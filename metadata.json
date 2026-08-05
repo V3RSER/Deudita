@@ -1,0 +1,6 @@
+{
+  "name": "Gastos Compartidos",
+  "description": "Aplicación web de gastos compartidos multiusuario para administrar grupos, dividir gastos desglosados, calcular balances consolidados y gestionar borradores de gastos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
