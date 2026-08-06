@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseItem, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
@@ -29,20 +30,45 @@ export function NewExpenseModal({
   onClose,
   defaultGroupId,
 }: NewExpenseModalProps) {
-  const { currentProfile, groups, members, profiles, addExpense } = useExpense();
+  const { currentProfile, userGroups, members, profiles, addExpense } = useExpense();
 
   const [groupId, setGroupId] = useState<string>(() => {
-    if (defaultGroupId && groups.some((g) => g.id === defaultGroupId)) {
+    if (defaultGroupId && userGroups.some((g) => g.id === defaultGroupId)) {
       return defaultGroupId;
     }
-    if (groups.length > 0) {
-      return groups[0].id;
+    if (userGroups.length > 0) {
+      return userGroups[0].id;
     }
     return '';
   });
+
+  const activeGroupId =
+    groupId && userGroups.some((g) => g.id === groupId)
+      ? groupId
+      : defaultGroupId && userGroups.some((g) => g.id === defaultGroupId)
+      ? defaultGroupId
+      : userGroups.length > 0
+      ? userGroups[0].id
+      : '';
+
+  // Get members of the chosen group
+  const groupMembers = members.filter((m) => m.group_id === activeGroupId);
+  const memberProfiles = groupMembers
+    .map((m) => profiles.find((p) => p.id === m.user_id))
+    .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
   const [description, setDescription] = useState<string>('');
   const [totalAmount, setTotalAmount] = useState<string>('');
-  const [paidBy, setPaidBy] = useState<string>(currentProfile.id);
+  const [paidBy, setPaidBy] = useState<string>(() => {
+    if (memberProfiles.length > 0) {
+      const currentInGroup = currentProfile && memberProfiles.some((p) => p.id === currentProfile.id);
+      if (currentInGroup && currentProfile) {
+        return currentProfile.id;
+      }
+      return memberProfiles[0].id;
+    }
+    return currentProfile?.id || '';
+  });
   const [category, setCategory] = useState<string>('Supermercado');
   const [expenseDate, setExpenseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -56,23 +82,10 @@ export function NewExpenseModal({
 
   // Split mode
   const [splitType, setSplitType] = useState<SplitType>('equal');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(() => {
+    return memberProfiles.map((p) => p.id);
+  });
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
-
-  const activeGroupId =
-    groupId && groups.some((g) => g.id === groupId)
-      ? groupId
-      : defaultGroupId && groups.some((g) => g.id === defaultGroupId)
-      ? defaultGroupId
-      : groups.length > 0
-      ? groups[0].id
-      : '';
-
-  // Get members of the chosen group
-  const groupMembers = members.filter((m) => m.group_id === activeGroupId);
-  const memberProfiles = groupMembers
-    .map((m) => profiles.find((p) => p.id === m.user_id))
-    .filter((p): p is NonNullable<typeof p> => p !== undefined);
 
   const handleGroupSelect = (newGroupId: string) => {
     setGroupId(newGroupId);
@@ -83,9 +96,14 @@ export function NewExpenseModal({
 
     if (newProfiles.length > 0) {
       setSelectedMemberIds(newProfiles.map((p) => p.id));
-      if (!newGroupMembers.some((m) => m.user_id === paidBy)) {
+      const currentInGroup = currentProfile && newProfiles.some((p) => p.id === currentProfile.id);
+      if (currentInGroup && currentProfile) {
+        setPaidBy(currentProfile.id);
+      } else {
         setPaidBy(newProfiles[0].id);
       }
+    } else {
+      setSelectedMemberIds([]);
     }
   };
 
@@ -131,7 +149,7 @@ export function NewExpenseModal({
 
     const numericTotal = parseFloat(totalAmount);
     if (isNaN(numericTotal) || numericTotal <= 0) {
-      alert('Ingresa un monto total válido');
+      alert('Ingresa un monto total válido mayor a 0');
       return;
     }
 
@@ -140,8 +158,31 @@ export function NewExpenseModal({
       return;
     }
 
-    if (!groupId) {
+    const effectiveGroupId = groupId || activeGroupId;
+    if (!effectiveGroupId) {
       alert('Selecciona un grupo');
+      return;
+    }
+
+    if (memberProfiles.length === 0) {
+      alert('El grupo seleccionado no tiene integrantes');
+      return;
+    }
+
+    if (selectedMemberIds.length === 0) {
+      alert('Selecciona al menos un integrante para dividir el gasto');
+      return;
+    }
+
+    const effectivePaidBy =
+      paidBy && memberProfiles.some((p) => p.id === paidBy)
+        ? paidBy
+        : currentProfile && memberProfiles.some((p) => p.id === currentProfile.id)
+        ? currentProfile.id
+        : memberProfiles[0]?.id;
+
+    if (!effectivePaidBy) {
+      alert('Selecciona quién pagó el gasto');
       return;
     }
 
@@ -166,7 +207,8 @@ export function NewExpenseModal({
     const finalSplits: Omit<ExpenseSplit, 'id' | 'created_at' | 'expense_id'>[] = [];
 
     if (splitType === 'equal') {
-      const share = numericTotal / selectedMemberIds.length;
+      const count = selectedMemberIds.length;
+      const share = count > 0 ? numericTotal / count : numericTotal;
       selectedMemberIds.forEach((uid) => {
         finalSplits.push({
           user_id: uid,
@@ -206,14 +248,14 @@ export function NewExpenseModal({
     }
 
     addExpense({
-      group_id: activeGroupId,
-      paid_by: paidBy,
+      group_id: effectiveGroupId,
+      paid_by: effectivePaidBy,
       total_amount: numericTotal,
       description: description.trim(),
       category,
       expense_date: expenseDate,
       source: 'manual',
-      created_by: currentProfile.id,
+      created_by: currentProfile?.id ? currentProfile.id : effectivePaidBy,
       items: finalItems,
       splits: finalSplits as ExpenseSplit[],
     });
@@ -235,43 +277,43 @@ export function NewExpenseModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8">
         {/* Header */}
-        <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-bold">
-              <Receipt className="w-5 h-5" />
+        <div className="bg-zinc-900 text-white p-8 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
+              <Receipt className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Registrar Nuevo Gasto</h2>
-              <p className="text-xs text-slate-400">Ingresa los detalles y el reparto entre miembros</p>
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Registrar Nuevo Gasto</h2>
+              <p className="text-sm text-zinc-400 mt-1">Ingresa los detalles y el reparto entre miembros</p>
             </div>
           </div>
 
           <button
             onClick={resetAndClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8 max-h-[80vh] overflow-y-auto">
           {/* Group & Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Grupo
               </label>
               <select
                 value={groupId}
                 onChange={(e) => handleGroupSelect(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               >
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
+                {userGroups.map((g, idx) => (
+                  <option key={g.id || `ug-${idx}`} value={g.id}>
                     {g.name}
                   </option>
                 ))}
@@ -279,13 +321,13 @@ export function NewExpenseModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Categoría
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               >
                 <option value="Supermercado">Supermercado & Abarrotes</option>
                 <option value="Servicios">Servicios (Luz, Agua, Gas, Net)</option>
@@ -300,9 +342,9 @@ export function NewExpenseModal({
           </div>
 
           {/* Description & Amount */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Descripción
               </label>
               <input
@@ -311,12 +353,12 @@ export function NewExpenseModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Ej: Boleta de supermercado o cena"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Monto Total ($)
               </label>
               <input
@@ -327,32 +369,32 @@ export function NewExpenseModal({
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
                 placeholder="15000"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-100"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-lg font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all disabled:bg-zinc-100 disabled:text-zinc-400 placeholder:text-zinc-400"
               />
             </div>
           </div>
 
           {/* Paid By & Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 ¿Quién Pagó?
               </label>
               <select
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               >
                 {memberProfiles.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.full_name} {p.id === currentProfile.id ? '(Tú)' : ''}
+                    {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Fecha
               </label>
               <input
@@ -360,19 +402,19 @@ export function NewExpenseModal({
                 required
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               />
             </div>
           </div>
 
           {/* Toggle Itemized Breakdown */}
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-3">
+          <div className="border-t border-zinc-200 pt-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <span className="text-sm font-bold text-slate-900 block">
+                <span className="text-sm font-semibold text-zinc-900 block tracking-tight">
                   Desglosar en Ítems Individuales
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-zinc-500 mt-0.5 block">
                   Permite detallar varios productos (ej: una boleta con carnes y limpieza).
                 </span>
               </div>
@@ -380,38 +422,38 @@ export function NewExpenseModal({
                 type="checkbox"
                 checked={useItems}
                 onChange={(e) => setUseItems(e.target.checked)}
-                className="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
+                className="w-5 h-5 accent-zinc-900 rounded cursor-pointer"
               />
             </div>
 
             {useItems && (
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 mt-3">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
+              <div className="bg-zinc-50 p-5 rounded-2xl ring-1 ring-zinc-200 space-y-4 mt-4">
+                <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                   <span>Ítem</span>
                   <span>Monto</span>
                 </div>
 
                 {items.map((item, idx) => (
-                  <div key={idx} className="flex items-center space-x-2">
+                  <div key={idx} className="flex items-center space-x-3">
                     <input
                       type="text"
                       placeholder="Ej: Frutas y verduras"
                       value={item.description}
                       onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                      className="flex-1 px-4 py-2 bg-white border-none ring-1 ring-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
                     />
                     <input
                       type="number"
                       placeholder="8500"
                       value={item.amount}
                       onChange={(e) => handleItemChange(idx, 'amount', e.target.value)}
-                      className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                      className="w-28 px-4 py-2 bg-white border-none ring-1 ring-zinc-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
                     />
                     {items.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveItemRow(idx)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 transition"
+                        className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -422,7 +464,7 @@ export function NewExpenseModal({
                 <button
                   type="button"
                   onClick={handleAddItemRow}
-                  className="flex items-center space-x-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 pt-1"
+                  className="flex items-center space-x-1.5 text-xs font-medium text-zinc-900 hover:text-zinc-600 pt-2 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Añadir otro ítem</span>
@@ -432,19 +474,19 @@ export function NewExpenseModal({
           </div>
 
           {/* Division Mode */}
-          <div className="border-t border-slate-100 pt-4 space-y-3">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+          <div className="border-t border-zinc-200 pt-6 space-y-5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
               ¿Cómo se Divide?
             </label>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => setSplitType('equal')}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                className={`py-2.5 px-3 rounded-xl text-xs font-medium transition-all ${
                   splitType === 'equal'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                    ? 'bg-zinc-900 text-white shadow-md'
+                    : 'bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-100'
                 }`}
               >
                 Partes Iguales
@@ -453,10 +495,10 @@ export function NewExpenseModal({
               <button
                 type="button"
                 onClick={() => setSplitType('exact')}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                className={`py-2.5 px-3 rounded-xl text-xs font-medium transition-all ${
                   splitType === 'exact'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                    ? 'bg-zinc-900 text-white shadow-md'
+                    : 'bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-100'
                 }`}
               >
                 Montos Exactos
@@ -465,10 +507,10 @@ export function NewExpenseModal({
               <button
                 type="button"
                 onClick={() => setSplitType('percentage')}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                className={`py-2.5 px-3 rounded-xl text-xs font-medium transition-all ${
                   splitType === 'percentage'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-500'
-                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                    ? 'bg-zinc-900 text-white shadow-md'
+                    : 'bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-100'
                 }`}
               >
                 Porcentaje (%)
@@ -476,32 +518,32 @@ export function NewExpenseModal({
             </div>
 
             {/* Member list selection */}
-            <div className="space-y-2 pt-2">
-              <span className="text-xs font-semibold text-slate-500 block">
+            <div className="space-y-3 pt-3">
+              <span className="text-xs font-medium text-zinc-500 block">
                 Selecciona los miembros incluidos:
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {memberProfiles.map((p) => {
                   const isChecked = selectedMemberIds.includes(p.id);
 
                   return (
                     <div
                       key={p.id}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition ${
+                      className={`flex items-center justify-between p-3 rounded-xl ring-1 transition-all ${
                         isChecked
-                          ? 'bg-emerald-50/60 border-emerald-300'
-                          : 'bg-slate-50 border-slate-200 opacity-60'
+                          ? 'bg-white ring-zinc-300 shadow-sm'
+                          : 'bg-zinc-50 ring-zinc-200 opacity-70'
                       }`}
                     >
-                      <label className="flex items-center space-x-2 cursor-pointer flex-1">
+                      <label className="flex items-center space-x-3 cursor-pointer flex-1">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleMemberSelection(p.id)}
-                          className="w-4 h-4 accent-indigo-600 rounded"
+                          className="w-4 h-4 accent-zinc-900 rounded"
                         />
-                        <img src={p.avatar_url} alt={p.full_name} className="w-5 h-5 rounded-full" />
-                        <span className="font-semibold text-slate-800">{p.full_name}</span>
+                        <Image src={p.avatar_url} alt={p.full_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                        <span className={`font-medium tracking-tight text-sm ${isChecked ? 'text-zinc-900' : 'text-zinc-500'}`}>{p.full_name}</span>
                       </label>
 
                       {isChecked && splitType !== 'equal' && (
@@ -510,7 +552,7 @@ export function NewExpenseModal({
                           placeholder={splitType === 'exact' ? '$' : '%'}
                           value={customSplits[p.id] ? customSplits[p.id] : ''}
                           onChange={(e) => handleCustomSplitChange(p.id, e.target.value)}
-                          className="w-20 px-2 py-1 bg-white border border-slate-300 rounded text-right font-bold"
+                          className="w-24 px-3 py-1.5 bg-white border-none ring-1 ring-zinc-200 rounded-lg text-right font-medium text-sm focus:ring-2 focus:ring-zinc-900"
                         />
                       )}
                     </div>
@@ -521,17 +563,17 @@ export function NewExpenseModal({
           </div>
 
           {/* Submit Action */}
-          <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+          <div className="pt-8 border-t border-zinc-200 flex justify-end space-x-4">
             <button
               type="button"
               onClick={resetAndClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
+              className="px-6 py-3 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition"
+              className="px-8 py-3 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm transition-all active:scale-95"
             >
               Guardar Gasto
             </button>

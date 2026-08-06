@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Group, GroupCategory } from '@/lib/types';
 import { formatCurrency, calculateUserSummaries } from '@/lib/balance-utils';
@@ -44,52 +45,14 @@ const CATEGORY_LABELS: Record<GroupCategory, string> = {
 };
 
 export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
-  const { currentProfile, groups, members, expenses, settlements, profiles } = useExpense();
-
-  // Filter groups where current user is a member
-  const myGroupIds = new Set(
-    members.filter((m) => m.user_id === currentProfile.id).map((m) => m.group_id)
-  );
-
-  const userGroups = groups.filter((g) => myGroupIds.has(g.id));
+  const { currentProfile, userGroups, members, expenses, payments, profiles } = useExpense();
 
   return (
     <div className="space-y-8">
-      {/* Overview Banner */}
-      <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-8 border border-indigo-900/50 text-white shadow-lg relative overflow-hidden">
-        <div className="relative z-10 max-w-3xl">
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-400/30">
-            Plataforma Multi-Grupo
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-3 tracking-tight">
-            Hola, {currentProfile.full_name.split(' ')[0]} 👋
-          </h1>
-          <p className="text-indigo-100/80 mt-2 text-sm sm:text-base leading-relaxed">
-            Administra tus grupos compartidos, registra gastos con desglose de ítems y consulta cuántas cuentas tienes pendientes en tiempo real.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-4 items-center">
-            <button
-              onClick={onOpenNewGroup}
-              className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Crear Nuevo Grupo</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Decorative background grid */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-indigo-500/10 blur-2xl pointer-events-none" />
-      </div>
-
       {/* Group Grid Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Mis Grupos ({userGroups.length})</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Selecciona un grupo para ver gastos, divisiones e ítems.
-          </p>
+          <h2 className="text-xl font-semibold text-zinc-900 tracking-tight">Mis Grupos <span className="text-zinc-400 font-normal">({userGroups.length})</span></h2>
         </div>
       </div>
 
@@ -123,101 +86,97 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
             const totalGroupSpent = groupExpenses.reduce((acc, curr) => acc + curr.total_amount, 0);
 
             // Calculate current user's balance in this specific group
-            const userSummaries = calculateUserSummaries(expenses, settlements, profiles, group.id);
-            const mySummary = userSummaries.find((s) => s.user.id === currentProfile.id);
+            const userSummaries = calculateUserSummaries(expenses, payments, profiles, group.id);
+            const mySummary = userSummaries.find((s) => s.user.id === currentProfile?.id);
             const netBalance = mySummary ? mySummary.netBalance : 0;
 
             return (
               <div
                 key={group.id}
                 onClick={() => onSelectGroup(group)}
-                className="group bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
+                className="group bg-white rounded-[1.5rem] p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
               >
                 <div>
                   {/* Category & Status Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2.5 bg-indigo-50/80 px-3 py-1.5 rounded-xl border border-indigo-100/50">
-                      {CATEGORY_ICONS[group.category]}
-                      <span className="text-xs font-semibold text-indigo-900">
-                        {CATEGORY_LABELS[group.category]}
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center space-x-2.5 bg-zinc-50 px-3 py-1.5 rounded-lg ring-1 ring-zinc-100">
+                      {CATEGORY_ICONS[group.category] || CATEGORY_ICONS.other}
+                      <span className="text-[11px] font-medium text-zinc-600 uppercase tracking-wider">
+                        {CATEGORY_LABELS[group.category] || group.category || 'General'}
                       </span>
                     </div>
 
-                    <span className="text-xs text-slate-400 font-medium flex items-center space-x-1">
+                    <span className="text-xs text-zinc-400 font-medium flex items-center space-x-1">
                       <Receipt className="w-3.5 h-3.5" />
-                      <span>{groupExpenses.length} gastos</span>
+                      <span>{groupExpenses.length}</span>
                     </span>
                   </div>
 
                   {/* Group Name & Description */}
-                  <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                  <h3 className="text-lg font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
                     {group.name}
                   </h3>
                   {group.description && (
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                    <p className="text-sm text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">
                       {group.description}
                     </p>
                   )}
 
                   {/* Member Avatars */}
-                  <div className="mt-5 flex items-center justify-between">
+                  <div className="mt-6 flex items-center justify-between">
                     <div className="flex -space-x-2 overflow-hidden">
                       {memberProfiles.map((p) => (
-                        <img
+                        <Image
                           key={p.id}
                           src={p.avatar_url}
                           alt={p.full_name}
                           title={p.full_name}
-                          className="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm"
+                          width={32}
+                          height={32}
+                          className="w-8 h-8 rounded-full ring-2 ring-white object-cover"
+                          unoptimized
+                          referrerPolicy="no-referrer"
                         />
                       ))}
                     </div>
-                    <span className="text-xs font-medium text-slate-500">
+                    <span className="text-xs font-medium text-zinc-400">
                       {memberProfiles.length} integrantes
                     </span>
                   </div>
                 </div>
 
                 {/* Footer Metrics */}
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div className="mt-8 pt-5 border-t border-zinc-100 flex items-center justify-between">
                   <div>
-                    <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider block">
+                    <span className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block">
                       Total Gastado
                     </span>
-                    <span className="text-sm font-bold text-slate-800">
+                    <span className="text-sm font-semibold text-zinc-900 mt-0.5 block">
                       {formatCurrency(totalGroupSpent)}
                     </span>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider block">
+                    <span className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">
                       Tu Estado
                     </span>
                     {Math.abs(netBalance) < 0.5 ? (
-                      <span className="inline-flex items-center text-xs font-semibold text-slate-500">
-                        <MinusCircle className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                      <span className="inline-flex items-center text-xs font-medium text-zinc-500 bg-zinc-50 px-2 py-1 rounded-md">
+                        <MinusCircle className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
                         Al día
                       </span>
                     ) : netBalance > 0 ? (
-                      <span className="inline-flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        <TrendingUp className="w-3.5 h-3.5 mr-1 text-emerald-500" />
-                        Te deben {formatCurrency(netBalance)}
+                      <span className="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md">
+                        <TrendingUp className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+                        +{formatCurrency(netBalance)}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                        <TrendingDown className="w-3.5 h-3.5 mr-1 text-rose-500" />
-                        Debes {formatCurrency(Math.abs(netBalance))}
+                      <span className="inline-flex items-center text-xs font-medium text-rose-700 bg-rose-50 px-2 py-1 rounded-md">
+                        <TrendingDown className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
+                        -{formatCurrency(Math.abs(netBalance))}
                       </span>
                     )}
                   </div>
-                </div>
-
-                {/* Arrow indicator */}
-                <div className="mt-3 flex justify-end">
-                  <span className="text-xs font-semibold text-emerald-600 group-hover:translate-x-1 transition-transform inline-flex items-center space-x-1">
-                    <span>Ver grupo</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </span>
                 </div>
               </div>
             );

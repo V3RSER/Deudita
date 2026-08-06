@@ -1,5 +1,6 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
+import { ExpenseProvider } from '@/lib/expense-context';
 
 export const metadata: Metadata = {
   title: 'Gastos Compartidos - Plataforma Multi-Grupo',
@@ -9,7 +10,11 @@ export const metadata: Metadata = {
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <ExpenseProvider>
+          {children}
+        </ExpenseProvider>
+      </body>
     </html>
   );
 }

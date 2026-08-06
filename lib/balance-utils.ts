@@ -1,4 +1,4 @@
-import { Expense, Settlement, Profile, PairwiseBalance, UserSummaryBalance } from './types';
+import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance } from './types';
 
 export function formatCurrency(amount: number): string {
   const rounded = Math.round(amount);
@@ -13,12 +13,12 @@ export function formatCurrency(amount: number): string {
 
 export function calculatePairwiseBalances(
   expenses: Expense[],
-  settlements: Settlement[],
+  payments: Payment[],
   profiles: Profile[],
   groupId?: string
 ): PairwiseBalance[] {
   const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-  const filteredSettlements = groupId ? settlements.filter((s) => s.group_id === groupId) : settlements;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
   const profileMap = new Map<string, Profile>();
   profiles.forEach((p) => profileMap.set(p.id, p));
@@ -42,12 +42,12 @@ export function calculatePairwiseBalances(
     });
   });
 
-  // Process settlements
-  filteredSettlements.forEach((settle) => {
+  // Process payments
+  filteredPayments.forEach((payment) => {
     // Payer paid Receiver, so Payer's debt to Receiver decreases
-    const key = getPairKey(settle.payer_id, settle.receiver_id);
+    const key = getPairKey(payment.paid_by, payment.paid_to);
     const current = debtMap.get(key) || 0;
-    debtMap.set(key, current - settle.amount);
+    debtMap.set(key, current - payment.amount);
   });
 
   // Simplify pairs (netting A->B and B->A)
@@ -101,18 +101,18 @@ export function calculatePairwiseBalances(
 
 export function calculateUserSummaries(
   expenses: Expense[],
-  settlements: Settlement[],
+  payments: Payment[],
   profiles: Profile[],
   groupId?: string
 ): UserSummaryBalance[] {
   const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-  const filteredSettlements = groupId ? settlements.filter((s) => s.group_id === groupId) : settlements;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
   return profiles.map((user) => {
     let totalPaid = 0;
     let totalOwedShare = 0;
-    let totalSettlementsPaid = 0;
-    let totalSettlementsReceived = 0;
+    let totalPaymentsMade = 0;
+    let totalPaymentsReceived = 0;
 
     filteredExpenses.forEach((exp) => {
       if (exp.paid_by === user.id) {
@@ -126,16 +126,16 @@ export function calculateUserSummaries(
       }
     });
 
-    filteredSettlements.forEach((s) => {
-      if (s.payer_id === user.id) {
-        totalSettlementsPaid += s.amount;
+    filteredPayments.forEach((p) => {
+      if (p.paid_by === user.id) {
+        totalPaymentsMade += p.amount;
       }
-      if (s.receiver_id === user.id) {
-        totalSettlementsReceived += s.amount;
+      if (p.paid_to === user.id) {
+        totalPaymentsReceived += p.amount;
       }
     });
 
-    const netBalance = (totalPaid + totalSettlementsPaid) - (totalOwedShare + totalSettlementsReceived);
+    const netBalance = (totalPaid + totalPaymentsMade) - (totalOwedShare + totalPaymentsReceived);
 
     return {
       user,

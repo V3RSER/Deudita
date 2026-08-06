@@ -55,102 +55,105 @@ export function DraftsView({
   return (
     <div className="space-y-8">
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white border border-indigo-900/50 shadow-lg">
-        <div className="flex items-center space-x-2 text-indigo-300 font-bold text-xs uppercase tracking-wider mb-2">
-          <MailCheck className="w-4 h-4 text-indigo-400" />
-          <span>Detección Automática Gmail & Scanner AI</span>
+      <div className="bg-zinc-900 rounded-[2rem] p-8 sm:p-10 text-white shadow-xl relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center space-x-3 text-zinc-400 font-semibold text-[10px] uppercase tracking-widest mb-3">
+            <MailCheck className="w-4 h-4 text-zinc-300" />
+            <span>Detección Automática Gmail & Scanner AI</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50">
+            Borradores & Correos Detectados
+          </h1>
+
+          <p className="text-zinc-400 text-base mt-3 max-w-3xl leading-relaxed">
+            Los correos electrónicos y tickets escaneados se guardan primero como <strong>borradores aislados</strong>. Revisa los detalles, asígnales un grupo y confirma para agregarlos a tus balances reales.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <button
+              onClick={onOpenScanReceiptModal}
+              className="flex items-center space-x-2 bg-white text-zinc-900 font-medium px-5 py-3 rounded-full text-sm shadow-sm transition-all hover:bg-zinc-100 active:scale-95"
+            >
+              <ScanLine className="w-4 h-4" />
+              <span>Escanear Comprobante / Email</span>
+            </button>
+
+            <button
+              onClick={simulateGmailArrival}
+              className="flex items-center space-x-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 px-5 py-3 rounded-full text-sm font-medium ring-1 ring-zinc-700/50 transition-all active:scale-95 backdrop-blur-sm"
+            >
+              <RefreshCw className="w-4 h-4 text-zinc-400" />
+              <span>Simular Sync Gmail</span>
+            </button>
+          </div>
         </div>
-
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-          Borradores & Correos Detectados
-        </h1>
-
-        <p className="text-indigo-100/80 text-sm mt-2 max-w-3xl leading-relaxed">
-          Los correos electrónicos y tickets escaneados se guardan primero como <strong>borradores aislados</strong>. Revisa los detalles, asígnales un grupo y confirma para agregarlos a tus balances reales.
-        </p>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            onClick={onOpenScanReceiptModal}
-            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm shadow-md transition"
-          >
-            <ScanLine className="w-4 h-4" />
-            <span>Escanear Comprobante / Email</span>
-          </button>
-
-          <button
-            onClick={simulateGmailArrival}
-            className="flex items-center space-x-2 bg-white/10 hover:bg-white/20 text-indigo-100 px-4 py-2.5 rounded-xl text-sm font-semibold border border-white/10 transition"
-          >
-            <RefreshCw className="w-4 h-4 text-indigo-300" />
-            <span>Simular Sync Gmail</span>
-          </button>
-        </div>
+        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none" />
       </div>
 
       {/* Pending Drafts Section */}
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
+          <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
             <Clock className="w-5 h-5 text-amber-500" />
-            <span>Pendientes de Confirmar ({pendingDrafts.length})</span>
+            <span>Pendientes de Confirmar <span className="text-zinc-400 font-normal">({pendingDrafts.length})</span></span>
           </h2>
         </div>
 
         {pendingDrafts.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 shadow-sm">
-            <Inbox className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="font-bold text-slate-800">No tienes borradores pendientes</h3>
-            <p className="text-xs text-slate-500 mt-1 mb-4">
-              Usa el botón de simulación o escanea un comprobante para generar un borrador.
+          <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-16 text-center text-zinc-500 shadow-sm">
+            <Inbox className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
+            <h3 className="font-semibold text-zinc-900 text-lg">No tienes borradores pendientes</h3>
+            <p className="text-sm text-zinc-500 mt-1.5 mb-6 max-w-md mx-auto">
+              Usa el botón de simulación o escanea un comprobante para generar un borrador automáticamente.
             </p>
             <button
               onClick={simulateGmailArrival}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs"
+              className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs transition-all active:scale-95"
             >
               Simular entrada de e-mail
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {pendingDrafts.map((draft) => (
               <div
                 key={draft.id}
-                className="bg-white rounded-2xl p-6 border border-amber-200 shadow-sm hover:shadow-md transition flex flex-col justify-between relative overflow-hidden"
+                className="bg-white rounded-2xl p-6 ring-1 ring-amber-200/60 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden"
               >
                 <div>
                   {/* Draft Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full border border-amber-200">
-                      Gmail / AI Detectado
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-800 bg-amber-100/50 px-2.5 py-1 rounded-md">
+                      AI Detectado
                     </span>
-                    <span className="text-xs font-bold text-slate-500">
+                    <span className="text-xs font-semibold text-zinc-400">
                       Confianza: {Math.round(draft.confidence * 100)}%
                     </span>
                   </div>
 
-                  <h3 className="font-extrabold text-slate-900 text-lg">
+                  <h3 className="font-semibold text-zinc-900 text-xl tracking-tight">
                     {draft.detected_merchant}
                   </h3>
 
-                  <p className="text-2xl font-black text-emerald-600 my-2">
+                  <p className="text-3xl font-semibold text-emerald-600 my-2 tracking-tight">
                     {formatCurrency(draft.detected_amount)}
                   </p>
 
-                  <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono leading-relaxed line-clamp-3">
+                  <p className="text-sm text-zinc-600 bg-zinc-50 p-4 rounded-xl ring-1 ring-zinc-100/80 leading-relaxed line-clamp-3 mt-4">
                     &quot;{draft.raw_snippet}&quot;
                   </p>
 
                   {draft.extracted_items && draft.extracted_items.length > 0 && (
-                    <div className="mt-3 pt-2 border-t border-slate-100 text-xs">
-                      <span className="font-bold text-slate-600 block mb-1">
-                        Ítems detectados ({draft.extracted_items.length}):
+                    <div className="mt-5 pt-4 border-t border-zinc-100 text-sm">
+                      <span className="font-semibold text-zinc-900 block mb-2">
+                        Ítems detectados <span className="text-zinc-500 font-normal">({draft.extracted_items.length})</span>
                       </span>
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         {draft.extracted_items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between text-slate-600">
+                          <div key={idx} className="flex justify-between text-zinc-600">
                             <span>• {item.description}</span>
-                            <span className="font-medium">{formatCurrency(item.amount)}</span>
+                            <span className="font-medium text-zinc-900">{formatCurrency(item.amount)}</span>
                           </div>
                         ))}
                       </div>
@@ -159,10 +162,10 @@ export function DraftsView({
                 </div>
 
                 {/* Footer Action Buttons */}
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <div className="mt-6 pt-5 border-t border-zinc-100 flex items-center justify-between gap-4">
                   <button
                     onClick={() => discardDraft(draft.id)}
-                    className="flex items-center space-x-1 text-slate-400 hover:text-rose-600 px-3 py-2 rounded-xl text-xs font-semibold hover:bg-rose-50 transition"
+                    className="flex items-center space-x-1.5 text-zinc-500 hover:text-rose-600 px-4 py-2 rounded-full text-xs font-medium hover:bg-rose-50 transition-colors"
                   >
                     <XCircle className="w-4 h-4" />
                     <span>Descartar</span>
@@ -170,7 +173,7 @@ export function DraftsView({
 
                   <button
                     onClick={() => onOpenConfirmDraft(draft)}
-                    className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition"
+                    className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs shadow-sm transition-all active:scale-95"
                   >
                     <span>Asignar a Grupo</span>
                     <ArrowRight className="w-4 h-4" />
@@ -184,26 +187,26 @@ export function DraftsView({
 
       {/* History of Processed Drafts */}
       {processedDrafts.length > 0 && (
-        <div className="space-y-3 pt-6 border-t border-slate-200">
-          <h3 className="font-bold text-slate-700 text-base">Historial de Borradores Procesados</h3>
-          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+        <div className="space-y-4 pt-8 border-t border-zinc-200/60">
+          <h3 className="font-semibold text-zinc-900 text-lg tracking-tight">Historial de Borradores Procesados</h3>
+          <div className="bg-white rounded-2xl ring-1 ring-zinc-200 divide-y divide-zinc-100 overflow-hidden shadow-sm">
             {processedDrafts.map((d) => (
-              <div key={d.id} className="p-4 flex items-center justify-between text-sm">
+              <div key={d.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between text-sm gap-3 hover:bg-zinc-50 transition-colors">
                 <div>
-                  <span className="font-bold text-slate-800">{d.detected_merchant}</span>
-                  <span className="text-xs text-slate-400 ml-3">{d.detected_date}</span>
+                  <span className="font-semibold text-zinc-900">{d.detected_merchant}</span>
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest ml-3">{d.detected_date}</span>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <span className="font-bold text-slate-700">
+                <div className="flex items-center space-x-4">
+                  <span className="font-semibold text-zinc-900">
                     {formatCurrency(d.detected_amount)}
                   </span>
                   {d.status === 'confirmed' ? (
-                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center space-x-1">
+                    <span className="bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-md flex items-center space-x-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Confirmado</span>
                     </span>
                   ) : (
-                    <span className="bg-slate-100 text-slate-500 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                    <span className="bg-zinc-100 text-zinc-500 text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-md">
                       Descartado
                     </span>
                   )}

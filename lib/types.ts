@@ -1,5 +1,16 @@
 export type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'other';
 
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -23,6 +34,15 @@ export interface GroupMember {
   invited_by?: string;
   role: 'owner' | 'member';
   joined_at: string;
+}
+
+export interface GroupInvite {
+  id: string;
+  group_id: string;
+  email: string;
+  invited_by: string;
+  status: 'pending' | 'accepted';
+  created_at: string;
 }
 
 export interface ExpenseItem {
@@ -72,14 +92,14 @@ export interface ExpenseDraft {
   extracted_items?: Array<{ description: string; amount: number }>;
 }
 
-export interface Settlement {
+export interface Payment {
   id: string;
   group_id: string;
-  payer_id: string;
-  receiver_id: string;
+  paid_by: string;
+  paid_to: string;
   amount: number;
-  date: string;
-  notes?: string;
+  payment_date: string;
+  note?: string;
   created_at: string;
 }
 

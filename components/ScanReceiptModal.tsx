@@ -86,39 +86,39 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-bold">
-              <ScanLine className="w-5 h-5" />
+        <div className="bg-zinc-900 text-white p-8 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
+              <ScanLine className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Escanear Comprobante con AI</h2>
-              <p className="text-xs text-slate-400">Pegar correo o subir imagen de ticket/boleta</p>
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Escanear Comprobante con AI</h2>
+              <p className="text-sm text-zinc-400 mt-1">Pegar correo o subir imagen de ticket/boleta</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleScan} className="p-6 space-y-5">
+        <form onSubmit={handleScan} className="p-8 space-y-6">
           {/* Mode Switcher */}
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+          <div className="grid grid-cols-2 gap-2 bg-zinc-100 p-1 rounded-xl">
             <button
               type="button"
               onClick={() => setInputMode('text')}
-              className={`py-2 text-xs font-bold rounded-lg transition flex items-center justify-center space-x-2 ${
+              className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 ${
                 inputMode === 'text'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50'
+                  : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
               <FileText className="w-4 h-4" />
@@ -128,10 +128,10 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
             <button
               type="button"
               onClick={() => setInputMode('image')}
-              className={`py-2 text-xs font-bold rounded-lg transition flex items-center justify-center space-x-2 ${
+              className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 ${
                 inputMode === 'image'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/50'
+                  : 'text-zinc-500 hover:text-zinc-700'
               }`}
             >
               <Upload className="w-4 h-4" />
@@ -141,7 +141,7 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
 
           {inputMode === 'text' ? (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Cuerpo del Correo o Notificación de Pago
               </label>
               <textarea
@@ -150,57 +150,58 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
                 value={emailText}
                 onChange={(e) => setEmailText(e.target.value)}
                 placeholder="Pega aquí el texto del correo recibido (ej: 'Tu viaje con Uber por $14.500...', o la boleta de compra)."
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
+                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono transition-all placeholder:text-zinc-400"
               />
             </div>
           ) : (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
                 Fotografía o Captura de Boleta
               </label>
               <input
                 type="file"
                 accept="image/*"
                 onChange={handleImageUpload}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-pointer"
+                className="w-full p-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-700 cursor-pointer transition-all focus:ring-2 focus:ring-zinc-900"
               />
               {selectedImage && (
-                <p className="text-xs text-emerald-600 font-semibold mt-2">
-                  ✓ Imagen seleccionada y lista para escanear
+                <p className="text-xs text-emerald-600 font-medium mt-3 flex items-center space-x-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Imagen seleccionada y lista para escanear</span>
                 </p>
               )}
             </div>
           )}
 
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
-              {error}
+            <div className="p-4 bg-rose-50 border-none ring-1 ring-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-start space-x-2">
+              <span className="block">{error}</span>
             </div>
           )}
 
           {/* Submit */}
-          <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+          <div className="pt-6 border-t border-zinc-100 flex justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
+              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading || (inputMode === 'image' && !selectedImage)}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition flex items-center space-x-2 disabled:opacity-50"
+              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm transition-all active:scale-95 flex items-center space-x-2 disabled:opacity-50"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Analizando con Gemini...</span>
+                  <span>Analizando...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>Escanear y Generar Borrador</span>
+                  <span>Generar Borrador</span>
                 </>
               )}
             </button>

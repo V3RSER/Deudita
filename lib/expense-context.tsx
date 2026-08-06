@@ -1,359 +1,206 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
   Profile,
   Group,
   GroupMember,
   Expense,
   ExpenseDraft,
-  Settlement,
+  Payment,
   ExpenseItem,
   ExpenseSplit,
 } from './types';
-import {
-  INITIAL_PROFILES,
-  INITIAL_GROUPS,
-  INITIAL_MEMBERS,
-  INITIAL_EXPENSES,
-  INITIAL_DRAFTS,
-  INITIAL_SETTLEMENTS,
-} from './seed-data';
+import { createClient } from '@/lib/supabase/client';
+
+type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'other';
 
 interface ExpenseContextType {
-  currentProfile: Profile;
-  setCurrentProfile: (p: Profile) => void;
+  currentProfile: Profile | null;
   profiles: Profile[];
-  addProfile: (fullName: string, email?: string) => Profile;
+  userGroups: Group[];
   groups: Group[];
   members: GroupMember[];
   expenses: Expense[];
   drafts: ExpenseDraft[];
-  settlements: Settlement[];
-  createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[]) => void;
-  addMemberToGroup: (groupId: string, userId: string) => void;
-  addExpense: (expense: Omit<Expense, 'id' | 'created_at'>) => void;
-  deleteExpense: (id: string) => void;
-  addSettlement: (settlement: Omit<Settlement, 'id' | 'created_at'>) => void;
-  confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => void;
-  discardDraft: (draftId: string) => void;
-  addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => void;
-  resetDataToSeed: () => void;
+  payments: Payment[];
+  createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[]) => Promise<void>;
+  addGroupInvite: (groupId: string, email: string) => Promise<void>;
+  addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
+  addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
+  confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<void>;
+  discardDraft: (draftId: string) => Promise<void>;
+  addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<void>;
+  reloadFromSupabase: () => Promise<void>;
+  logout: () => Promise<void>;
 }
-
-type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'other';
-
-const LOCAL_STORAGE_KEY = 'gastos_compartidos_app_state_v1';
 
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
 export function ExpenseProvider({ children }: { children: React.ReactNode }) {
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_PROFILES;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.profiles) && parsed.profiles.length > 0) return parsed.profiles;
-      }
-    } catch {}
-    return INITIAL_PROFILES;
-  });
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [members, setMembers] = useState<GroupMember[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [drafts, setDrafts] = useState<ExpenseDraft[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
-  const [currentProfile, setCurrentProfile] = useState<Profile>(() => {
-    if (typeof window === 'undefined') return INITIAL_PROFILES[0];
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.currentProfileId) {
-          const profileList = Array.isArray(parsed.profiles) ? parsed.profiles : INITIAL_PROFILES;
-          const found = profileList.find(
-            (p: Profile) => p.id === parsed.currentProfileId
-          );
-          if (found) return found;
-        }
-      }
-    } catch {}
-    return INITIAL_PROFILES[0];
-  });
+  const supabase = createClient();
 
-  const [groups, setGroups] = useState<Group[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_GROUPS;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.groups)) return parsed.groups;
-      }
-    } catch {}
-    return INITIAL_GROUPS;
-  });
-
-  const [members, setMembers] = useState<GroupMember[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_MEMBERS;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.members)) return parsed.members;
-      }
-    } catch {}
-    return INITIAL_MEMBERS;
-  });
-
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_EXPENSES;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.expenses)) return parsed.expenses;
-      }
-    } catch {}
-    return INITIAL_EXPENSES;
-  });
-
-  const [drafts, setDrafts] = useState<ExpenseDraft[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_DRAFTS;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.drafts)) return parsed.drafts;
-      }
-    } catch {}
-    return INITIAL_DRAFTS;
-  });
-
-  const [settlements, setSettlements] = useState<Settlement[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_SETTLEMENTS;
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.settlements)) return parsed.settlements;
-      }
-    } catch {}
-    return INITIAL_SETTLEMENTS;
-  });
-
-  const [isInitialized, setIsInitialized] = useState<boolean>(true);
-
-  // Sync to localStorage
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      const stateToSave = {
-        profiles,
-        currentProfileId: currentProfile.id,
-        groups,
-        members,
-        expenses,
-        drafts,
-        settlements,
-      };
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stateToSave));
-    } catch {
-      // Silent error handling for storage
+  const reloadFromSupabase = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCurrentProfile(null);
+      return;
     }
-  }, [profiles, currentProfile, groups, members, expenses, drafts, settlements, isInitialized]);
 
-  const addProfile = (fullName: string, email?: string): Profile => {
-    const trimmedName = fullName.trim();
-    const cleanEmail = email && email.trim().length > 0
-      ? email.trim()
-      : `${trimmedName.toLowerCase().replace(/\s+/g, '.')}@ejemplo.com`;
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (profile) setCurrentProfile(profile as Profile);
 
-    const newProfile: Profile = {
-      id: `usr_${Date.now()}`,
-      full_name: trimmedName,
-      email: cleanEmail,
-      avatar_url: `https://picsum.photos/seed/${encodeURIComponent(trimmedName)}/120/120`,
-      created_at: new Date().toISOString(),
-    };
-    setProfiles((prev) => [...prev, newProfile]);
-    return newProfile;
-  };
+    const { data: allProfiles } = await supabase.from('profiles').select('*');
+    if (allProfiles) setProfiles(allProfiles as Profile[]);
 
-  const createGroup = (
-    name: string,
-    category: GroupCategory,
-    description?: string,
-    memberIds: string[] = []
-  ) => {
-    const newGroup: Group = {
-      id: `grp_${Date.now()}`,
-      name: name.trim(),
-      description: description && description.trim().length > 0 ? description.trim() : undefined,
-      category,
-      owner_id: currentProfile.id,
-      created_at: new Date().toISOString(),
-    };
+    const { data: allGroups } = await supabase.from('groups').select('*').order('created_at', { ascending: false });
+    if (allGroups) setGroups(allGroups as Group[]);
 
-    const newMembers: GroupMember[] = [
-      {
-        group_id: newGroup.id,
-        user_id: currentProfile.id,
-        role: 'owner',
-        joined_at: new Date().toISOString(),
-      },
-    ];
+    const { data: allMembers } = await supabase.from('group_members').select('*');
+    if (allMembers) setMembers(allMembers as GroupMember[]);
 
-    memberIds.forEach((uid) => {
-      if (uid !== currentProfile.id) {
-        newMembers.push({
-          group_id: newGroup.id,
-          user_id: uid,
-          invited_by: currentProfile.id,
-          role: 'member',
-          joined_at: new Date().toISOString(),
-        });
-      }
+    const { data: allExpenses } = await supabase.from('expenses').select('*').order('created_at', { ascending: false });
+    const { data: allItems } = await supabase.from('expense_items').select('*');
+    const { data: allSplits } = await supabase.from('expense_splits').select('*');
+
+    if (allExpenses) {
+      const expensesWithDetails = allExpenses.map(exp => ({
+        ...exp,
+        items: allItems?.filter(i => i.expense_id === exp.id) || [],
+        splits: allSplits?.filter(s => s.expense_id === exp.id) || [],
+      }));
+      setExpenses(expensesWithDetails as Expense[]);
+    }
+
+    const { data: allPayments } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
+    if (allPayments) setPayments(allPayments as Payment[]);
+
+    const { data: allDrafts } = await supabase.from('expense_drafts').select('*').order('created_at', { ascending: false });
+    if (allDrafts) setDrafts(allDrafts as ExpenseDraft[]);
+  }, [supabase]);
+
+  useEffect(() => {
+    reloadFromSupabase();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      reloadFromSupabase();
     });
-
-    setGroups((prev) => [newGroup, ...prev]);
-    setMembers((prev) => [...prev, ...newMembers]);
-  };
-
-  const addMemberToGroup = (groupId: string, userId: string) => {
-    const exists = members.some((m) => m.group_id === groupId && m.user_id === userId);
-    if (exists) return;
-
-    const newMember: GroupMember = {
-      group_id: groupId,
-      user_id: userId,
-      invited_by: currentProfile.id,
-      role: 'member',
-      joined_at: new Date().toISOString(),
+    
+    return () => {
+      subscription.unsubscribe();
     };
+  }, [reloadFromSupabase, supabase]);
 
-    setMembers((prev) => [...prev, newMember]);
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setCurrentProfile(null);
   };
 
-  const addExpense = (newExpenseData: Omit<Expense, 'id' | 'created_at'>) => {
-    const newExpense: Expense = {
-      ...newExpenseData,
-      id: `exp_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    setExpenses((prev) => [newExpense, ...prev]);
+  const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[]) => {
+    await fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category, description, emails }),
+    });
+    await reloadFromSupabase();
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  const addGroupInvite = async (groupId: string, email: string) => {
+    await fetch('/api/groups/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId, email }),
+    });
+    await reloadFromSupabase();
   };
 
-  const addSettlement = (data: Omit<Settlement, 'id' | 'created_at'>) => {
-    const newSettlement: Settlement = {
-      ...data,
-      id: `settle_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    setSettlements((prev) => [newSettlement, ...prev]);
+  const addExpense = async (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
+    await fetch('/api/expenses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expense, items, splits }),
+    });
+    await reloadFromSupabase();
   };
 
-  const confirmDraft = (
-    draftId: string,
-    groupId: string,
-    paidBy: string,
-    splits: ExpenseSplit[]
-  ) => {
-    const draft = drafts.find((d) => d.id === draftId);
-    if (!draft) return;
-
-    const expenseId = `exp_${Date.now()}`;
-
-    const itemsList: ExpenseItem[] = (draft.extracted_items || []).map((item, idx) => ({
-      id: `item_${expenseId}_${idx}`,
-      expense_id: expenseId,
-      description: item.description,
-      amount: item.amount,
-      created_at: new Date().toISOString(),
-    }));
-
-    const formattedSplits: ExpenseSplit[] = splits.map((s, idx) => ({
-      ...s,
-      id: `s_${expenseId}_${idx}`,
-      expense_id: expenseId,
-      created_at: new Date().toISOString(),
-    }));
-
-    const newExpense: Expense = {
-      id: expenseId,
-      group_id: groupId,
-      paid_by: paidBy,
-      total_amount: draft.detected_amount,
-      description: draft.detected_merchant,
-      category: 'Detectado Gmail',
-      expense_date: draft.detected_date,
-      source: 'gmail',
-      source_draft_id: draft.id,
-      created_by: currentProfile.id,
-      created_at: new Date().toISOString(),
-      items: itemsList,
-      splits: formattedSplits,
-    };
-
-    setExpenses((prev) => [newExpense, ...prev]);
-    setDrafts((prev) =>
-      prev.map((d) =>
-        d.id === draftId
-          ? { ...d, status: 'confirmed', confirmed_expense_id: expenseId }
-          : d
-      )
-    );
+  const deleteExpense = async (id: string) => {
+    await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+    await reloadFromSupabase();
   };
 
-  const discardDraft = (draftId: string) => {
-    setDrafts((prev) =>
-      prev.map((d) => (d.id === draftId ? { ...d, status: 'discarded' } : d))
-    );
+  const addPayment = async (payment: Omit<Payment, 'id' | 'created_at'>) => {
+    await fetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payment),
+    });
+    await reloadFromSupabase();
   };
 
-  const addDraft = (data: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => {
-    const newDraft: ExpenseDraft = {
-      ...data,
-      id: `draft_${Date.now()}`,
-      user_id: currentProfile.id,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
-    setDrafts((prev) => [newDraft, ...prev]);
+  const confirmDraft = async (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => {
+    await fetch('/api/drafts/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draftId, groupId, paidBy, splits }),
+    });
+    await reloadFromSupabase();
   };
 
-  const resetDataToSeed = () => {
-    setProfiles(INITIAL_PROFILES);
-    setCurrentProfile(INITIAL_PROFILES[0]);
-    setGroups(INITIAL_GROUPS);
-    setMembers(INITIAL_MEMBERS);
-    setExpenses(INITIAL_EXPENSES);
-    setDrafts(INITIAL_DRAFTS);
-    setSettlements(INITIAL_SETTLEMENTS);
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+  const discardDraft = async (draftId: string) => {
+    await fetch(`/api/drafts/${draftId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'discarded' }),
+    });
+    await reloadFromSupabase();
   };
+
+  const addDraft = async (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => {
+    // In real app, this is created from Gmail webhook.
+    // For demo purposes, we can add it here if needed.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    await supabase.from('expense_drafts').insert({
+      ...draft,
+      user_id: user.id,
+      status: 'pending'
+    });
+    await reloadFromSupabase();
+  };
+
+  const userGroups = groups.filter((g) => members.some((m) => m.group_id === g.id && m.user_id === currentProfile?.id));
 
   return (
     <ExpenseContext.Provider
       value={{
         currentProfile,
-        setCurrentProfile,
         profiles,
-        addProfile,
+        userGroups,
         groups,
         members,
         expenses,
         drafts,
-        settlements,
+        payments,
         createGroup,
-        addMemberToGroup,
+        addGroupInvite,
         addExpense,
         deleteExpense,
-        addSettlement,
+        addPayment,
         confirmDraft,
         discardDraft,
         addDraft,
-        resetDataToSeed,
+        reloadFromSupabase,
+        logout,
       }}
     >
       {children}
@@ -363,7 +210,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
 export function useExpense() {
   const context = useContext(ExpenseContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useExpense debe usarse dentro de un ExpenseProvider');
   }
   return context;

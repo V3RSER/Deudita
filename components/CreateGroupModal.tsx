@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { GroupCategory } from '@/lib/types';
 import { X, Users, Plus, Check } from 'lucide-react';
@@ -11,40 +12,31 @@ interface CreateGroupModalProps {
 }
 
 export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
-  const { currentProfile, profiles, createGroup, addProfile } = useExpense();
+  const { currentProfile, createGroup } = useExpense();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<GroupCategory>('home');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-
-  const [showAddContact, setShowAddContact] = useState(false);
-  const [newContactName, setNewContactName] = useState('');
-  const [newContactEmail, setNewContactEmail] = useState('');
+  const [emails, setEmails] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const otherProfiles = profiles.filter((p) => p.id !== currentProfile.id);
-
-  const toggleMember = (id: string) => {
-    if (selectedMemberIds.includes(id)) {
-      setSelectedMemberIds(selectedMemberIds.filter((item) => item !== id));
-    } else {
-      setSelectedMemberIds([...selectedMemberIds, id]);
-    }
-  };
-
-  const handleAddNewContact = (e: React.MouseEvent) => {
+  const handleAddEmail = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!newContactName.trim()) return;
-    const created = addProfile(newContactName, newContactEmail);
-    setSelectedMemberIds((prev) => [...prev, created.id]);
-    setNewContactName('');
-    setNewContactEmail('');
-    setShowAddContact(false);
+    if (!newEmail.trim() || !newEmail.includes('@')) return;
+    if (!emails.includes(newEmail.trim().toLowerCase())) {
+      setEmails([...emails, newEmail.trim().toLowerCase()]);
+    }
+    setNewEmail('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRemoveEmail = (emailToRemove: string) => {
+    setEmails(emails.filter(e => e !== emailToRemove));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name || name.trim().length === 0) {
@@ -52,40 +44,43 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
       return;
     }
 
-    createGroup(name, category, description, selectedMemberIds);
+    setIsSubmitting(true);
+    await createGroup(name, category, description, emails);
+    setIsSubmitting(false);
+    
     setName('');
     setDescription('');
-    setSelectedMemberIds([]);
+    setEmails([]);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-bold">
-              <Users className="w-5 h-5" />
+        <div className="bg-zinc-900 text-white p-8 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
+              <Users className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Crear Nuevo Grupo</h2>
-              <p className="text-xs text-slate-400">Organiza gastos para un viaje, casa o evento</p>
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Crear Nuevo Grupo</h2>
+              <p className="text-sm text-zinc-400 mt-1">Organiza gastos para un viaje, casa o evento</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               Nombre del Grupo
             </label>
             <input
@@ -94,18 +89,18 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Depa Roomies 402 o Viaje Bariloche"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               Categoría
             </label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as GroupCategory)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
             >
               <option value="home">Hogar / Departamento</option>
               <option value="trip">Viaje / Vacaciones</option>
@@ -117,7 +112,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               Descripción (Opcional)
             </label>
             <input
@@ -125,110 +120,88 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Ej: Cuentas del depa y compras mensuales"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
             />
           </div>
 
           {/* Member Selection */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Invitar Integrantes Iniciales
-              </label>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
+              Invitar Integrantes Iniciales (Emails)
+            </label>
+
+            <div className="flex space-x-2 mb-3">
+              <input
+                type="email"
+                placeholder="correo@ejemplo.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="flex-1 px-4 py-2.5 bg-white border-none ring-1 ring-zinc-200 rounded-xl text-sm transition-all focus:ring-2 focus:ring-zinc-900"
+              />
               <button
                 type="button"
-                onClick={() => setShowAddContact(!showAddContact)}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center space-x-1"
+                onClick={handleAddEmail}
+                className="px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all active:scale-95"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{showAddContact ? 'Cancelar' : 'Nuevo Contacto'}</span>
+                Añadir
               </button>
             </div>
 
-            {showAddContact && (
-              <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3 mb-3 space-y-2">
-                <p className="text-xs font-bold text-indigo-900">Agregar nuevo amigo o contacto:</p>
-                <input
-                  type="text"
-                  placeholder="Nombre y Apellido"
-                  value={newContactName}
-                  onChange={(e) => setNewContactName(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                />
-                <input
-                  type="email"
-                  placeholder="Email (opcional)"
-                  value={newContactEmail}
-                  onChange={(e) => setNewContactEmail(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddNewContact}
-                  className="w-full py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition"
-                >
-                  Guardar y Seleccionar
-                </button>
-              </div>
-            )}
-
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {otherProfiles.length === 0 && !showAddContact ? (
-                <p className="text-xs text-slate-500 text-center py-2">
-                  Usa &quot;Nuevo Contacto&quot; arriba para agregar a tus amigos.
-                </p>
-              ) : (
-                otherProfiles.map((p) => {
-                  const isSelected = selectedMemberIds.includes(p.id);
-
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => toggleMember(p.id)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer text-xs transition ${
-                        isSelected
-                          ? 'bg-indigo-50 border-indigo-200 font-semibold'
-                          : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <img src={p.avatar_url} alt={p.full_name} className="w-6 h-6 rounded-full" />
-                        <div>
-                          <p className="text-slate-800 leading-tight">{p.full_name}</p>
-                          <p className="text-[10px] text-slate-400">{p.email}</p>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`w-5 h-5 rounded-md flex items-center justify-center border ${
-                          isSelected
-                            ? 'bg-indigo-600 border-indigo-600 text-white'
-                            : 'border-slate-300'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </div>
+            <div className="space-y-3 max-h-52 overflow-y-auto pr-2">
+              {/* Pinned Current Profile (Creator) */}
+              {currentProfile && (
+                <div className="flex items-center justify-between p-3 rounded-xl ring-1 ring-emerald-200 bg-emerald-50/50 text-sm shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <Image src={currentProfile.avatar_url} alt={currentProfile.full_name} width={32} height={32} className="w-8 h-8 rounded-full object-cover ring-2 ring-emerald-100" unoptimized referrerPolicy="no-referrer" />
+                    <div>
+                      <p className="text-zinc-900 font-semibold tracking-tight">
+                        {currentProfile.full_name} <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-widest ml-1">(Creador)</span>
+                      </p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">{currentProfile.email}</p>
                     </div>
-                  );
-                })
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold uppercase tracking-widest">
+                    <Check className="w-3 h-3" />
+                    <span>Incluido</span>
+                  </div>
+                </div>
               )}
+
+              {emails.map((email) => (
+                <div
+                  key={email}
+                  className="flex items-center justify-between p-3 rounded-xl ring-1 bg-white ring-zinc-200 shadow-sm text-sm"
+                >
+                  <p className="font-medium text-zinc-900">{email}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveEmail(email)}
+                    className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Submit */}
-          <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+          <div className="pt-6 border-t border-zinc-100 flex justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
-              Crear Grupo
+              {isSubmitting ? 'Creando...' : 'Crear Grupo'}
             </button>
           </div>
         </form>

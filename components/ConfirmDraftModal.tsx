@@ -17,13 +17,26 @@ export function ConfirmDraftModal({
   onClose,
   draft,
 }: ConfirmDraftModalProps) {
-  const { currentProfile, groups, members, profiles, confirmDraft } = useExpense();
+  const { currentProfile, userGroups, members, profiles, confirmDraft } = useExpense();
 
   const [selectedGroupId, setSelectedGroupId] = useState<string>(() => {
-    if (groups.length > 0) return groups[0].id;
+    if (userGroups.length > 0) return userGroups[0].id;
     return '';
   });
-  const [paidBy, setPaidBy] = useState<string>(currentProfile.id);
+
+  const activeGroupMembers = members.filter((m) => m.group_id === selectedGroupId);
+  const activeMemberProfiles = activeGroupMembers
+    .map((m) => profiles.find((p) => p.id === m.user_id))
+    .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+  const [paidBy, setPaidBy] = useState<string>(() => {
+    if (activeMemberProfiles.length > 0) {
+      const inGroup = currentProfile && activeMemberProfiles.some((p) => p.id === currentProfile.id);
+      if (inGroup && currentProfile) return currentProfile.id;
+      return activeMemberProfiles[0].id;
+    }
+    return currentProfile?.id || '';
+  });
 
   if (!isOpen || !draft) return null;
 
@@ -60,94 +73,94 @@ export function ConfirmDraftModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
+      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-bold">
-              <MailCheck className="w-5 h-5" />
+        <div className="bg-zinc-900 text-white p-8 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
+              <MailCheck className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Confirmar y Asignar Borrador</h2>
-              <p className="text-xs text-slate-400">Gasto detectado por e-mail o scanner AI</p>
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Confirmar y Asignar Borrador</h2>
+              <p className="text-sm text-zinc-400 mt-1">Gasto detectado por e-mail o scanner AI</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Draft Details Box */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-2">
-            <div className="flex justify-between items-center text-xs font-bold text-amber-900">
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <div className="bg-amber-50/50 p-5 rounded-2xl ring-1 ring-amber-200 space-y-2">
+            <div className="flex justify-between items-center text-xs font-bold text-amber-900 uppercase tracking-widest">
               <span>{draft.detected_merchant}</span>
-              <span className="text-sm font-extrabold text-emerald-700">
+              <span className="text-sm font-extrabold text-amber-600">
                 {formatCurrency(draft.detected_amount)}
               </span>
             </div>
-            <p className="text-xs text-slate-600 line-clamp-2">&quot;{draft.raw_snippet}&quot;</p>
-            <p className="text-[11px] text-slate-400">Fecha detectada: {draft.detected_date}</p>
+            <p className="text-sm text-zinc-600 line-clamp-2 mt-2 leading-relaxed">&quot;{draft.raw_snippet}&quot;</p>
+            <p className="text-[10px] text-zinc-400 uppercase tracking-widest mt-1">Fecha detectada: {draft.detected_date}</p>
           </div>
 
           {/* Group selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               Asignar al Grupo
             </label>
             <select
               value={selectedGroupId}
               onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
             >
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
+              {userGroups.map((g, idx) => (
+                <option key={g.id || `dg-${idx}`} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
           </div>
-
+          
           {/* Paid by selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               ¿Quién Pagó el Comprobante?
             </label>
             <select
               value={paidBy}
               onChange={(e) => setPaidBy(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
             >
               {memberProfiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name} {p.id === currentProfile.id ? '(Tú)' : ''}
+                  {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-600">
+          <div className="bg-zinc-50 p-4 rounded-2xl ring-1 ring-zinc-200 text-sm text-zinc-600">
             Se dividirá en partes iguales entre los{' '}
-            <strong>{memberProfiles.length} integrantes</strong> del grupo seleccionado.
+            <strong className="text-zinc-900">{memberProfiles.length} integrantes</strong> del grupo seleccionado.
           </div>
 
           {/* Submit */}
-          <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+          <div className="pt-6 border-t border-zinc-100 flex justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition"
+              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition flex items-center space-x-1.5"
+              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm transition-all active:scale-95 flex items-center space-x-2"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>Confirmar y Agregar Gasto</span>
