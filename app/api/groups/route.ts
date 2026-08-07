@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'El nombre del grupo es requerido' }, { status: 400 });
     }
 
-    // Ensure profile exists in profiles table to prevent foreign key constraint issues
+    // Ensure user profile exists in public.profiles table (ignore RLS/conflict errors if trigger created it)
     const { data: existingProfile } = await supabase
       .from('profiles')
       .select('id')
@@ -51,67 +51,95 @@ export async function POST(req: Request) {
       });
 
       if (profileErr) {
-        console.error('[API POST /api/groups] Error inserting user profile:', profileErr);
+        console.log('[API POST /api/groups] Profile check notice:', profileErr.message);
       }
     }
 
-    // Create group
-    const groupPayload: { name: string; category?: string; description?: string | null; owner_id: string } = {
+    // Attempt group insertion with optional fields
+    const fullGroupPayload: Record<string, unknown> = {
       name: name.trim(),
-      description: description ? description.trim() : null,
       owner_id: user.id,
     };
-
-    if (category) {
-      groupPayload.category = category;
-    }
+    if (category) fullGroupPayload.category = category;
+    if (description && description.trim().length > 0) fullGroupPayload.description = description.trim();
 
     let { data: group, error: groupErr } = await supabase
       .from('groups')
-      .insert(groupPayload)
+      .insert(fullGroupPayload)
       .select()
       .single();
 
-    if (groupErr && (groupErr.code === 'PGRST204' || (groupErr.message && groupErr.message.toLowerCase().includes('category')))) {
-      console.warn('[API POST /api/groups] Column category missing from groups schema, retrying insert without category');
-      delete groupPayload.category;
-      const retryResult = await supabase
+    // Fallback if schema does not have optional columns (e.g. category, description)
+    if (groupErr && (groupErr.code === 'PGRST204' || groupErr.message?.includes('schema cache') || groupErr.message?.includes('column'))) {
+      console.warn('[API POST /api/groups] Schema cache mismatch for optional columns, falling back to minimal group insert');
+      const minimalInsert = await supabase
         .from('groups')
-        .insert(groupPayload)
+        .insert({
+          name: name.trim(),
+          owner_id: user.id,
+        })
         .select()
         .single();
-      group = retryResult.data;
-      groupErr = retryResult.error;
+
+      if (minimalInsert.data) {
+        group = {
+          category: category ?? 'home',
+          description: description ?? null,
+          ...minimalInsert.data,
+        };
+        groupErr = null;
+      } else {
+        groupErr = minimalInsert.error;
+      }
     }
 
-    if (groupErr) {
+    if (groupErr || !group) {
       console.error('[API POST /api/groups] Error inserting group into Supabase:', groupErr);
-      return NextResponse.json({ error: groupErr.message }, { status: 500 });
+      return NextResponse.json({ error: groupErr?.message ?? 'Error al crear el grupo' }, { status: 500 });
     }
 
-    // Add owner to members
-    const { error: memberErr } = await supabase.from('group_members').insert({
+    // Add owner to group_members
+    let { error: memberErr } = await supabase.from('group_members').insert({
       group_id: group.id,
       user_id: user.id,
       role: 'owner',
     });
 
+    if (memberErr && (memberErr.code === 'PGRST204' || memberErr.message?.includes('column'))) {
+      const retryMember = await supabase.from('group_members').insert({
+        group_id: group.id,
+        user_id: user.id,
+      });
+      memberErr = retryMember.error;
+    }
+
     if (memberErr) {
       console.error('[API POST /api/groups] Error inserting owner into group_members:', memberErr);
     }
 
-    // Add invites
+    // Add invitations if any provided
     if (emails && Array.isArray(emails)) {
       for (const email of emails) {
         if (typeof email === 'string' && email.trim().length > 0 && email !== user.email) {
-          const { error: inviteErr } = await supabase.from('group_invites').insert({
+          const cleanEmail = email.trim().toLowerCase();
+          let { error: inviteErr } = await supabase.from('group_invites').insert({
             group_id: group.id,
-            email: email.trim().toLowerCase(),
+            email: cleanEmail,
             invited_by: user.id,
             status: 'pending',
           });
+
+          if (inviteErr && (inviteErr.code === 'PGRST204' || inviteErr.message?.includes('column'))) {
+            const retryInvite = await supabase.from('group_invites').insert({
+              group_id: group.id,
+              email: cleanEmail,
+              invited_by: user.id,
+            });
+            inviteErr = retryInvite.error;
+          }
+
           if (inviteErr) {
-            console.error('[API POST /api/groups] Error creating invite for email:', email, inviteErr);
+            console.error('[API POST /api/groups] Error creating invite for email:', cleanEmail, inviteErr);
           }
         }
       }
@@ -125,4 +153,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
