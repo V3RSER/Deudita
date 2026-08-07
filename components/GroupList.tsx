@@ -50,10 +50,23 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
   return (
     <div className="space-y-8">
       {/* Group Grid Header */}
-      <div className="flex items-center justify-between pt-6">
+      <div className="flex items-center justify-between pt-2">
         <div>
-          <h2 className="text-xl font-semibold text-zinc-900 tracking-tight">Mis Grupos <span className="text-zinc-400 font-normal">({userGroups.length})</span></h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-zinc-900 tracking-tight">
+            Mis Grupos <span className="text-zinc-400 font-normal">({userGroups.length})</span>
+          </h2>
+          <p className="text-xs text-zinc-500 mt-1">
+            Selecciona un grupo para ver gastos o crea uno nuevo en segundos.
+          </p>
         </div>
+
+        <button
+          onClick={onOpenNewGroup}
+          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-md transition-all active:scale-95 min-h-[44px]"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Crear Grupo</span>
+        </button>
       </div>
 
       {/* Group Cards */}

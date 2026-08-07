@@ -25,7 +25,7 @@ interface ExpenseContextType {
   expenses: Expense[];
   drafts: ExpenseDraft[];
   payments: Payment[];
-  createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[]) => Promise<void>;
+  createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
   addGroupInvite: (groupId: string, email: string) => Promise<void>;
   addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
@@ -136,11 +136,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     setCurrentProfile(null);
   };
 
-  const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[]) => {
+  const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string): Promise<Group> => {
     const res = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, description, emails }),
+      body: JSON.stringify({ name, category, description, emails, imageUrl }),
     });
 
     if (!res.ok) {
@@ -150,7 +150,9 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       throw new Error(message);
     }
 
+    const createdGroup: Group = await res.json();
     await reloadFromSupabase();
+    return createdGroup;
   };
 
   const addGroupInvite = async (groupId: string, email: string) => {

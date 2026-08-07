@@ -26,6 +26,7 @@ export interface Group {
   category: GroupCategory;
   owner_id: string;
   created_at: string;
+  image_url?: string;
 }
 
 export interface GroupMember {
