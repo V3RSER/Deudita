@@ -542,7 +542,13 @@ export function NewExpenseModal({
                           onChange={() => toggleMemberSelection(p.id)}
                           className="w-4 h-4 accent-zinc-900 rounded"
                         />
-                        <Image src={p.avatar_url} alt={p.full_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                        {p.avatar_url ? (
+                          <Image src={p.avatar_url} alt={p.full_name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold">
+                            {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                        )}
                         <span className={`font-medium tracking-tight text-sm ${isChecked ? 'text-zinc-900' : 'text-zinc-500'}`}>{p.full_name}</span>
                       </label>
 

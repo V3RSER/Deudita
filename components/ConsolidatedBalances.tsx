@@ -125,15 +125,21 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                 className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all flex items-center justify-between"
               >
                 <div className="flex items-center space-x-4">
-                  <Image
-                    src={p.debtor.avatar_url}
-                    alt={p.debtor.full_name}
-                    width={48}
-                    height={48}
-                    className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-100"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
+                  {p.debtor.avatar_url ? (
+                    <Image
+                      src={p.debtor.avatar_url}
+                      alt={p.debtor.full_name}
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-100"
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full ring-2 ring-emerald-100 bg-zinc-800 text-white flex items-center justify-center text-base font-bold">
+                      {p.debtor.full_name ? p.debtor.full_name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-semibold text-zinc-900 text-base tracking-tight">{p.debtor.full_name}</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">{p.debtor.email}</p>
@@ -176,15 +182,21 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                 className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all flex items-center justify-between"
               >
                 <div className="flex items-center space-x-4">
-                  <Image
-                    src={p.creditor.avatar_url}
-                    alt={p.creditor.full_name}
-                    width={48}
-                    height={48}
-                    className="w-12 h-12 rounded-full object-cover ring-2 ring-rose-100"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
+                  {p.creditor.avatar_url ? (
+                    <Image
+                      src={p.creditor.avatar_url}
+                      alt={p.creditor.full_name}
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-rose-100"
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full ring-2 ring-rose-100 bg-zinc-800 text-white flex items-center justify-center text-base font-bold">
+                      {p.creditor.full_name ? p.creditor.full_name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                   <div>
                     <h3 className="font-semibold text-zinc-900 text-base tracking-tight">{p.creditor.full_name}</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">{p.creditor.email}</p>

@@ -393,15 +393,21 @@ export function GroupDetail({
                   >
                     <div className="flex items-center space-x-4">
                       <div className="relative">
-                        <Image
-                          src={p.debtor.avatar_url}
-                          alt={p.debtor.full_name}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 rounded-full ring-2 ring-rose-100 object-cover"
-                          unoptimized
-                          referrerPolicy="no-referrer"
-                        />
+                        {p.debtor.avatar_url ? (
+                          <Image
+                            src={p.debtor.avatar_url}
+                            alt={p.debtor.full_name}
+                            width={48}
+                            height={48}
+                            className="w-12 h-12 rounded-full ring-2 ring-rose-100 object-cover"
+                            unoptimized
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full ring-2 ring-rose-100 bg-zinc-800 text-white flex items-center justify-center text-base font-bold">
+                            {p.debtor.full_name ? p.debtor.full_name.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                        )}
                         <span className="absolute -bottom-2 -right-1 bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
                           DEBE
                         </span>
@@ -459,15 +465,21 @@ export function GroupDetail({
                   key={p.id}
                   className="bg-white rounded-2xl p-5 ring-1 ring-zinc-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <Image
-                    src={p.avatar_url}
-                    alt={p.full_name}
-                    width={48}
-                    height={48}
-                    className="w-12 h-12 rounded-full object-cover ring-2 ring-zinc-100"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
+                  {p.avatar_url ? (
+                    <Image
+                      src={p.avatar_url}
+                      alt={p.full_name}
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-zinc-100"
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full ring-2 ring-zinc-100 bg-zinc-800 text-white flex items-center justify-center text-base font-bold">
+                      {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                   <div>
                     <div className="flex items-center space-x-2">
                       <h4 className="font-semibold text-zinc-900 text-sm tracking-tight">{p.full_name}</h4>

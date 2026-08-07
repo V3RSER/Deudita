@@ -125,19 +125,29 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                   {/* Member Avatars */}
                   <div className="mt-6 flex items-center justify-between">
                     <div className="flex -space-x-2 overflow-hidden">
-                      {memberProfiles.map((p) => (
-                        <Image
-                          key={p.id}
-                          src={p.avatar_url}
-                          alt={p.full_name}
-                          title={p.full_name}
-                          width={32}
-                          height={32}
-                          className="w-8 h-8 rounded-full ring-2 ring-white object-cover"
-                          unoptimized
-                          referrerPolicy="no-referrer"
-                        />
-                      ))}
+                      {memberProfiles.map((p) =>
+                        p.avatar_url ? (
+                          <Image
+                            key={p.id}
+                            src={p.avatar_url}
+                            alt={p.full_name}
+                            title={p.full_name}
+                            width={32}
+                            height={32}
+                            className="w-8 h-8 rounded-full ring-2 ring-white object-cover"
+                            unoptimized
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div
+                            key={p.id}
+                            title={p.full_name}
+                            className="w-8 h-8 rounded-full ring-2 ring-white bg-zinc-800 text-white flex items-center justify-center text-xs font-semibold"
+                          >
+                            {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                        )
+                      )}
                     </div>
                     <span className="text-xs font-medium text-zinc-400">
                       {memberProfiles.length} integrantes

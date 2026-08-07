@@ -117,15 +117,21 @@ export function Navbar({
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                 className="flex items-center space-x-2 bg-transparent hover:bg-zinc-100 text-zinc-700 px-2 py-1.5 rounded-xl transition text-sm font-medium"
               >
-                <Image
-                  src={currentProfile.avatar_url}
-                  alt={currentProfile.full_name}
-                  width={24}
-                  height={24}
-                  className="w-7 h-7 rounded-full object-cover ring-2 ring-white shadow-sm"
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                />
+                {currentProfile.avatar_url ? (
+                  <Image
+                    src={currentProfile.avatar_url}
+                    alt={currentProfile.full_name}
+                    width={28}
+                    height={28}
+                    className="w-7 h-7 rounded-full object-cover ring-2 ring-white shadow-sm"
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white shadow-sm">
+                    {currentProfile.full_name ? currentProfile.full_name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
                 <ChevronDown className="w-4 h-4 text-zinc-400" />
               </button>
 

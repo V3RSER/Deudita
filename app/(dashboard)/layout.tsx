@@ -6,7 +6,7 @@ import { Navbar, ActiveTab } from '@/components/Navbar';
 import { usePathname, useRouter } from 'next/navigation';
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
-  const { currentProfile } = useExpense();
+  const { currentProfile, loading } = useExpense();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -14,16 +14,27 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   let activeTab: ActiveTab = 'groups';
   if (pathname.includes('/my-expenses')) activeTab = 'expenses';
   else if (pathname.includes('/drafts')) activeTab = 'drafts';
-  else if (pathname.includes('/balances')) activeTab = 'balances'; // optional if we keep it
+  else if (pathname.includes('/balances')) activeTab = 'balances';
 
   React.useEffect(() => {
-    if (!currentProfile) {
+    if (!loading && !currentProfile) {
       router.push('/login');
     }
-  }, [currentProfile, router]);
+  }, [loading, currentProfile, router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-zinc-500 font-medium">Cargando datos de la sesión...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentProfile) {
-    return null; // or a loading spinner
+    return null;
   }
 
   const handleTabChange = (tab: ActiveTab) => {

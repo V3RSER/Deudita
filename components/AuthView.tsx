@@ -1,11 +1,26 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Wallet, AlertCircle } from 'lucide-react';
+import { Wallet, AlertCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export function AuthView({ error }: { error?: string }) {
   const supabase = createClient();
+  const router = useRouter();
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        router.replace('/groups');
+      } else {
+        setCheckingAuth(false);
+      }
+    };
+    void checkUser();
+  }, [supabase, router]);
 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
@@ -15,6 +30,15 @@ export function AuthView({ error }: { error?: string }) {
       },
     });
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
+        <Loader2 className="w-8 h-8 text-zinc-900 animate-spin" />
+        <p className="text-sm text-zinc-500 mt-3 font-medium">Verificando sesión...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
