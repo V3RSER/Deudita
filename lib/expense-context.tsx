@@ -92,7 +92,10 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           created_at: new Date().toISOString(),
         };
 
-        await supabase.from('profiles').upsert(newProfile);
+        const { error: insertErr } = await supabase.from('profiles').insert(newProfile);
+        if (insertErr) {
+          console.error('Error inserting new profile:', insertErr);
+        }
         setCurrentProfile(newProfile);
       }
 

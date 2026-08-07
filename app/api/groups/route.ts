@@ -33,28 +33,56 @@ export async function POST(req: Request) {
     }
 
     // Ensure profile exists in profiles table to prevent foreign key constraint issues
-    const { error: profileErr } = await supabase.from('profiles').upsert({
-      id: user.id,
-      email: user.email ?? '',
-      full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? (user.email ? user.email.split('@')[0] : 'Usuario'),
-      avatar_url: user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? '',
-    });
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    if (profileErr) {
-      console.error('[API POST /api/groups] Error upserting user profile:', profileErr);
+    if (!existingProfile) {
+      const fullName = user.user_metadata?.full_name ?? user.user_metadata?.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
+      const avatarUrl = user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? '';
+
+      const { error: profileErr } = await supabase.from('profiles').insert({
+        id: user.id,
+        email: user.email ?? '',
+        full_name: fullName,
+        avatar_url: avatarUrl,
+      });
+
+      if (profileErr) {
+        console.error('[API POST /api/groups] Error inserting user profile:', profileErr);
+      }
     }
 
     // Create group
-    const { data: group, error: groupErr } = await supabase
+    const groupPayload: { name: string; category?: string; description?: string | null; owner_id: string } = {
+      name: name.trim(),
+      description: description ? description.trim() : null,
+      owner_id: user.id,
+    };
+
+    if (category) {
+      groupPayload.category = category;
+    }
+
+    let { data: group, error: groupErr } = await supabase
       .from('groups')
-      .insert({
-        name: name.trim(),
-        category: category ?? 'home',
-        description: description ? description.trim() : null,
-        owner_id: user.id,
-      })
+      .insert(groupPayload)
       .select()
       .single();
+
+    if (groupErr && (groupErr.code === 'PGRST204' || (groupErr.message && groupErr.message.toLowerCase().includes('category')))) {
+      console.warn('[API POST /api/groups] Column category missing from groups schema, retrying insert without category');
+      delete groupPayload.category;
+      const retryResult = await supabase
+        .from('groups')
+        .insert(groupPayload)
+        .select()
+        .single();
+      group = retryResult.data;
+      groupErr = retryResult.error;
+    }
 
     if (groupErr) {
       console.error('[API POST /api/groups] Error inserting group into Supabase:', groupErr);
