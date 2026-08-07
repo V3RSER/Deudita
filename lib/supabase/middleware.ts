@@ -38,11 +38,19 @@ export async function updateSession(request: NextRequest) {
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/api')
+    !request.nextUrl.pathname.startsWith('/api') &&
+    !request.nextUrl.pathname.startsWith('/auth')
   ) {
-    // no user, potentially respond by redirecting the user to the login page
+    // no user, redirect to login
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  if (user && request.nextUrl.pathname.startsWith('/login')) {
+    // authenticated user, redirect to dashboard/groups
+    const url = request.nextUrl.clone()
+    url.pathname = '/groups'
     return NextResponse.redirect(url)
   }
 

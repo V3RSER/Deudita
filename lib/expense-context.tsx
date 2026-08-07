@@ -60,9 +60,26 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      if (profile) {
-        setCurrentProfile(profile as Profile);
+      const [
+        profileRes,
+        profilesRes,
+        groupsRes,
+        membersRes,
+        expensesRes,
+        paymentsRes,
+        draftsRes
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('profiles').select('*'),
+        supabase.from('groups').select('*').order('created_at', { ascending: false }),
+        supabase.from('group_members').select('*'),
+        supabase.from('expenses').select('*, items:expense_items(*), splits:expense_splits(*)').order('created_at', { ascending: false }),
+        supabase.from('payments').select('*').order('created_at', { ascending: false }),
+        supabase.from('expense_drafts').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (profileRes.data) {
+        setCurrentProfile(profileRes.data as Profile);
       } else {
         const meta = user.user_metadata ?? {};
         const fullName = meta.full_name ?? meta.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
@@ -79,33 +96,16 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         setCurrentProfile(newProfile);
       }
 
-      const { data: allProfiles } = await supabase.from('profiles').select('*');
-      if (allProfiles) setProfiles(allProfiles as Profile[]);
+      if (profilesRes.data) setProfiles(profilesRes.data as Profile[]);
+      if (groupsRes.data) setGroups(groupsRes.data as Group[]);
+      if (membersRes.data) setMembers(membersRes.data as GroupMember[]);
 
-      const { data: allGroups } = await supabase.from('groups').select('*').order('created_at', { ascending: false });
-      if (allGroups) setGroups(allGroups as Group[]);
-
-      const { data: allMembers } = await supabase.from('group_members').select('*');
-      if (allMembers) setMembers(allMembers as GroupMember[]);
-
-      const { data: allExpenses } = await supabase.from('expenses').select('*').order('created_at', { ascending: false });
-      const { data: allItems } = await supabase.from('expense_items').select('*');
-      const { data: allSplits } = await supabase.from('expense_splits').select('*');
-
-      if (allExpenses) {
-        const expensesWithDetails = allExpenses.map(exp => ({
-          ...exp,
-          items: allItems?.filter(i => i.expense_id === exp.id) ?? [],
-          splits: allSplits?.filter(s => s.expense_id === exp.id) ?? [],
-        }));
-        setExpenses(expensesWithDetails as Expense[]);
+      if (expensesRes.data) {
+        setExpenses(expensesRes.data as unknown as Expense[]);
       }
 
-      const { data: allPayments } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
-      if (allPayments) setPayments(allPayments as Payment[]);
-
-      const { data: allDrafts } = await supabase.from('expense_drafts').select('*').order('created_at', { ascending: false });
-      if (allDrafts) setDrafts(allDrafts as ExpenseDraft[]);
+      if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
+      if (draftsRes.data) setDrafts(draftsRes.data as ExpenseDraft[]);
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {
@@ -117,8 +117,10 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void reloadFromSupabase();
     
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      void reloadFromSupabase();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+      if (event !== 'INITIAL_SESSION') {
+        void reloadFromSupabase();
+      }
     });
     
     return () => {
