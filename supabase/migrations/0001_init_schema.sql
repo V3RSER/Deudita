@@ -11,6 +11,8 @@ create table public.profiles (
 create table public.groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  category text not null default 'home',
+  description text,
   owner_id uuid not null references public.profiles(id),
   created_at timestamptz not null default now()
 );
@@ -76,7 +78,7 @@ create table public.payments (
   created_at timestamptz not null default now()
 );
 
--- 4) BORRADORES DESDE GMAIL (fase futura, pero se crea la tabla desde ya)
+-- 4) BORRADORES DESDE GMAIL
 create table public.expense_drafts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id),
@@ -91,7 +93,7 @@ create table public.expense_drafts (
   created_at timestamptz not null default now()
 );
 
--- 5) VISTA DE BALANCES NETOS (gastos menos pagos ya hechos)
+-- 5) VISTA DE BALANCES NETOS
 create view public.net_balances as
 with expense_debts as (
   select e.group_id, e.paid_by as creditor, s.user_id as debtor, sum(s.amount_owed) as amount
@@ -114,7 +116,7 @@ from expense_debts ed
 full outer join payment_totals pt
   on ed.group_id = pt.group_id and ed.creditor = pt.creditor and ed.debtor = pt.debtor;
 
--- 6) FK PENDIENTE (expenses -> expense_drafts, ahora que ya existe)
+-- 6) FK PENDIENTE (expenses -> expense_drafts)
 alter table public.expenses
   add constraint expenses_source_draft_id_fkey
   foreign key (source_draft_id) references public.expense_drafts(id);
@@ -144,6 +146,7 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- 8) ROW LEVEL SECURITY
+alter table public.profiles enable row level security;
 alter table public.groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.group_invites enable row level security;
@@ -153,11 +156,47 @@ alter table public.expense_splits enable row level security;
 alter table public.payments enable row level security;
 alter table public.expense_drafts enable row level security;
 
+-- Policies for profiles
+create policy "select_profiles" on public.profiles for select using (true);
+create policy "insert_profiles" on public.profiles for insert with check (true);
+create policy "update_profiles" on public.profiles for update using (auth.uid() = id);
+
+-- Policies for groups
 create policy "select_own_groups" on public.groups
   for select using (
-    id in (select group_id from public.group_members where user_id = auth.uid())
+    id in (select group_id from public.group_members where user_id = auth.uid()) or owner_id = auth.uid()
   );
 
+create policy "insert_own_groups" on public.groups
+  for insert with check (auth.uid() = owner_id);
+
+create policy "update_own_groups" on public.groups
+  for update using (auth.uid() = owner_id);
+
+create policy "delete_own_groups" on public.groups
+  for delete using (auth.uid() = owner_id);
+
+-- Policies for group_members
+create policy "select_group_members" on public.group_members
+  for select using (true);
+
+create policy "insert_group_members" on public.group_members
+  for insert with check (true);
+
+create policy "delete_group_members" on public.group_members
+  for delete using (user_id = auth.uid() or group_id in (select id from public.groups where owner_id = auth.uid()));
+
+-- Policies for group_invites
+create policy "select_group_invites" on public.group_invites
+  for select using (true);
+
+create policy "insert_group_invites" on public.group_invites
+  for insert with check (invited_by = auth.uid());
+
+create policy "update_group_invites" on public.group_invites
+  for update using (true);
+
+-- Policies for expenses
 create policy "select_group_expenses" on public.expenses
   for select using (
     group_id in (select group_id from public.group_members where user_id = auth.uid())
@@ -168,6 +207,20 @@ create policy "insert_group_expenses" on public.expenses
     group_id in (select group_id from public.group_members where user_id = auth.uid())
   );
 
+create policy "delete_group_expenses" on public.expenses
+  for delete using (
+    created_by = auth.uid() or paid_by = auth.uid()
+  );
+
+-- Policies for expense_items
+create policy "select_expense_items" on public.expense_items for select using (true);
+create policy "insert_expense_items" on public.expense_items for insert with check (true);
+
+-- Policies for expense_splits
+create policy "select_expense_splits" on public.expense_splits for select using (true);
+create policy "insert_expense_splits" on public.expense_splits for insert with check (true);
+
+-- Policies for payments
 create policy "select_group_payments" on public.payments
   for select using (
     group_id in (select group_id from public.group_members where user_id = auth.uid())
@@ -178,8 +231,12 @@ create policy "insert_group_payments" on public.payments
     group_id in (select group_id from public.group_members where user_id = auth.uid())
   );
 
+-- Policies for expense_drafts
 create policy "select_own_drafts" on public.expense_drafts
   for select using (user_id = auth.uid());
 
 create policy "insert_own_drafts" on public.expense_drafts
   for insert with check (user_id = auth.uid());
+
+create policy "update_own_drafts" on public.expense_drafts
+  for update using (user_id = auth.uid());

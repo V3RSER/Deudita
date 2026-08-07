@@ -21,6 +21,8 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const [newEmail, setNewEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const handleAddEmail = (e: React.MouseEvent) => {
@@ -38,20 +40,26 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
 
     if (!name || name.trim().length === 0) {
-      alert('Ingresa el nombre del grupo');
+      setErrorMessage('Ingresa el nombre del grupo');
       return;
     }
 
     setIsSubmitting(true);
-    await createGroup(name, category, description, emails);
-    setIsSubmitting(false);
-    
-    setName('');
-    setDescription('');
-    setEmails([]);
-    onClose();
+    try {
+      await createGroup(name, category, description, emails);
+      setName('');
+      setDescription('');
+      setEmails([]);
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Ocurrió un problema al crear el grupo. Inténtalo nuevamente.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -79,6 +87,12 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          {errorMessage && (
+            <div className="p-3.5 bg-red-50 ring-1 ring-red-200 rounded-xl text-sm text-red-700 font-medium">
+              {errorMessage}
+            </div>
+          )}
+
           <div>
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
               Nombre del Grupo

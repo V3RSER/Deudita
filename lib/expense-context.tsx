@@ -134,43 +134,83 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[]) => {
-    await fetch('/api/groups', {
+    const res = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, category, description, emails }),
     });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo crear el grupo';
+      console.error('[ExpenseContext] Error in createGroup:', message);
+      throw new Error(message);
+    }
+
     await reloadFromSupabase();
   };
 
   const addGroupInvite = async (groupId: string, email: string) => {
-    await fetch('/api/groups/invite', {
+    const res = await fetch('/api/groups/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupId, email }),
     });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo enviar la invitación';
+      console.error('[ExpenseContext] Error in addGroupInvite:', message);
+      throw new Error(message);
+    }
+
     await reloadFromSupabase();
   };
 
   const addExpense = async (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
-    await fetch('/api/expenses', {
+    const res = await fetch('/api/expenses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ expense, items, splits }),
     });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo registrar el gasto';
+      console.error('[ExpenseContext] Error in addExpense:', message);
+      throw new Error(message);
+    }
+
     await reloadFromSupabase();
   };
 
   const deleteExpense = async (id: string) => {
-    await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el gasto';
+      console.error('[ExpenseContext] Error in deleteExpense:', message);
+      throw new Error(message);
+    }
+
     await reloadFromSupabase();
   };
 
   const addPayment = async (payment: Omit<Payment, 'id' | 'created_at'>) => {
-    await fetch('/api/payments', {
+    const res = await fetch('/api/payments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payment),
     });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo registrar el pago';
+      console.error('[ExpenseContext] Error in addPayment:', message);
+      throw new Error(message);
+    }
+
     await reloadFromSupabase();
   };
 
