@@ -89,10 +89,12 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
-    reloadFromSupabase();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void reloadFromSupabase();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      reloadFromSupabase();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void reloadFromSupabase();
     });
     
     return () => {
