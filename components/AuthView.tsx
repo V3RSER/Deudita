@@ -1,44 +1,19 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Wallet, AlertCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 export function AuthView({ error }: { error?: string }) {
   const supabase = createClient();
-  const router = useRouter();
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        router.push('/groups');
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [router, supabase.auth]);
 
   const handleGoogleLogin = async () => {
-    const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+    await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        skipBrowserRedirect: true, // Esto evita la redirección en el iframe
       },
     });
-
-    if (data?.url) {
-      const width = 500;
-      const height = 600;
-      const left = window.screenX + (window.innerWidth - width) / 2;
-      const top = window.screenY + (window.innerHeight - height) / 2;
-      
-      window.open(
-        data.url,
-        'oauth-login',
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-    }
   };
 
   return (
