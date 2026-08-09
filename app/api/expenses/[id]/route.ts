@@ -28,6 +28,7 @@ export async function PUT(
         expense_date: expense.expense_date,
         source: expense.source ?? 'manual',
         receipt_url: expense.receipt_url,
+        notes: expense.notes,
       })
       .eq('id', id)
       .select()

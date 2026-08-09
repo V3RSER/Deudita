@@ -21,10 +21,12 @@ export async function POST(req: Request) {
         paid_by: expense.paid_by,
         total_amount: expense.total_amount,
         description: expense.description,
+        category: expense.category,
         expense_date: expense.expense_date,
         source: expense.source ?? 'manual',
         source_draft_id: expense.source_draft_id,
         receipt_url: expense.receipt_url,
+        notes: expense.notes,
         created_by: user.id
       })
       .select()

@@ -24,6 +24,7 @@ import {
   UserCheck,
   Sparkles,
   Pencil,
+  FileText,
 } from 'lucide-react';
 import { Expense } from '@/lib/types';
 
@@ -351,6 +352,12 @@ export function GroupDetail({
                             </span>
                           )}
                         </div>
+                        {exp.notes && (
+                          <p className="text-xs text-zinc-600 mt-1 flex items-center space-x-1 font-normal bg-zinc-50 px-2 py-1 rounded-md border border-zinc-100 w-fit">
+                            <FileText className="w-3 h-3 text-zinc-400 shrink-0" />
+                            <span>{exp.notes}</span>
+                          </p>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-1">
                           <span className="flex items-center space-x-1 font-medium">
                             <Calendar className="w-3 h-3" />

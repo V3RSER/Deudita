@@ -96,6 +96,7 @@ export interface Expense {
   source: 'manual' | 'gmail';
   source_draft_id?: string;
   receipt_url?: string;
+  notes?: string;
   created_by: string;
   created_at: string;
   items?: ExpenseItem[];
