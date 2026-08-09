@@ -24,6 +24,7 @@ export async function POST(req: Request) {
         expense_date: expense.expense_date,
         source: expense.source ?? 'manual',
         source_draft_id: expense.source_draft_id,
+        receipt_url: expense.receipt_url,
         created_by: user.id
       })
       .select()

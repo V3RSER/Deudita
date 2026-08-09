@@ -14,11 +14,13 @@ import {
   ChevronDown,
   LogOut,
   UserCheck,
+  Settings,
   SplitSquareHorizontal,
   Sparkles,
 } from 'lucide-react';
 
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
 export type ActiveTab = 'dashboard' | 'groups' | 'friends' | 'balances' | 'expenses' | 'drafts';
 
@@ -37,6 +39,7 @@ export function Navbar({
 }: NavbarProps) {
   const { currentProfile, drafts, logout } = useExpense();
   const [profileDropdownOpen, setProfileDropdownOpen] = React.useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
 
   const pendingDraftsCount = drafts.filter((d) => d.status === 'pending').length;
 
@@ -184,7 +187,18 @@ export function Navbar({
                       <p className="text-xs text-zinc-500 truncate">{currentProfile.email}</p>
                     </div>
 
-                    <div className="p-1.5">
+                    <div className="p-1.5 space-y-0.5">
+                      <button
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          setIsProfileModalOpen(true);
+                        }}
+                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition"
+                      >
+                        <Settings className="w-4 h-4 text-zinc-500" />
+                        <span>Mi Perfil y Ajustes</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
@@ -200,14 +214,7 @@ export function Navbar({
                 )}
               </div>
 
-              {/* Action buttons */}
-              <button
-                onClick={onOpenNewGroup}
-                className="hidden sm:flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-4 py-2 rounded-full text-xs font-semibold transition min-h-[40px]"
-              >
-                <span>Crear Grupo</span>
-              </button>
-
+              {/* Action button */}
               <button
                 onClick={onOpenNewExpense}
                 className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-full shadow-sm text-xs transition-all active:scale-95 min-h-[40px]"
@@ -298,6 +305,11 @@ export function Navbar({
           )}
         </button>
       </nav>
+
+      <ProfileSettingsModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </>
   );
 }

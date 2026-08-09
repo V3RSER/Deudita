@@ -71,23 +71,6 @@ export function DashboardSummary({
               Aquí tienes el resumen actualizado de tus grupos, balances y actividad reciente.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={onOpenNewExpense}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 bg-white text-zinc-900 hover:bg-zinc-100 font-semibold px-5 py-3 rounded-full text-sm transition-all shadow-md active:scale-95 min-h-[44px]"
-            >
-              <Plus className="w-4 h-4 text-zinc-900" />
-              <span>Nuevo Gasto</span>
-            </button>
-            <button
-              onClick={onOpenNewGroup}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 bg-zinc-800 text-white hover:bg-zinc-700 font-medium px-5 py-3 rounded-full text-sm ring-1 ring-zinc-700 transition-all active:scale-95 min-h-[44px]"
-            >
-              <Users className="w-4 h-4" />
-              <span>Crear Grupo</span>
-            </button>
-          </div>
         </div>
 
         {/* 3 Metric Cards */}
@@ -139,32 +122,6 @@ export function DashboardSummary({
       {/* Quick Action Shortcuts */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <button
-          onClick={onOpenNewExpense}
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
-        >
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Plus className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="font-semibold text-zinc-900 text-sm">Añadir Gasto</p>
-            <p className="text-xs text-zinc-500">Divide un nuevo gasto</p>
-          </div>
-        </button>
-
-        <button
-          onClick={onOpenNewGroup}
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
-        >
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Users className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="font-semibold text-zinc-900 text-sm">Crear Grupo</p>
-            <p className="text-xs text-zinc-500">Nuevo grupo de gastos</p>
-          </div>
-        </button>
-
-        <button
           onClick={onOpenSettleModal}
           className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
@@ -185,10 +142,36 @@ export function DashboardSummary({
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <p className="font-semibold text-zinc-900 text-sm">Escanear Ticket AI</p>
+            <p className="font-semibold text-zinc-900 text-sm">Escanear Ticket</p>
             <p className="text-xs text-zinc-500">Desglosa foto de boleta</p>
           </div>
         </button>
+
+        <Link
+          href="/balances"
+          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+        >
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+            <ArrowRightLeft className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-semibold text-zinc-900 text-sm">Ver Balances</p>
+            <p className="text-xs text-zinc-500">Cuentas por cobrar y pagar</p>
+          </div>
+        </Link>
+
+        <Link
+          href="/my-expenses"
+          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+        >
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
+            <Receipt className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-semibold text-zinc-900 text-sm">Historial Gastos</p>
+            <p className="text-xs text-zinc-500">Revisar todos los comprobantes</p>
+          </div>
+        </Link>
       </div>
 
       {/* Active Groups & Recent Activity Grid */}

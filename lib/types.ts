@@ -16,6 +16,9 @@ export interface Profile {
   email: string;
   full_name: string;
   avatar_url: string;
+  timezone?: string;
+  currency?: string;
+  currency_symbol?: string;
   created_at: string;
 }
 
@@ -92,6 +95,7 @@ export interface Expense {
   expense_date: string;
   source: 'manual' | 'gmail';
   source_draft_id?: string;
+  receipt_url?: string;
   created_by: string;
   created_at: string;
   items?: ExpenseItem[];

@@ -379,12 +379,12 @@ export function GroupDetail({
                       </div>
 
                       <div className="flex items-center space-x-1.5 bg-zinc-50 p-1 rounded-xl">
-                        {hasItems && (
+                        {(hasItems || exp.receipt_url) && (
                           <button
                             onClick={() => toggleExpandExpense(exp.id)}
                             className="px-3 py-1.5 hover:bg-white rounded-lg text-zinc-600 text-xs font-medium flex items-center space-x-1 transition-colors shadow-sm min-h-[36px]"
                           >
-                            <span>Ítems</span>
+                            <span>{exp.receipt_url ? 'Detalles / Recibo' : 'Ítems'}</span>
                             {isExpanded ? (
                               <ChevronUp className="w-3.5 h-3.5" />
                             ) : (
@@ -404,26 +404,56 @@ export function GroupDetail({
                     </div>
                   </div>
 
-                  {isExpanded && hasItems && (
+                  {isExpanded && (
                     <div className="mt-5 pt-4 border-t border-zinc-100 space-y-4">
-                      <div>
-                        <h5 className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider mb-2">
-                          Desglose de Ítems ({exp.items?.length})
-                        </h5>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {exp.items?.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex items-center justify-between bg-zinc-50 px-4 py-2.5 rounded-xl text-sm"
-                            >
-                              <span className="font-medium text-zinc-600">{item.description}</span>
-                              <span className="font-semibold text-zinc-900">
-                                {formatCurrency(item.amount)}
-                              </span>
-                            </div>
-                          ))}
+                      {hasItems && (
+                        <div>
+                          <h5 className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider mb-2">
+                            Desglose de Ítems ({exp.items?.length})
+                          </h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {exp.items?.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between bg-zinc-50 px-4 py-2.5 rounded-xl text-sm"
+                              >
+                                <span className="font-medium text-zinc-600">{item.description}</span>
+                                <span className="font-semibold text-zinc-900">
+                                  {formatCurrency(item.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {exp.receipt_url && (
+                        <div>
+                          <h5 className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider mb-2">
+                            Comprobante / Recibo Adjunto
+                          </h5>
+                          <div className="relative max-w-sm rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 p-2">
+                            <a
+                              href={exp.receipt_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block relative w-full h-48 rounded-xl overflow-hidden group"
+                            >
+                              <Image
+                                src={exp.receipt_url}
+                                alt="Recibo"
+                                fill
+                                className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                unoptimized
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
+                                Ver imagen completa ↗
+                              </div>
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -59,15 +59,15 @@ export function DraftsView({
         <div className="relative z-10">
           <div className="flex items-center space-x-3 text-zinc-400 font-semibold text-[10px] uppercase tracking-widest mb-3">
             <MailCheck className="w-4 h-4 text-zinc-300" />
-            <span>Detección Automática Gmail & Scanner AI</span>
+            <span>Lectura de Comprobantes y Boletas</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50">
-            Borradores & Correos Detectados
+            Borradores de Gastos
           </h1>
 
           <p className="text-zinc-400 text-base mt-3 max-w-3xl leading-relaxed">
-            Los correos electrónicos y tickets escaneados se guardan primero como <strong>borradores aislados</strong>. Revisa los detalles, asígnales un grupo y confirma para agregarlos a tus balances reales.
+            Los comprobantes detectados o escaneados se guardan como <strong>borradores</strong>. Revisa los detalles, asígnales un grupo y confirma para agregarlos a tus balances reales.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -76,7 +76,7 @@ export function DraftsView({
               className="flex items-center space-x-2 bg-white text-zinc-900 font-medium px-5 py-3 rounded-full text-sm shadow-sm transition-all hover:bg-zinc-100 active:scale-95"
             >
               <ScanLine className="w-4 h-4" />
-              <span>Escanear Comprobante / Email</span>
+              <span>Escanear Comprobante</span>
             </button>
 
             <button
@@ -84,7 +84,7 @@ export function DraftsView({
               className="flex items-center space-x-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 px-5 py-3 rounded-full text-sm font-medium ring-1 ring-zinc-700/50 transition-all active:scale-95 backdrop-blur-sm"
             >
               <RefreshCw className="w-4 h-4 text-zinc-400" />
-              <span>Simular Sync Gmail</span>
+              <span>Importar Ejemplo</span>
             </button>
           </div>
         </div>
@@ -125,10 +125,10 @@ export function DraftsView({
                   {/* Draft Header */}
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-amber-800 bg-amber-100/50 px-2.5 py-1 rounded-md">
-                      AI Detectado
+                      Borrador
                     </span>
                     <span className="text-xs font-semibold text-zinc-400">
-                      Confianza: {Math.round(draft.confidence * 100)}%
+                      Verificado
                     </span>
                   </div>
 

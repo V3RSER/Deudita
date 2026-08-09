@@ -15,6 +15,9 @@ import {
   Calculator,
   ListPlus,
   AlertCircle,
+  Camera,
+  UploadCloud,
+  Loader2,
 } from 'lucide-react';
 
 interface NewExpenseModalProps {
@@ -79,6 +82,45 @@ export function NewExpenseModal({
   const [items, setItems] = useState<Array<{ description: string; amount: string }>>([
     { description: '', amount: '' },
   ]);
+
+  // Receipt photo state
+  const [receiptUrl, setReceiptUrl] = useState<string>('');
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState<boolean>(false);
+
+  const handleReceiptFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingReceipt(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'expense_receipt');
+
+      const numericId = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+      formData.append('entityId', numericId);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Error al subir comprobante');
+      }
+
+      const data = await res.json();
+      if (data.url) {
+        setReceiptUrl(data.url);
+      }
+    } catch (err) {
+      console.error('Error al subir el recibo:', err);
+      alert('No se pudo subir la foto del recibo');
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
 
   // Split mode
   const [splitType, setSplitType] = useState<SplitType>('equal');
@@ -255,6 +297,7 @@ export function NewExpenseModal({
       category,
       expense_date: expenseDate,
       source: 'manual',
+      receipt_url: receiptUrl || undefined,
       created_by: currentProfile?.id ? currentProfile.id : effectivePaidBy,
       items: finalItems,
       splits: finalSplits as ExpenseSplit[],
@@ -266,6 +309,7 @@ export function NewExpenseModal({
   const resetAndClose = () => {
     setDescription('');
     setTotalAmount('');
+    setReceiptUrl('');
     setUseItems(false);
     setItems([{ description: '', amount: '' }]);
     setCustomSplits({});
@@ -405,6 +449,65 @@ export function NewExpenseModal({
                 className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               />
             </div>
+          </div>
+
+          {/* Receipt Attachment Section */}
+          <div className="bg-zinc-50 border border-zinc-200 p-4 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center space-x-1.5">
+                <Receipt className="w-3.5 h-3.5 text-zinc-700" />
+                <span>Foto de Recibo o Comprobante</span>
+              </label>
+              {receiptUrl && (
+                <button
+                  type="button"
+                  onClick={() => setReceiptUrl('')}
+                  className="text-xs text-rose-600 hover:text-rose-700 font-medium"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            {receiptUrl ? (
+              <div className="flex items-center space-x-3 bg-white p-3 rounded-xl border border-zinc-200">
+                <div className="w-14 h-14 relative rounded-lg overflow-hidden shrink-0 border border-zinc-200">
+                  <Image
+                    src={receiptUrl}
+                    alt="Recibo"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div className="text-xs text-zinc-600 space-y-0.5 overflow-hidden">
+                  <p className="font-semibold text-zinc-900 truncate">Comprobante adjuntado</p>
+                  <p className="text-[10px] text-emerald-600 font-medium font-mono truncate">{receiptUrl}</p>
+                </div>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-4 bg-white border-2 border-dashed border-zinc-200 hover:border-zinc-400 rounded-xl cursor-pointer transition-colors">
+                {isUploadingReceipt ? (
+                  <div className="flex items-center space-x-2 text-zinc-600 text-xs font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-900" />
+                    <span>Subiendo archivo...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 text-zinc-600 text-xs font-medium">
+                    <UploadCloud className="w-4 h-4 text-zinc-500" />
+                    <span>Adjuntar foto de boleta o recibo</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleReceiptFileChange}
+                  disabled={isUploadingReceipt}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           {/* Toggle Itemized Breakdown */}

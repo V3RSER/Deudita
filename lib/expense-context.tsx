@@ -29,6 +29,7 @@ interface ExpenseContextType {
   payments: Payment[];
   pendingInvites: GroupInvite[];
   notifications: Notification[];
+  updateProfile: (updates: Partial<Profile>) => Promise<void>;
   createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
   addGroupInvite: (groupId: string, email?: string) => Promise<{ inviteUrl: string; message: string }>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
@@ -150,6 +151,21 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     setCurrentProfile(null);
+  };
+
+  const updateProfile = async (updates: Partial<Profile>): Promise<void> => {
+    if (!currentProfile) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', currentProfile.id);
+
+    if (error) {
+      console.error('Error al actualizar el perfil:', error);
+      throw new Error(error.message || 'Error al actualizar el perfil');
+    }
+
+    await reloadFromSupabase();
   };
 
   const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string): Promise<Group> => {
@@ -328,6 +344,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         payments,
         pendingInvites,
         notifications,
+        updateProfile,
         createGroup,
         addGroupInvite,
         acceptGroupInvite,
