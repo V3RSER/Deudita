@@ -36,6 +36,7 @@ interface ExpenseContextType {
   rejectGroupInvite: (inviteId: string) => Promise<void>;
   markNotificationAsRead: (notificationId?: string) => Promise<void>;
   addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
+  updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
   confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<void>;
@@ -266,6 +267,23 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     await reloadFromSupabase();
   };
 
+  const updateExpense = async (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
+    const res = await fetch(`/api/expenses/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expense, items, splits }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el gasto';
+      console.error('[ExpenseContext] Error in updateExpense:', message);
+      throw new Error(message);
+    }
+
+    await reloadFromSupabase();
+  };
+
   const deleteExpense = async (id: string) => {
     const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
 
@@ -351,6 +369,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         rejectGroupInvite,
         markNotificationAsRead,
         addExpense,
+        updateExpense,
         deleteExpense,
         addPayment,
         confirmDraft,

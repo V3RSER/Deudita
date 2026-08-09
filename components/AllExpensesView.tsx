@@ -14,13 +14,16 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  Pencil,
 } from 'lucide-react';
+import { Expense } from '@/lib/types';
 
 interface AllExpensesViewProps {
   onOpenNewExpense: () => void;
+  onEditExpense?: (expense: Expense) => void;
 }
 
-export function AllExpensesView({ onOpenNewExpense }: AllExpensesViewProps) {
+export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpensesViewProps) {
   const { expenses, userGroups, profiles, deleteExpense } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
@@ -203,9 +206,20 @@ export function AllExpensesView({ onOpenNewExpense }: AllExpensesViewProps) {
                         </button>
                       )}
 
+                      {onEditExpense && (
+                        <button
+                          onClick={() => onEditExpense(exp)}
+                          className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                          title="Editar gasto"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <button
                         onClick={() => deleteExpense(exp.id)}
                         className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors"
+                        title="Eliminar gasto"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

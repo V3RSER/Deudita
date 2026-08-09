@@ -23,12 +23,15 @@ import {
   Check,
   UserCheck,
   Sparkles,
+  Pencil,
 } from 'lucide-react';
+import { Expense } from '@/lib/types';
 
 interface GroupDetailProps {
   group: Group;
   onBack: () => void;
   onOpenNewExpense: (groupId?: string) => void;
+  onEditExpense?: (expense: Expense) => void;
   onOpenSettleModal: (groupId: string, debtorId?: string, creditorId?: string, amount?: number) => void;
   onOpenAddMember: (groupId: string) => void;
 }
@@ -37,6 +40,7 @@ export function GroupDetail({
   group,
   onBack,
   onOpenNewExpense,
+  onEditExpense,
   onOpenSettleModal,
   onOpenAddMember,
 }: GroupDetailProps) {
@@ -390,6 +394,16 @@ export function GroupDetail({
                             ) : (
                               <ChevronDown className="w-3.5 h-3.5" />
                             )}
+                          </button>
+                        )}
+
+                        {onEditExpense && (
+                          <button
+                            onClick={() => onEditExpense(exp)}
+                            className="p-2 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                            title="Editar gasto"
+                          >
+                            <Pencil className="w-4 h-4" />
                           </button>
                         )}
 

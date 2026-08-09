@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { GroupDetail } from '@/components/GroupDetail';
 import { useExpense } from '@/lib/expense-context';
+import { Expense } from '@/lib/types';
 import { useRouter, useParams } from 'next/navigation';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
@@ -15,6 +16,7 @@ export default function GroupDetailPage() {
   const { groups } = useExpense();
 
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
+  const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   
   const [isSettleOpen, setIsSettleOpen] = useState(false);
   const [settleParams, setSettleParams] = useState<{
@@ -31,6 +33,16 @@ export default function GroupDetailPage() {
     return <div className="p-8 text-center text-zinc-500">Grupo no encontrado.</div>;
   }
 
+  const handleOpenNewExpense = () => {
+    setExpenseToEdit(null);
+    setIsNewExpenseOpen(true);
+  };
+
+  const handleEditExpense = (exp: Expense) => {
+    setExpenseToEdit(exp);
+    setIsNewExpenseOpen(true);
+  };
+
   const handleOpenSettleModal = (
     _gId?: string,
     debtorId?: string,
@@ -46,15 +58,20 @@ export default function GroupDetailPage() {
       <GroupDetail
         group={group}
         onBack={() => router.push('/groups')}
-        onOpenNewExpense={() => setIsNewExpenseOpen(true)}
+        onOpenNewExpense={handleOpenNewExpense}
+        onEditExpense={handleEditExpense}
         onOpenSettleModal={handleOpenSettleModal}
         onOpenAddMember={() => setIsAddMemberOpen(true)}
       />
 
       <NewExpenseModal
         isOpen={isNewExpenseOpen}
-        onClose={() => setIsNewExpenseOpen(false)}
+        onClose={() => {
+          setIsNewExpenseOpen(false);
+          setExpenseToEdit(null);
+        }}
         defaultGroupId={groupId}
+        expenseToEdit={expenseToEdit}
       />
 
       <SettleDebtModal
