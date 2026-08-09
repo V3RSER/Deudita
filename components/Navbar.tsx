@@ -18,6 +18,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+import { NotificationCenter } from '@/components/NotificationCenter';
+
 export type ActiveTab = 'dashboard' | 'groups' | 'friends' | 'balances' | 'expenses' | 'drafts';
 
 interface NavbarProps {
@@ -142,6 +144,9 @@ export function Navbar({
 
             {/* Right Action Area */}
             <div className="flex items-center space-x-3">
+              {/* Notifications Center */}
+              <NotificationCenter />
+
               {/* Profile Dropdown */}
               <div className="relative">
                 <button

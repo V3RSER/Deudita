@@ -45,10 +45,79 @@ const CATEGORY_LABELS: Record<GroupCategory, string> = {
 };
 
 export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
-  const { currentProfile, userGroups, members, expenses, payments, profiles } = useExpense();
+  const { currentProfile, userGroups, members, expenses, payments, profiles, pendingInvites, acceptGroupInvite, rejectGroupInvite } = useExpense();
+  const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
+
+  const handleAcceptInvite = async (inviteId: string) => {
+    try {
+      setProcessingInviteId(inviteId);
+      await acceptGroupInvite(inviteId);
+    } catch (err) {
+      console.error('Error al aceptar:', err);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  };
+
+  const handleRejectInvite = async (inviteId: string) => {
+    try {
+      setProcessingInviteId(inviteId);
+      await rejectGroupInvite(inviteId);
+    } catch (err) {
+      console.error('Error al rechazar:', err);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
+      {/* PENDING INVITES BANNER */}
+      {pendingInvites.length > 0 && (
+        <div className="bg-zinc-900 text-white rounded-[2rem] p-6 shadow-xl border border-zinc-800 space-y-4">
+          <div className="flex items-center space-x-2">
+            <span className="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-emerald-500/30">
+              Invitación Pendiente
+            </span>
+          </div>
+
+          {pendingInvites.map((invite) => {
+            const groupName = invite.group ? invite.group.name : 'Un grupo';
+            const inviterName = invite.inviter ? invite.inviter.full_name : 'Un integrante';
+
+            return (
+              <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-800/80 p-4 rounded-2xl border border-zinc-700/60">
+                <div>
+                  <h4 className="font-bold text-white text-base">
+                    Te han invitado al grupo <span className="text-emerald-400">&quot;{groupName}&quot;</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Invitado por <strong className="text-zinc-200">{inviterName}</strong>
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={() => handleRejectInvite(invite.id)}
+                    disabled={processingInviteId === invite.id}
+                    className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded-xl text-xs font-medium transition"
+                  >
+                    Rechazar
+                  </button>
+                  <button
+                    onClick={() => handleAcceptInvite(invite.id)}
+                    disabled={processingInviteId === invite.id}
+                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-semibold shadow-md transition"
+                  >
+                    Aceptar e Ingresar
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Group Grid Header */}
       <div className="flex items-center justify-between pt-2">
         <div>

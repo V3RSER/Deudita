@@ -10,6 +10,8 @@ import {
   Payment,
   ExpenseItem,
   ExpenseSplit,
+  GroupInvite,
+  Notification,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
 
@@ -25,8 +27,13 @@ interface ExpenseContextType {
   expenses: Expense[];
   drafts: ExpenseDraft[];
   payments: Payment[];
+  pendingInvites: GroupInvite[];
+  notifications: Notification[];
   createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
-  addGroupInvite: (groupId: string, email: string) => Promise<void>;
+  addGroupInvite: (groupId: string, email?: string) => Promise<{ inviteUrl: string; message: string }>;
+  acceptGroupInvite: (inviteId: string) => Promise<string>;
+  rejectGroupInvite: (inviteId: string) => Promise<void>;
+  markNotificationAsRead: (notificationId?: string) => Promise<void>;
   addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
@@ -48,6 +55,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [drafts, setDrafts] = useState<ExpenseDraft[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const supabase = createClient();
 
@@ -67,7 +76,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         membersRes,
         expensesRes,
         paymentsRes,
-        draftsRes
+        draftsRes,
+        notificationsRes
       ] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('profiles').select('*'),
@@ -75,7 +85,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         supabase.from('group_members').select('*'),
         supabase.from('expenses').select('*, items:expense_items(*), splits:expense_splits(*)').order('created_at', { ascending: false }),
         supabase.from('payments').select('*').order('created_at', { ascending: false }),
-        supabase.from('expense_drafts').select('*').order('created_at', { ascending: false })
+        supabase.from('expense_drafts').select('*').order('created_at', { ascending: false }),
+        fetch('/api/notifications').then((r) => r.json()).catch(() => ({ notifications: [], pendingInvites: [] }))
       ]);
 
       if (profileRes.data) {
@@ -109,6 +120,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
       if (draftsRes.data) setDrafts(draftsRes.data as ExpenseDraft[]);
+
+      if (notificationsRes) {
+        setNotifications(notificationsRes.notifications || []);
+        setPendingInvites(notificationsRes.pendingInvites || []);
+      }
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {
@@ -155,7 +171,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return createdGroup;
   };
 
-  const addGroupInvite = async (groupId: string, email: string) => {
+  const addGroupInvite = async (groupId: string, email?: string): Promise<{ inviteUrl: string; message: string }> => {
     const res = await fetch('/api/groups/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -169,6 +185,51 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       throw new Error(message);
     }
 
+    const data = await res.json();
+    await reloadFromSupabase();
+    return {
+      inviteUrl: data.inviteUrl,
+      message: data.message,
+    };
+  };
+
+  const acceptGroupInvite = async (inviteId: string): Promise<string> => {
+    const res = await fetch(`/api/invites/${inviteId}/accept`, {
+      method: 'POST',
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'No se pudo aceptar la invitación');
+    }
+
+    const data = await res.json();
+    await reloadFromSupabase();
+    return data.groupId;
+  };
+
+  const rejectGroupInvite = async (inviteId: string): Promise<void> => {
+    const res = await fetch(`/api/invites/${inviteId}/reject`, {
+      method: 'POST',
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'No se pudo rechazar la invitación');
+    }
+
+    await reloadFromSupabase();
+  };
+
+  const markNotificationAsRead = async (notificationId?: string): Promise<void> => {
+    await fetch('/api/notifications', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notificationId,
+        markAll: !notificationId,
+      }),
+    });
     await reloadFromSupabase();
   };
 
@@ -265,8 +326,13 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         expenses,
         drafts,
         payments,
+        pendingInvites,
+        notifications,
         createGroup,
         addGroupInvite,
+        acceptGroupInvite,
+        rejectGroupInvite,
+        markNotificationAsRead,
         addExpense,
         deleteExpense,
         addPayment,

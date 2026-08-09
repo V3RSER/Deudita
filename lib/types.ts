@@ -42,7 +42,27 @@ export interface GroupInvite {
   group_id: string;
   email: string;
   invited_by: string;
-  status: 'pending' | 'accepted';
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  token?: string;
+  group?: Group;
+  inviter?: Profile;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: 'group_invite' | 'general';
+  title: string;
+  message: string;
+  data?: {
+    invite_id?: string;
+    group_id?: string;
+    group_name?: string;
+    invited_by_name?: string;
+    invited_by_email?: string;
+  };
+  is_read: boolean;
   created_at: string;
 }
 
