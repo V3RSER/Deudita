@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function DELETE(
   req: Request,
@@ -20,13 +20,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Falta el ID del amigo' }, { status: 400 });
     }
 
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+
     // 1. Get all group IDs where current user is a member or owner
-    const { data: userMemberships } = await supabase
+    const { data: userMemberships } = await db
       .from('group_members')
       .select('group_id')
       .eq('user_id', user.id);
 
-    const { data: userOwnedGroups } = await supabase
+    const { data: userOwnedGroups } = await db
       .from('groups')
       .select('id')
       .eq('owner_id', user.id);
@@ -39,7 +41,7 @@ export async function DELETE(
 
     // 2. Remove friend from shared groups
     if (groupIds.length > 0) {
-      await supabase
+      await db
         .from('group_members')
         .delete()
         .eq('user_id', friendId)
@@ -47,27 +49,41 @@ export async function DELETE(
     }
 
     // Also remove friend where invited_by = user.id
-    await supabase
+    await db
       .from('group_members')
       .delete()
       .eq('user_id', friendId)
       .eq('invited_by', user.id);
 
+    // Also remove pending invitations for this friend invited by current user
+    await db
+      .from('group_invites')
+      .delete()
+      .eq('invitee_profile_id', friendId)
+      .eq('invited_by', user.id);
+
     // 3. If friend is a temporary profile and has no remaining memberships, clean up profile
-    const { data: friendProfile } = await supabase
+    const { data: friendProfile } = await db
       .from('profiles')
-      .select('email')
+      .select('email, is_temp')
       .eq('id', friendId)
       .maybeSingle();
 
-    if (friendProfile && (friendProfile.email.startsWith('temp_') || friendProfile.email.includes('@deudita.app'))) {
-      const { data: remainingMemberships } = await supabase
-        .from('group_members')
-        .select('group_id')
-        .eq('user_id', friendId);
+    if (friendProfile) {
+      const isTemp = Boolean(
+        friendProfile.is_temp ||
+        (friendProfile.email && (friendProfile.email.startsWith('temp_') || friendProfile.email.includes('@deudita.app')))
+      );
 
-      if (!remainingMemberships || remainingMemberships.length === 0) {
-        await supabase.from('profiles').delete().eq('id', friendId);
+      if (isTemp) {
+        const { data: remainingMemberships } = await db
+          .from('group_members')
+          .select('group_id')
+          .eq('user_id', friendId);
+
+        if (!remainingMemberships || remainingMemberships.length === 0) {
+          await db.from('profiles').delete().eq('id', friendId);
+        }
       }
     }
 

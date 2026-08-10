@@ -10,7 +10,7 @@ import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, 
 interface AddMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  groupId: string;
+  groupId?: string;
 }
 
 export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps) {
@@ -18,6 +18,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   
   // Step 1 = Add Name, Step 2 = How to Invite
   const [step, setStep] = useState<1 | 2>(1);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId || userGroups[0]?.id || '');
   const [name, setName] = useState('');
   const [addedMemberName, setAddedMemberName] = useState('');
   const [addedMemberId, setAddedMemberId] = useState<string | null>(null);
@@ -29,14 +30,16 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const activeGroupId = groupId || selectedGroupId || (userGroups[0] ? userGroups[0].id : '');
+
   if (!isOpen) return null;
 
-  const group = userGroups.find((g) => g.id === groupId);
+  const group = userGroups.find((g) => g.id === activeGroupId);
   const groupName = group ? group.name : 'Grupo';
 
   // Filter friends who are NOT currently in this group
   const groupMemberUserIds = new Set(
-    members.filter((m) => m.group_id === groupId).map((m) => m.user_id)
+    members.filter((m) => m.group_id === activeGroupId).map((m) => m.user_id)
   );
 
   const availableFriends = profiles.filter((p) => {
@@ -56,14 +59,14 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   // Step 1 Submit: Create Temporary Member immediately
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !activeGroupId) return;
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
       setSuccessMsg(null);
 
-      const result = await addGroupInvite(groupId, undefined, name.trim());
+      const result = await addGroupInvite(activeGroupId, undefined, name.trim());
       setAddedMemberName(name.trim());
       setAddedMemberId(result.memberId || null);
       setGeneratedLink(result.inviteUrl);
@@ -78,6 +81,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
   // Add friend directly from suggestions
   const handleSelectFriend = async (friend: Profile) => {
+    if (!activeGroupId) return;
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
@@ -86,7 +90,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
       const friendName = friend.full_name || 'Amigo';
       const friendEmail = isTempEmail(friend.email) || !friend.email ? undefined : friend.email;
 
-      const result = await addGroupInvite(groupId, friendEmail, friendName, friend.id);
+      const result = await addGroupInvite(activeGroupId, friendEmail, friendName, friend.id);
       
       setAddedMemberName(friendName);
       setAddedMemberId(result.memberId || friend.id);
@@ -105,14 +109,14 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   // Step 2: Send Email Invite
   const handleSendEmailInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !activeGroupId) return;
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
       setSuccessMsg(null);
 
-      const result = await addGroupInvite(groupId, email.trim(), addedMemberName, addedMemberId || undefined);
+      const result = await addGroupInvite(activeGroupId, email.trim(), addedMemberName, addedMemberId || undefined);
       setSuccessMsg(`Invitación enviada por correo a ${email.trim()}`);
       if (result.inviteUrl) setGeneratedLink(result.inviteUrl);
       if (result.memberId) setAddedMemberId(result.memberId);
@@ -127,10 +131,10 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
   const handleCopyLink = async () => {
     let link = generatedLink;
-    if (!link) {
+    if (!link && activeGroupId) {
       try {
         setIsSubmitting(true);
-        const result = await addGroupInvite(groupId, undefined, addedMemberName || name, addedMemberId || undefined);
+        const result = await addGroupInvite(activeGroupId, undefined, addedMemberName || name, addedMemberId || undefined);
         link = result.inviteUrl;
         if (result.memberId) setAddedMemberId(result.memberId);
         setGeneratedLink(link);
@@ -150,10 +154,10 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
   const handleNativeShare = async () => {
     let link = generatedLink;
-    if (!link) {
+    if (!link && activeGroupId) {
       try {
         setIsSubmitting(true);
-        const result = await addGroupInvite(groupId, undefined, addedMemberName || name, addedMemberId || undefined);
+        const result = await addGroupInvite(activeGroupId, undefined, addedMemberName || name, addedMemberId || undefined);
         link = result.inviteUrl;
         if (result.memberId) setAddedMemberId(result.memberId);
         setGeneratedLink(link);
@@ -234,6 +238,25 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
           {/* STEP 1: Add Name First */}
           {step === 1 ? (
             <form onSubmit={handleAddMember} className="space-y-4">
+              {!groupId && userGroups.length > 1 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
+                    Grupo de Destino *
+                  </label>
+                  <select
+                    value={activeGroupId}
+                    onChange={(e) => setSelectedGroupId(e.target.value)}
+                    className="w-full px-3.5 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
+                  >
+                    {userGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                   1. Nombre o Búsqueda de Amigo *

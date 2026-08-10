@@ -8,6 +8,7 @@ import { Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
 import { isTempEmail, formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
+import { AddMemberModal } from '@/components/AddMemberModal';
 import {
   Users,
   UserPlus,
@@ -23,13 +24,10 @@ interface FriendsViewProps {
 }
 
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
-  const { currentProfile, profiles, members, expenses, payments, userGroups, addGroupInvite } = useExpense();
+  const { currentProfile, profiles, members, expenses, payments, userGroups } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
 
   // Get list of unique friends who share at least one group with current user
   const userGroupIds = new Set(userGroups.map((g) => g.id));
@@ -56,26 +54,6 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
     return nameMatch || emailMatch;
   });
 
-  const handleSendInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !userGroups[0]) return;
-
-    setIsSubmitting(true);
-    try {
-      await addGroupInvite(userGroups[0].id, inviteEmail.trim());
-      setInviteSuccess(true);
-      setTimeout(() => {
-        setInviteSuccess(false);
-        setShowInviteModal(false);
-        setInviteEmail('');
-      }, 2000);
-    } catch {
-      // Error handling
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="space-y-8">
       {/* Header Banner */}
@@ -94,7 +72,7 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
         </div>
 
         <button
-          onClick={() => setShowInviteModal(true)}
+          onClick={() => setIsAddMemberOpen(true)}
           className="bg-white hover:bg-zinc-100 text-zinc-900 font-semibold px-6 py-3 rounded-full text-sm shadow-md transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
         >
           <UserPlus className="w-4 h-4" />
@@ -120,10 +98,10 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
           <Users className="w-12 h-12 text-zinc-300 mx-auto" />
           <h3 className="font-semibold text-zinc-900 text-lg">No se encontraron amigos</h3>
           <p className="text-xs text-zinc-500 max-w-md mx-auto">
-            Prueba invitando a tus amigos por correo electrónico para agregarlos a tus grupos.
+            Prueba invitando a tus amigos por correo electrónico o añadiéndolos a un grupo.
           </p>
           <button
-            onClick={() => setShowInviteModal(true)}
+            onClick={() => setIsAddMemberOpen(true)}
             className="bg-zinc-900 text-white text-xs font-semibold px-5 py-2.5 rounded-full"
           >
             Invitar Amigo
@@ -246,62 +224,11 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
         memberProfile={selectedFriend}
       />
 
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-          <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-md p-6 sm:p-8 space-y-5">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg text-zinc-900">Invitar Nuevo Amigo</h3>
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="p-2 text-zinc-400 hover:text-zinc-900 rounded-full"
-              >
-                ✕
-              </button>
-            </div>
-
-            {inviteSuccess ? (
-              <div className="p-4 bg-emerald-50 ring-1 ring-emerald-200 text-emerald-800 rounded-xl text-sm font-medium flex items-center space-x-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>¡Invitación enviada con éxito!</span>
-              </div>
-            ) : (
-              <form onSubmit={handleSendInvite} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                    Correo Electrónico
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="amigo@ejemplo.com"
-                    className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-zinc-900"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowInviteModal(false)}
-                    className="px-4 py-2.5 rounded-full ring-1 ring-zinc-200 text-xs font-medium"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !inviteEmail.trim()}
-                    className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-semibold shadow-sm hover:bg-zinc-800 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Enviando...' : 'Enviar Invitación'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Add / Invite Member Modal */}
+      <AddMemberModal
+        isOpen={isAddMemberOpen}
+        onClose={() => setIsAddMemberOpen(false)}
+      />
     </div>
   );
 }
