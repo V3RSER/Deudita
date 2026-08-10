@@ -30,3 +30,44 @@ export function getCleanGroupDescription(description?: string): string {
   if (!description) return '';
   return description.replace(/\[img:.*?\]/g, '').trim();
 }
+
+export function getGroupCategoryLabel(category?: string): string {
+  if (!category) return 'General';
+  const cat = category.toLowerCase().trim();
+  switch (cat) {
+    case 'friends':
+    case 'amigos':
+      return 'Amigos';
+    case 'trip':
+    case 'viajes':
+    case 'viaje':
+    case 'travel':
+      return 'Viajes';
+    case 'home':
+    case 'hogar':
+    case 'house':
+    case 'vivienda':
+      return 'Hogar';
+    case 'couple':
+    case 'pareja':
+      return 'Pareja';
+    case 'event':
+    case 'eventos':
+    case 'evento':
+      return 'Eventos';
+    case 'accounting':
+    case 'contabilidad':
+      return 'Contabilidad';
+    case 'work':
+    case 'trabajo':
+    case 'negocio':
+    case 'business':
+      return 'Trabajo';
+    case 'other':
+    case 'otros':
+    case 'otro':
+      return 'Otros';
+    default:
+      return category.charAt(0).toUpperCase() + category.slice(1);
+  }
+}

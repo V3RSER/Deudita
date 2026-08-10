@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Group } from '@/lib/types';
+import { Group, Expense, Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances, calculateUserSummaries } from '@/lib/balance-utils';
 import {
   ArrowLeft,
@@ -26,11 +26,11 @@ import {
   Pencil,
   FileText,
 } from 'lucide-react';
-import { Expense } from '@/lib/types';
 
-import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
+import { getGroupImage, getCleanGroupDescription, getGroupCategoryLabel } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
+import { MemberDetailModal } from '@/components/MemberDetailModal';
 
 interface GroupDetailProps {
   group: Group;
@@ -64,6 +64,7 @@ export function GroupDetail({
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
+  const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
@@ -173,7 +174,7 @@ export function GroupDetail({
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-600 bg-zinc-100 px-3 py-1 rounded-md">
-                  {CATEGORY_LABELS[group.category] ? CATEGORY_LABELS[group.category].toUpperCase() : (group.category ? group.category.toUpperCase() : 'GENERAL')}
+                  {getGroupCategoryLabel(group.category).toUpperCase()}
                 </span>
                 {isSoloMember && (
                   <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] uppercase tracking-wider font-semibold rounded-md">
@@ -557,43 +558,70 @@ export function GroupDetail({
             {memberProfiles.map((p) => {
               const memberRecord = groupMembers.find((m) => m.user_id === p.id);
               const isOwner = memberRecord?.role === 'owner';
+              const isTemp = !p.email || p.email.startsWith('temp_');
 
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-2xl p-4 ring-1 ring-zinc-200 flex items-center space-x-3 shadow-sm"
+                  onClick={() => setSelectedMemberForDetail(p)}
+                  className="bg-white hover:bg-zinc-50/80 rounded-2xl p-4 ring-1 ring-zinc-200/80 flex items-center justify-between shadow-2xs cursor-pointer transition-all active:scale-[0.99] group"
                 >
-                  {p.avatar_url ? (
-                    <Image
-                      src={p.avatar_url}
-                      alt={p.full_name}
-                      width={44}
-                      height={44}
-                      className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100"
-                      unoptimized
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-11 h-11 rounded-full bg-zinc-800 text-white flex items-center justify-center text-sm font-bold">
-                      {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
+                  <div className="flex items-center space-x-3.5 overflow-hidden">
+                    {p.avatar_url ? (
+                      <Image
+                        src={p.avatar_url}
+                        alt={p.full_name}
+                        width={44}
+                        height={44}
+                        className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100 shrink-0"
+                        unoptimized
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-zinc-900 text-white flex items-center justify-center text-sm font-bold shrink-0">
+                        {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <h4 className="font-semibold text-zinc-900 text-sm truncate group-hover:text-zinc-950">
+                          {p.full_name}
+                        </h4>
+                        {isOwner && (
+                          <span className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                            Admin
+                          </span>
+                        )}
+                        {isTemp && (
+                          <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                            Pendiente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                        {isTemp ? 'Usuario temporal del grupo' : p.email}
+                      </p>
                     </div>
-                  )}
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-semibold text-zinc-900 text-sm">{p.full_name}</h4>
-                      {isOwner && (
-                        <span className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                          Admin
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-0.5">{p.email}</p>
                   </div>
+
+                  <span className="text-xs font-semibold text-zinc-400 group-hover:text-zinc-700 shrink-0 pl-2">
+                    Ver perfil
+                  </span>
                 </div>
               );
             })}
           </div>
         </div>
+      )}
+
+      {/* Member Detail Modal */}
+      {selectedMemberForDetail && (
+        <MemberDetailModal
+          isOpen={Boolean(selectedMemberForDetail)}
+          memberProfile={selectedMemberForDetail}
+          groupId={group.id}
+          onClose={() => setSelectedMemberForDetail(null)}
+        />
       )}
       {/* Expense Detail Modal */}
       {selectedExpenseForModal && (

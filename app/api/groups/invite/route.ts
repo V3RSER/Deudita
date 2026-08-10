@@ -44,153 +44,139 @@ export async function POST(req: Request) {
       .single();
 
     const inviterName = inviterProfile?.full_name || user.user_metadata?.full_name || 'Un integrante';
-    const inviterEmail = user.email || '';
 
-    // If name is provided, create a temporary member profile so they immediately join the group
-    if (memberName) {
-      const tempEmail = targetEmail || `temp_${Date.now()}_${Math.floor(Math.random() * 10000)}@deudita.app`;
-      
-      let targetUserId: string | null = null;
-      
-      // Check if profile with email exists
-      if (targetEmail) {
-        const { data: existingProf } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', targetEmail)
-          .maybeSingle();
-        if (existingProf) targetUserId = existingProf.id;
-      }
+    let targetUserId: string | null = null;
+    let tempEmail = targetEmail;
 
-      if (!targetUserId) {
-        const newUserId = crypto.randomUUID();
-        const { error: profInsertErr } = await supabase.from('profiles').insert({
-          id: newUserId,
-          email: tempEmail,
-          full_name: memberName,
-          avatar_url: '',
-        });
-
-        if (!profInsertErr) {
-          targetUserId = newUserId;
-        } else {
-          // If insert fails due to FK auth.users, fallback to auth admin if available
-          const { data: authAdminRes } = await supabase.auth.admin.createUser({
-            email: tempEmail,
-            email_confirm: true,
-            user_metadata: { full_name: memberName },
-          }).catch(() => ({ data: null }));
-          if (authAdminRes?.user) {
-            targetUserId = authAdminRes.user.id;
-          }
-        }
-      }
-
-      if (targetUserId) {
-        await supabase.from('group_members').upsert({
-          group_id: groupId,
-          user_id: targetUserId,
-          invited_by: user.id,
-          role: 'member',
-        }, { onConflict: 'group_id,user_id' });
-      }
-    }
-
-    // Check if target user is already a member if email is provided
+    // 1. If email is provided, check if profile exists
     if (targetEmail) {
       const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('*')
         .eq('email', targetEmail)
         .maybeSingle();
 
       if (existingProfile) {
-        const { data: existingMember } = await supabase
-          .from('group_members')
-          .select('user_id')
-          .eq('group_id', groupId)
-          .eq('user_id', existingProfile.id)
-          .maybeSingle();
+        targetUserId = existingProfile.id;
+      }
+    }
 
-        if (existingMember) {
-          return NextResponse.json({ error: 'Esta persona ya es miembro del grupo' }, { status: 400 });
+    // 2. If no existing profile found, create a new profile (temporary or with provided email/name)
+    if (!targetUserId) {
+      if (!tempEmail) {
+        tempEmail = `temp_${Date.now()}_${Math.floor(Math.random() * 100000)}@deudita.app`;
+      }
+      const displayName = memberName || targetEmail.split('@')[0];
+      const tempPassword = crypto.randomUUID() + 'aA1!';
+
+      // Create auth user so ID is valid in auth.users
+      const { data: signUpData } = await supabase.auth.signUp({
+        email: tempEmail,
+        password: tempPassword,
+        options: {
+          data: { full_name: displayName },
+        },
+      }).catch(() => ({ data: null }));
+
+      if (signUpData?.user?.id) {
+        targetUserId = signUpData.user.id;
+      } else {
+        // Fallback to admin or uuid
+        const { data: adminData } = await supabase.auth.admin.createUser({
+          email: tempEmail,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: { full_name: displayName },
+        }).catch(() => ({ data: null }));
+
+        if (adminData?.user?.id) {
+          targetUserId = adminData.user.id;
+        } else {
+          targetUserId = crypto.randomUUID();
         }
       }
+
+      // Upsert profile record
+      await supabase.from('profiles').upsert({
+        id: targetUserId,
+        email: tempEmail,
+        full_name: displayName,
+        avatar_url: '',
+      }, { onConflict: 'id' });
     }
 
-    // Upsert invitation in database
-    const inviteEmail = targetEmail || `invite_${Date.now()}@deudita.app`;
+    // 3. Add to group_members immediately!
+    const { error: memberInsertErr } = await supabase.from('group_members').upsert({
+      group_id: groupId,
+      user_id: targetUserId,
+      invited_by: user.id,
+      role: 'member',
+    }, { onConflict: 'group_id,user_id' });
 
-    const { data: invite, error: inviteErr } = await supabase
+    if (memberInsertErr) {
+      console.error('[API /api/groups/invite] Error adding member to group:', memberInsertErr);
+    }
+
+    // 4. Create or update group_invite record if real email is provided or for generating link
+    let inviteId: string | null = null;
+    const inviteEmailToUse = targetEmail || tempEmail || `temp_${groupId}_${targetUserId}@deudita.app`;
+
+    const { data: existingInvite } = await supabase
       .from('group_invites')
-      .upsert(
-        {
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('email', inviteEmailToUse)
+      .maybeSingle();
+
+    if (existingInvite) {
+      inviteId = existingInvite.id;
+    } else {
+      const { data: newInvite } = await supabase
+        .from('group_invites')
+        .insert({
           group_id: groupId,
-          email: inviteEmail,
+          email: inviteEmailToUse,
           invited_by: user.id,
           status: 'pending',
-        },
-        { onConflict: 'group_id,email' }
-      )
-      .select()
-      .single();
+        })
+        .select('id')
+        .single();
 
-    if (inviteErr || !invite) {
-      console.error('[API /api/groups/invite] Error al insertar invitación:', inviteErr);
-      return NextResponse.json({ error: inviteErr?.message || 'Error al crear la invitación' }, { status: 500 });
+      if (newInvite) inviteId = newInvite.id;
     }
 
-    // Determine domain / app URL
-    const requestOrigin = new URL(req.url).origin;
-    const appUrl = process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : requestOrigin;
-    const inviteUrl = `${appUrl}/join/${invite.id}`;
+    const origin = req.headers.get('origin') || 'https://deudita.app';
+    const inviteUrl = inviteId
+      ? `${origin}/join?invite=${inviteId}`
+      : `${origin}/join?group=${groupId}`;
 
-    // If target email corresponds to a registered user, create an in-app notification
-    if (targetEmail) {
-      const { data: targetProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', targetEmail)
-        .maybeSingle();
-
-      if (targetProfile) {
-        await supabase.from('notifications').insert({
-          user_id: targetProfile.id,
-          type: 'group_invite',
-          title: 'Invitación a Grupo',
-          message: `${inviterName} te ha invitado a unirte al grupo "${group.name}".`,
-          data: {
-            invite_id: invite.id,
-            group_id: group.id,
-            group_name: group.name,
-            invited_by_name: inviterName,
-            invited_by_email: inviterEmail,
-          },
+    // 5. Send email if real target email was provided
+    if (targetEmail && !targetEmail.startsWith('temp_')) {
+      try {
+        await sendGroupInviteEmail({
+          to: targetEmail,
+          groupName: group.name,
+          inviterName,
+          inviterEmail: user.email || '',
+          inviteUrl,
         });
+      } catch (e) {
+        console.error('[API /api/groups/invite] Error enviando correo:', e);
       }
-
-      // Send email
-      await sendGroupInviteEmail({
-        to: targetEmail,
-        inviterName,
-        inviterEmail,
-        groupName: group.name,
-        inviteUrl,
-      });
     }
 
     return NextResponse.json({
       success: true,
-      inviteId: invite.id,
+      memberId: targetUserId,
+      inviteId,
       inviteUrl,
-      groupName: group.name,
-      message: targetEmail
-        ? `Invitación enviada por correo a ${targetEmail}`
-        : 'Enlace de invitación creado exitosamente',
+      message: memberName
+        ? `"${memberName}" ha sido añadido al grupo`
+        : `Invitación enviada a ${targetEmail}`,
     });
   } catch (err: unknown) {
-    console.error('[API /api/groups/invite] Error no controlado:', err);
-    const message = err instanceof Error ? err.message : 'Error interno del servidor';
+    console.error('[API POST /api/groups/invite] Error:', err);
+    const message = err instanceof Error ? err.message : 'Error al procesar la invitación';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

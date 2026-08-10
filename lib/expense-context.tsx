@@ -42,6 +42,7 @@ interface ExpenseContextType {
   discardDraft: (draftId: string) => Promise<void>;
   addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<void>;
   reloadFromSupabase: () => Promise<void>;
+  refreshData: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -375,6 +376,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         discardDraft,
         addDraft,
         reloadFromSupabase,
+        refreshData: reloadFromSupabase,
         logout,
       }}
     >

@@ -22,7 +22,7 @@ import {
   Calculator,
 } from 'lucide-react';
 
-import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
+import { getGroupImage, getCleanGroupDescription, getGroupCategoryLabel } from '@/lib/group-utils';
 
 interface GroupListProps {
   onSelectGroup: (group: Group) => void;
@@ -208,7 +208,7 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                     <div className="flex items-center space-x-2.5 bg-zinc-50 px-3 py-1.5 rounded-lg ring-1 ring-zinc-100">
                       {CATEGORY_ICONS[group.category] ?? CATEGORY_ICONS.other}
                       <span className="text-[11px] font-medium text-zinc-600 uppercase tracking-wider">
-                        {CATEGORY_LABELS[group.category] ?? (group.category ? group.category : 'General')}
+                        {getGroupCategoryLabel(group.category)}
                       </span>
                     </div>
 
