@@ -116,21 +116,27 @@ export async function POST(
     }
 
     // Add user to group_members
-    const { error: memberErr } = await supabase
+    const { data: existingMember } = await supabase
       .from('group_members')
-      .upsert(
-        {
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!existingMember) {
+      const { error: memberErr } = await supabase
+        .from('group_members')
+        .insert({
           group_id: groupId,
           user_id: user.id,
           invited_by: invite.invited_by,
           role: 'member',
-        },
-        { onConflict: 'group_id,user_id' }
-      );
+        });
 
-    if (memberErr) {
-      console.error('[API /api/invites/[id]/accept] Error al agregar miembro:', memberErr);
-      return NextResponse.json({ error: memberErr.message }, { status: 500 });
+      if (memberErr && memberErr.code !== '23505') {
+        console.error('[API /api/invites/[id]/accept] Error al agregar miembro:', memberErr);
+        return NextResponse.json({ error: memberErr.message }, { status: 500 });
+      }
     }
 
     // Mark invite status as accepted

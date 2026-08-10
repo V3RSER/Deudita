@@ -2,6 +2,30 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendGroupInviteEmail } from '@/lib/email';
 
+async function ensureGroupMember(supabase: any, groupId: string, userId: string, invitedBy: string) {
+  const { data: existing } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!existing) {
+    const { error } = await supabase
+      .from('group_members')
+      .insert({
+        group_id: groupId,
+        user_id: userId,
+        invited_by: invitedBy,
+        role: 'member',
+      });
+    if (error && error.code !== '23505') {
+      return error;
+    }
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
@@ -67,12 +91,7 @@ export async function POST(req: Request) {
           if (existingProfile && existingProfile.id !== rawMemberId) {
             targetUserId = existingProfile.id;
 
-            await supabase.from('group_members').upsert({
-              group_id: groupId,
-              user_id: existingProfile.id,
-              invited_by: user.id,
-              role: 'member',
-            }, { onConflict: 'group_id,user_id' });
+            await ensureGroupMember(supabase, groupId, existingProfile.id, user.id);
 
             await supabase.from('expenses').update({ paid_by: existingProfile.id }).eq('group_id', groupId).eq('paid_by', rawMemberId);
             await supabase.from('expense_splits').update({ user_id: existingProfile.id }).eq('user_id', rawMemberId);
@@ -96,12 +115,7 @@ export async function POST(req: Request) {
 
             await supabase.from('profiles').update(updateData).eq('id', rawMemberId);
 
-            await supabase.from('group_members').upsert({
-              group_id: groupId,
-              user_id: rawMemberId,
-              invited_by: user.id,
-              role: 'member',
-            }, { onConflict: 'group_id,user_id' });
+            await ensureGroupMember(supabase, groupId, rawMemberId, user.id);
           }
         } else {
           targetUserId = rawMemberId;
@@ -147,12 +161,7 @@ export async function POST(req: Request) {
     }
 
     // 3. Add to group_members immediately
-    const { error: memberInsertErr } = await supabase.from('group_members').upsert({
-      group_id: groupId,
-      user_id: targetUserId,
-      invited_by: user.id,
-      role: 'member',
-    }, { onConflict: 'group_id,user_id' });
+    const memberInsertErr = await ensureGroupMember(supabase, groupId, targetUserId, user.id);
 
     if (memberInsertErr) {
       console.error('[API /api/groups/invite] Error adding member to group:', memberInsertErr);

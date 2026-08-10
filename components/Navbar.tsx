@@ -213,16 +213,6 @@ export function Navbar({
                   </div>
                 )}
               </div>
-
-              {/* Action button */}
-              <button
-                onClick={onOpenNewExpense}
-                className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-full shadow-sm text-xs transition-all active:scale-95 min-h-[40px]"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Nuevo Gasto</span>
-                <span className="sm:hidden">Gasto</span>
-              </button>
             </div>
           </div>
         </div>

@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import {
   X,
   User,
@@ -19,6 +21,7 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle,
+  Eye,
 } from 'lucide-react';
 import Image from 'next/image';
 import { calculatePairwiseBalance } from '@/lib/group-utils';
@@ -56,6 +59,8 @@ export function MemberDetailModal({
   const [copied, setCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showConfirmDeleteMember, setShowConfirmDeleteMember] = useState(false);
+  const [showConfirmDeleteFriend, setShowConfirmDeleteFriend] = useState(false);
 
   const [prevProfileId, setPrevProfileId] = useState<string | null>(null);
 
@@ -173,7 +178,6 @@ export function MemberDetailModal({
 
   const handleDeleteMemberFromGroup = async () => {
     if (isSelf || !groupId) return;
-    if (!confirm(`¿Estás seguro de eliminar a "${memberProfile.full_name}" del grupo?`)) return;
 
     try {
       setIsSubmitting(true);
@@ -189,6 +193,7 @@ export function MemberDetailModal({
       }
 
       if (refreshData) await refreshData();
+      setShowConfirmDeleteMember(false);
       onClose();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al eliminar integrante';
@@ -200,13 +205,13 @@ export function MemberDetailModal({
 
   const handleDeleteFriend = async () => {
     if (isSelf) return;
-    if (!confirm(`¿Estás seguro de eliminar a "${memberProfile.full_name}" de tu lista de amigos?`)) return;
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
 
       await deleteFriend(memberProfile.id);
+      setShowConfirmDeleteFriend(false);
       onClose();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al eliminar amigo';
@@ -380,8 +385,8 @@ export function MemberDetailModal({
             )}
           </form>
 
-          {/* Invitation Actions if viewing from a Group */}
-          {context === 'group' && groupId && (
+          {/* Invitation Actions if user is temp or pending invite */}
+          {context === 'group' && groupId && (isTemp || hasPendingInvite) && (
             <div className="border-t border-zinc-100 pt-4 space-y-2.5">
               <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                 Acciones de Invitación
@@ -420,13 +425,27 @@ export function MemberDetailModal({
             </div>
           )}
 
+          {/* View Full Profile Link */}
+          {!isSelf && (
+            <div className="border-t border-zinc-100 pt-4">
+              <Link
+                href={`/friends/${memberProfile.id}`}
+                onClick={onClose}
+                className="w-full flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
+              >
+                <Eye className="w-3.5 h-3.5 text-zinc-600" />
+                <span>Ver Perfil Completo en Amigos</span>
+              </Link>
+            </div>
+          )}
+
           {/* Delete Action depending on context */}
           {!isSelf && (
             <div className="border-t border-zinc-100 pt-3">
               {context === 'group' && isGroupOwner && (
                 <button
                   type="button"
-                  onClick={handleDeleteMemberFromGroup}
+                  onClick={() => setShowConfirmDeleteMember(true)}
                   disabled={isSubmitting}
                   className="w-full flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
                 >
@@ -438,7 +457,7 @@ export function MemberDetailModal({
               {context === 'friends' && (
                 <button
                   type="button"
-                  onClick={handleDeleteFriend}
+                  onClick={() => setShowConfirmDeleteFriend(true)}
                   disabled={isSubmitting}
                   className="w-full flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
                 >
@@ -450,6 +469,26 @@ export function MemberDetailModal({
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmDeleteMember}
+        onClose={() => setShowConfirmDeleteMember(false)}
+        onConfirm={handleDeleteMemberFromGroup}
+        title="Eliminar del Grupo"
+        description={`¿Estás seguro de que deseas eliminar a "${memberProfile.full_name}" de este grupo?`}
+        confirmText="Eliminar"
+        isLoading={isSubmitting}
+      />
+
+      <ConfirmModal
+        isOpen={showConfirmDeleteFriend}
+        onClose={() => setShowConfirmDeleteFriend(false)}
+        onConfirm={handleDeleteFriend}
+        title="Eliminar Amigo"
+        description={`¿Estás seguro de que deseas eliminar a "${memberProfile.full_name}" de tu lista de amigos?`}
+        confirmText="Eliminar"
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

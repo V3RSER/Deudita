@@ -38,6 +38,8 @@ export function ConfirmDraftModal({
     return currentProfile?.id || '';
   });
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   if (!isOpen || !draft) return null;
 
   const groupMembers = members.filter((m) => m.group_id === selectedGroupId);
@@ -47,14 +49,15 @@ export function ConfirmDraftModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
 
     if (!selectedGroupId) {
-      alert('Selecciona un grupo para asignar el gasto');
+      setErrorMsg('Selecciona un grupo para asignar el gasto');
       return;
     }
 
     if (memberProfiles.length === 0) {
-      alert('El grupo seleccionado no tiene integrantes');
+      setErrorMsg('El grupo seleccionado no tiene integrantes');
       return;
     }
 

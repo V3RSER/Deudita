@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
@@ -15,7 +16,6 @@ import {
   Search,
   CheckCircle2,
   Wallet,
-  Eye,
 } from 'lucide-react';
 
 interface FriendsViewProps {
@@ -23,7 +23,7 @@ interface FriendsViewProps {
 }
 
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
-  const { currentProfile, profiles, expenses, payments, userGroups, addGroupInvite } = useExpense();
+  const { currentProfile, profiles, members, expenses, payments, userGroups, addGroupInvite } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -31,11 +31,19 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
 
-  // Get list of unique friends (profiles excluding current user)
-  const friendProfiles = profiles.filter((p) => p.id !== currentProfile?.id);
+  // Get list of unique friends who share at least one group with current user
+  const userGroupIds = new Set(userGroups.map((g) => g.id));
+  const sharedMemberUserIds = new Set(
+    members
+      .filter((m) => userGroupIds.has(m.group_id))
+      .map((m) => m.user_id)
+  );
+
+  const friendProfiles = profiles.filter(
+    (p) => p.id !== currentProfile?.id && sharedMemberUserIds.has(p.id)
+  );
 
   // Pairwise balances
-  const userGroupIds = new Set(userGroups.map((g) => g.id));
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
   const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
   const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);
@@ -148,8 +156,8 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                 key={friend.id}
                 className="bg-white rounded-2xl ring-1 ring-zinc-200 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5"
               >
-                <div
-                  onClick={() => setSelectedFriend(friend)}
+                <Link
+                  href={`/friends/${friend.id}`}
                   className="flex items-center space-x-4 cursor-pointer group"
                 >
                   {friend.avatar_url ? (
@@ -158,12 +166,12 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                       alt={friend.full_name}
                       width={52}
                       height={52}
-                      className="w-13 h-13 rounded-full object-cover ring-2 ring-zinc-100 shrink-0 group-hover:ring-zinc-900 transition-all"
+                      className="w-13 h-13 rounded-full object-cover ring-2 ring-zinc-100 shrink-0 group-hover:ring-zinc-900 transition-all duration-200"
                       unoptimized
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-13 h-13 rounded-full bg-zinc-900 text-white flex items-center justify-center text-lg font-bold shrink-0 group-hover:bg-zinc-800 transition-all">
+                    <div className="w-13 h-13 rounded-full bg-zinc-900 text-white flex items-center justify-center text-lg font-bold shrink-0 group-hover:bg-zinc-800 transition-all duration-200">
                       {friend.full_name ? friend.full_name.charAt(0).toUpperCase() : 'A'}
                     </div>
                   )}
@@ -176,7 +184,7 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                       {formatDisplayEmail(friend.email)}
                     </p>
                   </div>
-                </div>
+                </Link>
 
                 {/* Debt Status Card */}
                 <div className="bg-zinc-50 rounded-xl p-4 ring-1 ring-zinc-100 flex items-center justify-between">
@@ -199,33 +207,24 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                   )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center space-x-2 pt-1">
-                  <button
-                    onClick={() => setSelectedFriend(friend)}
-                    className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium py-2.5 px-3 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center space-x-1 shrink-0"
-                    title="Ver perfil de amigo"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Perfil</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (debtStatus === 'te_debe') {
-                        onOpenSettleModal(undefined, friend.id, currentProfile?.id, amount);
-                      } else if (debtStatus === 'le_debes') {
-                        onOpenSettleModal(undefined, currentProfile?.id, friend.id, amount);
-                      } else {
-                        onOpenSettleModal(undefined, friend.id, currentProfile?.id, 0);
-                      }
-                    }}
-                    className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-medium py-2.5 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center space-x-1.5 min-h-[40px]"
-                  >
-                    <Wallet className="w-3.5 h-3.5" />
-                    <span>Saldar Cuenta</span>
-                  </button>
-                </div>
+                {/* Actions - Only show Saldar Cuenta if there is pending debt */}
+                {debtStatus !== 'al_dia' && amount > 0 && (
+                  <div className="pt-1">
+                    <button
+                      onClick={() => {
+                        if (debtStatus === 'te_debe') {
+                          onOpenSettleModal(undefined, friend.id, currentProfile?.id, amount);
+                        } else if (debtStatus === 'le_debes') {
+                          onOpenSettleModal(undefined, currentProfile?.id, friend.id, amount);
+                        }
+                      }}
+                      className="w-full bg-zinc-900 hover:bg-zinc-800 hover:shadow-md text-white font-medium py-2.5 rounded-xl text-xs transition-all duration-200 active:scale-95 flex items-center justify-center space-x-1.5 min-h-[40px] cursor-pointer"
+                    >
+                      <Wallet className="w-3.5 h-3.5" />
+                      <span>Saldar Cuenta</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

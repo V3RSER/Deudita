@@ -6,6 +6,7 @@ import { Expense, Group, Profile } from '@/lib/types';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import {
   X,
   Calendar,
@@ -37,6 +38,7 @@ export function ExpenseDetailModal({
 }: ExpenseDetailModalProps) {
   const { currentProfile, profiles, userGroups, deleteExpense } = useExpense();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   if (!isOpen || !expense) return null;
 
@@ -83,13 +85,13 @@ export function ExpenseDetailModal({
   const IconComponent = catConfig.icon;
 
   const handleDelete = async () => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este gasto?')) return;
     setIsDeleting(true);
     try {
       await deleteExpense(expense.id);
+      setShowConfirmDelete(false);
       onClose();
     } catch (err) {
-      alert('Error al eliminar el gasto');
+      console.error('Error al eliminar gasto:', err);
     } finally {
       setIsDeleting(false);
     }
@@ -328,7 +330,7 @@ export function ExpenseDetailModal({
         <div className="p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
             <button
-              onClick={handleDelete}
+              onClick={() => setShowConfirmDelete(true)}
               disabled={isDeleting}
               className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 active:scale-95 disabled:opacity-50"
             >
@@ -364,6 +366,16 @@ export function ExpenseDetailModal({
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmDelete}
+        onClose={() => setShowConfirmDelete(false)}
+        onConfirm={handleDelete}
+        title="Eliminar Gasto"
+        description={`¿Estás seguro de que deseas eliminar el gasto "${expense.description}"?`}
+        confirmText="Eliminar"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

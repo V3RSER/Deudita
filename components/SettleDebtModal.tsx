@@ -49,20 +49,22 @@ export function SettleDebtModal({
   });
 
   const [notes, setNotes] = useState<string>('Transferencia bancaria');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
 
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      alert('Ingresa un monto válido');
+      setErrorMsg('Ingresa un monto válido');
       return;
     }
 
     if (payerId === receiverId) {
-      alert('El pagador y el receptor deben ser personas distintas');
+      setErrorMsg('El pagador y el receptor deben ser personas distintas');
       return;
     }
 
@@ -108,6 +110,11 @@ export function SettleDebtModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
+              {errorMsg}
+            </div>
+          )}
           {/* Group */}
           <div>
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">

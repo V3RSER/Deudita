@@ -20,15 +20,24 @@ export async function DELETE(
       return NextResponse.json({ error: 'Falta el ID del amigo' }, { status: 400 });
     }
 
-    // 1. Get all groups owned by user
-    const { data: userGroups } = await supabase
+    // 1. Get all group IDs where current user is a member or owner
+    const { data: userMemberships } = await supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id);
+
+    const { data: userOwnedGroups } = await supabase
       .from('groups')
       .select('id')
       .eq('owner_id', user.id);
 
-    const groupIds = userGroups ? userGroups.map((g) => g.id) : [];
+    const groupIdsSet = new Set<string>();
+    if (userMemberships) userMemberships.forEach((m) => groupIdsSet.add(m.group_id));
+    if (userOwnedGroups) userOwnedGroups.forEach((g) => groupIdsSet.add(g.id));
 
-    // 2. Remove friend from user's groups
+    const groupIds = Array.from(groupIdsSet);
+
+    // 2. Remove friend from shared groups
     if (groupIds.length > 0) {
       await supabase
         .from('group_members')
@@ -37,7 +46,7 @@ export async function DELETE(
         .in('group_id', groupIds);
     }
 
-    // Also remove friend from group_members where invited_by = user.id
+    // Also remove friend where invited_by = user.id
     await supabase
       .from('group_members')
       .delete()

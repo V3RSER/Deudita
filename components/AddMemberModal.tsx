@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Profile } from '@/lib/types';
+import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
+import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, ArrowRight, Plus } from 'lucide-react';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -11,7 +14,7 @@ interface AddMemberModalProps {
 }
 
 export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps) {
-  const { userGroups, addGroupInvite } = useExpense();
+  const { currentProfile, profiles, members, userGroups, addGroupInvite } = useExpense();
   
   // Step 1 = Add Name, Step 2 = How to Invite
   const [step, setStep] = useState<1 | 2>(1);
@@ -31,6 +34,25 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   const group = userGroups.find((g) => g.id === groupId);
   const groupName = group ? group.name : 'Grupo';
 
+  // Filter friends who are NOT currently in this group
+  const groupMemberUserIds = new Set(
+    members.filter((m) => m.group_id === groupId).map((m) => m.user_id)
+  );
+
+  const availableFriends = profiles.filter((p) => {
+    if (!p.id || p.id === currentProfile?.id) return false;
+    if (groupMemberUserIds.has(p.id)) return false;
+    return true;
+  });
+
+  const query = name.trim().toLowerCase();
+  const suggestedFriends = availableFriends.filter((p) => {
+    if (!query) return true;
+    const nameMatch = p.full_name ? p.full_name.toLowerCase().includes(query) : false;
+    const emailMatch = !isTempEmail(p.email) && p.email ? p.email.toLowerCase().includes(query) : false;
+    return nameMatch || emailMatch;
+  });
+
   // Step 1 Submit: Create Temporary Member immediately
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +67,32 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
       setAddedMemberName(name.trim());
       setAddedMemberId(result.memberId || null);
       setGeneratedLink(result.inviteUrl);
+      setStep(2);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al añadir al integrante';
+      setErrorMsg(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Add friend directly from suggestions
+  const handleSelectFriend = async (friend: Profile) => {
+    try {
+      setIsSubmitting(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      const friendName = friend.full_name || 'Amigo';
+      const friendEmail = isTempEmail(friend.email) ? undefined : friend.email;
+
+      const result = await addGroupInvite(groupId, friendEmail, friendName, friend.id);
+      
+      setAddedMemberName(friendName);
+      setAddedMemberId(result.memberId || friend.id);
+      if (result.inviteUrl) setGeneratedLink(result.inviteUrl);
+      
+      setSuccessMsg(`"${friendName}" ha sido añadido al grupo`);
       setStep(2);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al añadir al integrante';
@@ -188,30 +236,98 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
             <form onSubmit={handleAddMember} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                  1. Nombre de la Persona *
+                  1. Nombre o Búsqueda de Amigo *
                 </label>
                 <div className="relative">
                   <UserPlus className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
                   <input
                     type="text"
                     required
-                    placeholder="Ej: Carlos, Mamá, María Gómez"
+                    placeholder="Escribe un nombre o correo..."
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
-                  Esta persona aparecerá de inmediato en la lista de integrantes del grupo para que puedas asignarle gastos.
+                  Busca entre tus amigos existentes por nombre o correo, o escribe un nombre nuevo.
                 </p>
               </div>
+
+              {/* Friends Suggestions */}
+              {availableFriends.length > 0 && (
+                <div className="space-y-2 pt-1 border-t border-zinc-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                      Amigos Sugeridos {query ? `("${name}")` : ''}
+                    </label>
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      {suggestedFriends.length} {suggestedFriends.length === 1 ? 'disponible' : 'disponibles'}
+                    </span>
+                  </div>
+
+                  {suggestedFriends.length === 0 ? (
+                    <p className="text-xs text-zinc-400 italic py-2">
+                      No se encontraron amigos que coincidan con &quot;{name}&quot;. Puedes añadirlo como nuevo integrante con el botón de abajo.
+                    </p>
+                  ) : (
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                      {suggestedFriends.map((friend) => {
+                        const displayEmail = formatDisplayEmail(friend.email);
+                        return (
+                          <div
+                            key={friend.id}
+                            onClick={() => !isSubmitting && handleSelectFriend(friend)}
+                            className="flex items-center justify-between p-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/80 rounded-xl transition-all cursor-pointer group active:scale-[0.98]"
+                          >
+                            <div className="flex items-center space-x-3 overflow-hidden">
+                              {friend.avatar_url ? (
+                                <Image
+                                  src={friend.avatar_url}
+                                  alt={friend.full_name || 'Amigo'}
+                                  width={36}
+                                  height={36}
+                                  className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
+                                  unoptimized
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-9 h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                                  {friend.full_name ? friend.full_name.charAt(0).toUpperCase() : 'A'}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-zinc-900 truncate group-hover:text-emerald-700 transition-colors">
+                                  {friend.full_name || 'Sin nombre'}
+                                </p>
+                                <p className="text-[11px] text-zinc-500 truncate">
+                                  {displayEmail}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Agregar</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
                 className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
               >
-                <span>Añadir al Grupo</span>
+                <span>Añadir como Nuevo Integrante</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
