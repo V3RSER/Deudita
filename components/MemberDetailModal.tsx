@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { calculatePairwiseBalance } from '@/lib/group-utils';
-import { isTempEmail, formatDisplayEmail } from '@/lib/utils';
+import { isTempEmail, formatDisplayEmail, isTempProfile } from '@/lib/utils';
 
 interface MemberDetailModalProps {
   isOpen: boolean;
@@ -75,10 +75,10 @@ export function MemberDetailModal({
 
   if (!isOpen || !memberProfile) return null;
 
-  const isTemp = isTempEmail(memberProfile.email);
+  const isTemp = isTempProfile(memberProfile);
+  const isRegistered = !isTemp;
   const isSelf = currentProfile?.id === memberProfile.id;
-  const isRegistered = Boolean(memberProfile.email && !isTemp);
-  const canEdit = !isRegistered || isSelf;
+  const canEdit = isSelf || isTemp;
 
   const currentGroup = groupId ? userGroups.find((g) => g.id === groupId) : null;
   const isGroupOwner = currentGroup?.owner_id === currentProfile?.id;
@@ -244,14 +244,20 @@ export function MemberDetailModal({
               <h2 className="text-lg font-semibold tracking-tight text-zinc-50">
                 {memberProfile.full_name}
               </h2>
-              {hasPendingInvite && (
-                <div className="flex items-center space-x-1.5 mt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                {isTemp && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Pendiente de registro
+                  </span>
+                )}
+                {hasPendingInvite && !isTemp && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     <Clock className="w-3 h-3 mr-1" />
                     Invitación Pendiente
                   </span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 

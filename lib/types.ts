@@ -16,6 +16,7 @@ export interface Profile {
   email: string;
   full_name: string;
   avatar_url: string;
+  is_temp?: boolean;
   timezone?: string;
   currency?: string;
   currency_symbol?: string;

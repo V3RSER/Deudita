@@ -90,37 +90,22 @@ export async function POST(req: Request) {
 
           if (existingProfile && existingProfile.id !== rawMemberId) {
             targetUserId = existingProfile.id;
-
             await ensureGroupMember(supabase, groupId, existingProfile.id, user.id);
-
-            await supabase.from('expenses').update({ paid_by: existingProfile.id }).eq('group_id', groupId).eq('paid_by', rawMemberId);
-            await supabase.from('expense_splits').update({ user_id: existingProfile.id }).eq('user_id', rawMemberId);
-            await supabase.from('payments').update({ paid_by: existingProfile.id }).eq('group_id', groupId).eq('paid_by', rawMemberId);
-            await supabase.from('payments').update({ paid_to: existingProfile.id }).eq('group_id', groupId).eq('paid_to', rawMemberId);
-
-            await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', rawMemberId);
-
-            const { data: remainingMemberships } = await supabase
-              .from('group_members')
-              .select('group_id')
-              .eq('user_id', rawMemberId);
-
-            if (!remainingMemberships || remainingMemberships.length === 0) {
-              await supabase.from('profiles').delete().eq('id', rawMemberId);
-            }
           } else {
             targetUserId = rawMemberId;
-            const updateData: { email: string; full_name?: string } = { email: targetEmail };
+            const updateData: { email: string; full_name?: string; is_temp?: boolean } = {
+              email: targetEmail,
+              is_temp: true,
+            };
             if (memberName) updateData.full_name = memberName;
 
             await supabase.from('profiles').update(updateData).eq('id', rawMemberId);
-
             await ensureGroupMember(supabase, groupId, rawMemberId, user.id);
           }
         } else {
           targetUserId = rawMemberId;
           if (memberName) {
-            await supabase.from('profiles').update({ full_name: memberName }).eq('id', rawMemberId);
+            await supabase.from('profiles').update({ full_name: memberName, is_temp: true }).eq('id', rawMemberId);
           }
         }
       }
@@ -139,7 +124,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. If no existing profile found, create a new profile for the member
+    // 2. If no existing profile found, create a new profile for the member with is_temp: true
     if (!targetUserId) {
       if (!tempEmail) {
         tempEmail = `temp_${groupId}_${Date.now()}_${Math.floor(Math.random() * 100000)}@deudita.app`;
@@ -152,6 +137,7 @@ export async function POST(req: Request) {
         email: tempEmail,
         full_name: displayName,
         avatar_url: '',
+        is_temp: true,
       }, { onConflict: 'id' });
 
       if (profErr) {

@@ -22,7 +22,7 @@ import {
 
 import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
-import { formatDisplayEmail } from '@/lib/utils';
+import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 
@@ -615,7 +615,12 @@ export function GroupDetail({
                             Admin
                           </span>
                         )}
-                        {pendingInvites.some((i) => i.group_id === group.id && (i.email === p.email || (p.email && i.email.toLowerCase() === p.email.toLowerCase()))) && (
+                        {isTempProfile(p) && (
+                          <span className="bg-sky-100 text-sky-800 border border-sky-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                            Pendiente de registro
+                          </span>
+                        )}
+                        {pendingInvites.some((i) => i.group_id === group.id && (i.email === p.email || (p.email && i.email.toLowerCase() === p.email.toLowerCase()))) && !isTempProfile(p) && (
                           <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
                             Invitación Pendiente
                           </span>

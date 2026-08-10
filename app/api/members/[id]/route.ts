@@ -23,6 +23,23 @@ export async function PATCH(
       return NextResponse.json({ error: 'Proporciona al menos un nombre o correo para actualizar' }, { status: 400 });
     }
 
+    // Verify permissions: only self or temporary profile (is_temp = true) can be edited
+    if (memberId !== user.id) {
+      const { data: targetProf } = await supabase
+        .from('profiles')
+        .select('is_temp, email')
+        .eq('id', memberId)
+        .maybeSingle();
+
+      const isTemp = Boolean(targetProf?.is_temp) || Boolean(targetProf?.email?.startsWith('temp_')) || Boolean(targetProf?.email?.endsWith('@deudita.app'));
+      if (!targetProf || !isTemp) {
+        return NextResponse.json(
+          { error: 'Solo puedes modificar tu propio perfil o perfiles temporales de invitados.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const updates: { full_name?: string; email?: string } = {};
     if (name && typeof name === 'string' && name.trim()) {
       updates.full_name = name.trim();

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
-import { isTempEmail, formatDisplayEmail } from '@/lib/utils';
+import { isTempEmail, formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import {
   Users,
@@ -177,9 +177,16 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                   )}
 
                   <div className="space-y-0.5 overflow-hidden">
-                    <h3 className="font-semibold text-zinc-900 text-base group-hover:text-emerald-600 transition-colors truncate">
-                      {friend.full_name}
-                    </h3>
+                    <div className="flex items-center space-x-1.5 flex-wrap">
+                      <h3 className="font-semibold text-zinc-900 text-base group-hover:text-emerald-600 transition-colors truncate">
+                        {friend.full_name}
+                      </h3>
+                      {isTempProfile(friend) && (
+                        <span className="bg-sky-100 text-sky-800 border border-sky-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                          Pendiente de registro
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-zinc-500 truncate">
                       {formatDisplayEmail(friend.email)}
                     </p>
