@@ -9,6 +9,7 @@ import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
 import { isTempEmail, formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { AddMemberModal } from '@/components/AddMemberModal';
+import { AddFriendModal } from '@/components/AddFriendModal';
 import {
   Users,
   UserPlus,
@@ -17,6 +18,7 @@ import {
   Search,
   CheckCircle2,
   Wallet,
+  Plus,
 } from 'lucide-react';
 
 interface FriendsViewProps {
@@ -24,12 +26,13 @@ interface FriendsViewProps {
 }
 
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
-  const { currentProfile, profiles, members, expenses, payments, userGroups } = useExpense();
+  const { currentProfile, profiles, members, expenses, payments, userGroups, pendingInvites } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null);
 
-  // Get list of unique friends who share at least one group with current user
+  // Get list of unique friends: shared in groups, created standalone, or invited by current user
   const userGroupIds = new Set(userGroups.map((g) => g.id));
   const sharedMemberUserIds = new Set(
     members
@@ -37,9 +40,18 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
       .map((m) => m.user_id)
   );
 
-  const friendProfiles = profiles.filter(
-    (p) => p.id !== currentProfile?.id && sharedMemberUserIds.has(p.id)
-  );
+  const friendProfiles = profiles.filter((p) => {
+    if (!p.id || p.id === currentProfile?.id) return false;
+    const isSharedInGroup = sharedMemberUserIds.has(p.id);
+    const isCreatedByMe = Boolean(p.created_by && currentProfile?.id && p.created_by === currentProfile.id);
+    const isInvitedByMe = pendingInvites.some(
+      (inv) => inv.invited_by === currentProfile?.id && inv.invitee_profile_id === p.id
+    );
+    const isMemberInvitedByMe = members.some(
+      (m) => m.invited_by === currentProfile?.id && m.user_id === p.id
+    );
+    return isSharedInGroup || isCreatedByMe || isInvitedByMe || isMemberInvitedByMe;
+  });
 
   // Pairwise balances
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
@@ -71,13 +83,22 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddMemberOpen(true)}
-          className="bg-white hover:bg-zinc-100 text-zinc-900 font-semibold px-6 py-3 rounded-full text-sm shadow-md transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Añadir o Invitar Amigo</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <button
+            onClick={() => setIsAddFriendOpen(true)}
+            className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Agregar Amigo</span>
+          </button>
+          <button
+            onClick={() => setIsAddMemberOpen(true)}
+            className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Añadir a un Grupo</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -222,6 +243,12 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
         onClose={() => setSelectedFriend(null)}
         context="friends"
         memberProfile={selectedFriend}
+      />
+
+      {/* Add Standalone Friend Modal */}
+      <AddFriendModal
+        isOpen={isAddFriendOpen}
+        onClose={() => setIsAddFriendOpen(false)}
       />
 
       {/* Add / Invite Member Modal */}

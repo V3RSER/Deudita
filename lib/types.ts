@@ -17,6 +17,7 @@ export interface Profile {
   full_name: string;
   avatar_url: string;
   is_temp?: boolean;
+  created_by?: string;
   timezone?: string;
   currency?: string;
   currency_symbol?: string;

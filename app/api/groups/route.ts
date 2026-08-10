@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Cuerpo de la petición inválido' }, { status: 400 });
     }
 
-    const { name, category, description, emails, imageUrl } = body;
+    const { name, category, description, emails, imageUrl, memberIds } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json({ error: 'El nombre del grupo es requerido' }, { status: 400 });
@@ -105,6 +105,27 @@ export async function POST(req: Request) {
 
     if (memberErr) {
       console.error('[API POST /api/groups] Error inserting owner in group_members:', memberErr);
+    }
+
+    // Insert selected friends as group members if memberIds provided
+    if (memberIds && Array.isArray(memberIds)) {
+      const membersToInsert = memberIds
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0 && id !== user.id)
+        .map((id) => ({
+          group_id: group.id,
+          user_id: id,
+          invited_by: user.id,
+          role: 'member',
+        }));
+
+      if (membersToInsert.length > 0) {
+        const { error: friendsInsertErr } = await supabase
+          .from('group_members')
+          .upsert(membersToInsert, { onConflict: 'group_id,user_id' });
+        if (friendsInsertErr) {
+          console.error('[API POST /api/groups] Error inserting memberIds into group_members:', friendsInsertErr);
+        }
+      }
     }
 
     // Insert invites if emails provided

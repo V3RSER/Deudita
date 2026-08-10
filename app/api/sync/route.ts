@@ -62,16 +62,40 @@ export async function GET() {
       members = memberData || [];
     }
 
-    // Member user IDs to fetch relevant profiles
-    const memberUserIds = Array.from(new Set([user.id, ...members.map((m) => m.user_id)]));
+    // Member user IDs and created/invited profiles to fetch
+    const profileIdsToFetch = new Set<string>([user.id, ...members.map((m) => m.user_id)]);
 
-    // 5. Profiles of members
+    // Fetch standalone profiles created by current user
+    const { data: userCreatedProfiles } = await db
+      .from('profiles')
+      .select('id')
+      .eq('created_by', user.id);
+
+    if (userCreatedProfiles && userCreatedProfiles.length > 0) {
+      userCreatedProfiles.forEach((p) => profileIdsToFetch.add(p.id));
+    }
+
+    // Fetch profiles invited by current user in group_invites
+    const { data: userInvites } = await db
+      .from('group_invites')
+      .select('invitee_profile_id')
+      .eq('invited_by', user.id);
+
+    if (userInvites && userInvites.length > 0) {
+      userInvites.forEach((inv) => {
+        if (inv.invitee_profile_id) profileIdsToFetch.add(inv.invitee_profile_id);
+      });
+    }
+
+    const finalProfileIds = Array.from(profileIdsToFetch);
+
+    // 5. Profiles of members and user's contacts
     let profiles: any[] = [];
-    if (memberUserIds.length > 0) {
+    if (finalProfileIds.length > 0) {
       const { data: profileData } = await db
         .from('profiles')
         .select('*')
-        .in('id', memberUserIds);
+        .in('id', finalProfileIds);
       profiles = profileData || [];
     }
 

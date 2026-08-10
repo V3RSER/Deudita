@@ -29,7 +29,8 @@ interface ExpenseContextType {
   pendingInvites: GroupInvite[];
   notifications: Notification[];
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
-  createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
+  addFriend: (fullName: string, email?: string) => Promise<Profile>;
+  createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[]) => Promise<Group>;
   addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
   deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
@@ -126,11 +127,37 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     await reloadFromSupabase();
   };
 
-  const createGroup = async (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string): Promise<Group> => {
+  const addFriend = async (fullName: string, email?: string): Promise<Profile> => {
+    const res = await fetch('/api/friends', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, email }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'Error al agregar amigo';
+      console.error('[ExpenseContext] Error in addFriend:', message);
+      throw new Error(message);
+    }
+
+    const data = await res.json();
+    await reloadFromSupabase();
+    return data.profile as Profile;
+  };
+
+  const createGroup = async (
+    name: string,
+    category: GroupCategory,
+    description?: string,
+    emails?: string[],
+    imageUrl?: string,
+    memberIds?: string[]
+  ): Promise<Group> => {
     const res = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, description, emails, imageUrl }),
+      body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds }),
     });
 
     if (!res.ok) {
@@ -334,6 +361,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         pendingInvites,
         notifications,
         updateProfile,
+        addFriend,
         createGroup,
         addGroupInvite,
         deleteFriend,

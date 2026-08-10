@@ -114,18 +114,48 @@ const CATEGORY_OPTIONS: Array<{
 
 export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const router = useRouter();
-  const { createGroup } = useExpense();
+  const { createGroup, profiles, currentProfile, addFriend } = useExpense();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<GroupCategory>('friends');
   const [groupImageUrl, setGroupImageUrl] = useState<string>('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [newFriendName, setNewFriendName] = useState('');
+  const [isAddingNewFriend, setIsAddingNewFriend] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Available friend profiles (excluding current user)
+  const availableFriends = profiles.filter((p) => p.id && p.id !== currentProfile?.id);
+
   if (!isOpen) return null;
+
+  const toggleSelectFriend = (friendId: string) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(friendId) ? prev.filter((id) => id !== friendId) : [...prev, friendId]
+    );
+  };
+
+  const handleAddNewFriendOnTheFly = async () => {
+    if (!newFriendName.trim()) return;
+    try {
+      setIsAddingNewFriend(true);
+      setErrorMessage(null);
+      const newProf = await addFriend(newFriendName.trim());
+      if (newProf && newProf.id) {
+        setSelectedMemberIds((prev) => [...prev, newProf.id]);
+      }
+      setNewFriendName('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al agregar amigo';
+      setErrorMessage(msg);
+    } finally {
+      setIsAddingNewFriend(false);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,10 +205,11 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
     try {
       const finalAvatar = groupImageUrl.trim() ? groupImageUrl.trim() : DEFAULT_GROUP_IMAGE;
 
-      const newGroup = await createGroup(groupName, category, '', [], finalAvatar);
+      const newGroup = await createGroup(groupName, category, '', [], finalAvatar, selectedMemberIds);
       
       setName('');
       setGroupImageUrl('');
+      setSelectedMemberIds([]);
       onClose();
 
       // Direct navigation to /groups/[groupId]

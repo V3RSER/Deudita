@@ -452,10 +452,15 @@ create policy "select_group_members" on public.group_members
     or group_id in (select id from public.groups where owner_id = auth.uid())
   );
 
+-- CUALQUIER miembro del grupo (no solo el owner) puede agregar a otras
+-- personas -- ya sea un miembro real insertándose a sí mismo tras aceptar
+-- una invitación, o un miembro agregando directamente a alguien más
+-- (ej. agregar por nombre, perfil temporal).
 drop policy if exists "insert_group_members" on public.group_members;
 create policy "insert_group_members" on public.group_members
   for insert with check (
     group_id in (select id from public.groups where owner_id = auth.uid())
+    or public.is_group_member(group_id, auth.uid())
     or user_id = auth.uid()
   );
 
@@ -484,9 +489,16 @@ create policy "select_group_invites" on public.group_invites
     or email = (select email from public.profiles where id = auth.uid())
   );
 
+-- CUALQUIER miembro del grupo puede invitar a alguien más, no solo el owner.
 drop policy if exists "insert_group_invites" on public.group_invites;
 create policy "insert_group_invites" on public.group_invites
-  for insert with check (invited_by = auth.uid());
+  for insert with check (
+    invited_by = auth.uid()
+    and (
+      group_id in (select id from public.groups where owner_id = auth.uid())
+      or public.is_group_member(group_id, auth.uid())
+    )
+  );
 
 drop policy if exists "update_group_invites" on public.group_invites;
 create policy "update_group_invites" on public.group_invites
