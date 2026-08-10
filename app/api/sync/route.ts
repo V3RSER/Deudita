@@ -10,32 +10,46 @@ export async function GET() {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const db = createAdminClient();
+    // Use the authenticated Supabase client (with request cookies and JWT) to respect RLS
+    const db = supabase;
 
     // 1. Current user profile
-    const { data: userProfile } = await db
+    const { data: userProfile, error: profileErr } = await db
       .from('profiles')
       .select('*')
       .eq('id', user.id)
       .maybeSingle();
 
+    if (profileErr) {
+      console.error('[API /api/sync] Error selecting user profile:', profileErr);
+    }
+
     // 2. User's group memberships
-    const { data: userMemberships } = await db
+    const { data: userMemberships, error: memSelectErr } = await db
       .from('group_members')
       .select('group_id')
       .eq('user_id', user.id);
+
+    console.log('[API /api/sync] group_members select result for user', user.id, ':', { data: userMemberships, error: memSelectErr });
 
     const userGroupIds = Array.from(new Set((userMemberships || []).map((m) => m.group_id)));
 
     // 3. Groups
     let groups: any[] = [];
     if (userGroupIds.length > 0) {
-      const { data: groupData } = await db
+      const { data: groupData, error: groupSelectErr } = await db
         .from('groups')
         .select('*')
         .in('id', userGroupIds)
         .order('created_at', { ascending: false });
+
+      console.log('[API /api/sync] groups select result:', { data: groupData, error: groupSelectErr });
+      if (groupSelectErr) {
+        console.error('[API /api/sync] Error selecting groups:', groupSelectErr);
+      }
       groups = groupData || [];
+    } else {
+      console.log('[API /api/sync] No userGroupIds found for user', user.id);
     }
 
     // 4. All members for these groups

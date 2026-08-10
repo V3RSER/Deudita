@@ -1,6 +1,56 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export async function GET() {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error('[API GET /api/groups] Unauthorized user:', authError);
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { data: memberships, error: memberErr } = await supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id);
+
+    console.log('[API GET /api/groups] memberships select result:', { data: memberships, error: memberErr });
+
+    if (memberErr) {
+      console.error('[API GET /api/groups] Error selecting group_members:', memberErr);
+      return NextResponse.json({ error: memberErr.message }, { status: 500 });
+    }
+
+    const groupIds = Array.from(new Set((memberships || []).map((m) => m.group_id)));
+
+    if (groupIds.length === 0) {
+      console.log('[API GET /api/groups] User has no group memberships');
+      return NextResponse.json([]);
+    }
+
+    const { data: groups, error: groupsErr } = await supabase
+      .from('groups')
+      .select('*')
+      .in('id', groupIds)
+      .order('created_at', { ascending: false });
+
+    console.log('[API GET /api/groups] groups select result:', { data: groups, error: groupsErr });
+
+    if (groupsErr) {
+      console.error('[API GET /api/groups] Error selecting groups:', groupsErr);
+      return NextResponse.json({ error: groupsErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json(groups || []);
+  } catch (err: unknown) {
+    console.error('[API GET /api/groups] Unhandled error:', err);
+    const message = err instanceof Error ? err.message : 'Error interno al obtener grupos';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
