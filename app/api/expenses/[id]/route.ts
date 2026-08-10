@@ -1,6 +1,36 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+
+    if (authErr || !user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { data: expense, error } = await supabase
+      .from('expenses')
+      .select('*, items:expense_items(*), splits:expense_splits(*)')
+      .eq('id', id)
+      .single();
+
+    if (error || !expense) {
+      return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
+    }
+
+    return NextResponse.json(expense);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error al obtener detalle del gasto';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,26 +47,44 @@ export async function PUT(
 
     const { expense, items, splits } = await request.json();
 
-    const { data: updatedExpense, error: expErr } = await supabase
+    const updatePayload: Record<string, any> = {
+      group_id: expense.group_id,
+      paid_by: expense.paid_by,
+      total_amount: expense.total_amount,
+      description: expense.description,
+      expense_date: expense.expense_date,
+      source: expense.source ?? 'manual',
+      receipt_url: expense.receipt_url,
+    };
+
+    if (expense.category) updatePayload.category = expense.category;
+    if (expense.notes) updatePayload.notes = expense.notes;
+
+    let { data: updatedExpense, error: expErr } = await supabase
       .from('expenses')
-      .update({
-        group_id: expense.group_id,
-        paid_by: expense.paid_by,
-        total_amount: expense.total_amount,
-        description: expense.description,
-        category: expense.category,
-        expense_date: expense.expense_date,
-        source: expense.source ?? 'manual',
-        receipt_url: expense.receipt_url,
-        notes: expense.notes,
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
-    if (expErr) {
+    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes'))) {
+      delete updatePayload.category;
+      delete updatePayload.notes;
+
+      const fallbackRes = await supabase
+        .from('expenses')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single();
+
+      updatedExpense = fallbackRes.data;
+      expErr = fallbackRes.error;
+    }
+
+    if (expErr || !updatedExpense) {
       console.error('[API /api/expenses/[id]] Update error:', expErr);
-      return NextResponse.json({ error: expErr.message }, { status: 500 });
+      return NextResponse.json({ error: expErr?.message || 'Error al actualizar el gasto' }, { status: 500 });
     }
 
     // Replace items

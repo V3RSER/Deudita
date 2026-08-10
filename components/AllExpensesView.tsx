@@ -19,17 +19,21 @@ import {
 } from 'lucide-react';
 import { Expense } from '@/lib/types';
 
+import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
+
 interface AllExpensesViewProps {
   onOpenNewExpense: () => void;
   onEditExpense?: (expense: Expense) => void;
 }
 
 export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpensesViewProps) {
-  const { expenses, userGroups, profiles, deleteExpense } = useExpense();
+  const { currentProfile, expenses, userGroups, profiles, deleteExpense } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
+  const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
 
   const userGroupIds = new Set(userGroups.map((g) => g.id));
   const myExpenses = expenses.filter((exp) => userGroupIds.has(exp.group_id));
@@ -50,7 +54,14 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
     const matchesGroup = selectedGroupId === 'all' || exp.group_id === selectedGroupId;
     const matchesCategory = selectedCategory === 'all' || exp.category === selectedCategory;
 
-    return matchesSearch && matchesGroup && matchesCategory;
+    let matchesInteraction = true;
+    if (expenseFilter === 'mine') {
+      const isPayer = exp.paid_by === currentProfile?.id;
+      const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
+      matchesInteraction = Boolean(isPayer || isParticipant);
+    }
+
+    return matchesSearch && matchesGroup && matchesCategory && matchesInteraction;
   });
 
   const totalFilteredSpent = filtered.reduce((acc, curr) => acc + curr.total_amount, 0);
@@ -76,46 +87,75 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white p-5 rounded-2xl ring-1 ring-zinc-200 shadow-sm flex flex-col md:flex-row gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-zinc-400 absolute left-4 top-3.5" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por descripción, grupo o persona..."
-            className="w-full pl-11 pr-4 py-2.5 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
-          />
+      <div className="bg-white p-5 rounded-2xl ring-1 ring-zinc-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+          <div className="flex items-center space-x-1 bg-zinc-100/80 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setExpenseFilter('all')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                expenseFilter === 'all'
+                  ? 'bg-white text-zinc-900 shadow-2xs'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Todos los gastos
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpenseFilter('mine')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                expenseFilter === 'mine'
+                  ? 'bg-white text-zinc-900 shadow-2xs'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              En los que interactúo
+            </button>
+          </div>
         </div>
 
-        {/* Group Filter */}
-        <select
-          value={selectedGroupId}
-          onChange={(e) => setSelectedGroupId(e.target.value)}
-          className="bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
-        >
-          <option value="all">Todos los grupos</option>
-          {userGroups.map((g, idx) => (
-            <option key={g.id || `group-${idx}`} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-4 top-3.5" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por descripción, grupo o persona..."
+              className="w-full pl-11 pr-4 py-2.5 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
+            />
+          </div>
 
-        {/* Category Filter */}
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
-        >
-          <option value="all">Todas las categorías</option>
-          {categories.map((c, idx) => (
-            <option key={`cat-${c}-${idx}`} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          {/* Group Filter */}
+          <select
+            value={selectedGroupId}
+            onChange={(e) => setSelectedGroupId(e.target.value)}
+            className="bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+          >
+            <option value="all">Todos los grupos</option>
+            {userGroups.map((g, idx) => (
+              <option key={g.id || `group-${idx}`} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Category Filter */}
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+          >
+            <option value="all">Todas las categorías</option>
+            {categories.map((c, idx) => (
+              <option key={`cat-${c}-${idx}`} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Metric Summary Bar */}
@@ -140,23 +180,47 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
           {filtered.map((exp) => {
             const group = userGroups.find((g) => g.id === exp.group_id);
             const paidBy = profiles.find((p) => p.id === exp.paid_by);
-            const isExpanded = expandedId === exp.id;
-            const hasItems = exp.items && exp.items.length > 0;
+            const catConfig = getCategoryConfig(exp.category);
+            const CategoryIcon = catConfig.icon;
+
+            const isPayer = exp.paid_by === currentProfile?.id;
+            const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed || 0;
+
+            let statusText = 'No participas';
+            let statusBg = 'bg-zinc-100 text-zinc-600 border-zinc-200';
+
+            if (isPayer) {
+              const recovers = exp.total_amount - mySplit;
+              if (recovers > 0) {
+                statusText = `Recuperas ${formatCurrency(recovers)}`;
+                statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+              } else {
+                statusText = `Pagaste ${formatCurrency(exp.total_amount)}`;
+                statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+              }
+            } else if (mySplit > 0) {
+              statusText = `Debes ${formatCurrency(mySplit)}`;
+              statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
+            }
 
             return (
               <div
                 key={exp.id}
-                className="bg-white rounded-2xl ring-1 ring-zinc-200 p-6 shadow-sm hover:shadow-md transition-all"
+                onClick={() => setSelectedExpenseForModal(exp)}
+                className="bg-white rounded-2xl ring-1 ring-zinc-200/90 p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                   <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-400 font-bold shrink-0 ring-1 ring-zinc-100">
-                      <Receipt className="w-5 h-5" />
+                    {/* Category SVG Icon */}
+                    <div className={`p-3 rounded-2xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} shrink-0 mt-0.5`}>
+                      <CategoryIcon className="w-5 h-5" />
                     </div>
 
                     <div>
                       <div className="flex items-center space-x-2.5">
-                        <h3 className="font-semibold text-zinc-900 text-base">{exp.description}</h3>
+                        <h3 className="font-bold text-zinc-900 text-base group-hover:text-emerald-700 transition-colors">
+                          {exp.description}
+                        </h3>
                         {exp.source === 'gmail' && (
                           <span className="bg-zinc-900 text-white text-[10px] uppercase font-semibold tracking-widest px-2 py-0.5 rounded-md">
                             AI
@@ -177,13 +241,13 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
                         </span>
                         <span>•</span>
                         <span className="flex items-center space-x-1 font-medium">
-                          <Calendar className="w-3 h-3" />
+                          <Calendar className="w-3 h-3 text-zinc-400" />
                           <span>{exp.expense_date}</span>
                         </span>
                         <span>•</span>
                         <span>
                           Pagó:{' '}
-                          <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
+                          <strong className="text-zinc-800 font-semibold">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
                         </span>
                       </div>
                     </div>
@@ -191,31 +255,18 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
 
                   <div className="flex items-center justify-between sm:justify-end gap-5 border-t sm:border-t-0 pt-4 sm:pt-0 border-zinc-100">
                     <div className="text-right">
-                      <span className="text-xl font-semibold text-zinc-900 block tracking-tight">
-                        {formatCurrency(exp.total_amount)}
+                      <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
+                        Total: {formatCurrency(exp.total_amount)}
                       </span>
-                      <span className="text-xs text-zinc-400 block mt-0.5 font-medium">
-                        {(exp.splits ? exp.splits : []).length} divididos
-                      </span>
+                      <div className={`mt-1 inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${statusBg}`}>
+                        {statusText}
+                      </div>
                     </div>
 
-                    <div className="flex items-center space-x-1.5 bg-zinc-50/80 p-1 rounded-xl">
-                      {(hasItems || exp.receipt_url) && (
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : exp.id)}
-                          className="px-3 py-1.5 hover:bg-white rounded-lg text-zinc-600 text-xs font-medium flex items-center space-x-1.5 transition-colors shadow-sm"
-                        >
-                          <span>{exp.receipt_url ? 'Detalles / Recibo' : 'Ítems'}</span>
-                          {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      )}
-
+                    <div className="flex items-center space-x-1.5 bg-zinc-50/80 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
                       {onEditExpense && (
                         <button
+                          type="button"
                           onClick={() => onEditExpense(exp)}
                           className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors"
                           title="Editar gasto"
@@ -225,6 +276,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
                       )}
 
                       <button
+                        type="button"
                         onClick={() => deleteExpense(exp.id)}
                         className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors"
                         title="Eliminar gasto"
@@ -234,64 +286,23 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
                     </div>
                   </div>
                 </div>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <div className="mt-6 pt-5 border-t border-zinc-100 space-y-5">
-                    {hasItems && (
-                      <div>
-                        <h4 className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest mb-3">
-                          Desglose de Ítems ({exp.items?.length})
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {exp.items?.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex items-center justify-between bg-zinc-50 px-4 py-3 rounded-xl ring-1 ring-zinc-100 text-sm"
-                            >
-                              <span className="font-medium text-zinc-600">{item.description}</span>
-                              <span className="font-semibold text-zinc-900">
-                                {formatCurrency(item.amount)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {exp.receipt_url && (
-                      <div>
-                        <h4 className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest mb-3">
-                          Comprobante de Pago Adjunto
-                        </h4>
-                        <div className="relative max-w-sm rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 p-2">
-                          <a
-                            href={exp.receipt_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block relative w-full h-48 rounded-xl overflow-hidden group"
-                          >
-                            <Image
-                              src={exp.receipt_url}
-                              alt="Recibo"
-                              fill
-                              className="object-cover group-hover:scale-105 transition-transform duration-200"
-                              unoptimized
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
-                              Ver imagen completa ↗
-                            </div>
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Expense Detail Modal */}
+      {selectedExpenseForModal && (
+        <ExpenseDetailModal
+          expense={selectedExpenseForModal}
+          isOpen={Boolean(selectedExpenseForModal)}
+          onClose={() => setSelectedExpenseForModal(null)}
+          onEditExpense={(exp) => {
+            setSelectedExpenseForModal(null);
+            if (onEditExpense) onEditExpense(exp);
+          }}
+        />
       )}
     </div>
   );

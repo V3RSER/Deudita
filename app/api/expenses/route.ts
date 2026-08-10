@@ -13,28 +13,52 @@ export async function POST(req: Request) {
 
     const { expense, items, splits } = await req.json();
 
-    // Create expense
-    const { data: newExpense, error: expErr } = await supabase
+    // Build insert payload
+    const expenseInsertPayload: Record<string, any> = {
+      group_id: expense.group_id,
+      paid_by: expense.paid_by,
+      total_amount: expense.total_amount,
+      description: expense.description,
+      expense_date: expense.expense_date,
+      source: expense.source ?? 'manual',
+      source_draft_id: expense.source_draft_id,
+      receipt_url: expense.receipt_url,
+      created_by: user.id
+    };
+
+    if (expense.category) {
+      expenseInsertPayload.category = expense.category;
+    }
+    if (expense.notes) {
+      expenseInsertPayload.notes = expense.notes;
+    }
+
+    // Try inserting with full payload
+    let { data: newExpense, error: expErr } = await supabase
       .from('expenses')
-      .insert({
-        group_id: expense.group_id,
-        paid_by: expense.paid_by,
-        total_amount: expense.total_amount,
-        description: expense.description,
-        category: expense.category,
-        expense_date: expense.expense_date,
-        source: expense.source ?? 'manual',
-        source_draft_id: expense.source_draft_id,
-        receipt_url: expense.receipt_url,
-        notes: expense.notes,
-        created_by: user.id
-      })
+      .insert(expenseInsertPayload)
       .select()
       .single();
 
-    if (expErr) {
+    // Fallback if category or notes column is missing in schema cache
+    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes'))) {
+      console.warn('[API /api/expenses] Retrying insert without category/notes due to schema error:', expErr.message);
+      delete expenseInsertPayload.category;
+      delete expenseInsertPayload.notes;
+
+      const fallbackRes = await supabase
+        .from('expenses')
+        .insert(expenseInsertPayload)
+        .select()
+        .single();
+
+      newExpense = fallbackRes.data;
+      expErr = fallbackRes.error;
+    }
+
+    if (expErr || !newExpense) {
       console.error('[API /api/expenses] Supabase insert expense error:', expErr);
-      return NextResponse.json({ error: expErr.message }, { status: 500 });
+      return NextResponse.json({ error: expErr?.message || 'Error al crear el gasto' }, { status: 500 });
     }
 
     // Add items if any

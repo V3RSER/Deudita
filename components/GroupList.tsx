@@ -21,6 +21,8 @@ import {
   MinusCircle,
 } from 'lucide-react';
 
+import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
+
 interface GroupListProps {
   onSelectGroup: (group: Group) => void;
   onOpenNewGroup: () => void;
@@ -36,12 +38,12 @@ const CATEGORY_ICONS: Record<GroupCategory, React.ReactNode> = {
 };
 
 const CATEGORY_LABELS: Record<GroupCategory, string> = {
-  home: 'Hogar / Arriendo',
-  trip: 'Viaje / Vacaciones',
+  home: 'Hogar',
+  trip: 'Viajes',
   couple: 'Pareja',
-  event: 'Evento / Asado',
-  work: 'Oficina / Trabajo',
-  other: 'Otro',
+  event: 'Eventos',
+  work: 'Trabajo',
+  other: 'Otros',
 };
 
 export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
@@ -172,15 +174,32 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
             const mySummary = userSummaries.find((s) => s.user.id === currentProfile?.id);
             const netBalance = mySummary ? mySummary.netBalance : 0;
 
+            const groupImg = getGroupImage(group);
+            const cleanDesc = getCleanGroupDescription(group.description);
+
             return (
               <div
                 key={group.id}
                 onClick={() => onSelectGroup(group)}
-                className="group bg-white rounded-[1.5rem] p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
+                className="group bg-white rounded-[1.5rem] p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden active:scale-[0.98]"
               >
                 <div>
+                  {/* Optional Group Banner Image */}
+                  {groupImg && (
+                    <div className="relative w-full h-24 -mt-6 -mx-6 mb-4 overflow-hidden border-b border-zinc-100 bg-zinc-100">
+                      <Image
+                        src={groupImg}
+                        alt={group.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        unoptimized
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
+
                   {/* Category & Status Header */}
-                  <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-2.5 bg-zinc-50 px-3 py-1.5 rounded-lg ring-1 ring-zinc-100">
                       {CATEGORY_ICONS[group.category] ?? CATEGORY_ICONS.other}
                       <span className="text-[11px] font-medium text-zinc-600 uppercase tracking-wider">
@@ -198,9 +217,9 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                   <h3 className="text-lg font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
                     {group.name}
                   </h3>
-                  {group.description && (
+                  {cleanDesc && (
                     <p className="text-sm text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">
-                      {group.description}
+                      {cleanDesc}
                     </p>
                   )}
 

@@ -53,40 +53,40 @@ type SidePanelMode = 'none' | 'split' | 'category';
 // High-level Category Groups
 const CATEGORY_GROUPS = [
   {
-    name: 'Hogar y Supermercado',
+    name: 'Hogar',
     icon: ShoppingCart,
     color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    items: ['Supermercado', 'Almacén & Abarrotes', 'Aseo y Limpieza', 'Mascotas'],
+    items: ['Supermercado', 'Abarrotes', 'Limpieza', 'Mascotas'],
   },
   {
-    name: 'Comida y Bebida',
+    name: 'Comida',
     icon: Utensils,
     color: 'bg-orange-100 text-orange-800 border-orange-200',
-    items: ['Restaurante', 'Bares y Salidas', 'Cafetería & Snacks', 'Delivery'],
+    items: ['Restaurante', 'Bares', 'Cafetería', 'Delivery'],
   },
   {
-    name: 'Servicios y Vivienda',
+    name: 'Servicios',
     icon: Zap,
     color: 'bg-amber-100 text-amber-800 border-amber-200',
-    items: ['Servicios (Luz, Agua, Gas)', 'Internet & Cable', 'Alojamiento & Cabaña'],
+    items: ['Servicios', 'Internet', 'Alojamiento'],
   },
   {
-    name: 'Transporte y Viajes',
+    name: 'Transporte',
     icon: Car,
     color: 'bg-blue-100 text-blue-800 border-blue-200',
-    items: ['Bencina & Combustible', 'Transporte & Peajes', 'Pasajes & Vuelos'],
+    items: ['Combustible', 'Transporte', 'Pasajes'],
   },
   {
-    name: 'Entretenimiento y Ocio',
+    name: 'Entretenimiento',
     icon: Film,
     color: 'bg-purple-100 text-purple-800 border-purple-200',
-    items: ['Cine & Eventos', 'Deportes', 'Regalos & Compras', 'Salud & Farmacia'],
+    items: ['Cine', 'Deportes', 'Compras', 'Salud'],
   },
   {
     name: 'Otros',
     icon: DollarSign,
     color: 'bg-zinc-100 text-zinc-800 border-zinc-200',
-    items: ['General', 'Varios / Otro'],
+    items: ['General', 'Otros'],
   },
 ];
 
@@ -143,7 +143,7 @@ export function NewExpenseModal({
 
   // Active side panel state ('none' | 'split' | 'category')
   const [activeSidePanel, setActiveSidePanel] = useState<SidePanelMode>('none');
-  const [openCategoryGroup, setOpenCategoryGroup] = useState<string | null>('Hogar y Supermercado');
+  const [openCategoryGroup, setOpenCategoryGroup] = useState<string | null>('Hogar');
 
   // Form states
   const [groupId, setGroupId] = useState<string>('');

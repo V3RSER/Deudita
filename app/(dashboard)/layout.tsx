@@ -70,7 +70,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <footer className="bg-white border-t border-zinc-200 mt-auto py-8 mb-16 lg:mb-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-zinc-500">
           <div className="flex items-center space-x-2">
-            <span className="font-semibold text-zinc-900">SplitPay</span>
+            <span className="font-semibold text-zinc-900">Deudita</span>
             <span>&copy; {new Date().getFullYear()}</span>
           </div>
           <p>Plataforma de Gastos Compartidos</p>

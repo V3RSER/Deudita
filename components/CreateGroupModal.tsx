@@ -35,7 +35,7 @@ const CATEGORY_OPTIONS: Array<{
 }> = [
   {
     id: 'trip',
-    label: 'Viaje / Vacaciones',
+    label: 'Viajes',
     description: 'Vuelos, hoteles, cenas y recorridos',
     icon: <Plane className="w-6 h-6" />,
     bgColor: 'bg-sky-50 hover:bg-sky-100/80',
@@ -44,7 +44,7 @@ const CATEGORY_OPTIONS: Array<{
   },
   {
     id: 'home',
-    label: 'Hogar / Depa',
+    label: 'Hogar',
     description: 'Arriendo, cuentas, súper y servicios',
     icon: <Home className="w-6 h-6" />,
     bgColor: 'bg-indigo-50 hover:bg-indigo-100/80',
@@ -62,7 +62,7 @@ const CATEGORY_OPTIONS: Array<{
   },
   {
     id: 'event',
-    label: 'Evento / Asado',
+    label: 'Eventos',
     description: 'Fiestas, cumpleaños y reuniones',
     icon: <Calendar className="w-6 h-6" />,
     bgColor: 'bg-amber-50 hover:bg-amber-100/80',
@@ -71,7 +71,7 @@ const CATEGORY_OPTIONS: Array<{
   },
   {
     id: 'work',
-    label: 'Trabajo / Proyecto',
+    label: 'Trabajo',
     description: 'Equipos, oficina y negocios',
     icon: <Briefcase className="w-6 h-6" />,
     bgColor: 'bg-emerald-50 hover:bg-emerald-100/80',
@@ -80,7 +80,7 @@ const CATEGORY_OPTIONS: Array<{
   },
   {
     id: 'other',
-    label: 'Otro',
+    label: 'Otros',
     description: 'Cualquier otro tipo de gasto',
     icon: <Folder className="w-6 h-6" />,
     bgColor: 'bg-slate-50 hover:bg-slate-100/80',

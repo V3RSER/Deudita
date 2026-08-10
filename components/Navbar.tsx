@@ -60,7 +60,7 @@ export function Navbar({
               </div>
               <div className="flex flex-col">
                 <span className="font-semibold text-lg text-zinc-900 leading-tight tracking-tight">
-                  SplitPay
+                  Deudita
                 </span>
               </div>
             </div>
