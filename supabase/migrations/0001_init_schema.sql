@@ -77,7 +77,7 @@ alter table public.group_invites add column if not exists token uuid not null de
 -- (para el flujo: "agregar miembro por nombre" -> "invitarlo después")
 alter table public.group_invites add column if not exists invitee_profile_id uuid references public.profiles(id);
 
-drop index if exists public.group_invites_group_id_email_key;
+alter table public.group_invites drop constraint if exists group_invites_group_id_email_key;
 create unique index if not exists group_invites_token_key on public.group_invites (token);
 
 alter table public.group_invites drop constraint if exists group_invites_email_or_profile_check;
