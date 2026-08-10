@@ -6,30 +6,23 @@ import { useExpense } from '@/lib/expense-context';
 import { Group, Expense, Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances, calculateUserSummaries } from '@/lib/balance-utils';
 import {
-  ArrowLeft,
   Receipt,
   Wallet,
   Users,
   Plus,
-  ChevronDown,
-  ChevronUp,
   UserPlus,
   Trash2,
-  Calendar,
-  Tag,
   CheckCircle2,
   Share2,
-  Copy,
   Check,
-  UserCheck,
   Sparkles,
   Pencil,
   FileText,
 } from 'lucide-react';
 
-import { getGroupImage, getCleanGroupDescription, getGroupCategoryLabel } from '@/lib/group-utils';
+import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
-import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
+import { formatDisplayEmail } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 
@@ -42,16 +35,51 @@ interface GroupDetailProps {
   onOpenAddMember: (groupId: string) => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  friends: 'Amigos',
-  home: 'Hogar',
-  trip: 'Viajes',
-  couple: 'Pareja',
-  event: 'Eventos',
-  accounting: 'Contabilidad',
-  work: 'Trabajo',
-  other: 'Otros',
-};
+const MONTH_NAMES_ES = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+const MONTH_ABBR_ES = [
+  'ENE',
+  'FEB',
+  'MAR',
+  'ABR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DIC',
+];
+
+function parseExpenseDate(dateStr: string) {
+  if (!dateStr) return { year: 2026, monthIndex: 0, day: 1 };
+  const parts = dateStr.split('-');
+  if (parts.length >= 3) {
+    const year = parseInt(parts[0], 10) || 2026;
+    const monthIndex = Math.max(0, Math.min(11, (parseInt(parts[1], 10) || 1) - 1));
+    const day = parseInt(parts[2].slice(0, 2), 10) || 1;
+    return { year, monthIndex, day };
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), monthIndex: d.getMonth(), day: d.getDate() };
+  }
+  return { year: 2026, monthIndex: 0, day: 1 };
+}
 
 export function GroupDetail({
   group,
@@ -76,8 +104,6 @@ export function GroupDetail({
     return Boolean(isPayer || isParticipant);
   });
 
-  const totalGroupSpent = groupExpenses.reduce((acc, curr) => acc + curr.total_amount, 0);
-
   const groupMembers = members.filter((m) => m.group_id === group.id);
   const memberProfiles = groupMembers
     .map((m) => profiles.find((p) => p.id === m.user_id))
@@ -85,11 +111,6 @@ export function GroupDetail({
 
   // Pairwise debts in this group
   const groupPairwise = calculatePairwiseBalances(expenses, payments, profiles, group.id);
-
-  // Summary per member
-  const userSummaries = calculateUserSummaries(expenses, payments, profiles, group.id);
-  const mySummary = userSummaries.find((s) => s.user.id === currentProfile?.id);
-  const myNet = mySummary ? mySummary.netBalance : 0;
 
   const isSoloMember = memberProfiles.length <= 1;
 
@@ -118,43 +139,34 @@ export function GroupDetail({
   };
 
   const groupImageUrl = getGroupImage(group);
-  const cleanDescription = getCleanGroupDescription(group.description);
+
+  // Group filtered expenses by Month & Year
+  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+    return new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime();
+  });
+
+  const groupedByMonth: { key: string; label: string; expenses: Expense[] }[] = [];
+
+  sortedExpenses.forEach((exp) => {
+    const { year, monthIndex } = parseExpenseDate(exp.expense_date);
+    const key = `${year}-${monthIndex}`;
+    const label = `${MONTH_NAMES_ES[monthIndex]} ${year}`;
+
+    let existing = groupedByMonth.find((g) => g.key === key);
+    if (!existing) {
+      existing = { key, label, expenses: [] };
+      groupedByMonth.push(existing);
+    }
+    existing.expenses.push(exp);
+  });
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Navigation Breadcrumb */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center space-x-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 bg-white px-4 py-2.5 rounded-full ring-1 ring-zinc-200 shadow-sm transition-all active:scale-95 min-h-[44px]"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Volver a Mis Grupos</span>
-        </button>
-
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => onOpenSettleModal(group.id)}
-            className="flex items-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all ring-1 ring-zinc-200 shadow-sm min-h-[44px]"
-          >
-            <Wallet className="w-4 h-4" />
-            <span>Saldar Cuenta</span>
-          </button>
-
-          <button
-            onClick={() => onOpenNewExpense(group.id)}
-            className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-sm transition-all active:scale-95 min-h-[44px]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nuevo Gasto</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Group Card Banner */}
-      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 p-6 sm:p-8 md:p-10 shadow-sm overflow-hidden relative">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-start space-x-4">
+      {/* Group Card Header */}
+      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="flex items-center space-x-4 min-w-0">
+            {/* Foto a la izquierda */}
             {groupImageUrl ? (
               <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden ring-2 ring-zinc-100 shrink-0 shadow-sm">
                 <Image
@@ -172,61 +184,39 @@ export function GroupDetail({
               </div>
             )}
 
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-600 bg-zinc-100 px-3 py-1 rounded-md">
-                  {getGroupCategoryLabel(group.category).toUpperCase()}
-                </span>
-                {isSoloMember && (
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] uppercase tracking-wider font-semibold rounded-md">
-                    1 INTEGRANTE
-                  </span>
-                )}
-              </div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-zinc-900 mt-2 tracking-tight">
+            {/* A la derecha de la foto: Nombre en grande arriba, pequeña descripción de la cantidad de personas abajo */}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight truncate">
                 {group.name}
               </h1>
-              {cleanDescription ? (
-                <p className="text-zinc-500 text-sm sm:text-base mt-1.5 max-w-xl leading-relaxed">
-                  {cleanDescription}
-                </p>
-              ) : null}
+              <p className="text-zinc-500 text-sm font-medium mt-1 flex items-center space-x-1.5">
+                <Users className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span>
+                  {memberProfiles.length === 1
+                    ? '1 persona'
+                    : `${memberProfiles.length} personas en este grupo`}
+                </span>
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="bg-zinc-50 p-5 rounded-2xl ring-1 ring-zinc-100 min-w-[150px]">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                Total del Grupo
-              </span>
-              <span className="text-2xl font-semibold text-zinc-900 mt-1 block tracking-tight">
-                {formatCurrency(totalGroupSpent)}
-              </span>
-            </div>
-            <div
-              className={`p-5 rounded-2xl ring-1 bg-white min-w-[150px] ${
-                Math.abs(myNet) < 0.5
-                  ? 'ring-zinc-200 border-l-4 border-l-zinc-300'
-                  : myNet > 0
-                  ? 'ring-emerald-100 border-l-4 border-l-emerald-500'
-                  : 'ring-rose-100 border-l-4 border-l-rose-500'
-              }`}
+          {/* A la derecha de todo esto: Botones de saldar y nuevo gasto */}
+          <div className="flex items-center space-x-2.5 shrink-0 self-start sm:self-center">
+            <button
+              onClick={() => onOpenSettleModal(group.id)}
+              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all ring-1 ring-zinc-200 shadow-sm active:scale-95 min-h-[44px]"
             >
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                {myNet > 0 ? 'Te deben' : myNet < 0 ? 'Debes' : 'Tu Balance'}
-              </span>
-              <span
-                className={`text-2xl font-semibold mt-1 block tracking-tight ${
-                  Math.abs(myNet) < 0.5
-                    ? 'text-zinc-600'
-                    : myNet > 0
-                    ? 'text-emerald-600'
-                    : 'text-rose-600'
-                }`}
-              >
-                {Math.abs(myNet) < 0.5 ? 'Al día' : formatCurrency(Math.abs(myNet))}
-              </span>
-            </div>
+              <Wallet className="w-4 h-4" />
+              <span>Saldar</span>
+            </button>
+
+            <button
+              onClick={() => onOpenNewExpense(group.id)}
+              className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-sm transition-all active:scale-95 min-h-[44px]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nuevo gasto</span>
+            </button>
           </div>
         </div>
       </div>
@@ -278,7 +268,7 @@ export function GroupDetail({
         </div>
       )}
 
-      {/* Tabs Navigation Bar */}
+      {/* Pestañas de Gastos, Balances y Miembros */}
       <div className="flex border-b border-zinc-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab('expenses')}
@@ -372,119 +362,152 @@ export function GroupDetail({
               </button>
             </div>
           ) : (
-            filteredExpenses.map((exp) => {
-              const paidByProfile = profiles.find((p) => p.id === exp.paid_by);
-              const catConfig = getCategoryConfig(exp.category);
-              const CategoryIcon = catConfig.icon;
+            <div className="space-y-6">
+              {groupedByMonth.map((groupSection) => (
+                <div key={groupSection.key} className="space-y-3">
+                  {/* Pequeño corte que indica el mes */}
+                  <div className="flex items-center space-x-3 py-1">
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider bg-zinc-100 px-3 py-1 rounded-md border border-zinc-200/60">
+                      {groupSection.label}
+                    </span>
+                    <div className="h-px bg-zinc-200 flex-1" />
+                  </div>
 
-              const isPayer = exp.paid_by === currentProfile?.id;
-              const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed ?? 0;
+                  <div className="space-y-2.5">
+                    {groupSection.expenses.map((exp) => {
+                      const { monthIndex, day } = parseExpenseDate(exp.expense_date);
+                      const monthAbbr = MONTH_ABBR_ES[monthIndex];
+                      const formattedDay = day < 10 ? `0${day}` : `${day}`;
 
-              let statusText = 'No participas';
-              let statusBg = 'bg-zinc-100 text-zinc-600 border-zinc-200';
+                      const paidByProfile = profiles.find((p) => p.id === exp.paid_by);
+                      const payerName = paidByProfile
+                        ? paidByProfile.id === currentProfile?.id
+                          ? 'Tú'
+                          : paidByProfile.full_name
+                        : 'Usuario';
 
-              if (isPayer) {
-                const recovers = exp.total_amount - mySplit;
-                if (recovers > 0) {
-                  statusText = `Recuperas ${formatCurrency(recovers)}`;
-                  statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                } else {
-                  statusText = 'Pagaste todo';
-                  statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-                }
-              } else if (mySplit > 0) {
-                statusText = `Debes ${formatCurrency(mySplit)}`;
-                statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
-              }
+                      const catConfig = getCategoryConfig(exp.category);
+                      const CategoryIcon = catConfig.icon;
 
-              return (
-                <div
-                  key={exp.id}
-                  onClick={() => setSelectedExpenseForModal(exp)}
-                  className="bg-white rounded-2xl ring-1 ring-zinc-200/90 p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start space-x-3.5">
-                      {/* Category SVG Icon */}
-                      <div className={`p-3 rounded-2xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} shrink-0 mt-0.5`}>
-                        <CategoryIcon className="w-5 h-5" />
-                      </div>
+                      const isPayer = exp.paid_by === currentProfile?.id;
+                      const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed ?? 0;
 
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h4 className="font-bold text-zinc-900 text-base group-hover:text-emerald-700 transition-colors">
-                            {exp.description}
-                          </h4>
-                          {exp.source === 'gmail' && (
-                            <span className="bg-zinc-900 text-white text-[10px] uppercase font-semibold tracking-widest px-2 py-0.5 rounded-md">
-                              AI
+                      let participationElement = null;
+
+                      if (isPayer) {
+                        const recovers = exp.total_amount - mySplit;
+                        if (recovers > 0) {
+                          participationElement = (
+                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full inline-block">
+                              Prestaste {formatCurrency(recovers)}
                             </span>
-                          )}
-                        </div>
-
-                        {exp.notes && (
-                          <p className="text-xs text-zinc-600 mt-1 flex items-center space-x-1 font-normal bg-zinc-50 px-2 py-1 rounded-md border border-zinc-100 w-fit">
-                            <FileText className="w-3 h-3 text-zinc-400 shrink-0" />
-                            <span>{exp.notes}</span>
-                          </p>
-                        )}
-
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-1.5">
-                          <span className="flex items-center space-x-1 font-medium">
-                            <Calendar className="w-3 h-3 text-zinc-400" />
-                            <span>{exp.expense_date}</span>
+                          );
+                        } else {
+                          participationElement = (
+                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full inline-block">
+                              Pagaste todo
+                            </span>
+                          );
+                        }
+                      } else if (mySplit > 0) {
+                        participationElement = (
+                          <span className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full inline-block">
+                            {payerName} te prestó {formatCurrency(mySplit)}
                           </span>
-                          <span>•</span>
-                          <span className="flex items-center space-x-1 font-medium text-zinc-700">
-                            <span>{exp.category}</span>
+                        );
+                      } else {
+                        participationElement = (
+                          <span className="text-xs font-medium text-zinc-500 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-full inline-block">
+                            No participas
                           </span>
-                          <span>•</span>
-                          <span>
-                            Pagó:{' '}
-                            <strong className="text-zinc-800 font-semibold">
-                              {paidByProfile ? paidByProfile.full_name : 'Usuario'}
-                            </strong>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                        );
+                      }
 
-                    <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100">
-                      <div className="text-right">
-                        <span className="text-sm font-bold text-zinc-900 block tracking-tight">
-                          {formatCurrency(exp.total_amount)}
-                        </span>
-                        <div className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusBg}`}>
-                          {statusText}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1.5 bg-zinc-50 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
-                        {onEditExpense && (
-                          <button
-                            type="button"
-                            onClick={() => onEditExpense(exp)}
-                            className="p-2 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                            title="Editar gasto"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => deleteExpense(exp.id)}
-                          className="p-2 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                          title="Eliminar gasto"
+                      return (
+                        <div
+                          key={exp.id}
+                          onClick={() => setSelectedExpenseForModal(exp)}
+                          className="bg-white rounded-2xl ring-1 ring-zinc-200/90 p-4 sm:p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                              {/* Fecha resumida: AGO / 01 (Mismo tamaño que el SVG de categoría) */}
+                              <div className="w-12 h-12 rounded-xl bg-zinc-100 border border-zinc-200/80 flex flex-col items-center justify-center shrink-0 text-center select-none">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none tracking-tight">
+                                  {monthAbbr}
+                                </span>
+                                <span className="text-base sm:text-lg font-extrabold text-zinc-900 leading-none mt-0.5">
+                                  {formattedDay}
+                                </span>
+                              </div>
+
+                              {/* SVG de la categoría */}
+                              <div className={`w-12 h-12 rounded-xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}>
+                                <CategoryIcon className="w-5 h-5" />
+                              </div>
+
+                              {/* Descripción del gasto y quién pagó */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <h4 className="font-bold text-zinc-900 text-base truncate group-hover:text-emerald-700 transition-colors">
+                                    {exp.description}
+                                  </h4>
+                                  {exp.source === 'gmail' && (
+                                    <span className="bg-zinc-900 text-white text-[10px] uppercase font-semibold tracking-widest px-2 py-0.5 rounded-md shrink-0">
+                                      AI
+                                    </span>
+                                  )}
+                                </div>
+
+                                {exp.notes && (
+                                  <p className="text-xs text-zinc-600 mt-0.5 flex items-center space-x-1 font-normal">
+                                    <FileText className="w-3 h-3 text-zinc-400 shrink-0" />
+                                    <span className="truncate">{exp.notes}</span>
+                                  </p>
+                                )}
+
+                                <p className="text-xs text-zinc-500 mt-1 font-medium truncate">
+                                  <strong className="text-zinc-800 font-semibold">{payerName}</strong> pagó {formatCurrency(exp.total_amount)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Participación y Acciones */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100 shrink-0">
+                              <div className="text-right">
+                                {participationElement}
+                              </div>
+
+                              <div className="flex items-center space-x-1 bg-zinc-50 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                                {onEditExpense && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditExpense(exp)}
+                                    className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                                    title="Editar gasto"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => deleteExpense(exp.id)}
+                                  className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                                  title="Eliminar gasto"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -559,7 +582,6 @@ export function GroupDetail({
             {memberProfiles.map((p) => {
               const memberRecord = groupMembers.find((m) => m.user_id === p.id);
               const isOwner = memberRecord?.role === 'owner';
-              const isTemp = !p.email || p.email.startsWith('temp_');
 
               return (
                 <div
@@ -639,3 +661,4 @@ export function GroupDetail({
     </div>
   );
 }
+
