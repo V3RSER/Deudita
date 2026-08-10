@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +11,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const db = createAdminClient();
     const body = await req.json().catch(() => null);
 
     if (!body) {
@@ -31,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     // Insert group matching database schema: name, category, description, owner_id
-    const { data: group, error: groupErr } = await db
+    const { data: group, error: groupErr } = await supabase
       .from('groups')
       .insert({
         name: name.trim(),
@@ -44,11 +43,11 @@ export async function POST(req: Request) {
 
     if (groupErr || !group) {
       console.error('[API POST /api/groups] Error inserting group:', groupErr);
-      return NextResponse.json({ error: groupErr?.message || 'Error al crear el grupo' }, { status: 500 });
+      return NextResponse.json({ error: groupErr?.message ?? 'Error al crear el grupo' }, { status: 500 });
     }
 
     // Insert owner membership record in group_members
-    const { error: memberErr } = await db.from('group_members').insert({
+    const { error: memberErr } = await supabase.from('group_members').insert({
       group_id: group.id,
       user_id: user.id,
       role: 'owner',
@@ -60,8 +59,9 @@ export async function POST(req: Request) {
 
     // Insert invites if emails provided
     if (emails && Array.isArray(emails)) {
+      const userEmailLower = user.email ? user.email.toLowerCase() : null;
       const invitesToInsert = emails
-        .filter((e): e is string => typeof e === 'string' && e.trim().length > 0 && e.trim().toLowerCase() !== user.email?.toLowerCase())
+        .filter((e): e is string => typeof e === 'string' && e.trim().length > 0 && e.trim().toLowerCase() !== userEmailLower)
         .map((e) => ({
           group_id: group.id,
           email: e.trim().toLowerCase(),
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
         }));
 
       if (invitesToInsert.length > 0) {
-        const { error: inviteErr } = await db.from('group_invites').insert(invitesToInsert);
+        const { error: inviteErr } = await supabase.from('group_invites').insert(invitesToInsert);
         if (inviteErr) {
           console.error('[API POST /api/groups] Error creating group invites:', inviteErr);
         }
