@@ -61,51 +61,29 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. If no existing profile found, create a new profile (temporary or with provided email/name)
+    // 2. If no existing profile found, create a new profile for the member
     if (!targetUserId) {
       if (!tempEmail) {
-        tempEmail = `temp_${Date.now()}_${Math.floor(Math.random() * 100000)}@deudita.app`;
+        tempEmail = `temp_${groupId}_${Date.now()}_${Math.floor(Math.random() * 100000)}@deudita.app`;
       }
-      const displayName = memberName || targetEmail.split('@')[0];
-      const tempPassword = crypto.randomUUID() + 'aA1!';
+      const displayName = memberName || (targetEmail ? targetEmail.split('@')[0] : 'Integrante');
+      targetUserId = crypto.randomUUID();
 
-      // Create auth user so ID is valid in auth.users
-      const { data: signUpData } = await supabase.auth.signUp({
-        email: tempEmail,
-        password: tempPassword,
-        options: {
-          data: { full_name: displayName },
-        },
-      }).catch(() => ({ data: null }));
-
-      if (signUpData?.user?.id) {
-        targetUserId = signUpData.user.id;
-      } else {
-        // Fallback to admin or uuid
-        const { data: adminData } = await supabase.auth.admin.createUser({
-          email: tempEmail,
-          password: tempPassword,
-          email_confirm: true,
-          user_metadata: { full_name: displayName },
-        }).catch(() => ({ data: null }));
-
-        if (adminData?.user?.id) {
-          targetUserId = adminData.user.id;
-        } else {
-          targetUserId = crypto.randomUUID();
-        }
-      }
-
-      // Upsert profile record
-      await supabase.from('profiles').upsert({
+      // Upsert profile record directly in public.profiles
+      const { error: profErr } = await supabase.from('profiles').upsert({
         id: targetUserId,
         email: tempEmail,
         full_name: displayName,
         avatar_url: '',
       }, { onConflict: 'id' });
+
+      if (profErr) {
+        console.error('[API /api/groups/invite] Error upserting profile:', profErr);
+        return NextResponse.json({ error: profErr.message || 'Error al crear perfil del integrante' }, { status: 500 });
+      }
     }
 
-    // 3. Add to group_members immediately!
+    // 3. Add to group_members immediately
     const { error: memberInsertErr } = await supabase.from('group_members').upsert({
       group_id: groupId,
       user_id: targetUserId,
@@ -115,6 +93,7 @@ export async function POST(req: Request) {
 
     if (memberInsertErr) {
       console.error('[API /api/groups/invite] Error adding member to group:', memberInsertErr);
+      return NextResponse.json({ error: memberInsertErr.message || 'Error al añadir integrante al grupo' }, { status: 500 });
     }
 
     // 4. Create or update group_invite record if real email is provided or for generating link

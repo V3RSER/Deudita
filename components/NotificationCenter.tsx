@@ -53,7 +53,7 @@ export function NotificationCenter() {
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-full transition-colors flex items-center justify-center min-w-[40px] min-h-[40px]"
+        className="relative p-2 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-full transition-all active:scale-95 flex items-center justify-center min-w-[40px] min-h-[40px]"
         title="Notificaciones e invitaciones"
       >
         <Bell className="w-5 h-5" />
@@ -80,7 +80,7 @@ export function NotificationCenter() {
             {unreadNotifications.length > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="text-xs text-zinc-300 hover:text-white flex items-center space-x-1"
+                className="text-xs text-zinc-300 hover:text-white flex items-center space-x-1 transition-colors active:scale-95"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 <span>Marcar leídas</span>
@@ -123,14 +123,14 @@ export function NotificationCenter() {
                         <button
                           onClick={() => handleReject(invite.id)}
                           disabled={processingId === invite.id}
-                          className="flex-1 bg-white hover:bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200 py-2 rounded-xl text-xs font-medium transition-all"
+                          className="flex-1 bg-white hover:bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200 py-2 rounded-xl text-xs font-medium transition-all active:scale-95"
                         >
                           Rechazar
                         </button>
                         <button
                           onClick={() => handleAccept(invite.id)}
                           disabled={processingId === invite.id}
-                          className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white py-2 rounded-xl text-xs font-semibold shadow-sm transition-all"
+                          className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white py-2 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95"
                         >
                           Aceptar
                         </button>
@@ -163,7 +163,7 @@ export function NotificationCenter() {
                       {!n.is_read && (
                         <button
                           onClick={() => markNotificationAsRead(n.id)}
-                          className="text-zinc-400 hover:text-zinc-700"
+                          className="text-zinc-400 hover:text-zinc-700 transition-colors active:scale-95"
                           title="Marcar como leída"
                         >
                           <Check className="w-3.5 h-3.5" />

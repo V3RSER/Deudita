@@ -61,7 +61,7 @@ export function AuthView({ error }: { error?: string }) {
 
         <button
           onClick={handleGoogleLogin}
-          className="w-full bg-zinc-900 text-white rounded-xl py-3 px-4 font-semibold hover:bg-zinc-800 transition-colors flex items-center justify-center space-x-2"
+          className="w-full bg-zinc-900 text-white rounded-xl py-3 px-4 font-semibold hover:bg-zinc-800 transition-all active:scale-95 shadow-sm flex items-center justify-center space-x-2"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path

@@ -296,7 +296,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                       type="button"
                       onClick={handleNativeShare}
                       disabled={isSubmitting}
-                      className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-700 py-2 px-4 rounded-xl text-xs font-medium border border-zinc-200 transition-all"
+                      className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-700 py-2 px-4 rounded-xl text-xs font-medium border border-zinc-200 transition-all active:scale-95"
                     >
                       <Share2 className="w-3.5 h-3.5" />
                       <span>Más opciones de compartir</span>

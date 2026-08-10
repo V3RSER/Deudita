@@ -39,32 +39,43 @@ export default function ExpenseDetailPage({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
-    // Check context first
-    const foundInContext = expenses.find((e) => e.id === id);
-    if (foundInContext) {
-      setExpense(foundInContext);
-      setLoading(false);
-      return;
-    }
+    let isMounted = true;
+    async function loadExpense() {
+      const foundInContext = expenses.find((e) => e.id === id);
+      if (foundInContext) {
+        if (isMounted) {
+          setExpense(foundInContext);
+          setLoading(false);
+        }
+        return;
+      }
 
-    // Otherwise fetch from server API
-    async function fetchExpense() {
       try {
-        setLoading(true);
+        if (isMounted) setLoading(true);
         const res = await fetch(`/api/expenses/${id}`);
         if (!res.ok) {
           throw new Error('Gasto no encontrado');
         }
         const data = await res.json();
-        setExpense(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar el gasto');
+        if (isMounted) {
+          setExpense(data);
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Error al cargar el gasto');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchExpense();
+    void loadExpense();
+
+    return () => {
+      isMounted = false;
+    };
   }, [id, expenses]);
 
   if (loading) {

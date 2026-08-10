@@ -123,7 +123,7 @@ export function DashboardSummary({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <button
           onClick={onOpenSettleModal}
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+          className="p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
           <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
             <Wallet className="w-5 h-5" />
@@ -136,7 +136,7 @@ export function DashboardSummary({
 
         <button
           onClick={onOpenScanReceiptModal}
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+          className="p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
           <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
             <Sparkles className="w-5 h-5" />
@@ -149,7 +149,7 @@ export function DashboardSummary({
 
         <Link
           href="/balances"
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+          className="p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
           <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
             <ArrowRightLeft className="w-5 h-5" />
@@ -162,7 +162,7 @@ export function DashboardSummary({
 
         <Link
           href="/my-expenses"
-          className="p-5 bg-white rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
+          className="p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
           <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
             <Receipt className="w-5 h-5" />
@@ -196,7 +196,7 @@ export function DashboardSummary({
               <p className="text-xs text-zinc-500">Crea un grupo para empezar a dividir cuentas.</p>
               <button
                 onClick={onOpenNewGroup}
-                className="bg-zinc-900 text-white font-medium px-5 py-2.5 rounded-full text-xs transition"
+                className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs transition-all active:scale-95 shadow-sm"
               >
                 Crear primer grupo
               </button>

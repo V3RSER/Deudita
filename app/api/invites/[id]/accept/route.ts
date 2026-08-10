@@ -92,22 +92,27 @@ export async function POST(
       // Reassign payments
       await supabase
         .from('payments')
-        .update({ payer_id: user.id })
+        .update({ paid_by: user.id })
         .eq('group_id', groupId)
-        .eq('payer_id', tempUserIdToMerge);
+        .eq('paid_by', tempUserIdToMerge);
 
       await supabase
         .from('payments')
-        .update({ payee_id: user.id })
+        .update({ paid_to: user.id })
         .eq('group_id', groupId)
-        .eq('payee_id', tempUserIdToMerge);
+        .eq('paid_to', tempUserIdToMerge);
 
-      // Remove temp user from group_members
+      // Remove temp user from group_members and profiles
       await supabase
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
         .eq('user_id', tempUserIdToMerge);
+
+      await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', tempUserIdToMerge);
     }
 
     // Add user to group_members

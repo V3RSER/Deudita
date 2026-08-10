@@ -41,15 +41,16 @@ export function MemberDetailModal({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (memberProfile) {
-      setName(memberProfile.full_name || '');
-      const rawEmail = memberProfile.email || '';
-      setEmail(rawEmail.startsWith('temp_') ? '' : rawEmail);
-      setSuccessMsg(null);
-      setErrorMsg(null);
-    }
-  }, [memberProfile]);
+  const [prevProfileId, setPrevProfileId] = useState<string | null>(null);
+
+  if (memberProfile && memberProfile.id !== prevProfileId) {
+    setPrevProfileId(memberProfile.id);
+    setName(memberProfile.full_name || '');
+    const rawEmail = memberProfile.email || '';
+    setEmail(rawEmail.startsWith('temp_') ? '' : rawEmail);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+  }
 
   if (!isOpen || !memberProfile) return null;
 

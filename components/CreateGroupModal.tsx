@@ -368,7 +368,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-5 py-3 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors"
+              className="px-5 py-3 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors active:scale-95"
             >
               Cancelar
             </button>
