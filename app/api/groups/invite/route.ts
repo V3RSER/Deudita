@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { sendGroupInviteEmail } from '@/lib/email';
 
-async function ensureGroupMember(supabase: any, groupId: string, userId: string, invitedBy: string) {
-  const { data: existing } = await supabase
+async function ensureGroupMember(db: any, groupId: string, userId: string, invitedBy: string) {
+  const { data: existing } = await db
     .from('group_members')
     .select('group_id')
     .eq('group_id', groupId)
@@ -11,7 +11,7 @@ async function ensureGroupMember(supabase: any, groupId: string, userId: string,
     .maybeSingle();
 
   if (!existing) {
-    const { error } = await supabase
+    const { error } = await db
       .from('group_members')
       .insert({
         group_id: groupId,
@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    const db = createAdminClient();
+
     const body = await req.json().catch(() => null);
     if (!body || !body.groupId) {
       return NextResponse.json({ error: 'Falta la información del grupo' }, { status: 400 });
@@ -50,18 +52,19 @@ export async function POST(req: Request) {
     }
 
     // Fetch group details
-    const { data: group, error: groupErr } = await supabase
+    const { data: group, error: groupErr } = await db
       .from('groups')
       .select('*')
       .eq('id', groupId)
       .single();
+
 
     if (groupErr || !group) {
       return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 });
     }
 
     // Fetch inviter profile
-    const { data: inviterProfile } = await supabase
+    const { data: inviterProfile } = await db
       .from('profiles')
       .select('*')
       .eq('id', user.id)
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
 
     // Handle case where memberId is passed (updating/inviting an existing temporary member)
     if (rawMemberId) {
-      const { data: tempProfile } = await supabase
+      const { data: tempProfile } = await db
         .from('profiles')
         .select('*')
         .eq('id', rawMemberId)
@@ -82,7 +85,7 @@ export async function POST(req: Request) {
 
       if (tempProfile) {
         if (targetEmail) {
-          const { data: existingProfile } = await supabase
+          const { data: existingProfile } = await db
             .from('profiles')
             .select('*')
             .eq('email', targetEmail)
@@ -90,7 +93,7 @@ export async function POST(req: Request) {
 
           if (existingProfile && existingProfile.id !== rawMemberId) {
             targetUserId = existingProfile.id;
-            await ensureGroupMember(supabase, groupId, existingProfile.id, user.id);
+            await ensureGroupMember(db, groupId, existingProfile.id, user.id);
           } else {
             targetUserId = rawMemberId;
             const updateData: { email: string; full_name?: string; is_temp?: boolean } = {
@@ -99,13 +102,13 @@ export async function POST(req: Request) {
             };
             if (memberName) updateData.full_name = memberName;
 
-            await supabase.from('profiles').update(updateData).eq('id', rawMemberId);
-            await ensureGroupMember(supabase, groupId, rawMemberId, user.id);
+            await db.from('profiles').update(updateData).eq('id', rawMemberId);
+            await ensureGroupMember(db, groupId, rawMemberId, user.id);
           }
         } else {
           targetUserId = rawMemberId;
           if (memberName) {
-            await supabase.from('profiles').update({ full_name: memberName, is_temp: true }).eq('id', rawMemberId);
+            await db.from('profiles').update({ full_name: memberName, is_temp: true }).eq('id', rawMemberId);
           }
         }
       }
@@ -113,7 +116,7 @@ export async function POST(req: Request) {
 
     // 1. If email is provided and targetUserId was not resolved via memberId
     if (!targetUserId && targetEmail) {
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile } = await db
         .from('profiles')
         .select('*')
         .eq('email', targetEmail)
@@ -132,7 +135,7 @@ export async function POST(req: Request) {
       const displayName = memberName || (targetEmail ? targetEmail.split('@')[0] : 'Integrante');
       targetUserId = crypto.randomUUID();
 
-      const { error: profErr } = await supabase.from('profiles').upsert({
+      const { error: profErr } = await db.from('profiles').upsert({
         id: targetUserId,
         email: tempEmail,
         full_name: displayName,
@@ -147,7 +150,7 @@ export async function POST(req: Request) {
     }
 
     // 3. Add to group_members immediately
-    const memberInsertErr = await ensureGroupMember(supabase, groupId, targetUserId, user.id);
+    const memberInsertErr = await ensureGroupMember(db, groupId, targetUserId, user.id);
 
     if (memberInsertErr) {
       console.error('[API /api/groups/invite] Error adding member to group:', memberInsertErr);
@@ -158,7 +161,7 @@ export async function POST(req: Request) {
     let inviteId: string | null = null;
     const inviteEmailToUse = targetEmail || tempEmail || `temp_${groupId}_${targetUserId}@deudita.app`;
 
-    const { data: existingInvite } = await supabase
+    const { data: existingInvite } = await db
       .from('group_invites')
       .select('id')
       .eq('group_id', groupId)
@@ -168,7 +171,7 @@ export async function POST(req: Request) {
     if (existingInvite) {
       inviteId = existingInvite.id;
     } else {
-      const { data: newInvite } = await supabase
+      const { data: newInvite } = await db
         .from('group_invites')
         .insert({
           group_id: groupId,

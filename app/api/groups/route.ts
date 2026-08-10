@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    const db = createAdminClient();
     const body = await req.json().catch(() => null);
 
     if (!body) {
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
     }
 
     // Insert group matching database schema: name, category, description, owner_id
-    const { data: group, error: groupErr } = await supabase
+    const { data: group, error: groupErr } = await db
       .from('groups')
       .insert({
         name: name.trim(),
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     }
 
     // Insert owner membership record in group_members
-    const { error: memberErr } = await supabase.from('group_members').insert({
+    const { error: memberErr } = await db.from('group_members').insert({
       group_id: group.id,
       user_id: user.id,
       role: 'owner',
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
         }));
 
       if (invitesToInsert.length > 0) {
-        const { error: inviteErr } = await supabase.from('group_invites').insert(invitesToInsert);
+        const { error: inviteErr } = await db.from('group_invites').insert(invitesToInsert);
         if (inviteErr) {
           console.error('[API POST /api/groups] Error creating group invites:', inviteErr);
         }
@@ -84,5 +85,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 
