@@ -390,14 +390,14 @@ export function GroupDetail({
               if (isPayer) {
                 const recovers = exp.total_amount - mySplit;
                 if (recovers > 0) {
-                  statusText = `Recuperas ${formatCurrency(recovers)}`;
+                  statusText = `Pagaste ${formatCurrency(exp.total_amount)} (Tu parte: ${formatCurrency(mySplit)} • Recuperas ${formatCurrency(recovers)})`;
                   statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                 } else {
-                  statusText = `Pagaste ${formatCurrency(exp.total_amount)}`;
+                  statusText = `Pagaste ${formatCurrency(exp.total_amount)} (Tu parte: ${formatCurrency(mySplit)})`;
                   statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                 }
               } else if (mySplit > 0) {
-                statusText = `Debes ${formatCurrency(mySplit)}`;
+                statusText = `Tu parte: ${formatCurrency(mySplit)} (Debes ${formatCurrency(mySplit)})`;
                 statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
               }
 

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useExpense } from '@/lib/expense-context';
 import { GroupCategory } from '@/lib/types';
+import { DEFAULT_GROUP_IMAGE } from '@/lib/group-utils';
 import {
   X,
   Users,
@@ -17,6 +18,10 @@ import {
   Check,
   Camera,
   Sparkles,
+  Upload,
+  Link,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 
 interface CreateGroupModalProps {
@@ -89,27 +94,55 @@ const CATEGORY_OPTIONS: Array<{
   },
 ];
 
-const PRESET_AVATARS = [
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=150&auto=format&fit=crop&q=80', // Playita
-  'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=150&auto=format&fit=crop&q=80', // Casa
-  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=150&auto=format&fit=crop&q=80', // Resto
-  'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=150&auto=format&fit=crop&q=80', // Fiesta
-  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80', // Equipo
-];
-
 export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const router = useRouter();
   const { createGroup } = useExpense();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<GroupCategory>('trip');
-  const [selectedAvatar, setSelectedAvatar] = useState<string>(PRESET_AVATARS[0]);
-  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [groupImageUrl, setGroupImageUrl] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [useUrlMode, setUseUrlMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'group_avatar');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Error al subir la imagen');
+      }
+
+      const data = await res.json();
+      if (data.url) {
+        setGroupImageUrl(data.url);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo subir la foto del grupo';
+      setErrorMessage(msg);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,13 +156,12 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
     setIsSubmitting(true);
     try {
-      const finalAvatar = showCustomInput && customAvatarUrl.trim()
-        ? customAvatarUrl.trim()
-        : selectedAvatar;
+      const finalAvatar = groupImageUrl.trim() ? groupImageUrl.trim() : DEFAULT_GROUP_IMAGE;
 
       const newGroup = await createGroup(groupName, category, '', [], finalAvatar);
       
       setName('');
+      setGroupImageUrl('');
       onClose();
 
       // Direct navigation to /groups/[groupId]
@@ -192,54 +224,91 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
           {/* 2. Foto o Portada del Grupo */}
           <div>
-            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2 flex items-center justify-between">
-              <span>2. Foto del Grupo</span>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                2. Foto del Grupo
+              </label>
               <button
                 type="button"
-                onClick={() => setShowCustomInput(!showCustomInput)}
-                className="text-[11px] text-zinc-500 hover:text-zinc-900 underline font-normal normal-case"
+                onClick={() => setUseUrlMode(!useUrlMode)}
+                className="text-[11px] text-zinc-500 hover:text-zinc-900 underline font-normal flex items-center gap-1"
               >
-                {showCustomInput ? 'Usar fotos predefinidas' : 'Usar URL de foto personalizada'}
+                {useUrlMode ? (
+                  <>
+                    <Upload className="w-3 h-3" />
+                    <span>Subir desde mi equipo</span>
+                  </>
+                ) : (
+                  <>
+                    <Link className="w-3 h-3" />
+                    <span>Ingresar enlace de imagen</span>
+                  </>
+                )}
               </button>
-            </label>
+            </div>
 
-            {showCustomInput ? (
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {useUrlMode ? (
               <input
                 type="url"
-                value={customAvatarUrl}
-                onChange={(e) => setCustomAvatarUrl(e.target.value)}
+                value={groupImageUrl}
+                onChange={(e) => setGroupImageUrl(e.target.value)}
                 placeholder="https://ejemplo.com/foto-grupo.jpg"
                 className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
               />
             ) : (
-              <div className="flex items-center space-x-3 overflow-x-auto pb-2">
-                {PRESET_AVATARS.map((url, idx) => {
-                  const isSelected = selectedAvatar === url;
-                  return (
+              <div className="flex items-center gap-4 bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-300">
+                <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-zinc-200 border border-zinc-300 shrink-0 shadow-2xs">
+                  <Image
+                    src={groupImageUrl.trim() ? groupImageUrl : DEFAULT_GROUP_IMAGE}
+                    alt="Vista previa foto de grupo"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                  />
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 flex-1">
+                  <p className="text-xs text-zinc-600 font-medium">
+                    {groupImageUrl ? 'Foto personal cargada' : 'Foto por defecto asignada. Sube una personalizada para distinguirlo.'}
+                  </p>
+                  <div className="flex items-center gap-2">
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => setSelectedAvatar(url)}
-                      className={`relative w-14 h-14 rounded-2xl overflow-hidden ring-2 transition-all shrink-0 ${
-                        isSelected ? 'ring-zinc-900 scale-105 shadow-md' : 'ring-transparent opacity-75 hover:opacity-100'
-                      }`}
+                      disabled={isUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-800 text-xs font-semibold hover:bg-zinc-100 shadow-2xs flex items-center gap-1.5 transition-all"
                     >
-                      <Image
-                        src={url}
-                        alt={`Foto preset ${idx + 1}`}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                        referrerPolicy="no-referrer"
-                      />
-                      {isSelected && (
-                        <div className="absolute inset-0 bg-zinc-900/30 flex items-center justify-center text-white">
-                          <Check className="w-5 h-5 stroke-[3]" />
-                        </div>
-                      )}
+                      <Camera className="w-3.5 h-3.5 text-zinc-600" />
+                      <span>{groupImageUrl ? 'Cambiar foto' : 'Subir foto'}</span>
                     </button>
-                  );
-                })}
+
+                    {groupImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setGroupImageUrl('')}
+                        className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Quitar foto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

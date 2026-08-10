@@ -41,8 +41,11 @@ export async function POST(req: Request) {
     if (uploadType === 'user_avatar') {
       // Structure: uploads/user/avatar/{numericFolder}/large_{uuid}.{ext}
       storagePath = `uploads/user/avatar/${numericFolder}/large_${uuid}.${ext}`;
+    } else if (uploadType === 'group_avatar') {
+      // Structure: uploads/group/avatar/{numericFolder}/${uuid}.{ext}
+      storagePath = `uploads/group/avatar/${numericFolder}/${uuid}.${ext}`;
     } else {
-      // Structure: uploads/expense/receipt/{numericFolder}/{uuid}.{ext}
+      // Structure: uploads/expense/receipt/{numericFolder}/${uuid}.{ext}
       storagePath = `uploads/expense/receipt/${numericFolder}/${uuid}.${ext}`;
     }
 

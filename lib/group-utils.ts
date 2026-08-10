@@ -1,6 +1,9 @@
 import { Group } from './types';
 
-export function getGroupImage(group: Group): string | undefined {
+export const DEFAULT_GROUP_IMAGE =
+  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80';
+
+export function getGroupImage(group: Group): string {
   if (group.image_url && group.image_url.trim().length > 0) {
     return group.image_url.trim();
   }
@@ -10,7 +13,7 @@ export function getGroupImage(group: Group): string | undefined {
       return match[1].trim();
     }
   }
-  return undefined;
+  return DEFAULT_GROUP_IMAGE;
 }
 
 export function getCleanGroupDescription(description?: string): string {

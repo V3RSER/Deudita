@@ -1,0 +1,411 @@
+'use client';
+
+import React, { useEffect, useState, use } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useExpense } from '@/lib/expense-context';
+import { Expense } from '@/lib/types';
+import { formatCurrency } from '@/lib/balance-utils';
+import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { NewExpenseModal } from '@/components/NewExpenseModal';
+import {
+  ArrowLeft,
+  Calendar,
+  UserCheck,
+  Trash2,
+  Edit3,
+  Receipt,
+  FileText,
+  Users,
+  Loader2,
+  AlertCircle,
+  ExternalLink,
+} from 'lucide-react';
+
+export default function ExpenseDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const router = useRouter();
+  const { currentProfile, expenses, userGroups, profiles, deleteExpense } = useExpense();
+
+  const [expense, setExpense] = useState<Expense | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Check context first
+    const foundInContext = expenses.find((e) => e.id === id);
+    if (foundInContext) {
+      setExpense(foundInContext);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch from server API
+    async function fetchExpense() {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/expenses/${id}`);
+        if (!res.ok) {
+          throw new Error('Gasto no encontrado');
+        }
+        const data = await res.json();
+        setExpense(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al cargar el gasto');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchExpense();
+  }, [id, expenses]);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3">
+        <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+        <p className="text-sm text-zinc-500 font-medium">Cargando detalles del gasto...</p>
+      </div>
+    );
+  }
+
+  if (error || !expense) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-4">
+        <div className="bg-white p-8 rounded-3xl ring-1 ring-zinc-200 text-center space-y-4 shadow-sm">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+          <h2 className="text-xl font-bold text-zinc-900">Gasto no encontrado</h2>
+          <p className="text-sm text-zinc-500">
+            El gasto solicitado no existe o fue eliminado previamente.
+          </p>
+          <button
+            onClick={() => router.back()}
+            className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-all inline-flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Volver</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const group = userGroups.find((g) => g.id === expense.group_id);
+  const paidByProfile = profiles.find((p) => p.id === expense.paid_by);
+  const isPaidByMe = currentProfile?.id === expense.paid_by;
+
+  const splits = expense.splits || [];
+  const items = expense.items || [];
+
+  const mySplit = splits.find((s) => s.user_id === currentProfile?.id);
+  const myOwedAmount = mySplit ? mySplit.amount_owed : 0;
+
+  const totalOthersOwe = splits
+    .filter((s) => s.user_id !== currentProfile?.id)
+    .reduce((acc, curr) => acc + curr.amount_owed, 0);
+
+  const myShareAmount = isPaidByMe
+    ? (mySplit ? mySplit.amount_owed : (expense.total_amount - totalOthersOwe))
+    : myOwedAmount;
+
+  let userStatusText = '';
+  let userStatusClass = '';
+
+  if (isPaidByMe) {
+    if (totalOthersOwe > 0) {
+      userStatusText = `Pagaste ${formatCurrency(expense.total_amount)} en total (Tu gasto real: ${formatCurrency(myShareAmount)} • Recuperas ${formatCurrency(totalOthersOwe)})`;
+      userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+    } else {
+      userStatusText = `Pagaste el total de ${formatCurrency(expense.total_amount)} (Tu gasto real: ${formatCurrency(myShareAmount)})`;
+      userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+    }
+  } else if (myOwedAmount > 0) {
+    userStatusText = `Tu gasto en esta compra: ${formatCurrency(myOwedAmount)} (Debes a ${paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'al pagador'})`;
+    userStatusClass = 'bg-rose-50 text-rose-800 border border-rose-200';
+  } else {
+    userStatusText = 'No participas en este gasto';
+    userStatusClass = 'bg-zinc-100 text-zinc-700 border border-zinc-200';
+  }
+
+  const catConfig = getCategoryConfig(expense.category || 'General');
+  const IconComponent = catConfig.icon;
+
+  const handleDelete = async () => {
+    if (!confirm('¿Estás seguro de que deseas eliminar este gasto?')) return;
+    setIsDeleting(true);
+    try {
+      await deleteExpense(expense.id);
+      if (group) {
+        router.push(`/groups/${group.id}`);
+      } else {
+        router.push('/my-expenses');
+      }
+    } catch (err) {
+      alert('Error al eliminar el gasto');
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-6">
+      {/* Top Bar Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center space-x-2 text-sm font-semibold text-zinc-600 hover:text-zinc-900 bg-white px-4 py-2 rounded-xl border border-zinc-200/80 shadow-2xs hover:shadow-xs transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Volver</span>
+        </button>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="px-4 py-2 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-800 rounded-xl text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shadow-2xs"
+          >
+            <Edit3 className="w-4 h-4 text-zinc-600" />
+            <span>Editar</span>
+          </button>
+
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-4 py-2 bg-rose-50 hover:bg-rose-100/80 border border-rose-200 text-rose-700 rounded-xl text-sm font-semibold transition-all inline-flex items-center space-x-1.5 shadow-2xs"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{isDeleting ? 'Eliminando...' : 'Eliminar'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="p-6 sm:p-8 border-b border-zinc-100 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="flex items-start space-x-4">
+            <div className={`p-4 rounded-2xl ${catConfig.bgClass} ${catConfig.textClass} shrink-0 shadow-2xs border border-zinc-200/60`}>
+              <IconComponent className="w-8 h-8" />
+            </div>
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                {expense.category || 'General'}
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 tracking-tight mt-0.5">
+                {expense.description}
+              </h1>
+              {group && (
+                <div className="mt-2 flex items-center space-x-2 text-xs font-medium text-zinc-500">
+                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Grupo:</span>
+                  <Link
+                    href={`/groups/${group.id}`}
+                    className="text-zinc-900 font-semibold hover:underline"
+                  >
+                    {group.name}
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="text-left sm:text-right bg-zinc-900 text-white p-5 rounded-2xl shadow-md shrink-0 sm:min-w-[200px]">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+              Monto Total
+            </span>
+            <span className="text-2xl sm:text-3xl font-black text-white mt-0.5 block tracking-tight">
+              {formatCurrency(expense.total_amount)}
+            </span>
+            <div className="mt-2 text-xs font-medium text-zinc-400 flex items-center sm:justify-end gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{expense.expense_date}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 sm:p-8 space-y-6">
+          {/* User Status Banner */}
+          <div className={`p-4 rounded-2xl flex items-center space-x-3 text-sm font-medium ${userStatusClass}`}>
+            <UserCheck className="w-5 h-5 shrink-0" />
+            <span>{userStatusText}</span>
+          </div>
+
+          {/* Breakdown Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200/80 shadow-2xs">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
+                Tu parte (Tu Gasto Real)
+              </span>
+              <span className="text-2xl font-black text-zinc-900 mt-1 block">
+                {formatCurrency(myShareAmount)}
+              </span>
+            </div>
+
+            <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200/80 shadow-2xs">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
+                {isPaidByMe ? 'Monto a Recuperar' : 'Monto que Debes'}
+              </span>
+              <span className={`text-2xl font-black mt-1 block ${isPaidByMe ? 'text-emerald-700' : myOwedAmount > 0 ? 'text-rose-700' : 'text-zinc-600'}`}>
+                {isPaidByMe ? formatCurrency(totalOthersOwe) : formatCurrency(myOwedAmount)}
+              </span>
+            </div>
+          </div>
+
+          {/* Who Paid */}
+          <div className="bg-zinc-50/80 p-4 rounded-2xl border border-zinc-200/70 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase text-zinc-500 tracking-wider">
+              Pagado por
+            </span>
+            <div className="flex items-center space-x-2.5">
+              {paidByProfile?.avatar_url ? (
+                <Image
+                  src={paidByProfile.avatar_url}
+                  alt={paidByProfile.full_name || 'Avatar'}
+                  width={32}
+                  height={32}
+                  className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+                  unoptimized
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-zinc-900 text-white font-bold text-xs flex items-center justify-center">
+                  {(paidByProfile?.full_name || 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-sm font-bold text-zinc-900">
+                {isPaidByMe ? 'Tú' : (paidByProfile?.full_name || 'Usuario')}
+              </span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {expense.notes && (
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/70 space-y-1">
+              <div className="flex items-center space-x-1.5 text-xs font-bold uppercase text-zinc-500 tracking-wider">
+                <FileText className="w-4 h-4 text-zinc-400" />
+                <span>Notas adicionales</span>
+              </div>
+              <p className="text-sm text-zinc-800 font-medium pl-5">
+                {expense.notes}
+              </p>
+            </div>
+          )}
+
+          {/* Items Breakdown */}
+          {items.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider flex items-center space-x-1.5">
+                <Receipt className="w-4 h-4 text-zinc-400" />
+                <span>Desglose de Ítems ({items.length})</span>
+              </h3>
+              <div className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200/80 overflow-hidden bg-white">
+                {items.map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="p-3.5 flex items-center justify-between hover:bg-zinc-50/80 transition-colors text-sm"
+                  >
+                    <span className="font-semibold text-zinc-800">{item.description}</span>
+                    <span className="font-bold text-zinc-900">{formatCurrency(item.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Splits Distribution */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider flex items-center space-x-1.5">
+              <Users className="w-4 h-4 text-zinc-400" />
+              <span>División entre participantes ({splits.length})</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {splits.map((split) => {
+                const member = profiles.find((p) => p.id === split.user_id);
+                const isMe = currentProfile?.id === split.user_id;
+
+                return (
+                  <div
+                    key={split.id || split.user_id}
+                    className="p-3.5 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 flex items-center justify-between text-sm"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      {member?.avatar_url ? (
+                        <Image
+                          src={member.avatar_url}
+                          alt={member.full_name || 'Member'}
+                          width={28}
+                          height={28}
+                          className="w-7 h-7 rounded-full object-cover ring-1 ring-zinc-200"
+                          unoptimized
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center justify-center">
+                          {(member?.full_name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="font-semibold text-zinc-900">
+                        {isMe ? 'Tú' : (member?.full_name || 'Usuario')}
+                      </span>
+                    </div>
+
+                    <span className="font-bold text-zinc-900">
+                      {formatCurrency(split.amount_owed)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Receipt Image */}
+          {expense.receipt_url && (
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider">
+                Comprobante de Pago
+              </h3>
+              <div className="relative max-w-md rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 p-2">
+                <a
+                  href={expense.receipt_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block relative w-full h-64 rounded-xl overflow-hidden group"
+                >
+                  <Image
+                    src={expense.receipt_url}
+                    alt="Comprobante de Pago"
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-200"
+                    unoptimized
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5">
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Ver comprobante completo</span>
+                  </div>
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <NewExpenseModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          expenseToEdit={expense}
+          defaultGroupId={expense.group_id}
+        />
+      )}
+    </div>
+  );
+}

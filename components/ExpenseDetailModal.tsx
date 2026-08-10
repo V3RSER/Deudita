@@ -47,27 +47,31 @@ export function ExpenseDetailModal({
   const splits = expense.splits || [];
   const items = expense.items || [];
 
-  // Calculate my personal share
+  // Calculate my personal share & status
   const mySplit = splits.find((s) => s.user_id === currentProfile?.id);
   const myOwedAmount = mySplit ? mySplit.amount_owed : 0;
+
+  const totalOthersOwe = splits
+    .filter((s) => s.user_id !== currentProfile?.id)
+    .reduce((acc, curr) => acc + curr.amount_owed, 0);
+
+  const myShareAmount = isPaidByMe
+    ? (mySplit ? mySplit.amount_owed : (expense.total_amount - totalOthersOwe))
+    : myOwedAmount;
 
   let userStatusText = '';
   let userStatusClass = '';
 
   if (isPaidByMe) {
-    const totalOthersOwe = splits
-      .filter((s) => s.user_id !== currentProfile?.id)
-      .reduce((acc, curr) => acc + curr.amount_owed, 0);
-
     if (totalOthersOwe > 0) {
-      userStatusText = `Tú pagaste ${formatCurrency(expense.total_amount)} (Recuperas ${formatCurrency(totalOthersOwe)})`;
+      userStatusText = `Pagaste ${formatCurrency(expense.total_amount)} en total (Tu gasto real: ${formatCurrency(myShareAmount)} • Recuperas ${formatCurrency(totalOthersOwe)})`;
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     } else {
-      userStatusText = `Tú pagaste el total (${formatCurrency(expense.total_amount)})`;
+      userStatusText = `Pagaste el total de ${formatCurrency(expense.total_amount)} (Tu gasto real: ${formatCurrency(myShareAmount)})`;
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     }
   } else if (myOwedAmount > 0) {
-    userStatusText = `Debes ${formatCurrency(myOwedAmount)} a ${paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'al pagador'}`;
+    userStatusText = `Tu gasto en esta compra: ${formatCurrency(myOwedAmount)} (Debes a ${paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'al pagador'})`;
     userStatusClass = 'bg-rose-50 text-rose-800 border border-rose-200';
   } else {
     userStatusText = 'No participas en este gasto';
@@ -146,6 +150,27 @@ export function ExpenseDetailModal({
           <div className={`p-4 rounded-2xl flex items-center space-x-3 text-sm font-medium ${userStatusClass}`}>
             <UserCheck className="w-5 h-5 shrink-0" />
             <span>{userStatusText}</span>
+          </div>
+
+          {/* Breakdown Cards Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/80">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                Tu parte (Tu Gasto Real)
+              </span>
+              <span className="text-xl font-bold text-zinc-900 mt-1 block">
+                {formatCurrency(myShareAmount)}
+              </span>
+            </div>
+
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/80">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                {isPaidByMe ? 'Monto a Recuperar' : 'Monto que Debes'}
+              </span>
+              <span className={`text-xl font-bold mt-1 block ${isPaidByMe ? 'text-emerald-700' : myOwedAmount > 0 ? 'text-rose-700' : 'text-zinc-600'}`}>
+                {isPaidByMe ? formatCurrency(totalOthersOwe) : formatCurrency(myOwedAmount)}
+              </span>
+            </div>
           </div>
 
           {/* Who Paid */}
@@ -283,18 +308,28 @@ export function ExpenseDetailModal({
 
         {/* Footer Actions */}
         <div className="p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-3">
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 active:scale-95 disabled:opacity-50"
-          >
-            {isDeleting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4" />
-            )}
-            <span>Eliminar gasto</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 active:scale-95 disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              <span>Eliminar</span>
+            </button>
+
+            <a
+              href={`/expenses/${expense.id}`}
+              className="px-3.5 py-2 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 active:scale-95 shadow-2xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Ver página</span>
+            </a>
+          </div>
 
           <div className="flex items-center space-x-2">
             {onEditExpense && (
