@@ -3,8 +3,16 @@
 -- Reemplaza 0001..0006 + todos los parches posteriores.
 -- Idempotente: se puede correr sobre una base nueva o sobre una que ya
 -- tenga cualquier versión anterior de estas tablas/policies/triggers.
--- No borra datos existentes (usa IF NOT EXISTS / OR REPLACE / DROP...IF EXISTS
--- solo sobre objetos que se recrean, nunca sobre filas).
+-- No borra datos existentes de PERFILES REALES (usa IF NOT EXISTS /
+-- OR REPLACE / DROP...IF EXISTS solo sobre objetos que se recrean).
+--
+-- INCLUYE: fusión de MÚLTIPLES perfiles temporales al registrarse.
+-- Si a la misma persona la agregaron como miembro (solo con nombre) en
+-- varios grupos distintos, y luego se registra -- por cualquiera de los
+-- links de invitación, o directo desde la app -- el trigger reclama TODOS
+-- los perfiles temporales que le correspondan (por token y/o por email)
+-- y los fusiona en un único perfil real, migrando todo su historial
+-- (grupos, gastos, pagos, splits, notificaciones) sin perder datos.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -227,108 +235,112 @@ $$;
 --       al invitar, pero sin pasar por el link con token, igual se
 --       vincula automáticamente vía group_invites.email.
 -- ----------------------------------------------------------------------------
+-- Reclama TODAS las referencias de un perfil temporal (temp_id) y las
+-- reasigna al perfil real (real_id). Idempotente por diseño: si ya no
+-- quedan filas apuntando a temp_id, simplemente no hace nada.
+create or replace function public.claim_temp_profile(temp_id uuid, real_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if temp_id is null or temp_id = real_id then
+    return;
+  end if;
+
+  update public.group_members set user_id = real_id where user_id = temp_id
+    and not exists (
+      select 1 from public.group_members gm2
+      where gm2.group_id = group_members.group_id and gm2.user_id = real_id
+    );
+  -- si ya era miembro del mismo grupo con el id real, solo borra el duplicado
+  delete from public.group_members where user_id = temp_id;
+
+  update public.group_members set invited_by = real_id where invited_by = temp_id;
+  update public.groups set owner_id = real_id where owner_id = temp_id;
+  update public.expenses set paid_by = real_id where paid_by = temp_id;
+  update public.expenses set created_by = real_id where created_by = temp_id;
+
+  update public.expense_splits set user_id = real_id where user_id = temp_id
+    and not exists (
+      select 1 from public.expense_splits es2
+      where es2.expense_id = expense_splits.expense_id and es2.user_id = real_id
+    );
+  delete from public.expense_splits where user_id = temp_id;
+
+  update public.payments set paid_by = real_id where paid_by = temp_id;
+  update public.payments set paid_to = real_id where paid_to = temp_id;
+  update public.notifications set user_id = real_id where user_id = temp_id;
+  update public.group_invites set invitee_profile_id = real_id where invitee_profile_id = temp_id;
+
+  delete from public.profiles where id = temp_id and is_temp = true;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- Trigger: crea el perfil real y reclama TODOS los perfiles temporales que
+-- le correspondan a este usuario nuevo -- ya sea porque llegó con un token
+-- de invitación específico, o porque su email coincide con el de una o más
+-- invitaciones pendientes (caso: lo invitaron a varios grupos distintos
+-- antes de registrarse, y se registra directo o desde cualquiera de los
+-- links -- todos esos perfiles temporales deben fusionarse en uno solo).
+-- ----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
-  inv_record record;
   invite_token uuid;
-  temp_profile_id uuid;
-  fallback_invite record;
+  inv record;
 begin
   invite_token := nullif(new.raw_user_meta_data->>'invite_token', '')::uuid;
 
-  if invite_token is not null then
-    select gi.invitee_profile_id, gi.group_id, gi.invited_by, g.name as group_name, gi.id as invite_id
-    into inv_record
+  insert into public.profiles (id, email, full_name, avatar_url, is_temp)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(coalesce(new.email, ''), '@', 1)),
+    coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', ''),
+    false
+  )
+  on conflict (id) do nothing;
+
+  -- Recorre TODAS las invitaciones pendientes relevantes para este usuario:
+  -- por token exacto (si vino de un link) Y/O por email coincidente
+  -- (cualquier grupo que lo haya invitado a ese correo, sin importar el
+  -- token). Se deduplica por invitee_profile_id para no fusionar el mismo
+  -- perfil temporal dos veces si aparece en ambos criterios.
+  for inv in
+    select distinct on (gi.invitee_profile_id, gi.id)
+      gi.id as invite_id, gi.group_id, gi.invited_by, gi.invitee_profile_id, g.name as group_name
     from public.group_invites gi
     join public.groups g on g.id = gi.group_id
-    where gi.token = invite_token and gi.status = 'pending';
-
-    if inv_record.invitee_profile_id is not null then
-      temp_profile_id := inv_record.invitee_profile_id;
+    where gi.status = 'pending'
+      and (
+        (invite_token is not null and gi.token = invite_token)
+        or (new.email is not null and gi.email = new.email)
+      )
+  loop
+    if inv.invitee_profile_id is not null then
+      -- Fusiona el perfil temporal (con todo su historial) al usuario real.
+      perform public.claim_temp_profile(inv.invitee_profile_id, new.id);
+    else
+      -- Invitación sin perfil temporal asociado (invitación "abierta" por
+      -- email, sin haber agregado antes a nadie con nombre): solo agrega
+      -- al grupo directamente.
+      insert into public.group_members (group_id, user_id, invited_by)
+      values (inv.group_id, new.id, inv.invited_by)
+      on conflict (group_id, user_id) do nothing;
     end if;
-  end if;
 
-  if temp_profile_id is not null then
-    -- Reclamo por token: crear perfil real, migrar referencias, borrar temporal.
-    insert into public.profiles (id, email, full_name, avatar_url, is_temp)
-    values (
-      new.id,
-      new.email,
-      coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(coalesce(new.email, ''), '@', 1)),
-      coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', ''),
-      false
-    )
-    on conflict (id) do nothing;
-
-    update public.group_members set user_id = new.id where user_id = temp_profile_id;
-    update public.group_members set invited_by = new.id where invited_by = temp_profile_id;
-    update public.groups set owner_id = new.id where owner_id = temp_profile_id;
-    update public.expenses set paid_by = new.id where paid_by = temp_profile_id;
-    update public.expenses set created_by = new.id where created_by = temp_profile_id;
-    update public.expense_splits set user_id = new.id where user_id = temp_profile_id;
-    update public.payments set paid_by = new.id where paid_by = temp_profile_id;
-    update public.payments set paid_to = new.id where paid_to = temp_profile_id;
-    update public.notifications set user_id = new.id where user_id = temp_profile_id;
-
-    update public.group_invites set status = 'accepted' where id = inv_record.invite_id;
+    update public.group_invites set status = 'accepted' where id = inv.invite_id;
 
     insert into public.notifications (user_id, type, title, message, data)
     values (
       new.id, 'group_invite', '¡Te has unido al grupo!',
-      'Te has unido exitosamente al grupo ' || inv_record.group_name || '.',
-      jsonb_build_object('group_id', inv_record.group_id)
+      'Te has unido exitosamente al grupo ' || inv.group_name || '.',
+      jsonb_build_object('group_id', inv.group_id, 'invite_id', inv.invite_id)
     );
-
-    delete from public.profiles where id = temp_profile_id;
-
-  else
-    -- Sin token: signup normal (o fallback por email).
-    insert into public.profiles (id, email, full_name, avatar_url, is_temp)
-    values (
-      new.id,
-      new.email,
-      coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(coalesce(new.email, ''), '@', 1)),
-      coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', ''),
-      false
-    )
-    on conflict (id) do nothing;
-
-    -- Fallback: invitaciones pendientes que además tienen un perfil temporal
-    -- asociado por email (mismo correo, sin usar el link con token).
-    for fallback_invite in
-      select gi.id, gi.group_id, gi.invited_by, gi.invitee_profile_id, g.name as group_name
-      from public.group_invites gi
-      join public.groups g on g.id = gi.group_id
-      where gi.email = new.email and gi.status = 'pending'
-    loop
-      if fallback_invite.invitee_profile_id is not null then
-        update public.group_members set user_id = new.id where user_id = fallback_invite.invitee_profile_id;
-        update public.group_members set invited_by = new.id where invited_by = fallback_invite.invitee_profile_id;
-        update public.groups set owner_id = new.id where owner_id = fallback_invite.invitee_profile_id;
-        update public.expenses set paid_by = new.id where paid_by = fallback_invite.invitee_profile_id;
-        update public.expenses set created_by = new.id where created_by = fallback_invite.invitee_profile_id;
-        update public.expense_splits set user_id = new.id where user_id = fallback_invite.invitee_profile_id;
-        update public.payments set paid_by = new.id where paid_by = fallback_invite.invitee_profile_id;
-        update public.payments set paid_to = new.id where paid_to = fallback_invite.invitee_profile_id;
-        update public.notifications set user_id = new.id where user_id = fallback_invite.invitee_profile_id;
-        delete from public.profiles where id = fallback_invite.invitee_profile_id;
-      else
-        insert into public.group_members (group_id, user_id, invited_by)
-        values (fallback_invite.group_id, new.id, fallback_invite.invited_by)
-        on conflict (group_id, user_id) do nothing;
-      end if;
-
-      update public.group_invites set status = 'accepted' where id = fallback_invite.id;
-
-      insert into public.notifications (user_id, type, title, message, data)
-      values (
-        new.id, 'group_invite', '¡Te has unido al grupo!',
-        'Te has unido exitosamente al grupo ' || fallback_invite.group_name || '.',
-        jsonb_build_object('group_id', fallback_invite.group_id, 'invite_id', fallback_invite.id)
-      );
-    end loop;
-  end if;
+  end loop;
 
   return new;
 end;
