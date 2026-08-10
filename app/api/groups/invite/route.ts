@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const db = createAdminClient();
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
 
     const body = await req.json().catch(() => null);
     if (!body || !body.groupId) {

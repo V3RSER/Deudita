@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Token de invitación no proporcionado' }, { status: 400 });
     }
 
-    const db = createAdminClient();
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
 
     // Find pending invite by token or by id
     let invite: any = null;

@@ -16,7 +16,7 @@ export async function POST(
       return NextResponse.json({ error: 'Debes iniciar sesión para aceptar la invitación' }, { status: 401 });
     }
 
-    const db = createAdminClient();
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
 
     // Fetch the invite by token or by id
     let invite: any = null;
