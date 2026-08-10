@@ -3,7 +3,10 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
+import { Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
+import { isTempEmail, formatDisplayEmail } from '@/lib/utils';
+import { MemberDetailModal } from '@/components/MemberDetailModal';
 import {
   Users,
   UserPlus,
@@ -12,9 +15,7 @@ import {
   Search,
   CheckCircle2,
   Wallet,
-  Mail,
-  Sparkles,
-  ArrowRight,
+  Eye,
 } from 'lucide-react';
 
 interface FriendsViewProps {
@@ -26,6 +27,7 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
 
@@ -41,10 +43,9 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   // Filter friends by search
   const filteredFriends = friendProfiles.filter((p) => {
     const query = searchTerm.toLowerCase();
-    return (
-      (p.full_name ? p.full_name.toLowerCase() : '').includes(query) ||
-      (p.email ? p.email.toLowerCase() : '').includes(query)
-    );
+    const nameMatch = p.full_name ? p.full_name.toLowerCase().includes(query) : false;
+    const emailMatch = !isTempEmail(p.email) && p.email ? p.email.toLowerCase().includes(query) : false;
+    return nameMatch || emailMatch;
   });
 
   const handleSendInvite = async (e: React.FormEvent) => {
@@ -147,26 +148,33 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                 key={friend.id}
                 className="bg-white rounded-2xl ring-1 ring-zinc-200 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5"
               >
-                <div className="flex items-center space-x-4">
+                <div
+                  onClick={() => setSelectedFriend(friend)}
+                  className="flex items-center space-x-4 cursor-pointer group"
+                >
                   {friend.avatar_url ? (
                     <Image
                       src={friend.avatar_url}
                       alt={friend.full_name}
                       width={52}
                       height={52}
-                      className="w-13 h-13 rounded-full object-cover ring-2 ring-zinc-100 shrink-0"
+                      className="w-13 h-13 rounded-full object-cover ring-2 ring-zinc-100 shrink-0 group-hover:ring-zinc-900 transition-all"
                       unoptimized
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-13 h-13 rounded-full bg-zinc-900 text-white flex items-center justify-center text-lg font-bold shrink-0">
+                    <div className="w-13 h-13 rounded-full bg-zinc-900 text-white flex items-center justify-center text-lg font-bold shrink-0 group-hover:bg-zinc-800 transition-all">
                       {friend.full_name ? friend.full_name.charAt(0).toUpperCase() : 'A'}
                     </div>
                   )}
 
-                  <div className="space-y-0.5">
-                    <h3 className="font-semibold text-zinc-900 text-base">{friend.full_name}</h3>
-                    <p className="text-xs text-zinc-500 truncate">{friend.email}</p>
+                  <div className="space-y-0.5 overflow-hidden">
+                    <h3 className="font-semibold text-zinc-900 text-base group-hover:text-emerald-600 transition-colors truncate">
+                      {friend.full_name}
+                    </h3>
+                    <p className="text-xs text-zinc-500 truncate">
+                      {formatDisplayEmail(friend.email)}
+                    </p>
                   </div>
                 </div>
 
@@ -194,6 +202,15 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                 {/* Actions */}
                 <div className="flex items-center space-x-2 pt-1">
                   <button
+                    onClick={() => setSelectedFriend(friend)}
+                    className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium py-2.5 px-3 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center space-x-1 shrink-0"
+                    title="Ver perfil de amigo"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Perfil</span>
+                  </button>
+
+                  <button
                     onClick={() => {
                       if (debtStatus === 'te_debe') {
                         onOpenSettleModal(undefined, friend.id, currentProfile?.id, amount);
@@ -214,6 +231,14 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
           })}
         </div>
       )}
+
+      {/* Member Detail Modal (Friend Profile) */}
+      <MemberDetailModal
+        isOpen={Boolean(selectedFriend)}
+        onClose={() => setSelectedFriend(null)}
+        context="friends"
+        memberProfile={selectedFriend}
+      />
 
       {/* Invite Modal */}
       {showInviteModal && (
@@ -274,3 +299,4 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
     </div>
   );
 }
+

@@ -29,6 +29,7 @@ import {
 
 import { getGroupImage, getCleanGroupDescription, getGroupCategoryLabel } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 
@@ -60,7 +61,7 @@ export function GroupDetail({
   onOpenSettleModal,
   onOpenAddMember,
 }: GroupDetailProps) {
-  const { currentProfile, expenses, payments, members, profiles, deleteExpense } = useExpense();
+  const { currentProfile, expenses, payments, members, profiles, pendingInvites, deleteExpense } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
@@ -592,14 +593,14 @@ export function GroupDetail({
                             Admin
                           </span>
                         )}
-                        {isTemp && (
+                        {pendingInvites.some((i) => i.group_id === group.id && (i.email === p.email || (p.email && i.email.toLowerCase() === p.email.toLowerCase()))) && (
                           <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                            Pendiente
+                            Invitación Pendiente
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-zinc-500 mt-0.5 truncate">
-                        {isTemp ? 'Usuario temporal del grupo' : p.email}
+                        {formatDisplayEmail(p.email)}
                       </p>
                     </div>
                   </div>

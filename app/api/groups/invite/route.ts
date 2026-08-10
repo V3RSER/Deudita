@@ -17,11 +17,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Falta la información del grupo' }, { status: 400 });
     }
 
-    const { groupId, email: rawEmail, name: rawName } = body;
+    const { groupId, email: rawEmail, name: rawName, memberId: rawMemberId } = body;
     const targetEmail = rawEmail ? String(rawEmail).trim().toLowerCase() : '';
     const memberName = rawName ? String(rawName).trim() : '';
 
-    if (!targetEmail && !memberName) {
+    if (!targetEmail && !memberName && !rawMemberId) {
       return NextResponse.json({ error: 'Ingresa al menos un nombre o correo para invitar' }, { status: 400 });
     }
 
@@ -48,8 +48,72 @@ export async function POST(req: Request) {
     let targetUserId: string | null = null;
     let tempEmail = targetEmail;
 
-    // 1. If email is provided, check if profile exists
-    if (targetEmail) {
+    // Handle case where memberId is passed (updating/inviting an existing temporary member)
+    if (rawMemberId) {
+      const { data: tempProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', rawMemberId)
+        .maybeSingle();
+
+      if (tempProfile) {
+        if (targetEmail) {
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', targetEmail)
+            .maybeSingle();
+
+          if (existingProfile && existingProfile.id !== rawMemberId) {
+            targetUserId = existingProfile.id;
+
+            await supabase.from('group_members').upsert({
+              group_id: groupId,
+              user_id: existingProfile.id,
+              invited_by: user.id,
+              role: 'member',
+            }, { onConflict: 'group_id,user_id' });
+
+            await supabase.from('expenses').update({ paid_by: existingProfile.id }).eq('group_id', groupId).eq('paid_by', rawMemberId);
+            await supabase.from('expense_splits').update({ user_id: existingProfile.id }).eq('user_id', rawMemberId);
+            await supabase.from('payments').update({ paid_by: existingProfile.id }).eq('group_id', groupId).eq('paid_by', rawMemberId);
+            await supabase.from('payments').update({ paid_to: existingProfile.id }).eq('group_id', groupId).eq('paid_to', rawMemberId);
+
+            await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', rawMemberId);
+
+            const { data: remainingMemberships } = await supabase
+              .from('group_members')
+              .select('group_id')
+              .eq('user_id', rawMemberId);
+
+            if (!remainingMemberships || remainingMemberships.length === 0) {
+              await supabase.from('profiles').delete().eq('id', rawMemberId);
+            }
+          } else {
+            targetUserId = rawMemberId;
+            const updateData: { email: string; full_name?: string } = { email: targetEmail };
+            if (memberName) updateData.full_name = memberName;
+
+            await supabase.from('profiles').update(updateData).eq('id', rawMemberId);
+
+            await supabase.from('group_members').upsert({
+              group_id: groupId,
+              user_id: rawMemberId,
+              invited_by: user.id,
+              role: 'member',
+            }, { onConflict: 'group_id,user_id' });
+          }
+        } else {
+          targetUserId = rawMemberId;
+          if (memberName) {
+            await supabase.from('profiles').update({ full_name: memberName }).eq('id', rawMemberId);
+          }
+        }
+      }
+    }
+
+    // 1. If email is provided and targetUserId was not resolved via memberId
+    if (!targetUserId && targetEmail) {
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('*')
@@ -69,7 +133,6 @@ export async function POST(req: Request) {
       const displayName = memberName || (targetEmail ? targetEmail.split('@')[0] : 'Integrante');
       targetUserId = crypto.randomUUID();
 
-      // Upsert profile record directly in public.profiles
       const { error: profErr } = await supabase.from('profiles').upsert({
         id: targetUserId,
         email: tempEmail,

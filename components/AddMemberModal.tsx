@@ -17,6 +17,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState('');
   const [addedMemberName, setAddedMemberName] = useState('');
+  const [addedMemberId, setAddedMemberId] = useState<string | null>(null);
   
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +43,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
       const result = await addGroupInvite(groupId, undefined, name.trim());
       setAddedMemberName(name.trim());
+      setAddedMemberId(result.memberId || null);
       setGeneratedLink(result.inviteUrl);
       setStep(2);
     } catch (err: unknown) {
@@ -62,9 +64,10 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
       setErrorMsg(null);
       setSuccessMsg(null);
 
-      const result = await addGroupInvite(groupId, email.trim(), addedMemberName);
+      const result = await addGroupInvite(groupId, email.trim(), addedMemberName, addedMemberId || undefined);
       setSuccessMsg(`Invitación enviada por correo a ${email.trim()}`);
       if (result.inviteUrl) setGeneratedLink(result.inviteUrl);
+      if (result.memberId) setAddedMemberId(result.memberId);
       setEmail('');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al enviar invitación por correo';
@@ -79,8 +82,9 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     if (!link) {
       try {
         setIsSubmitting(true);
-        const result = await addGroupInvite(groupId, undefined, addedMemberName || name);
+        const result = await addGroupInvite(groupId, undefined, addedMemberName || name, addedMemberId || undefined);
         link = result.inviteUrl;
+        if (result.memberId) setAddedMemberId(result.memberId);
         setGeneratedLink(link);
       } catch {
         return;
@@ -101,8 +105,9 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     if (!link) {
       try {
         setIsSubmitting(true);
-        const result = await addGroupInvite(groupId, undefined, addedMemberName || name);
+        const result = await addGroupInvite(groupId, undefined, addedMemberName || name, addedMemberId || undefined);
         link = result.inviteUrl;
+        if (result.memberId) setAddedMemberId(result.memberId);
         setGeneratedLink(link);
       } catch {
         return;
@@ -134,6 +139,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     setStep(1);
     setName('');
     setAddedMemberName('');
+    setAddedMemberId(null);
     setEmail('');
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -212,15 +218,6 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
           ) : (
             /* STEP 2: How to Invite Options */
             <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              {/* Success Badge */}
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center space-x-3 text-emerald-900">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <div>
-                  <p className="text-xs font-bold">¡&quot;{addedMemberName}&quot; añadido al grupo!</p>
-                  <p className="text-[11px] text-emerald-700">Ya está disponible para incluir en gastos.</p>
-                </div>
-              </div>
-
               {successMsg && (
                 <div className="p-3 bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl text-xs font-medium">
                   {successMsg}

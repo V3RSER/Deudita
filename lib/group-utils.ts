@@ -1,4 +1,4 @@
-import { Group, GroupCategory } from './types';
+import { Group, GroupCategory, Expense, Payment } from './types';
 
 export const DEFAULT_GROUP_IMAGES: Record<GroupCategory, string> = {
   trip: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
@@ -71,3 +71,48 @@ export function getGroupCategoryLabel(category?: string): string {
       return category.charAt(0).toUpperCase() + category.slice(1);
   }
 }
+
+export function calculatePairwiseBalance(
+  userAId: string,
+  userBId: string,
+  expenses: Expense[],
+  payments: Payment[],
+  groupId?: string
+): number {
+  if (!userAId || !userBId || userAId === userBId) return 0;
+
+  let balance = 0; // Positive = userB owes userA. Negative = userA owes userB.
+
+  for (const exp of expenses) {
+    if (groupId && exp.group_id !== groupId) continue;
+
+    if (exp.paid_by === userAId && exp.splits) {
+      const splitB = exp.splits.find((s) => s.user_id === userBId);
+      if (splitB) {
+        balance += Number(splitB.amount_owed || 0);
+      }
+    }
+
+    if (exp.paid_by === userBId && exp.splits) {
+      const splitA = exp.splits.find((s) => s.user_id === userAId);
+      if (splitA) {
+        balance -= Number(splitA.amount_owed || 0);
+      }
+    }
+  }
+
+  for (const p of payments) {
+    if (groupId && p.group_id !== groupId) continue;
+
+    if (p.paid_by === userAId && p.paid_to === userBId) {
+      balance += Number(p.amount || 0);
+    }
+
+    if (p.paid_by === userBId && p.paid_to === userAId) {
+      balance -= Number(p.amount || 0);
+    }
+  }
+
+  return balance;
+}
+

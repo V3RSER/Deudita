@@ -30,7 +30,8 @@ interface ExpenseContextType {
   notifications: Notification[];
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
-  addGroupInvite: (groupId: string, email?: string, name?: string) => Promise<{ inviteUrl: string; message: string }>;
+  addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
+  deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
   rejectGroupInvite: (inviteId: string) => Promise<void>;
   markNotificationAsRead: (notificationId?: string) => Promise<void>;
@@ -188,11 +189,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return createdGroup;
   };
 
-  const addGroupInvite = async (groupId: string, email?: string, name?: string): Promise<{ inviteUrl: string; message: string }> => {
+  const addGroupInvite = async (groupId: string, email?: string, name?: string, memberId?: string): Promise<{ inviteUrl: string; message: string; memberId?: string }> => {
     const res = await fetch('/api/groups/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId, email, name }),
+      body: JSON.stringify({ groupId, email, name, memberId }),
     });
 
     if (!res.ok) {
@@ -207,7 +208,21 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return {
       inviteUrl: data.inviteUrl,
       message: data.message,
+      memberId: data.memberId,
     };
+  };
+
+  const deleteFriend = async (friendId: string): Promise<void> => {
+    const res = await fetch(`/api/friends/${friendId}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'No se pudo eliminar al amigo');
+    }
+
+    await reloadFromSupabase();
   };
 
   const acceptGroupInvite = async (inviteId: string): Promise<string> => {
@@ -365,6 +380,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         createGroup,
         addGroupInvite,
+        deleteFriend,
         acceptGroupInvite,
         rejectGroupInvite,
         markNotificationAsRead,
