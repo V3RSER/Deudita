@@ -64,14 +64,15 @@ export function ExpenseDetailModal({
 
   if (isPaidByMe) {
     if (totalOthersOwe > 0) {
-      userStatusText = `Pagaste ${formatCurrency(expense.total_amount)} en total (Tu gasto real: ${formatCurrency(myShareAmount)} • Recuperas ${formatCurrency(totalOthersOwe)})`;
+      userStatusText = 'Pagaste la cuenta completa';
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     } else {
-      userStatusText = `Pagaste el total de ${formatCurrency(expense.total_amount)} (Tu gasto real: ${formatCurrency(myShareAmount)})`;
+      userStatusText = 'Gasto personal registrado';
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     }
   } else if (myOwedAmount > 0) {
-    userStatusText = `Tu gasto en esta compra: ${formatCurrency(myOwedAmount)} (Debes a ${paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'al pagador'})`;
+    const payerName = paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'el pagador';
+    userStatusText = `Te corresponde pagar tu parte a ${payerName}`;
     userStatusClass = 'bg-rose-50 text-rose-800 border border-rose-200';
   } else {
     userStatusText = 'No participas en este gasto';
@@ -156,7 +157,7 @@ export function ExpenseDetailModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/80">
               <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
-                Tu parte (Tu Gasto Real)
+                Tu gasto real
               </span>
               <span className="text-xl font-bold text-zinc-900 mt-1 block">
                 {formatCurrency(myShareAmount)}
@@ -165,7 +166,7 @@ export function ExpenseDetailModal({
 
             <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/80">
               <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
-                {isPaidByMe ? 'Monto a Recuperar' : 'Monto que Debes'}
+                {isPaidByMe ? 'Te deben' : 'Debes'}
               </span>
               <span className={`text-xl font-bold mt-1 block ${isPaidByMe ? 'text-emerald-700' : myOwedAmount > 0 ? 'text-rose-700' : 'text-zinc-600'}`}>
                 {isPaidByMe ? formatCurrency(totalOthersOwe) : formatCurrency(myOwedAmount)}
@@ -182,7 +183,7 @@ export function ExpenseDetailModal({
               {paidByProfile?.avatar_url ? (
                 <Image
                   src={paidByProfile.avatar_url}
-                  alt={paidByProfile.full_name || 'Avatar'}
+                  alt={paidByProfile.full_name ?? 'Avatar'}
                   width={28}
                   height={28}
                   className="w-7 h-7 rounded-full object-cover ring-1 ring-zinc-200"
@@ -190,12 +191,17 @@ export function ExpenseDetailModal({
                 />
               ) : (
                 <div className="w-7 h-7 rounded-full bg-zinc-900 text-white font-bold text-xs flex items-center justify-center">
-                  {(paidByProfile?.full_name || 'U').charAt(0).toUpperCase()}
+                  {(paidByProfile?.full_name ?? 'U').charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="text-sm font-semibold text-zinc-900">
-                {isPaidByMe ? 'Tú' : (paidByProfile?.full_name || 'Usuario')}
-              </span>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-zinc-900 block">
+                  {isPaidByMe ? 'Tú' : (paidByProfile?.full_name ?? 'Usuario')}
+                </span>
+                <span className="text-[11px] text-zinc-500 font-medium block">
+                  Pagó el total ({formatCurrency(expense.total_amount)})
+                </span>
+              </div>
             </div>
           </div>
 
@@ -213,6 +219,7 @@ export function ExpenseDetailModal({
                 {splits.map((s) => {
                   const p = profiles.find((prof) => prof.id === s.user_id);
                   const isMe = currentProfile?.id === s.user_id;
+                  const isPayer = s.user_id === expense.paid_by;
 
                   return (
                     <div key={s.user_id} className="p-3.5 flex items-center justify-between text-sm">
@@ -220,7 +227,7 @@ export function ExpenseDetailModal({
                         {p?.avatar_url ? (
                           <Image
                             src={p.avatar_url}
-                            alt={p.full_name || 'Avatar'}
+                            alt={p.full_name ?? 'Avatar'}
                             width={32}
                             height={32}
                             className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
@@ -228,22 +235,33 @@ export function ExpenseDetailModal({
                           />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center justify-center">
-                            {(p?.full_name || 'U').charAt(0).toUpperCase()}
+                            {(p?.full_name ?? 'U').charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div>
                           <p className="font-semibold text-zinc-900">
-                            {isMe ? 'Tú' : (p?.full_name || 'Integrante')}
+                            {isMe ? 'Tú' : (p?.full_name ?? 'Integrante')}
                           </p>
-                          <p className="text-[11px] text-zinc-500">
-                            {s.user_id === expense.paid_by ? 'Pagó la cuenta' : 'Debe su parte'}
-                          </p>
+                          {isPayer ? (
+                            <span className="inline-block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              Pagó la cuenta completa
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-zinc-500">
+                              Participante
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      <span className="font-semibold text-zinc-900">
-                        {formatCurrency(s.amount_owed)}
-                      </span>
+                      <div className="text-right">
+                        <span className="font-semibold text-zinc-900 block">
+                          {formatCurrency(s.amount_owed)}
+                        </span>
+                        <span className="text-[11px] text-zinc-400 block">
+                          Su parte
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -321,14 +339,6 @@ export function ExpenseDetailModal({
               )}
               <span>Eliminar</span>
             </button>
-
-            <a
-              href={`/expenses/${expense.id}`}
-              className="px-3.5 py-2 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 active:scale-95 shadow-2xs"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Ver página</span>
-            </a>
           </div>
 
           <div className="flex items-center space-x-2">

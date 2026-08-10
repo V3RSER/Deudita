@@ -120,14 +120,15 @@ export default function ExpenseDetailPage({
 
   if (isPaidByMe) {
     if (totalOthersOwe > 0) {
-      userStatusText = `Pagaste ${formatCurrency(expense.total_amount)} en total (Tu gasto real: ${formatCurrency(myShareAmount)} • Recuperas ${formatCurrency(totalOthersOwe)})`;
+      userStatusText = 'Pagaste la cuenta completa';
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     } else {
-      userStatusText = `Pagaste el total de ${formatCurrency(expense.total_amount)} (Tu gasto real: ${formatCurrency(myShareAmount)})`;
+      userStatusText = 'Gasto personal registrado';
       userStatusClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
     }
   } else if (myOwedAmount > 0) {
-    userStatusText = `Tu gasto en esta compra: ${formatCurrency(myOwedAmount)} (Debes a ${paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'al pagador'})`;
+    const payerName = paidByProfile?.full_name ? paidByProfile.full_name.split(' ')[0] : 'el pagador';
+    userStatusText = `Te corresponde pagar tu parte a ${payerName}`;
     userStatusClass = 'bg-rose-50 text-rose-800 border border-rose-200';
   } else {
     userStatusText = 'No participas en este gasto';
@@ -241,7 +242,7 @@ export default function ExpenseDetailPage({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200/80 shadow-2xs">
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
-                Tu parte (Tu Gasto Real)
+                Tu gasto real
               </span>
               <span className="text-2xl font-black text-zinc-900 mt-1 block">
                 {formatCurrency(myShareAmount)}
@@ -250,7 +251,7 @@ export default function ExpenseDetailPage({
 
             <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200/80 shadow-2xs">
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
-                {isPaidByMe ? 'Monto a Recuperar' : 'Monto que Debes'}
+                {isPaidByMe ? 'Te deben' : 'Debes'}
               </span>
               <span className={`text-2xl font-black mt-1 block ${isPaidByMe ? 'text-emerald-700' : myOwedAmount > 0 ? 'text-rose-700' : 'text-zinc-600'}`}>
                 {isPaidByMe ? formatCurrency(totalOthersOwe) : formatCurrency(myOwedAmount)}
@@ -267,7 +268,7 @@ export default function ExpenseDetailPage({
               {paidByProfile?.avatar_url ? (
                 <Image
                   src={paidByProfile.avatar_url}
-                  alt={paidByProfile.full_name || 'Avatar'}
+                  alt={paidByProfile.full_name ?? 'Avatar'}
                   width={32}
                   height={32}
                   className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
@@ -276,12 +277,17 @@ export default function ExpenseDetailPage({
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-zinc-900 text-white font-bold text-xs flex items-center justify-center">
-                  {(paidByProfile?.full_name || 'U').charAt(0).toUpperCase()}
+                  {(paidByProfile?.full_name ?? 'U').charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="text-sm font-bold text-zinc-900">
-                {isPaidByMe ? 'Tú' : (paidByProfile?.full_name || 'Usuario')}
-              </span>
+              <div className="text-right">
+                <span className="text-sm font-bold text-zinc-900 block">
+                  {isPaidByMe ? 'Tú' : (paidByProfile?.full_name ?? 'Usuario')}
+                </span>
+                <span className="text-xs text-zinc-500 font-medium block">
+                  Pagó el total ({formatCurrency(expense.total_amount)})
+                </span>
+              </div>
             </div>
           </div>
 
@@ -329,6 +335,7 @@ export default function ExpenseDetailPage({
               {splits.map((split) => {
                 const member = profiles.find((p) => p.id === split.user_id);
                 const isMe = currentProfile?.id === split.user_id;
+                const isPayer = split.user_id === expense.paid_by;
 
                 return (
                   <div
@@ -339,7 +346,7 @@ export default function ExpenseDetailPage({
                       {member?.avatar_url ? (
                         <Image
                           src={member.avatar_url}
-                          alt={member.full_name || 'Member'}
+                          alt={member.full_name ?? 'Member'}
                           width={28}
                           height={28}
                           className="w-7 h-7 rounded-full object-cover ring-1 ring-zinc-200"
@@ -348,17 +355,29 @@ export default function ExpenseDetailPage({
                         />
                       ) : (
                         <div className="w-7 h-7 rounded-full bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center justify-center">
-                          {(member?.full_name || 'U').charAt(0).toUpperCase()}
+                          {(member?.full_name ?? 'U').charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className="font-semibold text-zinc-900">
-                        {isMe ? 'Tú' : (member?.full_name || 'Usuario')}
-                      </span>
+                      <div>
+                        <span className="font-semibold text-zinc-900 block">
+                          {isMe ? 'Tú' : (member?.full_name ?? 'Usuario')}
+                        </span>
+                        {isPayer && (
+                          <span className="inline-block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            Pagó la cuenta completa
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <span className="font-bold text-zinc-900">
-                      {formatCurrency(split.amount_owed)}
-                    </span>
+                    <div className="text-right">
+                      <span className="font-bold text-zinc-900 block">
+                        {formatCurrency(split.amount_owed)}
+                      </span>
+                      <span className="text-[11px] text-zinc-400 block">
+                        Su parte
+                      </span>
+                    </div>
                   </div>
                 );
               })}

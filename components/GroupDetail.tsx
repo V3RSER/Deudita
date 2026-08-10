@@ -382,7 +382,7 @@ export function GroupDetail({
               const CategoryIcon = catConfig.icon;
 
               const isPayer = exp.paid_by === currentProfile?.id;
-              const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed || 0;
+              const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed ?? 0;
 
               let statusText = 'No participas';
               let statusBg = 'bg-zinc-100 text-zinc-600 border-zinc-200';
@@ -390,14 +390,14 @@ export function GroupDetail({
               if (isPayer) {
                 const recovers = exp.total_amount - mySplit;
                 if (recovers > 0) {
-                  statusText = `Pagaste ${formatCurrency(exp.total_amount)} (Tu parte: ${formatCurrency(mySplit)} • Recuperas ${formatCurrency(recovers)})`;
+                  statusText = `Recuperas ${formatCurrency(recovers)}`;
                   statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                 } else {
-                  statusText = `Pagaste ${formatCurrency(exp.total_amount)} (Tu parte: ${formatCurrency(mySplit)})`;
+                  statusText = 'Pagaste todo';
                   statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                 }
               } else if (mySplit > 0) {
-                statusText = `Tu parte: ${formatCurrency(mySplit)} (Debes ${formatCurrency(mySplit)})`;
+                statusText = `Debes ${formatCurrency(mySplit)}`;
                 statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
               }
 
@@ -455,10 +455,10 @@ export function GroupDetail({
 
                     <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100">
                       <div className="text-right">
-                        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
-                          Total: {formatCurrency(exp.total_amount)}
+                        <span className="text-sm font-bold text-zinc-900 block tracking-tight">
+                          {formatCurrency(exp.total_amount)}
                         </span>
-                        <div className={`mt-1 inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${statusBg}`}>
+                        <div className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusBg}`}>
                           {statusText}
                         </div>
                       </div>
