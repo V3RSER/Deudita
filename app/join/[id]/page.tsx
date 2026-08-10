@@ -39,8 +39,9 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Save pending invite ID in localStorage for auth callbacks
+    // Save pending invite ID / token in sessionStorage & localStorage for auth callbacks
     if (inviteId && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('deudita_invite_token', inviteId);
       window.localStorage.setItem('deudita_pending_invite', inviteId);
     }
 
@@ -51,7 +52,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
         const { data: { user } } = await supabase.auth.getUser();
         setCurrentUser(user);
 
-        // Fetch invitation details
+        // Fetch invitation details by token or id
         const res = await fetch(`/api/invites/${inviteId}`);
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -73,12 +74,13 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
 
   const handleGoogleLogin = async () => {
     if (inviteId && typeof window !== 'undefined') {
+      window.sessionStorage.setItem('deudita_invite_token', inviteId);
       window.localStorage.setItem('deudita_pending_invite', inviteId);
     }
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?returnTo=/join/${inviteId}`,
+        redirectTo: `${window.location.origin}/auth/callback?returnTo=/join/${inviteId}&token=${inviteId}`,
       },
     });
   };
@@ -98,6 +100,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
 
       const result = await res.json();
       if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('deudita_invite_token');
         window.localStorage.removeItem('deudita_pending_invite');
       }
 

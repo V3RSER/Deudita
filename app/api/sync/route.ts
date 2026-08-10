@@ -119,19 +119,17 @@ export async function GET() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    // 10. Pending invites
-    let pendingInvites: any[] = [];
-    if (user.email) {
-      const { data: inviteData } = await db
-        .from('group_invites')
-        .select('*, groups(name)')
-        .eq('email', user.email.toLowerCase())
-        .eq('status', 'pending');
-      pendingInvites = (inviteData || []).map((inv: any) => ({
-        ...inv,
-        group_name: inv.groups?.name || 'Grupo',
-      }));
-    }
+    // 10. Pending invites for user (by profile id or email)
+    const { data: inviteData } = await db
+      .from('group_invites')
+      .select('*, groups(name)')
+      .or(`invitee_profile_id.eq.${user.id},email.eq.${user.email?.toLowerCase() || ''}`)
+      .eq('status', 'pending');
+
+    const pendingInvites = (inviteData || []).map((inv: any) => ({
+      ...inv,
+      group_name: inv.groups?.name || 'Grupo',
+    }));
 
     return NextResponse.json({
       profile,

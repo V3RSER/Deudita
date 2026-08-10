@@ -13,7 +13,7 @@ export function generateUUID(): string {
 
 export interface Profile {
   id: string;
-  email: string;
+  email: string | null;
   full_name: string;
   avatar_url: string;
   is_temp?: boolean;
@@ -44,11 +44,12 @@ export interface GroupMember {
 export interface GroupInvite {
   id: string;
   group_id: string;
-  email: string;
+  email: string | null;
   invited_by: string;
   status: 'pending' | 'accepted' | 'rejected';
   created_at: string;
   token?: string;
+  invitee_profile_id?: string | null;
   group?: Group;
   inviter?: Profile;
 }

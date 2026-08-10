@@ -84,7 +84,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
       setSuccessMsg(null);
 
       const friendName = friend.full_name || 'Amigo';
-      const friendEmail = isTempEmail(friend.email) ? undefined : friend.email;
+      const friendEmail = isTempEmail(friend.email) || !friend.email ? undefined : friend.email;
 
       const result = await addGroupInvite(groupId, friendEmail, friendName, friend.id);
       

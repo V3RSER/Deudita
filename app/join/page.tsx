@@ -9,11 +9,15 @@ function JoinContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const inviteId = searchParams.get('id') || searchParams.get('code') || searchParams.get('invite');
+    const inviteId = searchParams.get('token') || searchParams.get('id') || searchParams.get('code') || searchParams.get('invite');
     if (inviteId) {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('deudita_invite_token', inviteId);
+        window.localStorage.setItem('deudita_pending_invite', inviteId);
+      }
       router.replace(`/join/${inviteId}`);
     } else if (typeof window !== 'undefined') {
-      const storedInvite = window.localStorage.getItem('deudita_pending_invite');
+      const storedInvite = window.sessionStorage.getItem('deudita_invite_token') || window.localStorage.getItem('deudita_pending_invite');
       if (storedInvite) {
         router.replace(`/join/${storedInvite}`);
       } else {

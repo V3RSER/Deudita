@@ -86,8 +86,8 @@ export function MemberDetailModal({
   const hasPendingInvite = pendingInvites.some(
     (i) =>
       (groupId ? i.group_id === groupId : true) &&
-      (i.email === memberProfile.email ||
-        (memberProfile.email && i.email.toLowerCase() === memberProfile.email.toLowerCase()))
+      (i.invitee_profile_id === memberProfile.id ||
+        (Boolean(i.email) && Boolean(memberProfile.email) && i.email?.toLowerCase() === memberProfile.email?.toLowerCase()))
   );
 
   const balance = currentProfile && memberProfile

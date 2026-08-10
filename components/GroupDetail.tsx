@@ -620,7 +620,7 @@ export function GroupDetail({
                             Pendiente de registro
                           </span>
                         )}
-                        {pendingInvites.some((i) => i.group_id === group.id && (i.email === p.email || (p.email && i.email.toLowerCase() === p.email.toLowerCase()))) && !isTempProfile(p) && (
+                        {pendingInvites.some((i) => i.group_id === group.id && (i.invitee_profile_id === p.id || (Boolean(i.email) && Boolean(p.email) && i.email?.toLowerCase() === p.email?.toLowerCase()))) && !isTempProfile(p) && (
                           <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
                             Invitación Pendiente
                           </span>
