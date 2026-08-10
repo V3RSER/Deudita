@@ -65,75 +65,31 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
   const reloadFromSupabase = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setCurrentProfile(null);
+      const res = await fetch('/api/sync');
+      if (!res.ok) {
+        if (res.status === 401) {
+          setCurrentProfile(null);
+        }
         setLoading(false);
         return;
       }
 
-      const [
-        profileRes,
-        profilesRes,
-        groupsRes,
-        membersRes,
-        expensesRes,
-        paymentsRes,
-        draftsRes,
-        notificationsRes
-      ] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('profiles').select('*'),
-        supabase.from('groups').select('*').order('created_at', { ascending: false }),
-        supabase.from('group_members').select('*'),
-        supabase.from('expenses').select('*, items:expense_items(*), splits:expense_splits(*)').order('created_at', { ascending: false }),
-        supabase.from('payments').select('*').order('created_at', { ascending: false }),
-        supabase.from('expense_drafts').select('*').order('created_at', { ascending: false }),
-        fetch('/api/notifications').then((r) => r.json()).catch(() => ({ notifications: [], pendingInvites: [] }))
-      ]);
-
-      if (profileRes.data) {
-        setCurrentProfile(profileRes.data as Profile);
-      } else {
-        const meta = user.user_metadata ?? {};
-        const fullName = meta.full_name ?? meta.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
-        const avatarUrl = meta.avatar_url ?? meta.picture ?? '';
-        const newProfile: Profile = {
-          id: user.id,
-          email: user.email ?? '',
-          full_name: fullName,
-          avatar_url: avatarUrl,
-          created_at: new Date().toISOString(),
-        };
-
-        const { error: insertErr } = await supabase.from('profiles').insert(newProfile);
-        if (insertErr) {
-          console.error('Error inserting new profile:', insertErr);
-        }
-        setCurrentProfile(newProfile);
-      }
-
-      if (profilesRes.data) setProfiles(profilesRes.data as Profile[]);
-      if (groupsRes.data) setGroups(groupsRes.data as Group[]);
-      if (membersRes.data) setMembers(membersRes.data as GroupMember[]);
-
-      if (expensesRes.data) {
-        setExpenses(expensesRes.data as unknown as Expense[]);
-      }
-
-      if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
-      if (draftsRes.data) setDrafts(draftsRes.data as ExpenseDraft[]);
-
-      if (notificationsRes) {
-        setNotifications(notificationsRes.notifications || []);
-        setPendingInvites(notificationsRes.pendingInvites || []);
-      }
+      const data = await res.json();
+      if (data.profile) setCurrentProfile(data.profile as Profile);
+      if (data.profiles) setProfiles(data.profiles as Profile[]);
+      if (data.groups) setGroups(data.groups as Group[]);
+      if (data.members) setMembers(data.members as GroupMember[]);
+      if (data.expenses) setExpenses(data.expenses as unknown as Expense[]);
+      if (data.payments) setPayments(data.payments as Payment[]);
+      if (data.drafts) setDrafts(data.drafts as ExpenseDraft[]);
+      if (data.notifications) setNotifications(data.notifications as Notification[]);
+      if (data.pendingInvites) setPendingInvites(data.pendingInvites as GroupInvite[]);
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
