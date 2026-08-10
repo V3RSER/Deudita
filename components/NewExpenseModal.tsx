@@ -37,6 +37,7 @@ import {
   Tag,
   Layers,
   Sparkles,
+  DollarSign,
 } from 'lucide-react';
 
 interface NewExpenseModalProps {
@@ -83,14 +84,17 @@ const CATEGORY_GROUPS = [
   },
   {
     name: 'Otros',
-    icon: Tag,
+    icon: DollarSign,
     color: 'bg-zinc-100 text-zinc-800 border-zinc-200',
-    items: ['Varios / Otro'],
+    items: ['General', 'Varios / Otro'],
   },
 ];
 
 function getCategoryIcon(catName: string) {
   const lower = (catName || '').toLowerCase();
+  if (lower.includes('general') || lower === 'otros' || lower.includes('varios') || lower.includes('otro')) {
+    return DollarSign;
+  }
   if (lower.includes('supermercado') || lower.includes('abarrotes') || lower.includes('aseo')) {
     return ShoppingCart;
   }
@@ -124,7 +128,7 @@ function getCategoryIcon(catName: string) {
   if (lower.includes('regalo') || lower.includes('compra')) {
     return Gift;
   }
-  return Tag;
+  return DollarSign;
 }
 
 export function NewExpenseModal({
@@ -146,7 +150,7 @@ export function NewExpenseModal({
   const [description, setDescription] = useState<string>('');
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [paidBy, setPaidBy] = useState<string>('');
-  const [category, setCategory] = useState<string>('Supermercado');
+  const [category, setCategory] = useState<string>('General');
   const [notes, setNotes] = useState<string>('');
   const [expenseDate, setExpenseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -160,6 +164,7 @@ export function NewExpenseModal({
   const [items, setItems] = useState<
     Array<{ description: string; amount: string; assignedMemberIds: string[] }>
   >([{ description: '', amount: '', assignedMemberIds: [] }]);
+  const [expandedItemMemberIndex, setExpandedItemMemberIndex] = useState<number | null>(null);
 
   // Receipt photo state
   const [receiptUrl, setReceiptUrl] = useState<string>('');
@@ -272,7 +277,7 @@ export function NewExpenseModal({
       setTotalAmount('');
       setReceiptUrl('');
       setNotes('');
-      setCategory('Supermercado');
+      setCategory('General');
       setExpenseDate(new Date().toISOString().split('T')[0]);
       setUseItems(false);
       setItems([{ description: '', amount: '', assignedMemberIds: [] }]);
@@ -535,24 +540,34 @@ export function NewExpenseModal({
     }
 
     if (splitType === 'exact') {
-      let sum = 0;
-      for (const uid of selectedMemberIds) {
-        const val = parseFloat(customSplits[uid] || '0');
-        if (isNaN(val) || val < 0) {
-          setValidationError(`Ingresa un monto exacto válido para cada miembro.`);
+      if (useItems) {
+        const shares = calculateItemizedMemberShares();
+        const autoSplits: Record<string, string> = {};
+        selectedMemberIds.forEach((uid) => {
+          const val = customSplits[uid] !== undefined ? parseFloat(customSplits[uid]) : (shares[uid]?.total || 0);
+          autoSplits[uid] = String(Math.round((isNaN(val) ? (shares[uid]?.total || 0) : val) * 100) / 100);
+        });
+        setCustomSplits(autoSplits);
+      } else {
+        let sum = 0;
+        for (const uid of selectedMemberIds) {
+          const val = parseFloat(customSplits[uid] || '0');
+          if (isNaN(val) || val < 0) {
+            setValidationError(`Ingresa un monto exacto válido para cada miembro.`);
+            return false;
+          }
+          sum += val;
+        }
+
+        const diff = Math.abs(sum - numericTotal);
+        if (diff > 0.05) {
+          setValidationError(
+            `La suma de los montos (${formatCurrency(sum)}) no coincide con el total (${formatCurrency(
+              numericTotal
+            )}). Diferencia: ${formatCurrency(Math.abs(sum - numericTotal))}`
+          );
           return false;
         }
-        sum += val;
-      }
-
-      const diff = Math.abs(sum - numericTotal);
-      if (diff > 0.05) {
-        setValidationError(
-          `La suma de los montos (${formatCurrency(sum)}) no coincide con el total (${formatCurrency(
-            numericTotal
-          )}). Diferencia: ${formatCurrency(Math.abs(sum - numericTotal))}`
-        );
-        return false;
       }
     } else if (splitType === 'percentage') {
       let sumPct = 0;
@@ -659,12 +674,13 @@ export function NewExpenseModal({
         });
       });
     } else if (splitType === 'exact') {
+      const shares = useItems ? calculateItemizedMemberShares() : {};
       selectedMemberIds.forEach((uid) => {
         const rawSplit = customSplits[uid];
-        const val = rawSplit ? parseFloat(rawSplit) : 0;
+        const val = rawSplit ? parseFloat(rawSplit) : (useItems ? (shares[uid]?.total || 0) : 0);
         finalSplits.push({
           user_id: uid,
-          amount_owed: isNaN(val) ? 0 : val,
+          amount_owed: isNaN(val) ? 0 : Math.round(val * 100) / 100,
         });
       });
     } else if (splitType === 'percentage') {
@@ -775,43 +791,18 @@ export function NewExpenseModal({
             
             {/* LEFT COLUMN: Main Expense Information */}
             <div className="p-6 sm:p-8 space-y-6">
-              
-              {/* Group Selector Header */}
-              <div className="flex items-center justify-between bg-zinc-50 p-3 rounded-2xl border border-zinc-200/80">
-                <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider pl-1">
-                  Grupo:
-                </span>
-                
-                <div className="relative inline-block">
-                  <select
-                    value={groupId || activeGroupId}
-                    onChange={(e) => handleGroupSelect(e.target.value)}
-                    className="appearance-none bg-white hover:bg-zinc-100 text-zinc-900 font-bold px-3.5 py-1.5 pr-8 rounded-full text-xs border border-zinc-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-colors shadow-2xs"
-                  >
-                    {userGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-600 absolute right-2.5 top-2.5 pointer-events-none" />
-                </div>
-              </div>
 
               {/* Main Card: Dynamic Category Icon Box + Description + Big Amount */}
               <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200 shadow-xs space-y-4">
                 <div className="flex items-center space-x-4">
-                  {/* Category Icon Box (Clicking opens Category Menu) */}
+                  {/* Category Icon Box (Clicking opens Category Menu - SVG only, no text below) */}
                   <button
                     type="button"
                     onClick={() => setActiveSidePanel(activeSidePanel === 'category' ? 'none' : 'category')}
-                    className="w-14 h-14 bg-emerald-50 hover:bg-emerald-100/80 active:scale-95 rounded-2xl border border-emerald-200/80 shadow-2xs flex flex-col items-center justify-center shrink-0 text-emerald-700 transition-all cursor-pointer group"
+                    className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-50 hover:bg-emerald-100/80 active:scale-95 rounded-2xl border border-emerald-200/80 shadow-2xs flex items-center justify-center shrink-0 text-emerald-700 transition-all cursor-pointer group"
                     title="Haz clic para elegir categoría"
                   >
                     {React.createElement(currentCategoryIcon, { className: "w-6 h-6 text-emerald-700 group-hover:scale-110 transition-transform" })}
-                    <span className="text-[9px] font-bold text-emerald-800 tracking-tight mt-0.5 truncate max-w-[48px]">
-                      {category.split(' ')[0]}
-                    </span>
                   </button>
 
                   <div className="flex-1 space-y-2">
@@ -848,52 +839,53 @@ export function NewExpenseModal({
                   </div>
                 </div>
 
-                {/* Sub-line: Who paid and split button */}
-                <div className="text-xs text-zinc-600 flex items-center justify-between pt-2 border-t border-zinc-200/80 flex-wrap gap-2">
-                  <div className="flex items-center space-x-1.5 flex-wrap">
-                    <span>Pagado por</span>
-                    
-                    {/* Payer Selector Pill */}
+                {/* Sub-line: Integrated Who paid and split button inline */}
+                <div className="text-xs text-zinc-600 flex items-center flex-wrap gap-1.5 pt-3 border-t border-zinc-200/80 leading-relaxed">
+                  <span className="font-medium text-zinc-500">Pagado por</span>
+                  
+                  {/* Payer Selector Pill */}
+                  <div className="relative inline-flex items-center">
                     <select
                       value={paidBy}
                       onChange={(e) => setPaidBy(e.target.value)}
-                      className="bg-zinc-200/80 hover:bg-zinc-300 text-zinc-800 font-semibold px-2.5 py-1 rounded-full text-xs cursor-pointer border-none focus:outline-none"
+                      className="bg-zinc-200/80 hover:bg-zinc-300 text-zinc-900 font-bold px-2.5 py-1 rounded-lg text-xs cursor-pointer border-none focus:outline-none appearance-none pr-5 transition-colors"
                     >
                       {memberProfiles.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.id === currentProfile?.id ? 'ti' : p.full_name}
+                          {p.id === currentProfile?.id ? 'ti' : (p.full_name || p.email || 'Usuario').split(' ')[0]}
                         </option>
                       ))}
                     </select>
-
-                    <span>y dividido</span>
-
-                    {/* Interactive Split Button (Clicking toggles split options side panel) */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveSidePanel(activeSidePanel === 'split' ? 'none' : 'split')}
-                      className={`font-semibold px-3 py-1 rounded-full text-xs transition-all flex items-center space-x-1 cursor-pointer active:scale-95 border ${
-                        activeSidePanel === 'split'
-                          ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
-                          : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-emerald-300/60'
-                      }`}
-                    >
-                      <span>
-                        {splitType === 'equal'
-                          ? 'a partes iguales'
-                          : splitType === 'exact'
-                          ? 'por montos exactos'
-                          : splitType === 'percentage'
-                          ? 'por porcentajes'
-                          : 'por cuotas'}
-                      </span>
-                      <ChevronRight
-                        className={`w-3.5 h-3.5 transition-transform ${
-                          activeSidePanel === 'split' ? 'rotate-90 text-white' : 'text-emerald-700'
-                        }`}
-                      />
-                    </button>
+                    <ChevronDown className="w-3 h-3 text-zinc-500 absolute right-1.5 pointer-events-none" />
                   </div>
+
+                  <span className="font-medium text-zinc-500">y dividido</span>
+
+                  {/* Interactive Split Button */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveSidePanel(activeSidePanel === 'split' ? 'none' : 'split')}
+                    className={`font-bold px-2.5 py-1 rounded-lg text-xs transition-all flex items-center space-x-1 cursor-pointer active:scale-95 border ${
+                      activeSidePanel === 'split'
+                        ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
+                        : 'bg-emerald-100/90 hover:bg-emerald-200 text-emerald-900 border-emerald-200'
+                    }`}
+                  >
+                    <span>
+                      {splitType === 'equal'
+                        ? 'a partes iguales'
+                        : splitType === 'exact'
+                        ? 'por montos exactos'
+                        : splitType === 'percentage'
+                        ? 'por porcentajes'
+                        : 'por cuotas'}
+                    </span>
+                    <ChevronRight
+                      className={`w-3.5 h-3.5 transition-transform ${
+                        activeSidePanel === 'split' ? 'rotate-90 text-white' : 'text-emerald-700'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 
@@ -912,16 +904,33 @@ export function NewExpenseModal({
                 />
               </div>
 
-              {/* Action Pills Row: Date, Direct Image Upload, Category */}
+              {/* Action Pills Row: Group, Date, Direct Image Upload, Category */}
               <div className="flex items-center gap-2 flex-wrap text-xs">
+                {/* Group Selector Pill */}
+                <div className="relative inline-flex items-center bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 text-xs font-semibold transition-colors">
+                  <Users className="w-3.5 h-3.5 text-zinc-500 mr-1.5 shrink-0" />
+                  <select
+                    value={groupId || activeGroupId}
+                    onChange={(e) => handleGroupSelect(e.target.value)}
+                    className="bg-transparent text-xs font-semibold text-zinc-800 focus:outline-none cursor-pointer pr-4 appearance-none"
+                  >
+                    {userGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-2.5 pointer-events-none" />
+                </div>
+
                 {/* Date Pill */}
-                <label className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3.5 py-2 rounded-full border border-zinc-200 text-zinc-700 cursor-pointer transition-colors">
+                <label className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 cursor-pointer transition-colors font-semibold">
                   <CalendarIcon className="w-3.5 h-3.5 text-zinc-500" />
                   <input
                     type="date"
                     value={expenseDate}
                     onChange={(e) => setExpenseDate(e.target.value)}
-                    className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+                    className="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer"
                   />
                 </label>
 
@@ -930,7 +939,7 @@ export function NewExpenseModal({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingReceipt}
-                  className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3.5 py-2 rounded-full border border-zinc-200 text-zinc-700 cursor-pointer transition-colors active:scale-95 disabled:opacity-50"
+                  className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 font-semibold cursor-pointer transition-colors active:scale-95 disabled:opacity-50"
                 >
                   {isUploadingReceipt ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600" />
@@ -950,7 +959,7 @@ export function NewExpenseModal({
                 <button
                   type="button"
                   onClick={() => setActiveSidePanel(activeSidePanel === 'category' ? 'none' : 'category')}
-                  className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-full border text-xs font-semibold transition-colors ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors cursor-pointer ${
                     activeSidePanel === 'category'
                       ? 'bg-zinc-900 text-white border-zinc-900'
                       : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200'
@@ -1089,57 +1098,97 @@ export function NewExpenseModal({
                             )}
                           </div>
 
-                          {/* Row 2: Member Assignment Chips Bar */}
-                          <div className="pt-2 border-t border-zinc-100 flex items-center justify-between flex-wrap gap-2 text-xs">
-                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                              <span className="text-[11px] font-semibold text-zinc-500 mr-1">Repartir entre:</span>
-
-                              {/* Todos Pill */}
+                          {/* Row 2: Collapsible Repartir Entre Bar */}
+                          <div className="pt-2 border-t border-zinc-100 space-y-2">
+                            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                               <button
                                 type="button"
-                                onClick={() => setItemMembersAll(idx)}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
-                                  isAll
-                                    ? 'bg-zinc-900 text-white shadow-2xs'
-                                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200'
-                                }`}
+                                onClick={() => setExpandedItemMemberIndex(expandedItemMemberIndex === idx ? null : idx)}
+                                className="flex items-center space-x-1.5 px-3 py-1 bg-zinc-100 hover:bg-zinc-200/90 text-zinc-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                               >
-                                Todos ({activeMembers.length})
+                                <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                                <span>
+                                  Repartir entre:{' '}
+                                  <strong className="text-zinc-900">
+                                    {isAll
+                                      ? `Todos (${activeMembers.length})`
+                                      : assignedIds
+                                          .map((id) => {
+                                            const p = memberProfiles.find((m) => m.id === id);
+                                            return p ? (p.full_name || p.email || 'U').split(' ')[0] : '';
+                                          })
+                                          .filter(Boolean)
+                                          .join(', ')}
+                                  </strong>
+                                </span>
+                                <ChevronDown
+                                  className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${
+                                    expandedItemMemberIndex === idx ? 'rotate-180' : ''
+                                  }`}
+                                />
                               </button>
 
-                              {/* Individual Member Chips */}
-                              {memberProfiles.map((p) => {
-                                const isSelected = !isAll && assignedIds.includes(p.id);
-                                const displayName = p.full_name || p.email || 'Usuario';
-                                const firstName = displayName.split(' ')[0];
-                                return (
-                                  <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => toggleItemMember(idx, p.id)}
-                                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-600/50'
-                                        : isAll
-                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60 opacity-80 hover:opacity-100'
-                                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200'
-                                    }`}
-                                  >
-                                    <span className="w-3.5 h-3.5 rounded-full bg-white/20 text-[9px] flex items-center justify-center uppercase font-bold shrink-0">
-                                      {firstName.charAt(0)}
-                                    </span>
-                                    <span>{firstName}</span>
-                                    {isSelected && <Check className="w-3 h-3 text-white ml-0.5" />}
-                                  </button>
-                                );
-                              })}
+                              {itemAmt > 0 && (
+                                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 shrink-0">
+                                  ${Math.round(sharePerPerson).toLocaleString()} c/u ({effectiveCount})
+                                </span>
+                              )}
                             </div>
 
-                            {/* Calculated share badge for this item */}
-                            {itemAmt > 0 && (
-                              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-100">
-                                ${Math.round(sharePerPerson).toLocaleString()} c/u ({effectiveCount})
-                              </span>
+                            {/* Expandable Member Selection Chips */}
+                            {expandedItemMemberIndex === idx && (
+                              <div className="mt-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200/80 space-y-2 animate-fadeIn">
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-500">
+                                  <span>Personas asignadas a este producto:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedItemMemberIndex(null)}
+                                    className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+                                  >
+                                    Listo
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
+                                  {/* Todos Pill */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemMembersAll(idx)}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                                      isAll
+                                        ? 'bg-zinc-900 text-white shadow-2xs'
+                                        : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
+                                    }`}
+                                  >
+                                    Todos ({activeMembers.length})
+                                  </button>
+
+                                  {/* Individual Member Chips */}
+                                  {memberProfiles.map((p) => {
+                                    const isSelected = !isAll && assignedIds.includes(p.id);
+                                    const displayName = p.full_name || p.email || 'Usuario';
+                                    const firstName = displayName.split(' ')[0];
+                                    return (
+                                      <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => toggleItemMember(idx, p.id)}
+                                        className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                                          isSelected
+                                            ? 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-600/50'
+                                            : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
+                                        }`}
+                                      >
+                                        <span className="w-3.5 h-3.5 rounded-full bg-black/10 text-[9px] flex items-center justify-center uppercase font-bold shrink-0">
+                                          {firstName.charAt(0)}
+                                        </span>
+                                        <span>{firstName}</span>
+                                        {isSelected && <Check className="w-3 h-3 text-white ml-0.5" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
