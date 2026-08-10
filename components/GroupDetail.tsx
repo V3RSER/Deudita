@@ -42,10 +42,12 @@ interface GroupDetailProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  friends: 'Amigos',
   home: 'Hogar',
   trip: 'Viajes',
   couple: 'Pareja',
   event: 'Eventos',
+  accounting: 'Contabilidad',
   work: 'Trabajo',
   other: 'Otros',
 };
@@ -342,14 +344,6 @@ export function GroupDetail({
                 En los que interactúo
               </button>
             </div>
-
-            <button
-              onClick={() => onOpenNewExpense(group.id)}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1 shadow-2xs transition-all active:scale-95"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Añadir</span>
-            </button>
           </div>
 
           {filteredExpenses.length === 0 ? (

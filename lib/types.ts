@@ -1,4 +1,4 @@
-export type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'other';
+export type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'friends' | 'accounting' | 'other';
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

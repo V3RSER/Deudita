@@ -17,8 +17,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Falta la información del grupo' }, { status: 400 });
     }
 
-    const { groupId, email: rawEmail } = body;
+    const { groupId, email: rawEmail, name: rawName } = body;
     const targetEmail = rawEmail ? String(rawEmail).trim().toLowerCase() : '';
+    const memberName = rawName ? String(rawName).trim() : '';
+
+    if (!targetEmail && !memberName) {
+      return NextResponse.json({ error: 'Ingresa al menos un nombre o correo para invitar' }, { status: 400 });
+    }
 
     // Fetch group details
     const { data: group, error: groupErr } = await supabase
@@ -40,6 +45,56 @@ export async function POST(req: Request) {
 
     const inviterName = inviterProfile?.full_name || user.user_metadata?.full_name || 'Un integrante';
     const inviterEmail = user.email || '';
+
+    // If name is provided, create a temporary member profile so they immediately join the group
+    if (memberName) {
+      const tempEmail = targetEmail || `temp_${Date.now()}_${Math.floor(Math.random() * 10000)}@deudita.app`;
+      
+      let targetUserId: string | null = null;
+      
+      // Check if profile with email exists
+      if (targetEmail) {
+        const { data: existingProf } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', targetEmail)
+          .maybeSingle();
+        if (existingProf) targetUserId = existingProf.id;
+      }
+
+      if (!targetUserId) {
+        const newUserId = crypto.randomUUID();
+        const { error: profInsertErr } = await supabase.from('profiles').insert({
+          id: newUserId,
+          email: tempEmail,
+          full_name: memberName,
+          avatar_url: '',
+        });
+
+        if (!profInsertErr) {
+          targetUserId = newUserId;
+        } else {
+          // If insert fails due to FK auth.users, fallback to auth admin if available
+          const { data: authAdminRes } = await supabase.auth.admin.createUser({
+            email: tempEmail,
+            email_confirm: true,
+            user_metadata: { full_name: memberName },
+          }).catch(() => ({ data: null }));
+          if (authAdminRes?.user) {
+            targetUserId = authAdminRes.user.id;
+          }
+        }
+      }
+
+      if (targetUserId) {
+        await supabase.from('group_members').upsert({
+          group_id: groupId,
+          user_id: targetUserId,
+          invited_by: user.id,
+          role: 'member',
+        }, { onConflict: 'group_id,user_id' });
+      }
+    }
 
     // Check if target user is already a member if email is provided
     if (targetEmail) {

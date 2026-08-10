@@ -848,7 +848,7 @@ export function NewExpenseModal({
                     <select
                       value={paidBy}
                       onChange={(e) => setPaidBy(e.target.value)}
-                      className="bg-zinc-200/80 hover:bg-zinc-300 text-zinc-900 font-bold px-2.5 py-1 rounded-lg text-xs cursor-pointer border-none focus:outline-none appearance-none pr-5 transition-colors"
+                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-semibold px-2.5 py-1 rounded-lg text-xs cursor-pointer border border-zinc-200/90 focus:outline-none appearance-none pr-6 transition-colors shadow-2xs"
                     >
                       {memberProfiles.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -867,8 +867,8 @@ export function NewExpenseModal({
                     onClick={() => setActiveSidePanel(activeSidePanel === 'split' ? 'none' : 'split')}
                     className={`font-bold px-2.5 py-1 rounded-lg text-xs transition-all flex items-center space-x-1 cursor-pointer active:scale-95 border ${
                       activeSidePanel === 'split'
-                        ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
-                        : 'bg-emerald-100/90 hover:bg-emerald-200 text-emerald-900 border-emerald-200'
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-200'
                     }`}
                   >
                     <span>
@@ -878,11 +878,11 @@ export function NewExpenseModal({
                         ? 'por montos exactos'
                         : splitType === 'percentage'
                         ? 'por porcentajes'
-                        : 'por cuotas'}
+                        : 'por peso'}
                     </span>
                     <ChevronRight
                       className={`w-3.5 h-3.5 transition-transform ${
-                        activeSidePanel === 'split' ? 'rotate-90 text-white' : 'text-emerald-700'
+                        activeSidePanel === 'split' ? 'rotate-90 text-white' : 'text-zinc-600'
                       }`}
                     />
                   </button>
@@ -1285,7 +1285,7 @@ export function NewExpenseModal({
                     onClick={() => applyQuickPreset('split')}
                     className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold transition-all border ${
                       quickPreset === 'split'
-                        ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
                         : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                     }`}
                   >
@@ -1297,7 +1297,7 @@ export function NewExpenseModal({
                     onClick={() => applyQuickPreset('i_owe_all')}
                     className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold transition-all border ${
                       quickPreset === 'i_owe_all'
-                        ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
                         : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                     }`}
                   >
@@ -1309,7 +1309,7 @@ export function NewExpenseModal({
                     onClick={() => applyQuickPreset('they_owe_all')}
                     className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold transition-all border ${
                       quickPreset === 'they_owe_all'
-                        ? 'bg-[#3da88a] text-white border-[#3da88a] shadow-2xs'
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
                         : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                     }`}
                   >
@@ -1373,7 +1373,7 @@ export function NewExpenseModal({
 
                     <button
                       type="button"
-                      title="Por cuotas/partes"
+                      title="Por peso"
                       onClick={() => {
                         setSplitType('shares');
                         setQuickPreset('split');
@@ -1396,13 +1396,13 @@ export function NewExpenseModal({
                     {splitType === 'equal' && 'Dividir a partes iguales'}
                     {splitType === 'exact' && 'Dividir por montos exactos'}
                     {splitType === 'percentage' && 'Dividir por porcentaje'}
-                    {splitType === 'shares' && 'Dividir por cuotas'}
+                    {splitType === 'shares' && 'Dividir por peso'}
                   </h4>
                   <p className="text-xs text-zinc-500 mt-0.5">
                     {splitType === 'equal' && 'El total se distribuye equitativamente entre los seleccionados.'}
                     {splitType === 'exact' && 'Ingresa el monto específico para cada integrante.'}
                     {splitType === 'percentage' && 'Asigna un porcentaje (%) a cada integrante (suma 100%).'}
-                    {splitType === 'shares' && 'Asigna la cantidad de partes/cuotas a cada integrante.'}
+                    {splitType === 'shares' && 'Asigna un peso o proporción a cada integrante.'}
                   </p>
                 </div>
 
@@ -1410,6 +1410,18 @@ export function NewExpenseModal({
                 <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                   {memberProfiles.map((p) => {
                     const isChecked = selectedMemberIds.includes(p.id);
+
+                    // Calculations for previews
+                    const pctVal = parseFloat(customSplits[p.id] || '0') || 0;
+                    const pctAmount = (numericTotal * pctVal) / 100;
+
+                    const totalSharesSum = selectedMemberIds.reduce((sum, id) => {
+                      const val = parseFloat(customSplits[id] || '1');
+                      return sum + (isNaN(val) || val <= 0 ? 0 : val);
+                    }, 0);
+                    const userWeightVal = parseFloat(customSplits[p.id] || '1');
+                    const safeWeight = isNaN(userWeightVal) || userWeightVal < 0 ? 0 : userWeightVal;
+                    const sharesAmount = totalSharesSum > 0 ? (numericTotal * safeWeight) / totalSharesSum : 0;
 
                     return (
                       <div
@@ -1425,7 +1437,7 @@ export function NewExpenseModal({
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleMemberSelection(p.id)}
-                            className="w-4 h-4 accent-[#3da88a] rounded cursor-pointer"
+                            className="w-4 h-4 accent-zinc-900 rounded cursor-pointer"
                           />
                           
                           {p.avatar_url ? (
@@ -1449,7 +1461,7 @@ export function NewExpenseModal({
                           </span>
                         </label>
 
-                        {/* Display or edit inputs */}
+                        {/* Display or edit inputs with live amount preview */}
                         <div className="text-right pl-2">
                           {splitType === 'equal' && isChecked && (
                             <span className="text-xs font-semibold text-zinc-800">
@@ -1472,30 +1484,40 @@ export function NewExpenseModal({
                           )}
 
                           {splitType === 'percentage' && isChecked && (
-                            <div className="flex items-center space-x-1">
-                              <input
-                                type="number"
-                                step="any"
-                                placeholder="0"
-                                value={customSplits[p.id] !== undefined ? customSplits[p.id] : ''}
-                                onChange={(e) => handleCustomSplitChange(p.id, e.target.value)}
-                                className="w-16 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-right font-semibold text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
-                              />
-                              <span className="text-xs text-zinc-500 font-bold">%</span>
+                            <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="0"
+                                  value={customSplits[p.id] !== undefined ? customSplits[p.id] : ''}
+                                  onChange={(e) => handleCustomSplitChange(p.id, e.target.value)}
+                                  className="w-16 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-right font-semibold text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                                />
+                                <span className="text-xs text-zinc-500 font-bold">%</span>
+                              </div>
+                              <span className="text-xs font-bold text-zinc-900 bg-zinc-100 px-2 py-1 rounded-md min-w-[64px] text-right">
+                                {formatCurrency(pctAmount)}
+                              </span>
                             </div>
                           )}
 
                           {splitType === 'shares' && isChecked && (
-                            <div className="flex items-center space-x-1">
-                              <input
-                                type="number"
-                                step="1"
-                                placeholder="1"
-                                value={customSplits[p.id] !== undefined ? customSplits[p.id] : '1'}
-                                onChange={(e) => handleCustomSplitChange(p.id, e.target.value)}
-                                className="w-16 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-right font-semibold text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
-                              />
-                              <span className="text-xs text-zinc-500 font-medium">cuota</span>
+                            <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="number"
+                                  step="1"
+                                  placeholder="1"
+                                  value={customSplits[p.id] !== undefined ? customSplits[p.id] : '1'}
+                                  onChange={(e) => handleCustomSplitChange(p.id, e.target.value)}
+                                  className="w-16 px-2 py-1 bg-white border border-zinc-200 rounded-lg text-right font-semibold text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                                />
+                                <span className="text-xs text-zinc-500 font-medium">peso</span>
+                              </div>
+                              <span className="text-xs font-bold text-zinc-900 bg-zinc-100 px-2 py-1 rounded-md min-w-[64px] text-right">
+                                {formatCurrency(sharesAmount)}
+                              </span>
                             </div>
                           )}
                         </div>

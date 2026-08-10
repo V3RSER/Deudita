@@ -19,9 +19,9 @@ import {
   Camera,
   Sparkles,
   Upload,
-  Link,
   Trash2,
   Loader2,
+  Calculator,
 } from 'lucide-react';
 
 interface CreateGroupModalProps {
@@ -38,6 +38,15 @@ const CATEGORY_OPTIONS: Array<{
   borderColor: string;
   textColor: string;
 }> = [
+  {
+    id: 'friends',
+    label: 'Amigos',
+    description: 'Reuniones, salidas y actividades con amigos',
+    icon: <Users className="w-6 h-6" />,
+    bgColor: 'bg-emerald-50 hover:bg-emerald-100/80',
+    borderColor: 'ring-emerald-200 border-emerald-400',
+    textColor: 'text-emerald-700',
+  },
   {
     id: 'trip',
     label: 'Viajes',
@@ -75,13 +84,22 @@ const CATEGORY_OPTIONS: Array<{
     textColor: 'text-amber-700',
   },
   {
+    id: 'accounting',
+    label: 'Contabilidad',
+    description: 'Balances, presupuestos y control financiero',
+    icon: <Calculator className="w-6 h-6" />,
+    bgColor: 'bg-purple-50 hover:bg-purple-100/80',
+    borderColor: 'ring-purple-200 border-purple-400',
+    textColor: 'text-purple-700',
+  },
+  {
     id: 'work',
     label: 'Trabajo',
     description: 'Equipos, oficina y negocios',
     icon: <Briefcase className="w-6 h-6" />,
-    bgColor: 'bg-emerald-50 hover:bg-emerald-100/80',
-    borderColor: 'ring-emerald-200 border-emerald-400',
-    textColor: 'text-emerald-700',
+    bgColor: 'bg-blue-50 hover:bg-blue-100/80',
+    borderColor: 'ring-blue-200 border-blue-400',
+    textColor: 'text-blue-700',
   },
   {
     id: 'other',
@@ -99,10 +117,9 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const { createGroup } = useExpense();
 
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<GroupCategory>('trip');
+  const [category, setCategory] = useState<GroupCategory>('friends');
   const [groupImageUrl, setGroupImageUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
-  const [useUrlMode, setUseUrlMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -222,30 +239,11 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
             />
           </div>
 
-          {/* 2. Foto o Portada del Grupo */}
+          {/* 2. Foto del Grupo (Opcional) */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">
-                2. Foto del Grupo
-              </label>
-              <button
-                type="button"
-                onClick={() => setUseUrlMode(!useUrlMode)}
-                className="text-[11px] text-zinc-500 hover:text-zinc-900 underline font-normal flex items-center gap-1"
-              >
-                {useUrlMode ? (
-                  <>
-                    <Upload className="w-3 h-3" />
-                    <span>Subir desde mi equipo</span>
-                  </>
-                ) : (
-                  <>
-                    <Link className="w-3 h-3" />
-                    <span>Ingresar enlace de imagen</span>
-                  </>
-                )}
-              </button>
-            </div>
+            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2">
+              2. Foto del Grupo (Opcional)
+            </label>
 
             {/* Hidden file input */}
             <input
@@ -256,61 +254,66 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
               className="hidden"
             />
 
-            {useUrlMode ? (
-              <input
-                type="url"
-                value={groupImageUrl}
-                onChange={(e) => setGroupImageUrl(e.target.value)}
-                placeholder="https://ejemplo.com/foto-grupo.jpg"
-                className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
-              />
-            ) : (
-              <div className="flex items-center gap-4 bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-300">
-                <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-zinc-200 border border-zinc-300 shrink-0 shadow-2xs">
-                  <Image
-                    src={groupImageUrl.trim() ? groupImageUrl : DEFAULT_GROUP_IMAGE}
-                    alt="Vista previa foto de grupo"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
-                  {isUploading && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 flex-1">
-                  <p className="text-xs text-zinc-600 font-medium">
-                    {groupImageUrl ? 'Foto personal cargada' : 'Foto por defecto asignada. Sube una personalizada para distinguirlo.'}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isUploading}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-800 text-xs font-semibold hover:bg-zinc-100 shadow-2xs flex items-center gap-1.5 transition-all"
-                    >
-                      <Camera className="w-3.5 h-3.5 text-zinc-600" />
-                      <span>{groupImageUrl ? 'Cambiar foto' : 'Subir foto'}</span>
-                    </button>
-
-                    {groupImageUrl && (
+            <div className="bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-200">
+              {groupImageUrl ? (
+                <div className="flex items-center gap-4 bg-white p-3 rounded-xl ring-1 ring-zinc-200">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-100 shrink-0 shadow-2xs">
+                    <Image
+                      src={groupImageUrl}
+                      alt="Foto de grupo cargada"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                    />
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs font-semibold text-zinc-900">Foto personalizada seleccionada</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-zinc-600 hover:text-zinc-900 font-medium underline"
+                      >
+                        Cambiar foto
+                      </button>
                       <button
                         type="button"
                         onClick={() => setGroupImageUrl('')}
-                        className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="Quitar foto"
+                        className="text-xs text-rose-600 hover:text-rose-700 font-medium underline flex items-center gap-1"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3 h-3" />
+                        <span>Eliminar</span>
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="py-2 flex flex-col items-center justify-center text-center space-y-2">
+                  <button
+                    type="button"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 text-xs font-semibold hover:bg-zinc-100 shadow-2xs flex items-center gap-2 transition-all active:scale-95"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
+                    ) : (
+                      <Camera className="w-4 h-4 text-zinc-600" />
+                    )}
+                    <span>Subir foto personalizada</span>
+                  </button>
+                  <p className="text-[11px] text-zinc-400">
+                    Si no subes una foto, se asignará automáticamente una según el tipo de grupo.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 3. Tipo de Grupo (con Gráficos Representativos) */}

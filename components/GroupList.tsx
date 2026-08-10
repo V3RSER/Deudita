@@ -19,6 +19,7 @@ import {
   TrendingUp,
   TrendingDown,
   MinusCircle,
+  Calculator,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
@@ -29,19 +30,23 @@ interface GroupListProps {
 }
 
 const CATEGORY_ICONS: Record<GroupCategory, React.ReactNode> = {
-  home: <Home className="w-5 h-5 text-indigo-500" />,
+  friends: <Users className="w-5 h-5 text-emerald-500" />,
   trip: <Plane className="w-5 h-5 text-sky-500" />,
+  home: <Home className="w-5 h-5 text-indigo-500" />,
   couple: <Heart className="w-5 h-5 text-rose-500" />,
   event: <Calendar className="w-5 h-5 text-amber-500" />,
-  work: <Briefcase className="w-5 h-5 text-teal-500" />,
+  accounting: <Calculator className="w-5 h-5 text-purple-500" />,
+  work: <Briefcase className="w-5 h-5 text-blue-500" />,
   other: <Folder className="w-5 h-5 text-slate-500" />,
 };
 
 const CATEGORY_LABELS: Record<GroupCategory, string> = {
-  home: 'Hogar',
+  friends: 'Amigos',
   trip: 'Viajes',
+  home: 'Hogar',
   couple: 'Pareja',
   event: 'Eventos',
+  accounting: 'Contabilidad',
   work: 'Trabajo',
   other: 'Otros',
 };
@@ -186,7 +191,7 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                 <div>
                   {/* Optional Group Banner Image */}
                   {groupImg && (
-                    <div className="relative w-full h-24 -mt-6 -mx-6 mb-4 overflow-hidden border-b border-zinc-100 bg-zinc-100">
+                    <div className="relative w-[calc(100%+3rem)] h-28 -mt-6 -mx-6 mb-4 overflow-hidden border-b border-zinc-100 bg-zinc-100">
                       <Image
                         src={groupImg}
                         alt={group.name}

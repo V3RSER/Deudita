@@ -12,10 +12,9 @@ import {
   ExpenseSplit,
   GroupInvite,
   Notification,
+  GroupCategory,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
-
-type GroupCategory = 'home' | 'trip' | 'couple' | 'event' | 'work' | 'other';
 
 interface ExpenseContextType {
   currentProfile: Profile | null;
@@ -31,7 +30,7 @@ interface ExpenseContextType {
   notifications: Notification[];
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   createGroup: (name: string, category: GroupCategory, description?: string, memberIds?: string[], imageUrl?: string) => Promise<Group>;
-  addGroupInvite: (groupId: string, email?: string) => Promise<{ inviteUrl: string; message: string }>;
+  addGroupInvite: (groupId: string, email?: string, name?: string) => Promise<{ inviteUrl: string; message: string }>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
   rejectGroupInvite: (inviteId: string) => Promise<void>;
   markNotificationAsRead: (notificationId?: string) => Promise<void>;
@@ -188,11 +187,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return createdGroup;
   };
 
-  const addGroupInvite = async (groupId: string, email?: string): Promise<{ inviteUrl: string; message: string }> => {
+  const addGroupInvite = async (groupId: string, email?: string, name?: string): Promise<{ inviteUrl: string; message: string }> => {
     const res = await fetch('/api/groups/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId, email }),
+      body: JSON.stringify({ groupId, email, name }),
     });
 
     if (!res.ok) {

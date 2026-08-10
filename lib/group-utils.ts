@@ -1,7 +1,17 @@
-import { Group } from './types';
+import { Group, GroupCategory } from './types';
 
-export const DEFAULT_GROUP_IMAGE =
-  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80';
+export const DEFAULT_GROUP_IMAGES: Record<GroupCategory, string> = {
+  trip: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
+  home: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
+  couple: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600&auto=format&fit=crop&q=80',
+  event: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=600&auto=format&fit=crop&q=80',
+  work: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80',
+  friends: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&auto=format&fit=crop&q=80',
+  accounting: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+  other: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+};
+
+export const DEFAULT_GROUP_IMAGE = DEFAULT_GROUP_IMAGES.friends;
 
 export function getGroupImage(group: Group): string {
   if (group.image_url && group.image_url.trim().length > 0) {
@@ -13,7 +23,7 @@ export function getGroupImage(group: Group): string {
       return match[1].trim();
     }
   }
-  return DEFAULT_GROUP_IMAGE;
+  return DEFAULT_GROUP_IMAGES[group.category] || DEFAULT_GROUP_IMAGE;
 }
 
 export function getCleanGroupDescription(description?: string): string {
