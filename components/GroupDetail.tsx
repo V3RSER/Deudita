@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Group, Expense, Profile } from '@/lib/types';
+import { Group, Expense, Payment, Profile } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances, calculateUserSummaries } from '@/lib/balance-utils';
 import {
   Receipt,
@@ -32,6 +32,8 @@ interface GroupDetailProps {
   onBack: () => void;
   onOpenNewExpense: (groupId?: string) => void;
   onEditExpense?: (expense: Expense) => void;
+  onEditPayment?: (payment: Payment) => void;
+  onDeletePayment?: (paymentId: string) => void;
   onOpenSettleModal: (groupId: string, debtorId?: string, creditorId?: string, amount?: number) => void;
   onOpenAddMember: (groupId: string) => void;
 }
@@ -87,10 +89,12 @@ export function GroupDetail({
   onBack,
   onOpenNewExpense,
   onEditExpense,
+  onEditPayment,
+  onDeletePayment,
   onOpenSettleModal,
   onOpenAddMember,
 }: GroupDetailProps) {
-  const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense } = useExpense();
+  const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
@@ -356,6 +360,8 @@ export function GroupDetail({
             onSelectExpense={(exp) => setSelectedExpenseForModal(exp)}
             onEditExpense={onEditExpense}
             onDeleteExpense={(expId) => deleteExpense(expId)}
+            onEditPayment={onEditPayment}
+            onDeletePayment={onDeletePayment || ((payId) => deletePayment(payId))}
             showGroupBadge={false}
           />
         </div>

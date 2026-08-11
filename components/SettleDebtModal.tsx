@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
-import { X, Wallet, ArrowRight, Camera, Loader2, Sparkles, AlertCircle, FileText } from 'lucide-react';
+import { Payment } from '@/lib/types';
+import { X, Wallet, ArrowRight, Camera, Loader2, Sparkles, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 
 interface SettleDebtModalProps {
@@ -14,6 +15,7 @@ interface SettleDebtModalProps {
   defaultDebtorId?: string;
   defaultCreditorId?: string;
   defaultAmount?: number;
+  paymentToEdit?: Payment | null;
 }
 
 export function SettleDebtModal({
@@ -23,8 +25,9 @@ export function SettleDebtModal({
   defaultDebtorId,
   defaultCreditorId,
   defaultAmount,
+  paymentToEdit,
 }: SettleDebtModalProps) {
-  const { currentProfile, userGroups, profiles, expenses, payments, addPayment } = useExpense();
+  const { currentProfile, userGroups, profiles, expenses, payments, addPayment, updatePayment, deletePayment } = useExpense();
 
   const [groupId, setGroupId] = useState<string>('');
   const [payerId, setPayerId] = useState<string>('');
@@ -34,6 +37,7 @@ export function SettleDebtModal({
   const [proofUrl, setProofUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,26 +47,36 @@ export function SettleDebtModal({
   if (isOpen && !prevIsOpen) {
     setPrevIsOpen(true);
     setErrorMsg(null);
-    setProofUrl('');
 
-    const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
-    setGroupId(activeGroup);
+    if (paymentToEdit) {
+      setGroupId(paymentToEdit.group_id);
+      setPayerId(paymentToEdit.paid_by);
+      setReceiverId(paymentToEdit.paid_to);
+      setAmount(paymentToEdit.amount ? paymentToEdit.amount.toString() : '');
+      setNotes(paymentToEdit.note || '');
+      setProofUrl(paymentToEdit.proof_url || '');
+    } else {
+      setProofUrl('');
+      const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
+      setGroupId(activeGroup);
 
-    const activePayer = defaultDebtorId || currentProfile?.id || profiles[0]?.id || '';
-    setPayerId(activePayer);
+      const activePayer = defaultDebtorId || currentProfile?.id || profiles[0]?.id || '';
+      setPayerId(activePayer);
 
-    const activeReceiver = defaultCreditorId || profiles.find((p) => p.id !== activePayer)?.id || '';
-    setReceiverId(activeReceiver);
+      const activeReceiver = defaultCreditorId || profiles.find((p) => p.id !== activePayer)?.id || '';
+      setReceiverId(activeReceiver);
 
-    setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
-    setNotes('Transferencia bancaria');
+      setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
+      setNotes('Transferencia bancaria');
+    }
   } else if (!isOpen && prevIsOpen) {
     setPrevIsOpen(false);
   }
 
   if (!isOpen) return null;
 
-  const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0);
+  const isEditing = Boolean(paymentToEdit);
+  const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;
 
   // Compute breakdown of group debts between payer and receiver
   const getGroupDebtBreakdown = () => {
@@ -180,9 +194,19 @@ export function SettleDebtModal({
 
     setIsSubmitting(true);
     try {
-      const paymentDate = new Date().toISOString().split('T')[0];
+      const paymentDate = isEditing && paymentToEdit ? (paymentToEdit.payment_date || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0];
 
-      if (isLockedToGroup && groupId) {
+      if (isEditing && paymentToEdit) {
+        await updatePayment(paymentToEdit.id, {
+          group_id: groupId || paymentToEdit.group_id,
+          paid_by: payerId,
+          paid_to: receiverId,
+          amount: numericAmount,
+          payment_date: paymentDate,
+          note: notes,
+          proof_url: proofUrl || undefined,
+        });
+      } else if (isLockedToGroup && groupId) {
         // Single group payment
         await addPayment({
           group_id: groupId,
@@ -234,10 +258,25 @@ export function SettleDebtModal({
 
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al registrar el pago';
+      const msg = err instanceof Error ? err.message : 'Error al guardar el pago';
       setErrorMsg(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!paymentToEdit) return;
+    setErrorMsg(null);
+    setIsDeleting(true);
+    try {
+      await deletePayment(paymentToEdit.id);
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al eliminar el pago';
+      setErrorMsg(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -255,9 +294,11 @@ export function SettleDebtModal({
               <Wallet className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-white">Saldar Deuda / Registrar Pago</h2>
+              <h2 className="text-xl font-bold tracking-tight text-white">
+                {isEditing ? 'Editar Pago / Abono' : 'Saldar Deuda / Registrar Pago'}
+              </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {isLockedToGroup ? `Registrando pago en el grupo` : `Pago distribuido entre grupos`}
+                {isEditing ? 'Modifica los datos del pago' : isLockedToGroup ? 'Registrando pago en el grupo' : 'Pago distribuido entre grupos'}
               </p>
             </div>
           </div>
@@ -466,28 +507,48 @@ export function SettleDebtModal({
           </div>
 
           {/* Submit Actions */}
-          <div className="pt-4 border-t border-zinc-100 flex items-center justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-semibold transition active:scale-95"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isUploading || numericAmount <= 0}
-              className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-2"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <>
-                  <Wallet className="w-4 h-4 text-emerald-400" />
-                  <span>Confirmar Pago</span>
-                </>
-              )}
-            </button>
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
+            {isEditing ? (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting || isSubmitting}
+                className="px-4 py-2.5 rounded-full text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold transition active:scale-95 flex items-center space-x-1.5"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>Eliminar Pago</span>
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex items-center space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-semibold transition active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || isUploading || numericAmount <= 0}
+                className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-2"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <>
+                    <Wallet className="w-4 h-4 text-emerald-400" />
+                    <span>{isEditing ? 'Guardar Cambios' : 'Confirmar Pago'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

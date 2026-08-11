@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { GroupDetail } from '@/components/GroupDetail';
 import { useExpense } from '@/lib/expense-context';
-import { Expense } from '@/lib/types';
+import { Expense, Payment } from '@/lib/types';
 import { useRouter, useParams } from 'next/navigation';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
@@ -13,12 +13,13 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const params = useParams();
   const groupId = params.groupId as string;
-  const { groups } = useExpense();
+  const { groups, deletePayment } = useExpense();
 
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
   const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
   
   const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const [paymentToEdit, setPaymentToEdit] = useState<Payment | null>(null);
   const [settleParams, setSettleParams] = useState<{
     debtorId?: string;
     creditorId?: string;
@@ -49,7 +50,13 @@ export default function GroupDetailPage() {
     creditorId?: string,
     amount?: number
   ) => {
+    setPaymentToEdit(null);
     setSettleParams({ debtorId, creditorId, amount });
+    setIsSettleOpen(true);
+  };
+
+  const handleEditPayment = (payment: Payment) => {
+    setPaymentToEdit(payment);
     setIsSettleOpen(true);
   };
 
@@ -60,6 +67,8 @@ export default function GroupDetailPage() {
         onBack={() => router.push('/groups')}
         onOpenNewExpense={handleOpenNewExpense}
         onEditExpense={handleEditExpense}
+        onEditPayment={handleEditPayment}
+        onDeletePayment={(payId) => deletePayment(payId)}
         onOpenSettleModal={handleOpenSettleModal}
         onOpenAddMember={() => setIsAddMemberOpen(true)}
       />
@@ -75,12 +84,17 @@ export default function GroupDetailPage() {
       />
 
       <SettleDebtModal
+        key={`settle-${isSettleOpen}-${paymentToEdit?.id || 'new'}`}
         isOpen={isSettleOpen}
-        onClose={() => setIsSettleOpen(false)}
+        onClose={() => {
+          setIsSettleOpen(false);
+          setPaymentToEdit(null);
+        }}
         defaultGroupId={groupId}
         defaultDebtorId={settleParams.debtorId}
         defaultCreditorId={settleParams.creditorId}
         defaultAmount={settleParams.amount}
+        paymentToEdit={paymentToEdit}
       />
 
       <AddMemberModal

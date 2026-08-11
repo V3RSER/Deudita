@@ -44,6 +44,8 @@ import {
   Layers,
   LucideIcon,
   UserPlus,
+  Wallet,
+  CreditCard,
 } from 'lucide-react';
 
 interface NewExpenseModalProps {
@@ -200,9 +202,16 @@ export function NewExpenseModal({
 
   // Itemized breakdown state (Gasto tipo factura)
   const [useItems, setUseItems] = useState<boolean>(false);
+  const [itemsTab, setItemsTab] = useState<'items' | 'assignment'>('items');
   const [items, setItems] = useState<
-    Array<{ description: string; amount: string; assignedMemberIds: string[] }>
-  >([{ description: '', amount: '', assignedMemberIds: [] }]);
+    Array<{
+      description: string;
+      quantity: string;
+      unitPrice: string;
+      amount: string;
+      assignedMemberIds: string[];
+    }>
+  >([{ description: '', quantity: '1', unitPrice: '', amount: '', assignedMemberIds: [] }]);
   const [expandedItemMemberIndex, setExpandedItemMemberIndex] = useState<number | null>(null);
 
   // Receipt photo state
@@ -271,14 +280,17 @@ export function NewExpenseModal({
         setItems(
           expenseToEdit.items.map((i) => ({
             description: i.description,
+            quantity: '1',
+            unitPrice: String(i.amount),
             amount: String(i.amount),
             assignedMemberIds: [],
           }))
         );
       } else {
         setUseItems(false);
-        setItems([{ description: '', amount: '', assignedMemberIds: [] }]);
+        setItems([{ description: '', quantity: '1', unitPrice: '', amount: '', assignedMemberIds: [] }]);
       }
+      setItemsTab('items');
 
       if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
         const selected = expenseToEdit.splits.map((s) => s.user_id);
@@ -324,7 +336,8 @@ export function NewExpenseModal({
       setCategory('General');
       setExpenseDate(new Date().toISOString().split('T')[0]);
       setUseItems(false);
-      setItems([{ description: '', amount: '', assignedMemberIds: [] }]);
+      setItems([{ description: '', quantity: '1', unitPrice: '', amount: '', assignedMemberIds: [] }]);
+      setItemsTab('items');
       setSplitType('equal');
       setQuickPreset('split');
 
@@ -443,15 +456,50 @@ export function NewExpenseModal({
   };
 
   const handleAddItemRow = () => {
-    setItems((prev) => [...prev, { description: '', amount: '', assignedMemberIds: [] }]);
+    setItems((prev) => [
+      ...prev,
+      { description: '', quantity: '1', unitPrice: '', amount: '', assignedMemberIds: [] },
+    ]);
   };
 
   const handleRemoveItemRow = (index: number) => {
     setItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleItemChange = (index: number, field: 'description' | 'amount', value: string) => {
-    const updated = items.map((item, idx) => (idx === index ? { ...item, [field]: value } : item));
+  const handleItemChange = (
+    index: number,
+    field: 'description' | 'quantity' | 'unitPrice' | 'amount',
+    value: string
+  ) => {
+    const updated = items.map((item, idx) => {
+      if (idx !== index) return item;
+
+      const newItem = { ...item, [field]: value };
+
+      if (field === 'quantity') {
+        const q = parseFloat(value) || 1;
+        const u = parseFloat(item.unitPrice) || 0;
+        if (u > 0) {
+          newItem.amount = (q * u).toFixed(2).replace(/\.00$/, '');
+        } else if (item.amount) {
+          const a = parseFloat(item.amount) || 0;
+          newItem.unitPrice = a > 0 ? (a / q).toFixed(2).replace(/\.00$/, '') : '';
+        }
+      } else if (field === 'unitPrice') {
+        const q = parseFloat(item.quantity) || 1;
+        const u = parseFloat(value) || 0;
+        newItem.amount = u > 0 ? (q * u).toFixed(2).replace(/\.00$/, '') : '';
+      } else if (field === 'amount') {
+        const q = parseFloat(item.quantity) || 1;
+        const a = parseFloat(value) || 0;
+        if (a > 0 && q > 0) {
+          newItem.unitPrice = (a / q).toFixed(2).replace(/\.00$/, '');
+        }
+      }
+
+      return newItem;
+    });
+
     setItems(updated);
 
     if (useItems) {
@@ -459,7 +507,7 @@ export function NewExpenseModal({
         const val = parseFloat(curr.amount);
         return acc + (isNaN(val) ? 0 : val);
       }, 0);
-      if (sum > 0) {
+      if (sum >= 0) {
         setTotalAmount(sum.toString());
       }
     }
@@ -786,7 +834,8 @@ export function NewExpenseModal({
     setReceiptUrl('');
     setNotes('');
     setUseItems(false);
-    setItems([{ description: '', amount: '', assignedMemberIds: [] }]);
+    setItems([{ description: '', quantity: '1', unitPrice: '', amount: '', assignedMemberIds: [] }]);
+    setItemsTab('items');
     setCustomSplits({});
     setSplitType('equal');
     setSelectedMemberIds([]);
@@ -808,15 +857,15 @@ export function NewExpenseModal({
         }`}
       >
         {/* Top Header Bar */}
-        <div className="bg-[#3da88a] text-white p-4 sm:p-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-white flex items-center space-x-2">
-            <Receipt className="w-5 h-5 text-teal-100" />
+        <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white p-4 sm:p-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight text-white flex items-center space-x-2">
+            <Receipt className="w-5 h-5 text-emerald-200" />
             <span>{isEditing ? 'Editar gasto' : 'Añadir un gasto'}</span>
           </h2>
           <button
             type="button"
             onClick={resetAndClose}
-            className="p-2 text-teal-100 hover:text-white hover:bg-teal-700/50 rounded-full transition-colors cursor-pointer"
+            className="p-2 text-emerald-100 hover:text-white hover:bg-emerald-600/40 rounded-full transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -837,7 +886,7 @@ export function NewExpenseModal({
             {/* MAIN / LEFT COLUMN */}
             <div className="p-6 sm:p-8 space-y-6">
 
-              {/* Mode Switcher Tabs: Gasto sencillo vs Gasto tipo factura */}
+              {/* Mode Switcher Tabs: Gasto sencillo vs Desglosar en artículos */}
               <div className="flex items-center space-x-2 bg-zinc-100 p-1.5 rounded-2xl border border-zinc-200">
                 <button
                   type="button"
@@ -848,7 +897,7 @@ export function NewExpenseModal({
                   className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     !useItems
                       ? 'bg-white text-zinc-900 shadow-2xs'
-                      : 'text-zinc-500 hover:text-zinc-900'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
                   }`}
                 >
                   Gasto sencillo
@@ -861,23 +910,23 @@ export function NewExpenseModal({
                   }}
                   className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
                     useItems
-                      ? 'bg-zinc-900 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:text-zinc-900'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50'
                   }`}
                 >
                   <Receipt className="w-3.5 h-3.5" />
-                  <span>Desglosar en Ítems / Productos</span>
+                  <span>Desglosar en artículos</span>
                 </button>
               </div>
 
-              {/* Main Card: Dynamic Category Icon Box + Description + Big Amount */}
-              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200 shadow-2xs space-y-4">
+              {/* Main Card: Dynamic Category Icon Box + Description + Amount */}
+              <div className="bg-emerald-50/40 rounded-2xl p-5 border border-emerald-100/80 shadow-2xs space-y-4">
                 <div className="flex items-start space-x-4">
                   {/* Category Icon Box (Clicking opens Category Menu) */}
                   <button
                     type="button"
                     onClick={() => setActiveSidePanel(activeSidePanel === 'category' ? 'none' : 'category')}
-                    className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-50 hover:bg-emerald-100/80 active:scale-95 rounded-2xl border border-emerald-200/80 shadow-2xs flex items-center justify-center shrink-0 text-emerald-700 transition-all cursor-pointer group mt-0.5"
+                    className="w-12 h-12 sm:w-14 sm:h-14 bg-white hover:bg-emerald-100/90 active:scale-95 rounded-2xl border border-emerald-200 shadow-2xs flex items-center justify-center shrink-0 text-emerald-700 transition-all cursor-pointer group mt-0.5"
                     title="Haz clic para elegir categoría"
                   >
                     {React.createElement(currentCategoryIcon, { className: "w-6 h-6 text-emerald-700 group-hover:scale-110 transition-transform" })}
@@ -893,14 +942,14 @@ export function NewExpenseModal({
                         setDescription(e.target.value);
                         setValidationError(null);
                       }}
-                      placeholder="Descripción del gasto (ej: Cena, Supermercado...)"
-                      className="w-full bg-transparent border-b border-zinc-200 focus:border-zinc-800 py-1 text-base sm:text-lg font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
+                      placeholder="Descripción"
+                      className="w-full bg-transparent border-b border-emerald-200 focus:border-emerald-700 py-1 text-base sm:text-lg font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
                     />
 
-                    {/* Amount Field with Live Formatted Currency Badge */}
+                    {/* Amount Field */}
                     <div className="space-y-1">
-                      <div className="flex items-center space-x-1 border-b border-zinc-200 focus-within:border-zinc-800 py-1">
-                        <span className="text-2xl sm:text-3xl font-black text-zinc-400">$</span>
+                      <div className="flex items-center space-x-1 border-b border-emerald-200 focus-within:border-emerald-700 py-1">
+                        <span className="text-2xl sm:text-3xl font-black text-emerald-700">$</span>
                         <input
                           type="number"
                           required
@@ -915,74 +964,15 @@ export function NewExpenseModal({
                           className="w-full bg-transparent text-2xl sm:text-3xl font-black text-zinc-900 placeholder:text-zinc-300 focus:outline-none disabled:text-zinc-400"
                         />
                       </div>
-
-                      {/* Currency Format Convention Preview Badge */}
-                      {numericTotal > 0 && (
-                        <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700">
-                          <span className="bg-emerald-100/80 text-emerald-900 px-2.5 py-0.5 rounded-md font-bold">
-                            {formatCurrency(numericTotal, currencyCode)}
-                          </span>
-                          {useItems && <span className="text-[11px] text-zinc-500">(Suma total de ítems)</span>}
-                        </div>
-                      )}
                     </div>
                   </div>
-                </div>
-
-                {/* Sub-line: Integrated Who paid and split button inline */}
-                <div className="text-xs text-zinc-600 flex items-center flex-wrap gap-1.5 pt-3 border-t border-zinc-200/80 leading-relaxed">
-                  <span className="font-semibold text-zinc-500">Pagado por</span>
-                  
-                  {/* Payer Selector Pill */}
-                  <div className="relative inline-flex items-center">
-                    <select
-                      value={paidBy}
-                      onChange={(e) => setPaidBy(e.target.value)}
-                      className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold px-2.5 py-1 rounded-lg text-xs cursor-pointer border border-zinc-200/90 focus:outline-none appearance-none pr-6 transition-colors shadow-2xs"
-                    >
-                      {memberProfiles.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.id === currentProfile?.id ? 'ti' : (p.full_name || p.email || 'Usuario').split(' ')[0]}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3 h-3 text-zinc-500 absolute right-1.5 pointer-events-none" />
-                  </div>
-
-                  <span className="font-semibold text-zinc-500">y dividido</span>
-
-                  {/* Interactive Split Button */}
-                  <button
-                    type="button"
-                    onClick={() => setActiveSidePanel(activeSidePanel === 'split' ? 'none' : 'split')}
-                    className={`font-bold px-2.5 py-1 rounded-lg text-xs transition-all flex items-center space-x-1 cursor-pointer active:scale-95 border ${
-                      activeSidePanel === 'split'
-                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
-                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-200'
-                    }`}
-                  >
-                    <span>
-                      {splitType === 'equal'
-                        ? 'a partes iguales'
-                        : splitType === 'exact'
-                        ? 'por montos exactos'
-                        : splitType === 'percentage'
-                        ? 'por porcentajes'
-                        : 'por peso'}
-                    </span>
-                    <ChevronRight
-                      className={`w-3.5 h-3.5 transition-transform ${
-                        activeSidePanel === 'split' ? 'rotate-90 text-white' : 'text-zinc-600'
-                      }`}
-                    />
-                  </button>
                 </div>
               </div>
 
               {/* Group & Action Controls Row */}
               <div className="flex items-center gap-2 flex-wrap text-xs">
-                {/* Themed Group Selector Dropdown */}
-                <div className="relative inline-flex items-center bg-zinc-100 hover:bg-zinc-200/80 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-800 text-xs font-semibold transition-all">
+                {/* Group Selector Dropdown */}
+                <div className="relative inline-flex items-center bg-white hover:bg-emerald-50/70 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-800 text-xs font-semibold transition-all cursor-pointer shadow-2xs">
                   <Users className="w-3.5 h-3.5 text-emerald-700 mr-1.5 shrink-0" />
                   <select
                     value={groupId}
@@ -999,14 +989,53 @@ export function NewExpenseModal({
                   <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-2.5 pointer-events-none" />
                 </div>
 
+                {/* Quién Pagó Selector Dropdown (at same level) */}
+                <div className="relative inline-flex items-center bg-white hover:bg-emerald-50/70 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-800 text-xs font-semibold transition-all cursor-pointer shadow-2xs">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-700 mr-1.5 shrink-0" />
+                  <span className="text-zinc-500 mr-1 font-medium">Pagó:</span>
+                  <select
+                    value={paidBy}
+                    onChange={(e) => {
+                      setPaidBy(e.target.value);
+                      setValidationError(null);
+                    }}
+                    className="bg-transparent text-xs font-bold text-zinc-900 focus:outline-none cursor-pointer pr-5 appearance-none"
+                  >
+                    {memberProfiles.map((p) => {
+                      const isCurrent = p.id === currentProfile?.id;
+                      const displayName = p.full_name ? p.full_name.split(' ')[0] : (p.email ? p.email.split('@')[0] : 'Usuario');
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {isCurrent ? `Tú (${displayName})` : displayName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-2.5 pointer-events-none" />
+                </div>
+
+                {/* Category Button Pill */}
+                <button
+                  type="button"
+                  onClick={() => setActiveSidePanel(activeSidePanel === 'category' ? 'none' : 'category')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors cursor-pointer shadow-2xs ${
+                    activeSidePanel === 'category'
+                      ? 'bg-zinc-900 text-white border-zinc-900'
+                      : 'bg-white hover:bg-emerald-50/70 text-zinc-700 border-zinc-200'
+                  }`}
+                >
+                  {React.createElement(currentCategoryIcon, { className: "w-3.5 h-3.5 text-emerald-700" })}
+                  <span>{category}</span>
+                </button>
+
                 {/* Date Pill */}
-                <label className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 cursor-pointer transition-colors font-semibold">
-                  <CalendarIcon className="w-3.5 h-3.5 text-zinc-500" />
+                <label className="flex items-center space-x-1.5 bg-white hover:bg-emerald-50/70 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 cursor-pointer transition-colors font-semibold shadow-2xs">
+                  <CalendarIcon className="w-3.5 h-3.5 text-emerald-700" />
                   <input
                     type="date"
                     value={expenseDate}
                     onChange={(e) => setExpenseDate(e.target.value)}
-                    className="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer"
+                    className="bg-transparent text-xs font-semibold text-zinc-900 focus:outline-none cursor-pointer"
                   />
                 </label>
 
@@ -1015,34 +1044,20 @@ export function NewExpenseModal({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingReceipt}
-                  className="flex items-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 font-semibold cursor-pointer transition-colors active:scale-95 disabled:opacity-50"
+                  className="flex items-center space-x-1.5 bg-white hover:bg-emerald-50/70 px-3 py-1.5 rounded-full border border-zinc-200 text-zinc-700 font-semibold cursor-pointer transition-colors active:scale-95 disabled:opacity-50 shadow-2xs"
                 >
                   {isUploadingReceipt ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700" />
                   ) : (
-                    <ImageIcon className="w-3.5 h-3.5 text-zinc-500" />
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-700" />
                   )}
                   <span>
                     {isUploadingReceipt
                       ? 'Subiendo...'
                       : receiptUrl
-                      ? 'Cambiar imagen'
-                      : 'Añadir imagen'}
+                      ? 'Cambiar foto'
+                      : 'Añadir foto'}
                   </span>
-                </button>
-
-                {/* Category Button Pill */}
-                <button
-                  type="button"
-                  onClick={() => setActiveSidePanel(activeSidePanel === 'category' ? 'none' : 'category')}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors cursor-pointer ${
-                    activeSidePanel === 'category'
-                      ? 'bg-zinc-900 text-white border-zinc-900'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200'
-                  }`}
-                >
-                  {React.createElement(currentCategoryIcon, { className: "w-3.5 h-3.5" })}
-                  <span>{category}</span>
                 </button>
               </div>
 
@@ -1154,9 +1169,9 @@ export function NewExpenseModal({
                       const shareData = itemizedShares[p.id];
                       amountOwed = shareData?.total || 0;
                       if (shareData && shareData.items.length > 0) {
-                        detailText = `${shareData.items.length} ${shareData.items.length === 1 ? 'ítem' : 'ítems'}: ${shareData.items.join(', ')}`;
+                        detailText = `${shareData.items.length} ${shareData.items.length === 1 ? 'artículo' : 'artículos'}: ${shareData.items.join(', ')}`;
                       } else {
-                        detailText = 'Sin ítems asignados';
+                        detailText = 'Sin artículos asignados';
                       }
                     } else if (splitType === 'equal') {
                       amountOwed = isSelected ? equalPerPerson : 0;
@@ -1183,7 +1198,7 @@ export function NewExpenseModal({
                         key={p.id}
                         className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
                           isSelected
-                            ? 'bg-white border-zinc-200/90 shadow-2xs'
+                            ? 'bg-white border-zinc-200/90 shadow-2xs hover:border-emerald-200'
                             : 'bg-zinc-100/50 border-zinc-200/50 opacity-60'
                         }`}
                       >
@@ -1199,7 +1214,7 @@ export function NewExpenseModal({
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-zinc-900 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-emerald-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
                               {displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
@@ -1227,122 +1242,256 @@ export function NewExpenseModal({
 
             {/* RIGHT COLUMN SIDE PANELS */}
             {activeSidePanel === 'items' && (
-              <div className="p-6 sm:p-8 space-y-5 bg-zinc-50/50 animate-fadeIn">
-                <div className="flex items-center justify-between pb-3 border-b border-zinc-200">
-                  <div className="flex items-center space-x-2">
-                    <Receipt className="w-5 h-5 text-emerald-700" />
-                    <h3 className="text-base font-semibold text-zinc-900 tracking-tight">
-                      Desglosar en Ítems / Productos
-                    </h3>
+              <div className="p-6 sm:p-8 space-y-5 bg-zinc-50/80 animate-fadeIn">
+                {/* Itemized Panel Header with Sub-tabs */}
+                <div className="space-y-3 pb-3 border-b border-zinc-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Receipt className="w-5 h-5 text-emerald-700" />
+                      <h3 className="text-base font-bold text-zinc-900 tracking-tight">
+                        Desglosar en artículos
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSidePanel('none')}
+                      className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSidePanel('none')}
-                    className="p-1 text-zinc-400 hover:text-zinc-700 rounded-lg cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+
+                  {/* 2 Step Tabs */}
+                  <div className="flex items-center bg-zinc-200/70 p-1 rounded-xl text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setItemsTab('items')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                        itemsTab === 'items'
+                          ? 'bg-white text-zinc-900 shadow-2xs font-bold'
+                          : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50'
+                      }`}
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>1. Artículos</span>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                        {items.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setItemsTab('assignment')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                        itemsTab === 'assignment'
+                          ? 'bg-emerald-700 text-white shadow-2xs font-bold'
+                          : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50'
+                      }`}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>2. Asignación</span>
+                    </button>
+                  </div>
                 </div>
 
-                <p className="text-xs text-zinc-500">
-                  Agrega cada producto de la factura y selecciona quiénes lo consumieron para calcular la división exacta:
-                </p>
+                {/* TAB 1: CARGAR ARTÍCULOS */}
+                {itemsTab === 'items' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <p className="text-xs text-zinc-500 font-medium">
+                      Paso 1: Ingresa los artículos de la factura con sus cantidades y precios:
+                    </p>
 
-                <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
-                  {items.map((item, idx) => {
-                    const itemAmt = parseFloat(item.amount) || 0;
-                    const assignedIds = item.assignedMemberIds || [];
-                    const isAll = assignedIds.length === 0;
-                    const activeMembers =
-                      selectedMemberIds.length > 0 ? selectedMemberIds : memberProfiles.map((p) => p.id);
-                    const effectiveCount = isAll ? activeMembers.length : assignedIds.length;
-                    const sharePerPerson = effectiveCount > 0 ? itemAmt / effectiveCount : itemAmt;
+                    <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+                      {items.map((item, idx) => {
+                        const q = parseFloat(item.quantity) || 1;
+                        const u = parseFloat(item.unitPrice) || 0;
+                        const totalVal = parseFloat(item.amount) || 0;
 
-                    return (
-                      <div
-                        key={idx}
-                        className="bg-white p-3.5 rounded-2xl border border-zinc-200/90 shadow-2xs space-y-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            placeholder="Nombre del producto o ítem..."
-                            value={item.description}
-                            onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                            className="flex-1 px-3 py-2 bg-zinc-50 border border-zinc-200 focus:border-zinc-800 focus:bg-white rounded-xl text-xs font-medium text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
-                          />
-                          <div className="relative shrink-0">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">
-                              $
-                            </span>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value={item.amount}
-                              onChange={(e) => handleItemChange(idx, 'amount', e.target.value)}
-                              className="w-28 pl-7 pr-3 py-2 bg-zinc-50 border border-zinc-200 focus:border-zinc-800 focus:bg-white rounded-xl text-xs font-bold text-zinc-900 focus:outline-none transition-colors"
-                            />
-                          </div>
-                          {items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItemRow(idx)}
-                              className="p-2 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                              title="Eliminar ítem"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Member assignment pill for this item */}
-                        <div className="pt-2 border-t border-zinc-100 space-y-2">
-                          <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedItemMemberIndex(expandedItemMemberIndex === idx ? null : idx)}
-                              className="flex items-center space-x-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200/90 text-zinc-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                              <span>
-                                Asignado a:{' '}
-                                <strong className="text-zinc-900">
-                                  {isAll
-                                    ? `Todos (${activeMembers.length})`
-                                    : assignedIds
-                                        .map((id) => {
-                                          const p = memberProfiles.find((m) => m.id === id);
-                                          return p ? (p.full_name || p.email || 'U').split(' ')[0] : '';
-                                        })
-                                        .filter(Boolean)
-                                        .join(', ')}
-                                </strong>
-                              </span>
-                              <ChevronDown
-                                className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${
-                                  expandedItemMemberIndex === idx ? 'rotate-180' : ''
-                                }`}
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-white p-3.5 rounded-2xl border border-zinc-200 shadow-2xs space-y-3 hover:border-emerald-300 transition-colors"
+                          >
+                            {/* Descripción del artículo */}
+                            <div className="flex items-center justify-between gap-2">
+                              <input
+                                type="text"
+                                placeholder={`Artículo #${idx + 1} (ej: Pizza, Bebidas, Postre...)`}
+                                value={item.description}
+                                onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
                               />
-                            </button>
-
-                            {itemAmt > 0 && (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 shrink-0">
-                                {formatCurrency(sharePerPerson, currencyCode)} c/u
-                              </span>
-                            )}
-                          </div>
-
-                          {expandedItemMemberIndex === idx && (
-                            <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200/80 space-y-2 animate-fadeIn">
-                              <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500">
-                                <span>Selecciona quiénes consumieron este ítem:</span>
+                              {items.length > 1 && (
                                 <button
                                   type="button"
-                                  onClick={() => setExpandedItemMemberIndex(null)}
-                                  className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer"
+                                  onClick={() => handleRemoveItemRow(idx)}
+                                  className="p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer shrink-0"
+                                  title="Eliminar artículo"
                                 >
-                                  Listo
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
+                              )}
+                            </div>
+
+                            {/* Grid: Cantidad | Precio c/u | Total */}
+                            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-100">
+                              {/* Cantidad */}
+                              <div>
+                                <label className="text-[10px] font-bold text-zinc-500 block mb-1">
+                                  Cantidad
+                                </label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="any"
+                                  placeholder="1"
+                                  value={item.quantity}
+                                  onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-bold text-zinc-900 focus:outline-none"
+                                />
+                              </div>
+
+                              {/* Precio c/u */}
+                              <div>
+                                <label className="text-[10px] font-bold text-zinc-500 block mb-1">
+                                  Precio unit.
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">
+                                    $
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="0"
+                                    value={item.unitPrice}
+                                    onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                                    className="w-full pl-5 pr-2 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Precio Total */}
+                              <div>
+                                <label className="text-[10px] font-bold text-emerald-700 block mb-1">
+                                  Precio total
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-emerald-700 font-bold">
+                                    $
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    placeholder="0"
+                                    value={item.amount}
+                                    onChange={(e) => handleItemChange(idx, 'amount', e.target.value)}
+                                    className="w-full pl-5 pr-2 py-1.5 bg-emerald-50/60 border border-emerald-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-bold text-emerald-900 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quick summary line for item */}
+                            {totalVal > 0 && (
+                              <div className="text-[11px] text-zinc-500 font-medium pt-1 flex items-center justify-between border-t border-zinc-100/80">
+                                <span>
+                                  {q > 1 ? `${q} unid. × ${formatCurrency(u, currencyCode)}` : '1 unidad'}
+                                </span>
+                                <span className="font-bold text-emerald-800">
+                                  Total: {formatCurrency(totalVal, currencyCode)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Bottom Controls for Tab 1 */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={handleAddItemRow}
+                          className="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer bg-white px-3.5 py-2 rounded-xl border border-emerald-200 shadow-2xs hover:bg-emerald-50/50 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Añadir otro artículo</span>
+                        </button>
+
+                        <div className="text-right">
+                          <span className="text-[10px] text-zinc-400 font-bold block uppercase tracking-wider">
+                            Total Factura
+                          </span>
+                          <span className="text-base font-black text-emerald-800">
+                            {formatCurrency(parseFloat(totalAmount) || 0, currencyCode)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setItemsTab('assignment')}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-2xs transition-all flex items-center justify-center space-x-2 active:scale-98"
+                      >
+                        <span>Continuar a asignar personas (Paso 2)</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: ASIGNAR PERSONAS */}
+                {itemsTab === 'assignment' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <p className="text-xs text-zinc-500 font-medium">
+                      Paso 2: Selecciona quiénes consumieron o participan en cada artículo:
+                    </p>
+
+                    <div className="space-y-3.5 max-h-[340px] overflow-y-auto pr-1">
+                      {items.map((item, idx) => {
+                        const itemAmt = parseFloat(item.amount) || 0;
+                        const q = parseFloat(item.quantity) || 1;
+                        const assignedIds = item.assignedMemberIds || [];
+                        const isAll = assignedIds.length === 0;
+                        const activeMembers =
+                          selectedMemberIds.length > 0 ? selectedMemberIds : memberProfiles.map((p) => p.id);
+                        const effectiveCount = isAll ? activeMembers.length : assignedIds.length;
+                        const sharePerPerson = effectiveCount > 0 ? itemAmt / effectiveCount : itemAmt;
+
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-white p-3.5 rounded-2xl border border-zinc-200/90 shadow-2xs space-y-3 hover:border-emerald-200 transition-colors"
+                          >
+                            {/* Header: Article name and total price */}
+                            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+                              <div>
+                                <p className="text-xs font-bold text-zinc-900">
+                                  {item.description.trim() || `Artículo #${idx + 1}`}
+                                </p>
+                                <p className="text-[11px] text-zinc-500">
+                                  {q > 1 ? `${q} unidades` : '1 unidad'} · Total: {formatCurrency(itemAmt, currencyCode)}
+                                </p>
+                              </div>
+
+                              {itemAmt > 0 && (
+                                <div className="text-right">
+                                  <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60 inline-block">
+                                    {formatCurrency(sharePerPerson, currencyCode)} c/u
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Member selector pills */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500">
+                                <span>Repartir entre:</span>
+                                <span className="text-emerald-700">
+                                  {isAll ? 'Todos los integrantes' : `${assignedIds.length} persona(s)`}
+                                </span>
                               </div>
 
                               <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
@@ -1351,8 +1500,8 @@ export function NewExpenseModal({
                                   onClick={() => setItemMembersAll(idx)}
                                   className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                                     isAll
-                                      ? 'bg-zinc-900 text-white shadow-2xs'
-                                      : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
+                                      ? 'bg-emerald-700 text-white shadow-2xs font-bold'
+                                      : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200'
                                   }`}
                                 >
                                   Todos
@@ -1367,10 +1516,10 @@ export function NewExpenseModal({
                                       key={p.id}
                                       type="button"
                                       onClick={() => toggleItemMember(idx, p.id)}
-                                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                                      className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                                         isSelected
-                                          ? 'bg-emerald-600 text-white shadow-2xs'
-                                          : 'bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200'
+                                          ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                                          : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200'
                                       }`}
                                     >
                                       <span>{firstName}</span>
@@ -1380,31 +1529,31 @@ export function NewExpenseModal({
                                 })}
                               </div>
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer bg-white px-3.5 py-2 rounded-xl border border-zinc-200 shadow-2xs transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Añadir otro ítem</span>
-                  </button>
+                    {/* Bottom Buttons for Tab 2 */}
+                    <div className="flex items-center justify-between pt-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setItemsTab('items')}
+                        className="px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-700 text-xs font-bold cursor-pointer transition-colors"
+                      >
+                        ← Volver a artículos
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={handleApplyItemizedSplits}
-                    className="px-5 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold cursor-pointer"
-                  >
-                    Aplicar reparto
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyItemizedSplits}
+                        className="px-5 py-2.5 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-2xs transition-all active:scale-95"
+                      >
+                        Aplicar reparto
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

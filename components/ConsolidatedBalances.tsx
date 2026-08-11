@@ -3,7 +3,9 @@
 import React from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
+import { Payment } from '@/lib/types';
 import { formatCurrency, calculatePairwiseBalances, calculateUserSummaries } from '@/lib/balance-utils';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 import {
   Wallet,
   TrendingUp,
@@ -13,14 +15,16 @@ import {
   Users,
   ShieldCheck,
   Sparkles,
+  Receipt,
 } from 'lucide-react';
 
 interface ConsolidatedBalancesProps {
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
+  onEditPayment?: (payment: Payment) => void;
 }
 
-export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
-  const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
+export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: ConsolidatedBalancesProps) {
+  const { currentProfile, expenses, payments, profiles, userGroups, deletePayment } = useExpense();
 
   const userGroupIds = new Set(userGroups.map((g) => g.id));
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
@@ -262,6 +266,24 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
             ))}
           </div>
         )}
+      </div>
+
+      {/* Historial de Movimientos y Pagos */}
+      <div className="space-y-5 pt-6">
+        <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
+          <Receipt className="w-5 h-5 text-zinc-600" />
+          <span>Historial de Gastos y Pagos de Deuda</span>
+        </h2>
+        <GenericExpenseList
+          expenses={userExpenses}
+          payments={userPayments}
+          profiles={profiles}
+          userGroups={userGroups}
+          currentProfile={currentProfile}
+          onEditPayment={onEditPayment}
+          onDeletePayment={(payId) => deletePayment(payId)}
+          showGroupBadge={true}
+        />
       </div>
     </div>
   );

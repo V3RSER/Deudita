@@ -5,7 +5,7 @@ import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
-import { Expense } from '@/lib/types';
+import { Expense, Payment } from '@/lib/types';
 import {
   Receipt,
   Search,
@@ -30,6 +30,7 @@ import {
 interface AllExpensesViewProps {
   onOpenNewExpense: () => void;
   onEditExpense?: (expense: Expense) => void;
+  onEditPayment?: (payment: Payment) => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -42,8 +43,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Varios: '#64748b', // slate-500
 };
 
-export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpensesViewProps) {
-  const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense } = useExpense();
+export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment }: AllExpensesViewProps) {
+  const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -323,6 +324,8 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense }: AllExpenses
         onSelectExpense={(exp) => setSelectedExpenseForModal(exp)}
         onEditExpense={onEditExpense}
         onDeleteExpense={(expId) => deleteExpense(expId)}
+        onEditPayment={onEditPayment}
+        onDeletePayment={(payId) => deletePayment(payId)}
         showGroupBadge={true}
       />
 

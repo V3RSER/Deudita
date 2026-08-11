@@ -40,6 +40,8 @@ interface ExpenseContextType {
   updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
+  updatePayment: (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
+  deletePayment: (id: string) => Promise<void>;
   confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<void>;
   discardDraft: (draftId: string) => Promise<void>;
   addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<void>;
@@ -313,6 +315,38 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     await reloadFromSupabase();
   };
 
+  const updatePayment = async (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => {
+    const res = await fetch(`/api/payments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payment),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el pago';
+      console.error('[ExpenseContext] Error in updatePayment:', message);
+      throw new Error(message);
+    }
+
+    await reloadFromSupabase();
+  };
+
+  const deletePayment = async (id: string) => {
+    const res = await fetch(`/api/payments/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el pago';
+      console.error('[ExpenseContext] Error in deletePayment:', message);
+      throw new Error(message);
+    }
+
+    await reloadFromSupabase();
+  };
+
   const confirmDraft = async (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => {
     await fetch('/api/drafts/confirm', {
       method: 'POST',
@@ -373,6 +407,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         updateExpense,
         deleteExpense,
         addPayment,
+        updatePayment,
+        deletePayment,
         confirmDraft,
         discardDraft,
         addDraft,
