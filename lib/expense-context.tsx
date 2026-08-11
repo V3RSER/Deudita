@@ -30,7 +30,7 @@ interface ExpenseContextType {
   notifications: Notification[];
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
-  createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[]) => Promise<Group>;
+  createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[], currency?: string) => Promise<Group>;
   addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
   deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
@@ -152,12 +152,13 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     description?: string,
     emails?: string[],
     imageUrl?: string,
-    memberIds?: string[]
+    memberIds?: string[],
+    currency?: string
   ): Promise<Group> => {
     const res = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds }),
+      body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds, currency }),
     });
 
     if (!res.ok) {

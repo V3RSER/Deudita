@@ -38,6 +38,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
   const [fullName, setFullName] = useState(currentProfile?.full_name || '');
   const [timezone, setTimezone] = useState(currentProfile?.timezone || 'America/Mexico_City');
   const [selectedCurrency, setSelectedCurrency] = useState(currentProfile?.currency || 'COP');
+  const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions || '');
   const [avatarUrl, setAvatarUrl] = useState(currentProfile?.avatar_url || '');
 
   const [isUploading, setIsUploading] = useState(false);
@@ -57,6 +58,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
     setFullName(currentProfile.full_name || '');
     setTimezone(currentProfile.timezone || 'America/Mexico_City');
     setSelectedCurrency(currentProfile.currency || 'COP');
+    setPaymentInstructions(currentProfile.payment_instructions || '');
     setAvatarUrl(currentProfile.avatar_url || '');
   }
 
@@ -118,6 +120,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
         timezone,
         currency: currObj.currency,
         currency_symbol: currObj.symbol,
+        payment_instructions: paymentInstructions.trim(),
         avatar_url: avatarUrl,
       });
 
@@ -270,7 +273,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
           {/* Currency / Weight type Select */}
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Tipo de Peso / Divisa Preferida
+              Tipo de Peso / Divisa Preferida (Predeterminada al crear grupos)
             </label>
             <div className="relative">
               <Coins className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5 pointer-events-none" />
@@ -286,6 +289,23 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Payment Instructions Field */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              Instrucciones de Cobro / Pago
+            </label>
+            <p className="text-xs text-zinc-500">
+              Escribe tus cuentas bancarias, Nequi, Daviplata, enlaces PSE o datos de pago. Quienes te deban dinero podrán ver estos datos al saldar deudas.
+            </p>
+            <textarea
+              rows={3}
+              value={paymentInstructions}
+              onChange={(e) => setPaymentInstructions(e.target.value)}
+              placeholder="Ej: Nequi/Daviplata 3001234567, Bancolombia Ahorros # 12345678901 o https://pse.com/mideuda"
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm transition-all focus:ring-2 focus:ring-zinc-900 placeholder:text-zinc-400 font-sans"
+            />
           </div>
 
           {/* Submit Actions */}

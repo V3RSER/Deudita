@@ -25,6 +25,7 @@ import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 
 interface GroupDetailProps {
   group: Group;
@@ -89,7 +90,7 @@ export function GroupDetail({
   onOpenSettleModal,
   onOpenAddMember,
 }: GroupDetailProps) {
-  const { currentProfile, expenses, payments, members, profiles, pendingInvites, deleteExpense } = useExpense();
+  const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
@@ -97,11 +98,18 @@ export function GroupDetail({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
+  const groupPayments = payments.filter((p) => p.group_id === group.id);
+
   const filteredExpenses = groupExpenses.filter((exp) => {
     if (expenseFilter === 'all') return true;
     const isPayer = exp.paid_by === currentProfile?.id;
     const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
     return Boolean(isPayer || isParticipant);
+  });
+
+  const filteredPayments = groupPayments.filter((p) => {
+    if (expenseFilter === 'all') return true;
+    return p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
   });
 
   const groupMembers = members.filter((m) => m.group_id === group.id);
@@ -338,177 +346,18 @@ export function GroupDetail({
             </div>
           </div>
 
-          {filteredExpenses.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl ring-1 ring-zinc-200 p-8 shadow-sm space-y-4">
-              <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
-                <Receipt className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-zinc-900">
-                  {expenseFilter === 'mine' ? 'No interactúas en ningún gasto' : 'Aún no hay gastos registrados'}
-                </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  {expenseFilter === 'mine'
-                    ? 'Cambia el filtro a "Todos los gastos" para ver el historial del grupo.'
-                    : 'Sé el primero en agregar un gasto para este grupo.'}
-                </p>
-              </div>
-              <button
-                onClick={() => onOpenNewExpense(group.id)}
-                className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-6 py-3 rounded-full text-sm shadow-sm transition-all active:scale-95 inline-flex items-center space-x-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Registrar Gasto</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groupedByMonth.map((groupSection) => (
-                <div key={groupSection.key} className="space-y-3">
-                  {/* Pequeño corte que indica el mes */}
-                  <div className="flex items-center space-x-3 py-1">
-                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider bg-zinc-100 px-3 py-1 rounded-md border border-zinc-200/60">
-                      {groupSection.label}
-                    </span>
-                    <div className="h-px bg-zinc-200 flex-1" />
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {groupSection.expenses.map((exp) => {
-                      const { monthIndex, day } = parseExpenseDate(exp.expense_date);
-                      const monthAbbr = MONTH_ABBR_ES[monthIndex];
-                      const formattedDay = day < 10 ? `0${day}` : `${day}`;
-
-                      const paidByProfile = profiles.find((p) => p.id === exp.paid_by);
-                      const payerName = paidByProfile
-                        ? paidByProfile.id === currentProfile?.id
-                          ? 'Tú'
-                          : paidByProfile.full_name
-                        : 'Usuario';
-
-                      const catConfig = getCategoryConfig(exp.category);
-                      const CategoryIcon = catConfig.icon;
-
-                      const isPayer = exp.paid_by === currentProfile?.id;
-                      const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed ?? 0;
-
-                      let participationElement = null;
-
-                      if (isPayer) {
-                        const recovers = exp.total_amount - mySplit;
-                        if (recovers > 0) {
-                          participationElement = (
-                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full inline-block">
-                              Prestaste {formatCurrency(recovers)}
-                            </span>
-                          );
-                        } else {
-                          participationElement = (
-                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full inline-block">
-                              Pagaste todo
-                            </span>
-                          );
-                        }
-                      } else if (mySplit > 0) {
-                        participationElement = (
-                          <span className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full inline-block">
-                            {payerName} te prestó {formatCurrency(mySplit)}
-                          </span>
-                        );
-                      } else {
-                        participationElement = (
-                          <span className="text-xs font-medium text-zinc-500 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-full inline-block">
-                            No participas
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <div
-                          key={exp.id}
-                          onClick={() => setSelectedExpenseForModal(exp)}
-                          className="bg-white rounded-2xl ring-1 ring-zinc-200/90 p-4 sm:p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
-                              {/* Fecha resumida: AGO / 01 (Mismo tamaño que el SVG de categoría) */}
-                              <div className="w-12 h-12 rounded-xl bg-zinc-100 border border-zinc-200/80 flex flex-col items-center justify-center shrink-0 text-center select-none">
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none tracking-tight">
-                                  {monthAbbr}
-                                </span>
-                                <span className="text-base sm:text-lg font-extrabold text-zinc-900 leading-none mt-0.5">
-                                  {formattedDay}
-                                </span>
-                              </div>
-
-                              {/* SVG de la categoría */}
-                              <div className={`w-12 h-12 rounded-xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}>
-                                <CategoryIcon className="w-5 h-5" />
-                              </div>
-
-                              {/* Descripción del gasto y quién pagó */}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center space-x-2">
-                                  <h4 className="font-bold text-zinc-900 text-base truncate group-hover:text-emerald-700 transition-colors">
-                                    {exp.description}
-                                  </h4>
-                                  {exp.source === 'gmail' && (
-                                    <span className="bg-zinc-900 text-white text-[10px] uppercase font-semibold tracking-widest px-2 py-0.5 rounded-md shrink-0">
-                                      AI
-                                    </span>
-                                  )}
-                                </div>
-
-                                {exp.notes && (
-                                  <p className="text-xs text-zinc-600 mt-0.5 flex items-center space-x-1 font-normal">
-                                    <FileText className="w-3 h-3 text-zinc-400 shrink-0" />
-                                    <span className="truncate">{exp.notes}</span>
-                                  </p>
-                                )}
-
-                                <p className="text-xs text-zinc-500 mt-1 font-medium truncate">
-                                  <strong className="text-zinc-800 font-semibold">{payerName}</strong> pagó {formatCurrency(exp.total_amount)}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Participación y Acciones */}
-                            <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100 shrink-0">
-                              <div className="text-right">
-                                {participationElement}
-                              </div>
-
-                              <div className="flex items-center space-x-1 bg-zinc-50 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
-                                {onEditExpense && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onEditExpense(exp)}
-                                    className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                                    title="Editar gasto"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                )}
-
-                                <button
-                                  type="button"
-                                  onClick={() => deleteExpense(exp.id)}
-                                  className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-                                  title="Eliminar gasto"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <GenericExpenseList
+            expenses={filteredExpenses}
+            payments={filteredPayments}
+            profiles={profiles}
+            userGroups={userGroups}
+            currentProfile={currentProfile}
+            groupCurrency={group.currency || 'COP'}
+            onSelectExpense={(exp) => setSelectedExpenseForModal(exp)}
+            onEditExpense={onEditExpense}
+            onDeleteExpense={(expId) => deleteExpense(expId)}
+            showGroupBadge={false}
+          />
         </div>
       )}
 

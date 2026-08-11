@@ -1,14 +1,43 @@
 import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance } from './types';
 
-export function formatCurrency(amount: number): string {
-  const rounded = Math.round(amount);
-  const formatted = new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(rounded);
-  // Replace CLP with $ for cleaner display
-  return formatted.replace('CLP', '$').trim();
+export function formatCurrency(amount: number, currencyCode?: string): string {
+  const num = isNaN(amount) ? 0 : amount;
+  const code = currencyCode && currencyCode.trim() ? currencyCode.trim().toUpperCase() : 'COP';
+
+  const currencySymbols: Record<string, string> = {
+    COP: '$',
+    MXN: '$',
+    CLP: '$',
+    ARS: '$',
+    USD: '$',
+    EUR: '€',
+    PEN: 'S/',
+  };
+
+  const symbol = currencySymbols[code] ?? '$';
+
+  // Check if amount has non-zero fractional part
+  const hasDecimals = Math.abs(num % 1) > 0.001;
+
+  let formattedNumber = '';
+  if (code === 'USD' || code === 'EUR') {
+    formattedNumber = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2,
+    }).format(num);
+  } else {
+    // COP, MXN, CLP, ARS, PEN: dots for thousands, comma for decimals
+    formattedNumber = new Intl.NumberFormat('es-CO', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2,
+    }).format(num);
+  }
+
+  if (code === 'EUR') {
+    return `${formattedNumber} ${symbol}`;
+  }
+
+  return `${symbol} ${formattedNumber}`;
 }
 
 export function calculatePairwiseBalances(

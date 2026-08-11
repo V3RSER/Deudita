@@ -21,6 +21,7 @@ export interface Profile {
   timezone?: string;
   currency?: string;
   currency_symbol?: string;
+  payment_instructions?: string;
   created_at: string;
 }
 
@@ -29,6 +30,7 @@ export interface Group {
   name: string;
   description?: string;
   category: GroupCategory;
+  currency?: string;
   owner_id: string;
   created_at: string;
   image_url?: string;
@@ -129,6 +131,7 @@ export interface Payment {
   amount: number;
   payment_date: string;
   note?: string;
+  proof_url?: string;
   created_at: string;
 }
 

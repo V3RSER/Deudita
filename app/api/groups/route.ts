@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Cuerpo de la petición inválido' }, { status: 400 });
     }
 
-    const { name, category, description, emails, imageUrl, memberIds } = body;
+    const { name, category, description, emails, imageUrl, memberIds, currency } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json({ error: 'El nombre del grupo es requerido' }, { status: 400 });
@@ -79,15 +79,20 @@ export async function POST(req: Request) {
       finalDesc = finalDesc ? `${finalDesc} [img:${imageUrl.trim()}]` : `[img:${imageUrl.trim()}]`;
     }
 
+    const groupInsertObj: Record<string, any> = {
+      name: name.trim(),
+      category: typeof category === 'string' && category.trim().length > 0 ? category.trim() : 'home',
+      description: finalDesc ? finalDesc : null,
+      owner_id: user.id,
+    };
+    if (currency) {
+      groupInsertObj.currency = currency;
+    }
+
     // Insert group matching database schema: name, category, description, owner_id
     const { data: group, error: groupErr } = await supabase
       .from('groups')
-      .insert({
-        name: name.trim(),
-        category: typeof category === 'string' && category.trim().length > 0 ? category.trim() : 'home',
-        description: finalDesc ? finalDesc : null,
-        owner_id: user.id,
-      })
+      .insert(groupInsertObj)
       .select()
       .single();
 

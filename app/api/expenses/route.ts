@@ -13,9 +13,11 @@ export async function POST(req: Request) {
 
     const { expense, items, splits } = await req.json();
 
+    const rawGroupId = expense.group_id && expense.group_id !== 'none' ? expense.group_id : null;
+
     // Build insert payload
     const expenseInsertPayload: Record<string, any> = {
-      group_id: expense.group_id,
+      group_id: rawGroupId,
       paid_by: expense.paid_by,
       total_amount: expense.total_amount,
       description: expense.description,
@@ -39,6 +41,41 @@ export async function POST(req: Request) {
       .insert(expenseInsertPayload)
       .select()
       .single();
+
+    // Fallback if null group_id violates DB constraint (group_id not null)
+    if (expErr && (expErr.message?.includes('group_id') || expErr.code === '23502')) {
+      console.warn('[API /api/expenses] group_id is null error, finding or creating Gastos Personales group...');
+      let { data: personalGroup } = await supabase
+        .from('groups')
+        .select('id')
+        .eq('created_by', user.id)
+        .eq('name', 'Gastos Personales')
+        .maybeSingle();
+
+      if (!personalGroup) {
+        const { data: createdGroup } = await supabase
+          .from('groups')
+          .insert({ name: 'Gastos Personales', created_by: user.id, currency: 'COP' })
+          .select('id')
+          .single();
+
+        if (createdGroup) {
+          personalGroup = createdGroup;
+          await supabase.from('group_members').insert({ group_id: createdGroup.id, user_id: user.id, role: 'admin' });
+        }
+      }
+
+      if (personalGroup) {
+        expenseInsertPayload.group_id = personalGroup.id;
+        const retryRes = await supabase
+          .from('expenses')
+          .insert(expenseInsertPayload)
+          .select()
+          .single();
+        newExpense = retryRes.data;
+        expErr = retryRes.error;
+      }
+    }
 
     // Fallback if category or notes column is missing in schema cache
     if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes'))) {

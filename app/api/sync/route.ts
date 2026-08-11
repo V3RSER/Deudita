@@ -123,14 +123,38 @@ export async function GET() {
 
     // 6. Expenses
     let expenses: any[] = [];
+    const expenseIdsSeen = new Set<string>();
+
     if (userGroupIds.length > 0) {
       const { data: expenseData } = await db
         .from('expenses')
         .select('*, items:expense_items(*), splits:expense_splits(*)')
         .in('group_id', userGroupIds)
         .order('created_at', { ascending: false });
-      expenses = expenseData || [];
+
+      (expenseData || []).forEach((e) => {
+        expenseIdsSeen.add(e.id);
+        expenses.push(e);
+      });
     }
+
+    // Also fetch personal/unassigned expenses created or paid by user
+    const { data: personalExpenses } = await db
+      .from('expenses')
+      .select('*, items:expense_items(*), splits:expense_splits(*)')
+      .or(`created_by.eq.${user.id},paid_by.eq.${user.id}`)
+      .order('created_at', { ascending: false });
+
+    if (personalExpenses) {
+      personalExpenses.forEach((e) => {
+        if (!expenseIdsSeen.has(e.id)) {
+          expenseIdsSeen.add(e.id);
+          expenses.push(e);
+        }
+      });
+    }
+
+    expenses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // 7. Payments
     let payments: any[] = [];

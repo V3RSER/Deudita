@@ -22,6 +22,7 @@ import {
   Trash2,
   Loader2,
   Calculator,
+  UserPlus,
 } from 'lucide-react';
 
 interface CreateGroupModalProps {
@@ -118,6 +119,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<GroupCategory>('friends');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(currentProfile?.currency || 'COP');
   const [groupImageUrl, setGroupImageUrl] = useState<string>('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [newFriendName, setNewFriendName] = useState('');
@@ -205,7 +207,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
     try {
       const finalAvatar = groupImageUrl.trim() ? groupImageUrl.trim() : DEFAULT_GROUP_IMAGE;
 
-      const newGroup = await createGroup(groupName, category, '', [], finalAvatar, selectedMemberIds);
+      const newGroup = await createGroup(groupName, category, '', [], finalAvatar, selectedMemberIds, selectedCurrency);
       
       setName('');
       setGroupImageUrl('');
@@ -268,6 +270,26 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
               placeholder="Ej: Viaje Cancún 2026, Arriendo Dpto, Asado Fin de Semana"
               className="w-full px-4 py-3.5 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
             />
+          </div>
+
+          {/* Moneda del Grupo */}
+          <div>
+            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2">
+              Moneda del Grupo
+            </label>
+            <select
+              value={selectedCurrency}
+              onChange={(e) => setSelectedCurrency(e.target.value)}
+              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+            >
+              <option value="COP">COP - Peso Colombiano ($)</option>
+              <option value="MXN">MXN - Peso Mexicano ($)</option>
+              <option value="CLP">CLP - Peso Chileno ($)</option>
+              <option value="ARS">ARS - Peso Argentino ($)</option>
+              <option value="USD">USD - Dólar Estadounidense ($)</option>
+              <option value="EUR">EUR - Euro (€)</option>
+              <option value="PEN">PEN - Sol Peruano (S/)</option>
+            </select>
           </div>
 
           {/* 2. Foto del Grupo (Opcional) */}
@@ -347,10 +369,78 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
             </div>
           </div>
 
-          {/* 3. Tipo de Grupo (con Gráficos Representativos) */}
+          {/* 3. Integrantes del Grupo (Elegir de mis Amigos) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                3. Integrantes del Grupo
+              </label>
+              <span className="text-[11px] font-medium text-zinc-500">
+                {selectedMemberIds.length} amigo(s) seleccionado(s)
+              </span>
+            </div>
+
+            {/* Quick Add Friend on the fly */}
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={newFriendName}
+                onChange={(e) => setNewFriendName(e.target.value)}
+                placeholder="Escribir nombre de un nuevo amigo..."
+                className="flex-1 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all placeholder:text-zinc-400"
+              />
+              <button
+                type="button"
+                onClick={handleAddNewFriendOnTheFly}
+                disabled={isAddingNewFriend || !newFriendName.trim()}
+                className="px-3.5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-all shrink-0"
+              >
+                {isAddingNewFriend ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                )}
+                <span>Añadir</span>
+              </button>
+            </div>
+
+            {/* Friend List Selection Pills */}
+            {availableFriends.length > 0 ? (
+              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-zinc-50/70 border border-zinc-200/80 rounded-2xl p-2.5">
+                {availableFriends.map((friend) => {
+                  const isSelected = selectedMemberIds.includes(friend.id);
+                  return (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      onClick={() => toggleSelectFriend(friend.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center space-x-1.5 border ${
+                        isSelected
+                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                          : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300'
+                      }`}
+                    >
+                      <span>{friend.full_name || friend.email || 'Amigo'}</span>
+                      {isSelected ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <UserPlus className="w-3.5 h-3.5 text-zinc-400" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400 italic">
+                Aún no tienes amigos guardados. Escribe un nombre arriba para añadir a tu primer amigo.
+              </p>
+            )}
+          </div>
+
+          {/* 4. Tipo de Grupo (con Gráficos Representativos) */}
           <div>
             <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-3">
-              3. Tipo de Grupo
+              4. Tipo de Grupo
             </label>
 
             <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto p-1">

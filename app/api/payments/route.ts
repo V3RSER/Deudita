@@ -11,18 +11,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { group_id, paid_by, paid_to, amount, payment_date, note } = await req.json();
+    const { group_id, paid_by, paid_to, amount, payment_date, note, proof_url } = await req.json();
+
+    const insertData: Record<string, any> = {
+      group_id,
+      paid_by,
+      paid_to,
+      amount,
+      payment_date,
+      note,
+    };
+    if (proof_url) {
+      insertData.proof_url = proof_url;
+    }
 
     const { data: payment, error } = await supabase
       .from('payments')
-      .insert({
-        group_id,
-        paid_by,
-        paid_to,
-        amount,
-        payment_date,
-        note
-      })
+      .insert(insertData)
       .select()
       .single();
 
