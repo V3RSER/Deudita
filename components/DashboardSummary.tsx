@@ -77,7 +77,7 @@ export function DashboardSummary({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 relative z-10">
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Te deben en total
+              Te deben
             </span>
             <div className="flex items-center space-x-2 mt-2">
               <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -89,7 +89,7 @@ export function DashboardSummary({
 
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Debes en total
+              Debes
             </span>
             <div className="flex items-center space-x-2 mt-2">
               <TrendingDown className="w-5 h-5 text-rose-400 shrink-0" />
@@ -101,7 +101,7 @@ export function DashboardSummary({
 
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Balance Neto
+              Balance neto
             </span>
             <div className="flex items-center space-x-2 mt-2">
               <ArrowRightLeft className="w-5 h-5 text-zinc-300 shrink-0" />
@@ -130,7 +130,7 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Nuevo Gasto</p>
-            <p className="text-xs text-zinc-500">Añadir un gasto al grupo</p>
+            <p className="text-xs text-zinc-500">Añadir gasto</p>
           </div>
         </button>
 
@@ -143,7 +143,7 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Saldar Cuenta</p>
-            <p className="text-xs text-zinc-500">Registrar transferencia</p>
+            <p className="text-xs text-zinc-500">Registrar pago</p>
           </div>
         </button>
 
@@ -156,7 +156,7 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Escanear Ticket</p>
-            <p className="text-xs text-zinc-500">Desglosa foto de boleta</p>
+            <p className="text-xs text-zinc-500">Desglosar comprobante</p>
           </div>
         </button>
 
@@ -169,7 +169,7 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Ver Balances</p>
-            <p className="text-xs text-zinc-500">Cuentas por cobrar y pagar</p>
+            <p className="text-xs text-zinc-500">Balances generales</p>
           </div>
         </Link>
 
@@ -182,7 +182,7 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Historial Gastos</p>
-            <p className="text-xs text-zinc-500">Revisar todos los comprobantes</p>
+            <p className="text-xs text-zinc-500">Todos los comprobantes</p>
           </div>
         </Link>
       </div>

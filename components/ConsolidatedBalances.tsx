@@ -48,13 +48,13 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
         <div className="relative z-10">
           <div className="flex items-center space-x-3 text-zinc-400 font-semibold text-[10px] uppercase tracking-widest mb-3">
             <Wallet className="w-4 h-4 text-zinc-300" />
-            <span>Vista Consolidada Global</span>
+            <span>Vista Consolidada</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50">
-            Balances Cuentas Claras
+            Balances
           </h1>
-          <p className="text-zinc-400 text-base mt-3 max-w-2xl leading-relaxed">
-            Resumen consolidado de todas tus deudas y cobros pendientes sumando todos los grupos en los que participas.
+          <p className="text-zinc-400 text-base mt-2 max-w-2xl leading-relaxed">
+            Resumen de cobros y pagos de tus grupos.
           </p>
         </div>
 
@@ -64,7 +64,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-6 relative overflow-hidden">
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500/50"></div>
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest block">
-              Te Deben en Total
+              Te deben
             </span>
             <div className="flex items-center space-x-2.5 mt-2">
               <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -78,7 +78,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-6 relative overflow-hidden">
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500/50"></div>
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest block">
-              Debes en Total
+              Debes
             </span>
             <div className="flex items-center space-x-2.5 mt-2">
               <TrendingDown className="w-5 h-5 text-rose-400 shrink-0" />
@@ -92,7 +92,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
           <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-6 relative overflow-hidden">
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-zinc-500/50"></div>
             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest block">
-              Balance Neto Total
+              Balance neto
             </span>
             <div className="flex items-center space-x-2.5 mt-2">
               <ArrowRightLeft className="w-5 h-5 text-zinc-300 shrink-0" />
@@ -114,7 +114,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
       <div className="space-y-5">
         <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
           <TrendingUp className="w-5 h-5 text-emerald-500" />
-          <span>Personas que te deben dinero <span className="text-zinc-400 font-normal">({myOwedToMe.length})</span></span>
+          <span>Por cobrar</span>
         </h2>
 
         {myOwedToMe.length === 0 ? (
@@ -171,7 +171,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
       <div className="space-y-5 pt-6">
         <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
           <TrendingDown className="w-5 h-5 text-rose-500" />
-          <span>Personas a las que les debes dinero <span className="text-zinc-400 font-normal">({myIOwe.length})</span></span>
+          <span>Por pagar</span>
         </h2>
 
         {myIOwe.length === 0 ? (
@@ -228,13 +228,13 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
       <div className="space-y-5 pt-6">
         <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
           <Users className="w-5 h-5 text-zinc-600" />
-          <span>Todas las Cuentas entre Terceros</span>
+          <span>Saldos entre integrantes</span>
         </h2>
 
         {consolidatedPairwise.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 ring-1 ring-zinc-200 text-center">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-            <h3 className="font-semibold text-zinc-900 text-lg tracking-tight">¡Cero Deudas Pendientes en la Plataforma!</h3>
+            <h3 className="font-semibold text-zinc-900 text-lg tracking-tight">¡Sin deudas pendientes!</h3>
           </div>
         ) : (
           <div className="bg-white rounded-2xl ring-1 ring-zinc-200 divide-y divide-zinc-100 overflow-hidden shadow-sm">
@@ -245,7 +245,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
               >
                 <div className="flex items-center space-x-3">
                   <span className="font-semibold text-zinc-900">{p.debtor.full_name}</span>
-                  <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest">le debe a</span>
+                  <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest">debe a</span>
                   <span className="font-semibold text-zinc-900">{p.creditor.full_name}</span>
                 </div>
 
@@ -272,7 +272,7 @@ export function ConsolidatedBalances({ onOpenSettleModal, onEditPayment }: Conso
       <div className="space-y-5 pt-6">
         <h2 className="text-xl font-semibold text-zinc-900 tracking-tight flex items-center space-x-2">
           <Receipt className="w-5 h-5 text-zinc-600" />
-          <span>Historial de Gastos y Pagos de Deuda</span>
+          <span>Historial de gastos y pagos</span>
         </h2>
         <GenericExpenseList
           expenses={userExpenses}

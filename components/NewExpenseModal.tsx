@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Expense, ExpenseItem, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
+import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import {
   X,
   Plus,
@@ -949,15 +950,13 @@ export function NewExpenseModal({
                     {/* Amount Field */}
                     <div className="space-y-1">
                       <div className="flex items-center space-x-1 border-b border-emerald-200 focus-within:border-emerald-700 py-1">
-                        <span className="text-2xl sm:text-3xl font-black text-emerald-700">$</span>
-                        <input
-                          type="number"
+                        <FormattedCurrencyInput
                           required
-                          step="any"
                           disabled={useItems}
                           value={totalAmount}
-                          onChange={(e) => {
-                            setTotalAmount(e.target.value);
+                          currency={currencyCode}
+                          onChange={(val) => {
+                            setTotalAmount(val);
                             setValidationError(null);
                           }}
                           placeholder="0"
@@ -979,7 +978,7 @@ export function NewExpenseModal({
                     onChange={(e) => handleGroupSelect(e.target.value)}
                     className="bg-transparent text-xs font-bold text-zinc-900 focus:outline-none cursor-pointer pr-5 appearance-none"
                   >
-                    <option value="none">Sin grupo (Gasto personal / Historial)</option>
+                    <option value="none">Sin grupo</option>
                     {userGroups.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name}
@@ -1006,7 +1005,7 @@ export function NewExpenseModal({
                       const displayName = p.full_name ? p.full_name.split(' ')[0] : (p.email ? p.email.split('@')[0] : 'Usuario');
                       return (
                         <option key={p.id} value={p.id}>
-                          {isCurrent ? `Tú (${displayName})` : displayName}
+                          {isCurrent ? `Tú` : displayName}
                         </option>
                       );
                     })}

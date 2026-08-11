@@ -86,7 +86,7 @@ export function ConfirmDraftModal({
             </div>
             <div>
               <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Confirmar y Asignar Borrador</h2>
-              <p className="text-sm text-zinc-400 mt-1">Gasto detectado por e-mail o scanner AI</p>
+              <p className="text-sm text-zinc-400 mt-1">Gasto detectado automáticamente</p>
             </div>
           </div>
 
@@ -132,7 +132,7 @@ export function ConfirmDraftModal({
           {/* Paid by selection */}
           <div>
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
-              ¿Quién Pagó el Comprobante?
+              ¿Quién pagó?
             </label>
             <select
               value={paidBy}
@@ -141,7 +141,7 @@ export function ConfirmDraftModal({
             >
               {memberProfiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
+                  {p.full_name}
                 </option>
               ))}
             </select>

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
+import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import { Payment } from '@/lib/types';
 import { X, Wallet, ArrowRight, Camera, Loader2, Sparkles, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import Image from 'next/image';
@@ -233,7 +234,7 @@ export function SettleDebtModal({
               paid_to: receiverId,
               amount: payForThisGroup,
               payment_date: paymentDate,
-              note: notes ? `${notes} (Abono distribuido)` : 'Abono distribuido',
+              note: notes ? notes : 'Abono distribuido',
               proof_url: proofUrl || undefined,
             });
 
@@ -250,7 +251,7 @@ export function SettleDebtModal({
             paid_to: receiverId,
             amount: remainingToPay,
             payment_date: paymentDate,
-            note: notes ? `${notes} (Abono extra)` : 'Abono extra',
+            note: notes ? notes : 'Abono extra',
             proof_url: proofUrl || undefined,
           });
         }
@@ -295,7 +296,7 @@ export function SettleDebtModal({
             </div>
             <div>
               <h2 className="text-xl font-bold tracking-tight text-white">
-                {isEditing ? 'Editar Pago / Abono' : 'Saldar Deuda / Registrar Pago'}
+                {isEditing ? 'Editar Pago' : 'Registrar Pago'}
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 {isEditing ? 'Modifica los datos del pago' : isLockedToGroup ? 'Registrando pago en el grupo' : 'Pago distribuido entre grupos'}
@@ -349,7 +350,7 @@ export function SettleDebtModal({
           <div className="bg-zinc-50 p-5 rounded-2xl ring-1 ring-zinc-200 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="w-full sm:flex-1">
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Quien Paga (Deudor)
+                Quien Paga
               </label>
               <select
                 value={payerId}
@@ -368,7 +369,7 @@ export function SettleDebtModal({
 
             <div className="w-full sm:flex-1">
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Quien Recibe (Acreedor)
+                Quien Recibe
               </label>
               <select
                 value={receiverId}
@@ -384,7 +385,7 @@ export function SettleDebtModal({
             </div>
           </div>
 
-          {/* Receiver Payment Instructions Card (¿Cómo pagar?) */}
+          {/* Receiver Payment Instructions Card */}
           {receiverProfile?.payment_instructions && (
             <PaymentInstructionsView instructions={receiverProfile.payment_instructions} />
           )}
@@ -399,18 +400,17 @@ export function SettleDebtModal({
             </div>
           )}
 
-          {/* Amount Input */}
+          {/* Amount Input with Formatted Currency */}
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Monto a Abonar / Saldar ($)
+              Monto
             </label>
-            <input
-              type="number"
+            <FormattedCurrencyInput
               required
-              step="any"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="Ej: 50000"
+              onChange={(val) => setAmount(val)}
+              currency={targetGroup?.currency || 'COP'}
+              placeholder="0"
               className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-xl font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400 placeholder:font-normal"
             />
           </div>
@@ -437,13 +437,13 @@ export function SettleDebtModal({
           {/* Notes Input */}
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Nota o Referencia
+              Nota
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ej: Nequi # 981273, Transferencia Bancolombia"
+              placeholder="Ej: Nequi, Transferencia Bancolombia"
               className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
             />
           </div>
@@ -451,7 +451,7 @@ export function SettleDebtModal({
           {/* Payment Proof / Screenshot Attachment */}
           <div className="space-y-2">
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Comprobante de Pago (Opcional)
+              Comprobante de pago
             </label>
 
             <input
@@ -501,7 +501,7 @@ export function SettleDebtModal({
                 ) : (
                   <Camera className="w-4 h-4 text-zinc-500" />
                 )}
-                <span>{isUploading ? 'Subiendo comprobante...' : 'Adjuntar foto / captura de pago'}</span>
+                <span>{isUploading ? 'Subiendo comprobante...' : 'Adjuntar comprobante'}</span>
               </button>
             )}
           </div>
