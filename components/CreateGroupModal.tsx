@@ -23,6 +23,7 @@ import {
   Loader2,
   Calculator,
   UserPlus,
+  AlertCircle,
 } from 'lucide-react';
 
 interface CreateGroupModalProps {
@@ -228,223 +229,137 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg my-8 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
+      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-zinc-900 text-white p-6 sm:p-8 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Crear Nuevo Grupo</h2>
-              <p className="text-xs text-zinc-400 mt-1">Sigue el flujo rápido para crear tu grupo</p>
-            </div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+          <div className="flex items-center space-x-3">
+            <button type="button" onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+              Crear Nuevo Grupo
+            </h2>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
-          {errorMessage && (
-            <div className="p-3.5 bg-red-50 ring-1 ring-red-200 rounded-xl text-sm text-red-700 font-medium">
-              {errorMessage}
+        {/* Error Banner */}
+        {errorMessage && (
+          <div className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700">
+            <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMessage}
+          </div>
+        )}
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* Nombre y Moneda */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Nombre del Grupo</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ej: Viaje Cancún 2026, Arriendo Dpto"
+                className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
+              />
             </div>
-          )}
 
-          {/* 1. Nombre del Grupo */}
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2">
-              1. Nombre del Grupo
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Viaje Cancún 2026, Arriendo Dpto, Asado Fin de Semana"
-              className="w-full px-4 py-3.5 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
-            />
-          </div>
-
-          {/* Moneda del Grupo */}
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2">
-              Moneda del Grupo
-            </label>
-            <select
-              value={selectedCurrency}
-              onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
-            >
-              <option value="COP">COP - Peso Colombiano ($)</option>
-              <option value="MXN">MXN - Peso Mexicano ($)</option>
-              <option value="CLP">CLP - Peso Chileno ($)</option>
-              <option value="ARS">ARS - Peso Argentino ($)</option>
-              <option value="USD">USD - Dólar Estadounidense ($)</option>
-              <option value="EUR">EUR - Euro (€)</option>
-              <option value="PEN">PEN - Sol Peruano (S/)</option>
-            </select>
-          </div>
-
-          {/* 2. Foto del Grupo (Opcional) */}
-          <div>
-            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-2">
-              2. Foto del Grupo (Opcional)
-            </label>
-
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-
-            <div className="bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-200">
-              {groupImageUrl ? (
-                <div className="flex items-center gap-4 bg-white p-3 rounded-xl ring-1 ring-zinc-200">
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-100 shrink-0 shadow-2xs">
-                    <Image
-                      src={groupImageUrl}
-                      alt="Foto de grupo cargada"
-                      fill
-                      className="object-cover"
-                      unoptimized
-                      referrerPolicy="no-referrer"
-                    />
-                    {isUploading && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-xs font-semibold text-zinc-900">Foto personalizada seleccionada</p>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-zinc-600 hover:text-zinc-900 font-medium underline"
-                      >
-                        Cambiar foto
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGroupImageUrl('')}
-                        className="text-xs text-rose-600 hover:text-rose-700 font-medium underline flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Eliminar</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-2 flex flex-col items-center justify-center text-center space-y-2">
-                  <button
-                    type="button"
-                    disabled={isUploading}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 text-xs font-semibold hover:bg-zinc-100 shadow-2xs flex items-center gap-2 transition-all active:scale-95"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
-                    ) : (
-                      <Camera className="w-4 h-4 text-zinc-600" />
-                    )}
-                    <span>Subir foto personalizada</span>
-                  </button>
-                  <p className="text-[11px] text-zinc-400">
-                    Si no subes una foto, se asignará automáticamente una según el tipo de grupo.
-                  </p>
-                </div>
-              )}
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Moneda Principal</label>
+              <select
+                value={selectedCurrency}
+                onChange={(e) => setSelectedCurrency(e.target.value)}
+                className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
+              >
+                <option value="COP">COP - Peso Colombiano ($)</option>
+                <option value="MXN">MXN - Peso Mexicano ($)</option>
+                <option value="CLP">CLP - Peso Chileno ($)</option>
+                <option value="ARS">ARS - Peso Argentino ($)</option>
+                <option value="USD">USD - Dólar Estadounidense ($)</option>
+                <option value="EUR">EUR - Euro (€)</option>
+                <option value="PEN">PEN - Sol Peruano (S/)</option>
+              </select>
             </div>
           </div>
 
-          {/* 3. Integrantes del Grupo (Elegir de mis Amigos) */}
+          {/* Integrantes */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">
-                3. Integrantes del Grupo
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                Integrantes
               </label>
-              <span className="text-[11px] font-medium text-zinc-500">
-                {selectedMemberIds.length} amigo(s) seleccionado(s)
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                {selectedMemberIds.length} amigo(s)
               </span>
             </div>
 
-            {/* Quick Add Friend on the fly */}
+            {/* Quick Add Friend */}
             <div className="flex items-center gap-2 mb-3">
               <input
                 type="text"
                 value={newFriendName}
                 onChange={(e) => setNewFriendName(e.target.value)}
-                placeholder="Escribir nombre de un nuevo amigo..."
-                className="flex-1 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all placeholder:text-zinc-400"
+                placeholder="Añadir nuevo amigo..."
+                className="flex-1 px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
               />
               <button
                 type="button"
                 onClick={handleAddNewFriendOnTheFly}
                 disabled={isAddingNewFriend || !newFriendName.trim()}
-                className="px-3.5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-all shrink-0"
+                className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 rounded-xl text-sm font-bold disabled:opacity-50 transition-colors shadow-sm"
               >
                 {isAddingNewFriend ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                  'Añadir'
                 )}
-                <span>Añadir</span>
               </button>
             </div>
 
             {/* Friend List Selection Pills */}
-            {availableFriends.length > 0 ? (
-              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-zinc-50/70 border border-zinc-200/80 rounded-2xl p-2.5">
-                {availableFriends.map((friend) => {
-                  const isSelected = selectedMemberIds.includes(friend.id);
-                  return (
-                    <button
-                      key={friend.id}
-                      type="button"
-                      onClick={() => toggleSelectFriend(friend.id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center space-x-1.5 border ${
-                        isSelected
-                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
-                          : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300'
-                      }`}
-                    >
-                      <span>{friend.full_name || friend.email || 'Amigo'}</span>
-                      {isSelected ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <UserPlus className="w-3.5 h-3.5 text-zinc-400" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-400 italic">
-                Aún no tienes amigos guardados. Escribe un nombre arriba para añadir a tu primer amigo.
-              </p>
-            )}
+            <div className="bg-zinc-50 p-3 rounded-2xl border border-zinc-100 max-h-40 overflow-y-auto shadow-inner">
+              {availableFriends.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {availableFriends.map((friend) => {
+                    const isSelected = selectedMemberIds.includes(friend.id);
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => toggleSelectFriend(friend.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center space-x-1.5 border shadow-sm ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-300'
+                        }`}
+                      >
+                        <span>{friend.full_name || friend.email || 'Amigo'}</span>
+                        {isSelected ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (
+                          <UserPlus className="w-3.5 h-3.5 text-zinc-400" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500 italic text-center py-2">
+                  No tienes amigos guardados. Añade uno arriba.
+                </p>
+              )}
+            </div>
           </div>
 
-          {/* 4. Tipo de Grupo (con Gráficos Representativos) */}
+          {/* Tipo de Grupo */}
           <div>
-            <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-3">
-              4. Tipo de Grupo
+            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">
+              Tipo de Grupo
             </label>
-
-            <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto p-1">
+            <div className="grid grid-cols-2 gap-3">
               {CATEGORY_OPTIONS.map((cat) => {
                 const isSelected = category === cat.id;
                 return (
@@ -452,30 +367,18 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
                     key={cat.id}
                     type="button"
                     onClick={() => setCategory(cat.id)}
-                    className={`p-3.5 rounded-2xl ring-1 text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
-                      cat.bgColor
-                    } ${
+                    className={`p-3 rounded-xl border text-left transition-all flex items-center space-x-3 shadow-sm ${
                       isSelected
-                        ? `${cat.borderColor} ring-2 bg-white shadow-md scale-[1.02]`
-                        : 'ring-zinc-200/80 opacity-90 hover:opacity-100 hover:scale-[1.01]'
+                        ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
+                        : 'border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className={`p-2 rounded-xl bg-white shadow-sm ${cat.textColor}`}>
-                        {cat.icon}
-                      </div>
-                      {isSelected && (
-                        <span className="w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center">
-                          <Check className="w-3 h-3" />
-                        </span>
-                      )}
+                    <div className={`p-2 rounded-lg bg-white shadow-sm border border-zinc-100 ${isSelected ? 'text-emerald-600' : 'text-zinc-600'}`}>
+                      {cat.icon}
                     </div>
                     <div>
-                      <p className={`font-semibold text-sm ${cat.textColor}`}>
+                      <p className={`text-sm font-bold ${isSelected ? 'text-emerald-900' : 'text-zinc-700'}`}>
                         {cat.label}
-                      </p>
-                      <p className="text-[11px] text-zinc-500 line-clamp-1 mt-0.5">
-                        {cat.description}
                       </p>
                     </div>
                   </button>
@@ -484,32 +387,68 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
             </div>
           </div>
 
-          {/* 4. Confirmación de Crear el Grupo */}
-          <div className="pt-6 border-t border-zinc-100 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-5 py-3 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors active:scale-95"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !name.trim()}
-              className="px-8 py-3 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-2"
-            >
-              {isSubmitting ? (
-                <span>Creando grupo...</span>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span>Crear Grupo</span>
-                </>
-              )}
-            </button>
+          {/* Foto del Grupo (Opcional) */}
+          <div className="pt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            
+            {groupImageUrl ? (
+               <div className="flex items-center justify-between bg-zinc-50 p-3 rounded-xl border border-zinc-200 shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-zinc-100 shadow-sm">
+                      <Image
+                        src={groupImageUrl}
+                        alt="Foto"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-zinc-900">Foto personalizada</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                     <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-zinc-600 hover:text-zinc-900">
+                        Cambiar
+                     </button>
+                     <button type="button" onClick={() => setGroupImageUrl('')} className="text-xs font-bold text-rose-600 hover:text-rose-700">
+                        Quitar
+                     </button>
+                  </div>
+               </div>
+            ) : (
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center space-x-2 py-3 bg-white border border-zinc-200 hover:bg-zinc-50 rounded-xl text-sm font-semibold text-zinc-600 shadow-sm transition-all"
+              >
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                <span>Añadir foto del grupo (opcional)</span>
+              </button>
+            )}
           </div>
+
         </form>
+
+        {/* Footer Actions */}
+        <div className="p-5 sm:px-6 border-t border-zinc-100 bg-zinc-50/80 flex items-center justify-end rounded-b-[24px]">
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !name.trim()}
+            className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <span>Crear Grupo</span>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -287,76 +287,79 @@ export function SettleDebtModal({
   const targetGroup = userGroups.find((g) => g.id === groupId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-[2.5rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
+      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-zinc-900 text-white p-6 sm:p-8 flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-emerald-400 font-bold shrink-0">
-              <Wallet className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-white">
-                {isEditing ? 'Editar Pago' : 'Registrar Pago'}
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                {isEditing ? 'Modifica los datos del pago' : isLockedToGroup ? 'Registrando pago en el grupo' : 'Pago distribuido entre grupos'}
-              </p>
-            </div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+          <div className="flex items-center space-x-3">
+            <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+              {isEditing ? 'Editar pago' : 'Registrar pago'}
+            </h2>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
+        {/* Error Banner */}
+        {errorMsg && (
+          <div className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700">
+            <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMsg}
+          </div>
+        )}
+
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 max-h-[80vh] overflow-y-auto">
-          {errorMsg && (
-            <div className="p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{errorMsg}</span>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Multi-group Distribution Hint */}
+          {!isLockedToGroup && (
+            <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 text-xs text-emerald-900">
+              <p className="font-bold flex items-center space-x-1.5 mb-1">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                <span>Repartición Automática</span>
+              </p>
+              <p className="text-emerald-800/80 leading-relaxed">
+                El pago se distribuirá de forma automática cubriendo primero los grupos con mayor deuda entre estas personas.
+              </p>
             </div>
           )}
 
-          {/* Group Context Selection or Locked View */}
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-              Grupo de Destino
-            </label>
-            {isLockedToGroup ? (
-              <div className="w-full px-4 py-3 bg-zinc-100 border border-zinc-200 rounded-2xl text-sm font-semibold text-zinc-900 flex items-center justify-between">
-                <span>{targetGroup ? targetGroup.name : 'Grupo Seleccionado'}</span>
-                <span className="text-xs bg-zinc-900 text-white px-2.5 py-0.5 rounded-md font-mono">
-                  {targetGroup?.currency || 'COP'}
-                </span>
-              </div>
-            ) : (
-              <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl text-xs text-emerald-900 space-y-1">
-                <p className="font-bold flex items-center space-x-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>Repartición Automática Multi-Grupo</span>
-                </p>
-                <p className="text-emerald-800 leading-relaxed">
-                  Al saldar desde saldos globales, el pago se distribuirá de forma automática cubriendo primero los grupos con mayor deuda con esta persona.
-                </p>
-              </div>
-            )}
+          {/* Amount Hero */}
+          <div className="text-center py-2">
+            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Monto a pagar</p>
+            <div className="flex items-center justify-center text-5xl font-black text-zinc-900">
+              <FormattedCurrencyInput
+                required
+                value={amount}
+                onChange={(val) => setAmount(val)}
+                currency={targetGroup?.currency || 'COP'}
+                placeholder="0"
+                className="bg-transparent text-center focus:outline-none w-full max-w-[250px] placeholder:text-zinc-200"
+                autoFocus
+              />
+            </div>
           </div>
 
-          {/* Payer & Receiver Pair */}
-          <div className="bg-zinc-50 p-5 rounded-2xl ring-1 ring-zinc-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="w-full sm:flex-1">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Quien Paga
-              </label>
+          {/* Payer & Receiver Pair with Avatars */}
+          <div className="flex items-center justify-between bg-zinc-50 p-2 rounded-2xl border border-zinc-100 relative shadow-inner">
+            {/* Payer */}
+            <div className="flex-1 relative bg-white border border-zinc-200 rounded-xl flex items-center p-2 sm:px-3 sm:py-2.5 shadow-sm overflow-hidden group">
+              {payerProfile?.avatar_url ? (
+                <Image src={payerProfile.avatar_url} alt="Payer" width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" unoptimized />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
+              <div className="ml-2.5 overflow-hidden flex-1">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Quien paga</p>
+                <p className="text-sm font-bold text-zinc-900 truncate">
+                  {payerProfile?.full_name?.split(' ')[0] || payerProfile?.email}
+                </p>
+              </div>
               <select
                 value={payerId}
                 onChange={(e) => setPayerId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border-none ring-1 ring-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:ring-2 focus:ring-zinc-900"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               >
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -366,16 +369,32 @@ export function SettleDebtModal({
               </select>
             </div>
 
-            <ArrowRight className="w-5 h-5 text-zinc-400 shrink-0 hidden sm:block mt-5" />
+            {/* Arrow */}
+            <div className="w-8 flex justify-center shrink-0 z-10 mx-1">
+              <div className="bg-white border border-zinc-200 p-1.5 rounded-full shadow-sm text-zinc-400">
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </div>
 
-            <div className="w-full sm:flex-1">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Quien Recibe
-              </label>
+            {/* Receiver */}
+            <div className="flex-1 relative bg-white border border-zinc-200 rounded-xl flex items-center p-2 sm:px-3 sm:py-2.5 shadow-sm overflow-hidden group">
+              {receiverProfile?.avatar_url ? (
+                <Image src={receiverProfile.avatar_url} alt="Receiver" width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" unoptimized />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
+              <div className="ml-2.5 overflow-hidden flex-1">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Recibe</p>
+                <p className="text-sm font-bold text-zinc-900 truncate">
+                  {receiverProfile?.full_name?.split(' ')[0] || receiverProfile?.email}
+                </p>
+              </div>
               <select
                 value={receiverId}
                 onChange={(e) => setReceiverId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border-none ring-1 ring-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:ring-2 focus:ring-zinc-900"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               >
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -391,36 +410,52 @@ export function SettleDebtModal({
             <PaymentInstructionsView instructions={receiverProfile.payment_instructions} />
           )}
 
-          {/* Total Owed Information */}
-          {totalOwed > 0 && (
-            <div className="flex items-center justify-between text-xs px-1">
-              <span className="text-zinc-500 font-medium">Deuda total calculada:</span>
-              <span className="font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
-                {formatCurrency(totalOwed, targetGroup?.currency || 'COP')}
-              </span>
+          {/* Details / Notes / File */}
+          <div className="space-y-4 pt-2">
+            <div>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Notas (Ej. Transferencia Bancolombia)"
+                className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
+              />
             </div>
-          )}
-
-          {/* Amount Input with Formatted Currency */}
-          <div className="space-y-1.5">
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Monto
-            </label>
-            <FormattedCurrencyInput
-              required
-              value={amount}
-              onChange={(val) => setAmount(val)}
-              currency={targetGroup?.currency || 'COP'}
-              placeholder="0"
-              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-xl font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400 placeholder:font-normal"
+            
+            <div className="flex gap-2">
+               <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex-1 flex items-center justify-center space-x-2 py-3 border rounded-xl text-sm font-semibold transition-all shadow-sm ${proofUrl ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
+              >
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                <span>{proofUrl ? 'Cambiar comprobante' : 'Adjuntar comprobante'}</span>
+              </button>
+              {proofUrl && (
+                <button
+                  type="button"
+                  onClick={() => setProofUrl('')}
+                  className="px-4 py-3 bg-white border border-zinc-200 text-rose-600 hover:bg-rose-50 rounded-xl text-sm font-semibold shadow-sm transition-all"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
             />
           </div>
 
           {/* Multi-group Distribution Breakdown Preview */}
           {!isLockedToGroup && distributionPreview.length > 0 && (
-            <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 space-y-2">
+            <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-4 space-y-2">
               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                Distribución estimada del pago por grupo:
+                Distribución estimada por grupo:
               </p>
               <div className="space-y-1.5">
                 {distributionPreview.map((item, idx) => (
@@ -434,124 +469,30 @@ export function SettleDebtModal({
               </div>
             </div>
           )}
-
-          {/* Notes Input */}
-          <div className="space-y-1.5">
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Nota
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ej: Nequi, Transferencia Bancolombia"
-              className="w-full px-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
-            />
-          </div>
-
-          {/* Payment Proof / Screenshot Attachment */}
-          <div className="space-y-2">
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Comprobante de pago
-            </label>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-
-            {proofUrl ? (
-              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3 rounded-2xl">
-                <div className="flex items-center space-x-3">
-                  <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-white border border-emerald-300 shrink-0">
-                    <Image
-                      src={proofUrl}
-                      alt="Comprobante"
-                      fill
-                      className="object-cover"
-                      unoptimized
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-emerald-900">Comprobante adjuntado</p>
-                    <p className="text-[11px] text-emerald-700">Listo para guardarse con el pago</p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setProofUrl('')}
-                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 underline"
-                >
-                  Quitar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full py-3 px-4 bg-zinc-50 hover:bg-zinc-100 border border-dashed border-zinc-200 rounded-2xl text-xs font-semibold text-zinc-700 flex items-center justify-center space-x-2 transition-all active:scale-98"
-              >
-                {isUploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
-                ) : (
-                  <Camera className="w-4 h-4 text-zinc-500" />
-                )}
-                <span>{isUploading ? 'Subiendo comprobante...' : 'Adjuntar comprobante'}</span>
-              </button>
-            )}
-          </div>
-
-          {/* Submit Actions */}
-          <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
-            {isEditing ? (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting || isSubmitting}
-                className="px-4 py-2.5 rounded-full text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-semibold transition active:scale-95 flex items-center space-x-1.5"
-              >
-                {isDeleting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="w-3.5 h-3.5" />
-                )}
-                <span>Eliminar Pago</span>
-              </button>
-            ) : (
-              <div />
-            )}
-
-            <div className="flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-semibold transition active:scale-95"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || isUploading || numericAmount <= 0}
-                className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                ) : (
-                  <>
-                    <Wallet className="w-4 h-4 text-emerald-400" />
-                    <span>{isEditing ? 'Guardar Cambios' : 'Confirmar Pago'}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
         </form>
+
+        {/* Footer Actions */}
+        <div className="p-5 sm:px-6 border-t border-zinc-100 bg-zinc-50/80 flex items-center justify-between rounded-b-[24px]">
+          {isEditing ? (
+             <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting || isSubmitting}
+              className="p-3 rounded-xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            >
+              {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+            </button>
+          ) : <div />}
+
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting || isUploading || numericAmount <= 0}
+            className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer ml-auto"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <span>{isEditing ? 'Guardar Cambios' : 'Confirmar Pago'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
