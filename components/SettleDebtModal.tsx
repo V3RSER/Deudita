@@ -181,6 +181,7 @@ export function SettleDebtModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMsg(null);
 
     if (isNaN(numericAmount) || numericAmount <= 0) {
@@ -267,7 +268,7 @@ export function SettleDebtModal({
   };
 
   const handleDelete = async () => {
-    if (!paymentToEdit) return;
+    if (!paymentToEdit || isDeleting) return;
     setErrorMsg(null);
     setIsDeleting(true);
     try {

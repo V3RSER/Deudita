@@ -21,7 +21,7 @@ export function AddFriendModal({ isOpen, onClose }: AddFriendModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) return;
+    if (isSubmitting || !fullName.trim()) return;
 
     setIsSubmitting(true);
     setErrorMessage(null);

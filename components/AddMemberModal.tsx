@@ -59,7 +59,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   // Step 1 Submit: Create Temporary Member immediately
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !activeGroupId) return;
+    if (isSubmitting || !name.trim() || !activeGroupId) return;
 
     try {
       setIsSubmitting(true);
@@ -81,7 +81,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
   // Add friend directly from suggestions
   const handleSelectFriend = async (friend: Profile) => {
-    if (!activeGroupId) return;
+    if (isSubmitting || !activeGroupId) return;
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
@@ -109,7 +109,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   // Step 2: Send Email Invite
   const handleSendEmailInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !activeGroupId) return;
+    if (isSubmitting || !email.trim() || !activeGroupId) return;
 
     try {
       setIsSubmitting(true);

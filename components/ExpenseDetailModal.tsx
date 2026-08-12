@@ -85,6 +85,7 @@ export function ExpenseDetailModal({
   const IconComponent = catConfig.icon;
 
   const handleDelete = async () => {
+    if (isDeleting) return;
     setIsDeleting(true);
     try {
       await deleteExpense(expense.id);

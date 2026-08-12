@@ -108,6 +108,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving || isUploading) return;
     try {
       setIsSaving(true);
       setErrorMsg(null);

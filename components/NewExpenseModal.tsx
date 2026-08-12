@@ -206,6 +206,7 @@ export function NewExpenseModal({
   const [expenseDate, setExpenseDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // File input reference for direct image upload
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -718,7 +719,11 @@ export function NewExpenseModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isSubmitting) return;
+
     if (!validateSplitOptions()) return;
+
+    setIsSubmitting(true);
 
     const effectiveGroupId = isNoGroup ? null : groupId;
     const effectivePaidBy =
@@ -821,6 +826,8 @@ export function NewExpenseModal({
     } catch (err: unknown) {
       console.error('Error guardando gasto:', err);
       setValidationError(err instanceof Error ? err.message : 'Error al guardar el gasto.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1797,10 +1804,20 @@ export function NewExpenseModal({
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  className="px-8 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-md transition-all active:scale-95 flex items-center space-x-2"
+                  disabled={isSubmitting}
+                  className="px-8 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-md transition-all active:scale-95 flex items-center space-x-2 disabled:opacity-50"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{isEditing ? 'Guardar Cambios' : 'Confirmar y Guardar'}</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{isEditing ? 'Guardar Cambios' : 'Confirmar y Guardar'}</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -1851,20 +1868,8 @@ export function NewExpenseModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  setShowDiscrepancyModal(false);
-                  setSplitType('itemized');
-                  setStep(4);
-                }}
-                className="w-full py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Mantener total de {formatCurrency(numericTotal, currencyCode)} y continuar
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setShowDiscrepancyModal(false)}
-                className="w-full py-2 px-4 text-zinc-500 hover:text-zinc-800 font-bold text-xs transition-colors cursor-pointer"
+                className="w-full py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
                 Ajustar artículos
               </button>

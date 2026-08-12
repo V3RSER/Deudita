@@ -39,6 +39,8 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     setError(null);
 

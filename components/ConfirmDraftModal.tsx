@@ -38,6 +38,7 @@ export function ConfirmDraftModal({
     return currentProfile?.id ?? '';
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen || !draft) return null;
@@ -47,8 +48,10 @@ export function ConfirmDraftModal({
     .map((m) => profiles.find((p) => p.id === m.user_id))
     .filter((p): p is NonNullable<typeof p> => p !== undefined);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setErrorMsg(null);
 
     if (!selectedGroupId) {
@@ -61,18 +64,25 @@ export function ConfirmDraftModal({
       return;
     }
 
-    // Default equal split among selected group members
-    const share = draft.detected_amount / memberProfiles.length;
-    const splits: ExpenseSplit[] = memberProfiles.map((p) => ({
-      id: '',
-      expense_id: '',
-      user_id: p.id,
-      amount_owed: Math.round(share * 100) / 100,
-      created_at: new Date().toISOString(),
-    }));
+    setIsSubmitting(true);
+    try {
+      // Default equal split among selected group members
+      const share = draft.detected_amount / memberProfiles.length;
+      const splits: ExpenseSplit[] = memberProfiles.map((p) => ({
+        id: '',
+        expense_id: '',
+        user_id: p.id,
+        amount_owed: Math.round(share * 100) / 100,
+        created_at: new Date().toISOString(),
+      }));
 
-    confirmDraft(draft.id, selectedGroupId, paidBy, splits);
-    onClose();
+      await confirmDraft(draft.id, selectedGroupId, paidBy, splits);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error al confirmar borrador');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -163,10 +173,11 @@ export function ConfirmDraftModal({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 flex items-center space-x-2"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 flex items-center space-x-2 disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Confirmar Gasto</span>
+              <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}</span>
             </button>
           </div>
         </form>
