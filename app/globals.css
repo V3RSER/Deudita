@@ -1,5 +1,49 @@
 @import "tailwindcss";
 
+/* Base button, clickable elements, and interactive reset for pointer cursor & hover feedback */
+@layer base {
+  button,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  select,
+  summary,
+  a {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input[type="button"]:disabled,
+  input[type="submit"]:disabled,
+  input[type="reset"]:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Fallback base styles for standard elements */
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover:not(:disabled),
+[role="button"]:hover:not([aria-disabled="true"]),
+input[type="button"]:hover:not(:disabled),
+input[type="submit"]:hover:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Remove arrow/spin buttons from all number inputs */
 input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button {
@@ -11,3 +55,4 @@ input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
