@@ -104,11 +104,11 @@ export async function GET() {
     if (!profile) {
       const meta = user.user_metadata ?? {};
       const fullName = meta.full_name ?? meta.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
-      const avatarUrl = meta.avatar_url ?? meta.picture ?? '';
+      const avatarUrl = meta.avatar_url ?? meta.picture ?? null;
       
       const newProf = {
         id: user.id,
-        email: user.email ?? '',
+        email: user.email ?? null,
         full_name: fullName,
         avatar_url: avatarUrl,
         is_temp: false,
@@ -182,10 +182,15 @@ export async function GET() {
       .order('created_at', { ascending: false });
 
     // 10. Pending invites for user (by profile id or email)
+    const userEmailLower = user.email ? user.email.toLowerCase() : null;
+    const inviteFilter = userEmailLower
+      ? `invitee_profile_id.eq.${user.id},email.eq.${userEmailLower}`
+      : `invitee_profile_id.eq.${user.id}`;
+
     const { data: inviteData } = await db
       .from('group_invites')
       .select('*, groups(name)')
-      .or(`invitee_profile_id.eq.${user.id},email.eq.${user.email?.toLowerCase() || ''}`)
+      .or(inviteFilter)
       .eq('status', 'pending');
 
     const pendingInvites = (inviteData || []).map((inv: any) => ({

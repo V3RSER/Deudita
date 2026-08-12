@@ -1,6 +1,6 @@
 import { Group, GroupCategory, Expense, Payment } from './types';
 
-export const DEFAULT_GROUP_IMAGES: Record<GroupCategory, string> = {
+const DEFAULT_GROUP_IMAGES: Record<GroupCategory, string> = {
   trip: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
   home: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
   couple: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600&auto=format&fit=crop&q=80',

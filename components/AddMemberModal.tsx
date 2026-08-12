@@ -18,7 +18,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   
   // Step 1 = Add Name, Step 2 = How to Invite
   const [step, setStep] = useState<1 | 2>(1);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId || userGroups[0]?.id || '');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId ?? userGroups[0]?.id ?? '');
   const [name, setName] = useState('');
   const [addedMemberName, setAddedMemberName] = useState('');
   const [addedMemberId, setAddedMemberId] = useState<string | null>(null);
@@ -348,9 +348,9 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
               <button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
-                className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
+                className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
               >
-                <span>Añadir como Nuevo Integrante</span>
+                <span>Añadir Integrante</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
@@ -422,7 +422,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                     ) : (
                       <>
                         <LinkIcon className="w-4 h-4 text-zinc-600" />
-                        <span>Copiar Enlace de Invitación</span>
+                        <span>Copiar Enlace</span>
                       </>
                     )}
                   </button>
@@ -432,10 +432,10 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                       type="button"
                       onClick={handleNativeShare}
                       disabled={isSubmitting}
-                      className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-700 py-2 px-4 rounded-xl text-xs font-medium border border-zinc-200 transition-all active:scale-95"
+                      className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 py-2 px-4 rounded-xl text-xs font-medium border border-zinc-200 transition-all duration-200 active:scale-95"
                     >
                       <Share2 className="w-3.5 h-3.5" />
-                      <span>Más opciones de compartir</span>
+                      <span>Compartir</span>
                     </button>
                   )}
                 </div>
@@ -445,9 +445,9 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                 <button
                   type="button"
                   onClick={handleResetAndClose}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition-all active:scale-95"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95"
                 >
-                  Listo / Finalizar
+                  Finalizar
                 </button>
               </div>
             </div>

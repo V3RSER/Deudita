@@ -184,7 +184,7 @@ export async function POST(req: Request) {
           to: targetEmail,
           groupName: group.name,
           inviterName,
-          inviterEmail: user.email || '',
+          inviterEmail: user.email ?? 'soporte@deudita.app',
           inviteUrl,
         });
       } catch (e) {

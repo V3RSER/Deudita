@@ -35,7 +35,7 @@ export function ConfirmDraftModal({
       if (inGroup && currentProfile) return currentProfile.id;
       return activeMemberProfiles[0].id;
     }
-    return currentProfile?.id || '';
+    return currentProfile?.id ?? '';
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -157,16 +157,16 @@ export function ConfirmDraftModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 text-sm font-medium transition-colors active:scale-95"
+              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 text-sm font-medium transition-all duration-200 active:scale-95"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm transition-all active:scale-95 flex items-center space-x-2"
+              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 flex items-center space-x-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Confirmar y Agregar Gasto</span>
+              <span>Confirmar Gasto</span>
             </button>
           </div>
         </form>

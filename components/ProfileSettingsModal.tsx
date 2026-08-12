@@ -35,11 +35,11 @@ const CURRENCY_OPTIONS = [
 export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalProps) {
   const { currentProfile, updateProfile } = useExpense();
 
-  const [fullName, setFullName] = useState(currentProfile?.full_name || '');
-  const [timezone, setTimezone] = useState(currentProfile?.timezone || 'America/Mexico_City');
-  const [selectedCurrency, setSelectedCurrency] = useState(currentProfile?.currency || 'COP');
-  const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions || '');
-  const [avatarUrl, setAvatarUrl] = useState(currentProfile?.avatar_url || '');
+  const [fullName, setFullName] = useState(currentProfile?.full_name ?? '');
+  const [timezone, setTimezone] = useState(currentProfile?.timezone ?? 'America/Mexico_City');
+  const [selectedCurrency, setSelectedCurrency] = useState(currentProfile?.currency ?? 'COP');
+  const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(currentProfile?.avatar_url ?? '');
 
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,11 +55,11 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
   if ((currentProfile !== prevProfile || isOpen !== prevIsOpen) && currentProfile && isOpen) {
     setPrevProfile(currentProfile);
     setPrevIsOpen(isOpen);
-    setFullName(currentProfile.full_name || '');
-    setTimezone(currentProfile.timezone || 'America/Mexico_City');
-    setSelectedCurrency(currentProfile.currency || 'COP');
-    setPaymentInstructions(currentProfile.payment_instructions || '');
-    setAvatarUrl(currentProfile.avatar_url || '');
+    setFullName(currentProfile.full_name ?? '');
+    setTimezone(currentProfile.timezone ?? 'America/Mexico_City');
+    setSelectedCurrency(currentProfile.currency ?? 'COP');
+    setPaymentInstructions(currentProfile.payment_instructions ?? '');
+    setAvatarUrl(currentProfile.avatar_url ?? '');
   }
 
   if (!isOpen || !currentProfile) return null;
@@ -313,21 +313,21 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-semibold transition active:scale-95"
+              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 text-xs font-semibold transition-all duration-200 active:scale-95"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSaving || isUploading}
-              className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-2"
+              className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-full text-xs font-semibold shadow-md hover:shadow-lg transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center space-x-2"
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Guardar Cambios</span>
+                  <span>Guardar</span>
                 </>
               )}
             </button>

@@ -66,8 +66,8 @@ export function MemberDetailModal({
 
   if (memberProfile && memberProfile.id !== prevProfileId) {
     setPrevProfileId(memberProfile.id);
-    setName(memberProfile.full_name || '');
-    const rawEmail = memberProfile.email || '';
+    setName(memberProfile.full_name ?? '');
+    const rawEmail = memberProfile.email ?? '';
     setEmail(isTempEmail(rawEmail) ? '' : rawEmail);
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -383,10 +383,10 @@ export function MemberDetailModal({
               <button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
-                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-1.5"
+                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Guardar Cambios</span>
+                <span>Guardar</span>
               </button>
             )}
           </form>
@@ -422,10 +422,10 @@ export function MemberDetailModal({
                   type="button"
                   onClick={handleResendInvite}
                   disabled={isSubmitting || !email.trim()}
-                  className="w-full flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-semibold shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Reenviar Correo</span>
+                  <span>Reenviar</span>
                 </button>
               </div>
             </div>
@@ -437,10 +437,10 @@ export function MemberDetailModal({
               <Link
                 href={`/friends/${memberProfile.id}`}
                 onClick={onClose}
-                className="w-full flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
               >
                 <Eye className="w-3.5 h-3.5 text-zinc-600" />
-                <span>Ver Perfil Completo en Amigos</span>
+                <span>Ver Perfil Completo</span>
               </Link>
             </div>
           )}

@@ -201,14 +201,6 @@ export function GroupDetail({
               <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight truncate">
                 {group.name}
               </h1>
-              <p className="text-zinc-500 text-sm font-medium mt-1 flex items-center space-x-1.5">
-                <Users className="w-4 h-4 text-zinc-400 shrink-0" />
-                <span>
-                  {memberProfiles.length === 1
-                    ? '1 persona'
-                    : `${memberProfiles.length} personas en este grupo`}
-                </span>
-              </p>
             </div>
           </div>
 
@@ -367,10 +359,6 @@ export function GroupDetail({
       {/* TAB CONTENT: Balances */}
       {activeTab === 'balances' && (
         <div className="space-y-6">
-          <div className="bg-zinc-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-md flex items-center justify-between">
-            <h3 className="text-xl font-semibold tracking-tight text-zinc-50">Cuentas Claras en {group.name}</h3>
-          </div>
-
           {groupPairwise.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 ring-1 ring-zinc-200 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />

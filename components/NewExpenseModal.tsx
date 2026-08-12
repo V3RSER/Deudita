@@ -238,8 +238,9 @@ export function NewExpenseModal({
   // Additional selected friends for "Sin grupo" personal expense
   const [extraFriendIds, setExtraFriendIds] = useState<string[]>([]);
 
-  // Validation error banner
+  // Validation error banner and popup modal
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState<boolean>(false);
 
   // Determine effective group and member profiles
   const isNoGroup = !groupId || groupId === 'none';
@@ -272,6 +273,7 @@ export function NewExpenseModal({
   if (isOpen && (!lastModalState.isOpen || lastModalState.expenseId !== currentExpenseId)) {
     setLastModalState({ isOpen: true, expenseId: currentExpenseId });
     setValidationError(null);
+    setShowDiscrepancyModal(false);
     setShowCategoryPicker(false);
 
     if (expenseToEdit) {
@@ -698,14 +700,9 @@ export function NewExpenseModal({
       }
     }
 
-    // Check if items sum matches numericTotal
+    // Check if items sum matches numericTotal - open modal if discrepancy exists
     if (numericTotal > 0 && Math.abs(itemsSum - numericTotal) > 0.05) {
-      setValidationError(
-        `La suma de los artículos (${formatCurrency(itemsSum, currencyCode)}) no coincide con el monto total (${formatCurrency(
-          numericTotal,
-          currencyCode
-        )}). Puedes actualizar el monto total arriba o ajustar los artículos.`
-      );
+      setShowDiscrepancyModal(true);
       return;
     }
 
@@ -713,6 +710,7 @@ export function NewExpenseModal({
       setTotalAmount(String(itemsSum));
     }
 
+    setSplitType('itemized');
     setStep(4); // Go to split/summary step
   };
 
@@ -1314,179 +1312,259 @@ export function NewExpenseModal({
           {flowType === 'invoice' && step === 3 && (
             <div className="space-y-6 animate-fadeIn">
               
-              {/* Sub-tabs for Invoice: 1. Artículos | 2. Asignación */}
-              <div className="flex items-center bg-zinc-100 p-1.5 rounded-2xl border border-zinc-200">
-                <button
-                  type="button"
-                  onClick={() => setItemsTab('items')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                    itemsTab === 'items'
-                      ? 'bg-white text-zinc-900 shadow-2xs'
-                      : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
-                >
-                  <ShoppingCart className="w-4 h-4 text-emerald-700" />
-                  <span>1. Cargar Ítems de la Factura</span>
-                </button>
+              {/* Header for Items */}
+              <div className="flex items-center justify-between bg-zinc-50 p-3.5 rounded-2xl border border-zinc-200">
+                <div className="flex items-center space-x-2">
+                  <ShoppingCart className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <div>
+                    <h3 className="text-xs font-bold text-zinc-900">Cargar Artículos de la Factura</h3>
+                    <p className="text-[11px] text-zinc-500">
+                      Ingresa cada producto con su cantidad y precio
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  Suma: {formatCurrency(itemsSum, currencyCode)}
+                </span>
+              </div>
 
+              {/* LISTA DE ARTÍCULOS */}
+              <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                {items.map((item, idx) => {
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-white p-3.5 rounded-2xl border border-zinc-200 shadow-2xs space-y-3 hover:border-emerald-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <input
+                          type="text"
+                          placeholder={`Artículo #${idx + 1} (ej: Pizza, Bebidas, Postre)`}
+                          value={item.description}
+                          onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
+                          className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
+                        />
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItemRow(idx)}
+                            className="p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title="Eliminar ítem"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500 block mb-1">
+                            Cantidad
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="any"
+                            placeholder="1"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-bold text-zinc-900 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500 block mb-1">
+                            Precio unitario
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="0"
+                            value={item.unitPrice}
+                            onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-emerald-800 block mb-1">
+                            Precio total
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="0"
+                            value={item.amount}
+                            onChange={(e) => handleItemChange(idx, 'amount', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-emerald-50/60 border border-emerald-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-black text-emerald-900 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-start pt-1">
                 <button
                   type="button"
-                  onClick={() => setItemsTab('assignment')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                    itemsTab === 'assignment'
-                      ? 'bg-emerald-700 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:text-zinc-900'
-                  }`}
+                  onClick={handleAddItemRow}
+                  className="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer bg-white px-3.5 py-2 rounded-xl border border-emerald-200 shadow-2xs hover:bg-emerald-50/50 transition-colors"
                 >
-                  <Users className="w-4 h-4" />
-                  <span>2. Asignar por Persona</span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Añadir otro artículo</span>
                 </button>
               </div>
 
-              {/* WARNING BANNER: IF ITEMS SUM DOES NOT MATCH INPUT TOTAL AMOUNT */}
-              {itemsSum > 0 && numericTotal > 0 && Math.abs(itemsSum - numericTotal) > 0.05 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start space-x-3 text-amber-900 text-xs animate-fadeIn">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 space-y-2">
-                    <p className="font-bold">
-                      La suma de los artículos ({formatCurrency(itemsSum, currencyCode)}) no coincide con el monto total ingresado ({formatCurrency(numericTotal, currencyCode)}).
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTotalAmount(String(itemsSum));
-                        setValidationError(null);
-                      }}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer inline-flex items-center space-x-1"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Actualizar monto total a {formatCurrency(itemsSum, currencyCode)}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* STEP 3 NEXT BUTTON */}
+              <div className="pt-4 border-t border-zinc-100 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="px-5 py-2.5 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-bold cursor-pointer"
+                >
+                  ← Volver a Datos básicos
+                </button>
 
-              {/* TAB 1: LISTA DE ARTÍCULOS */}
-              {itemsTab === 'items' && (
-                <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={handleNextFromInvoiceItems}
+                  className="px-8 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-md transition-all active:scale-95 flex items-center space-x-2"
+                >
+                  <span>Siguiente: Repartir gasto →</span>
+                </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* STEP 4 (Gasto Step 3 / Factura Step 4): REPARTO Y RESUMEN FINAL */}
+          {flowType !== 'unselected' && step === 4 && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Header Info */}
+              <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200 space-y-1">
+                <h3 className="text-sm font-bold text-zinc-900 flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-emerald-700" />
+                  <span>Elegir Opciones de División</span>
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Selecciona la estrategia de reparto y verifica los valores asignados a cada integrante.
+                </p>
+              </div>
+
+              {/* SPLIT MODE TOOLBAR INCLUDING "Asignar por persona" */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 bg-zinc-100 rounded-xl p-1.5 border border-zinc-200 shadow-2xs gap-1">
+                <button
+                  type="button"
+                  title="Asignar por persona por artículos"
+                  onClick={() => {
+                    setSplitType('itemized');
+                    setValidationError(null);
+                  }}
+                  className={`col-span-2 sm:col-span-1 py-2 px-1 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                    splitType === 'itemized'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'text-emerald-900 hover:bg-emerald-100/60 bg-emerald-50/80 border border-emerald-200/60'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Asignar por persona</span>
+                </button>
+
+                <button
+                  type="button"
+                  title="A partes iguales"
+                  onClick={() => {
+                    setSplitType('equal');
+                    setValidationError(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                    splitType === 'equal'
+                      ? 'bg-zinc-900 text-white shadow-2xs'
+                      : 'text-zinc-600 hover:bg-zinc-200/60'
+                  }`}
+                >
+                  <span>= Iguales</span>
+                </button>
+
+                <button
+                  type="button"
+                  title="Montos exactos"
+                  onClick={() => {
+                    setSplitType('exact');
+                    setValidationError(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                    splitType === 'exact'
+                      ? 'bg-zinc-900 text-white shadow-2xs'
+                      : 'text-zinc-600 hover:bg-zinc-200/60'
+                  }`}
+                >
+                  <span>$ Exacto</span>
+                </button>
+
+                <button
+                  type="button"
+                  title="Porcentajes"
+                  onClick={() => {
+                    setSplitType('percentage');
+                    setValidationError(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                    splitType === 'percentage'
+                      ? 'bg-zinc-900 text-white shadow-2xs'
+                      : 'text-zinc-600 hover:bg-zinc-200/60'
+                  }`}
+                >
+                  <span>% Porcentaje</span>
+                </button>
+
+                <button
+                  type="button"
+                  title="Por cuotas o peso"
+                  onClick={() => {
+                    setSplitType('shares');
+                    setValidationError(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                    splitType === 'shares'
+                      ? 'bg-zinc-900 text-white shadow-2xs'
+                      : 'text-zinc-600 hover:bg-zinc-200/60'
+                  }`}
+                >
+                  <span>≡ Cuotas</span>
+                </button>
+              </div>
+
+              {/* MODE DESCRIPTION & VALIDATION RULES */}
+              <div className="text-xs text-zinc-500 bg-zinc-50 p-3 rounded-xl border border-zinc-200">
+                {splitType === 'equal' && 'El monto total se repartirá equitativamente entre los integrantes seleccionados.'}
+                {splitType === 'exact' && 'Ingresa el monto exacto para cada integrante. La suma debe coincidir exactamente con el total del gasto.'}
+                {splitType === 'percentage' && 'Ingresa el porcentaje (%) correspondiente a cada integrante. La suma debe ser exactamente 100%.'}
+                {splitType === 'shares' && 'Asigna un número de cuotas o peso a cada persona. Cada input de cuotas se maneja de forma independiente.'}
+                {splitType === 'itemized' && 'Asigna cada producto de la factura a las personas que lo consumieron para calcular su parte.'}
+              </div>
+
+              {/* IF ITEMIZED SPLIT: RENDER ITEM ASSIGNMENT DIRECTLY IN STEP 4 */}
+              {splitType === 'itemized' && items.length > 0 && (
+                <div className="space-y-3 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-200">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-zinc-500 font-medium">
-                      Ingresa cada producto con su cantidad y precio:
-                    </p>
-                    <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                      Suma Artículos: {formatCurrency(itemsSum, currencyCode)}
+                    <div>
+                      <h4 className="text-xs font-extrabold text-emerald-900 flex items-center space-x-1.5">
+                        <ShoppingCart className="w-4 h-4 text-emerald-700 shrink-0" />
+                        <span>Asignar consumo de artículos por persona</span>
+                      </h4>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        Haz clic en cada participante para incluirlo o excluirlo de un artículo:
+                      </p>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs">
+                      Total: {formatCurrency(itemsSum > 0 ? itemsSum : numericTotal, currencyCode)}
                     </span>
                   </div>
 
-                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                    {items.map((item, idx) => {
-                      const q = parseFloat(item.quantity) || 1;
-                      const u = parseFloat(item.unitPrice) || 0;
-                      const totalVal = parseFloat(item.amount) || 0;
-
-                      return (
-                        <div
-                          key={idx}
-                          className="bg-white p-3.5 rounded-2xl border border-zinc-200 shadow-2xs space-y-3 hover:border-emerald-300 transition-colors"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <input
-                              type="text"
-                              placeholder={`Artículo #${idx + 1} (ej: Pizza, Bebidas, Postre)`}
-                              value={item.description}
-                              onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none transition-colors"
-                            />
-                            {items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItemRow(idx)}
-                                className="p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer shrink-0"
-                                title="Eliminar ítem"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="text-[10px] font-bold text-zinc-500 block mb-1">
-                                Cantidad
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                step="any"
-                                placeholder="1"
-                                value={item.quantity}
-                                onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                                className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-bold text-zinc-900 focus:outline-none"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-zinc-500 block mb-1">
-                                Precio unitario
-                              </label>
-                              <input
-                                type="number"
-                                step="any"
-                                placeholder="0"
-                                value={item.unitPrice}
-                                onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
-                                className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-bold text-emerald-800 block mb-1">
-                                Precio total
-                              </label>
-                              <input
-                                type="number"
-                                step="any"
-                                placeholder="0"
-                                value={item.amount}
-                                onChange={(e) => handleItemChange(idx, 'amount', e.target.value)}
-                                className="w-full px-2.5 py-1.5 bg-emerald-50/60 border border-emerald-200 focus:border-emerald-600 focus:bg-white rounded-xl text-xs font-black text-emerald-900 focus:outline-none"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2">
-                    <button
-                      type="button"
-                      onClick={handleAddItemRow}
-                      className="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer bg-white px-3.5 py-2 rounded-xl border border-emerald-200 shadow-2xs hover:bg-emerald-50/50 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Añadir otro artículo</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setItemsTab('assignment')}
-                      className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold cursor-pointer"
-                    >
-                      Asignar por persona →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: ASIGNACIÓN POR PERSONA */}
-              {itemsTab === 'assignment' && (
-                <div className="space-y-4">
-                  <p className="text-xs text-zinc-500 font-medium">
-                    Selecciona qué personas consumieron cada artículo de la factura:
-                  </p>
-
-                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
                     {items.map((item, idx) => {
                       const itemAmt = parseFloat(item.amount) || 0;
                       const assignedIds = item.assignedMemberIds ? item.assignedMemberIds : [];
@@ -1554,150 +1632,6 @@ export function NewExpenseModal({
                   </div>
                 </div>
               )}
-
-              {/* STEP 3 NEXT BUTTON */}
-              <div className="pt-4 border-t border-zinc-100 flex justify-between items-center">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="px-5 py-2.5 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-bold cursor-pointer"
-                >
-                  ← Volver a Datos básicos
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleNextFromInvoiceItems}
-                  className="px-8 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer shadow-md transition-all active:scale-95 flex items-center space-x-2"
-                >
-                  <span>Siguiente: Repartir gasto →</span>
-                </button>
-              </div>
-
-            </div>
-          )}
-
-          {/* STEP 4 (Gasto Step 3 / Factura Step 4): REPARTO Y RESUMEN FINAL */}
-          {flowType !== 'unselected' && step === 4 && (
-            <div className="space-y-6 animate-fadeIn">
-              
-              {/* Header Info */}
-              <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200 space-y-1">
-                <h3 className="text-sm font-bold text-zinc-900 flex items-center space-x-2">
-                  <Users className="w-4 h-4 text-emerald-700" />
-                  <span>Elegir Opciones de División</span>
-                </h3>
-                <p className="text-xs text-zinc-500">
-                  Selecciona la estrategia de reparto y verifica los valores asignados a cada integrante.
-                </p>
-              </div>
-
-              {/* IF INVOICE FLOW: SPECIAL STRATEGY OPTION */}
-              {flowType === 'invoice' && (
-                <div className="bg-teal-50 border border-teal-200 p-3.5 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <ShoppingCart className="w-4 h-4 text-teal-700 shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-teal-900">
-                        Dividir según consumo individual de artículos
-                      </p>
-                      <p className="text-[11px] text-teal-700">
-                        Calculado automáticamente a partir de los ítems asignados
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSplitType('itemized');
-                      setValidationError(null);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      splitType === 'itemized'
-                        ? 'bg-teal-700 text-white shadow-2xs'
-                        : 'bg-white text-teal-800 border border-teal-200 hover:bg-teal-100/50'
-                    }`}
-                  >
-                    {splitType === 'itemized' ? '✓ Seleccionado' : 'Usar consumo'}
-                  </button>
-                </div>
-              )}
-
-              {/* STANDARD SPLIT MODE TOOLBAR */}
-              <div className="inline-flex bg-zinc-100 rounded-xl p-1.5 border border-zinc-200 shadow-2xs w-full justify-between gap-1">
-                <button
-                  type="button"
-                  title="A partes iguales"
-                  onClick={() => {
-                    setSplitType('equal');
-                    setValidationError(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    splitType === 'equal'
-                      ? 'bg-zinc-900 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:bg-zinc-200/60'
-                  }`}
-                >
-                  <span>= A partes iguales</span>
-                </button>
-
-                <button
-                  type="button"
-                  title="Montos exactos"
-                  onClick={() => {
-                    setSplitType('exact');
-                    setValidationError(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    splitType === 'exact'
-                      ? 'bg-zinc-900 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:bg-zinc-200/60'
-                  }`}
-                >
-                  <span>$ Exacto</span>
-                </button>
-
-                <button
-                  type="button"
-                  title="Porcentajes"
-                  onClick={() => {
-                    setSplitType('percentage');
-                    setValidationError(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    splitType === 'percentage'
-                      ? 'bg-zinc-900 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:bg-zinc-200/60'
-                  }`}
-                >
-                  <span>% Porcentaje</span>
-                </button>
-
-                <button
-                  type="button"
-                  title="Por cuotas o peso"
-                  onClick={() => {
-                    setSplitType('shares');
-                    setValidationError(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    splitType === 'shares'
-                      ? 'bg-zinc-900 text-white shadow-2xs'
-                      : 'text-zinc-600 hover:bg-zinc-200/60'
-                  }`}
-                >
-                  <span>≡ Cuotas / Peso</span>
-                </button>
-              </div>
-
-              {/* MODE DESCRIPTION & VALIDATION RULES */}
-              <div className="text-xs text-zinc-500 bg-zinc-50 p-3 rounded-xl border border-zinc-200">
-                {splitType === 'equal' && 'El monto total se repartirá equitativamente entre los integrantes seleccionados.'}
-                {splitType === 'exact' && 'Ingresa el monto exacto para cada integrante. La suma debe coincidir exactamente con el total del gasto.'}
-                {splitType === 'percentage' && 'Ingresa el porcentaje (%) correspondiente a cada integrante. La suma debe ser exactamente 100%.'}
-                {splitType === 'shares' && 'Asigna un número de cuotas o peso a cada persona. Cada input de cuotas se maneja de forma independiente.'}
-                {splitType === 'itemized' && 'El reparto se calcula según los artículos individuales asignados a cada persona en el paso anterior.'}
-              </div>
 
               {/* MEMBER LIST WITH INDEPENDENT INPUTS */}
               <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
@@ -1875,6 +1809,69 @@ export function NewExpenseModal({
 
         </div>
       </div>
+
+      {/* POPUP MODAL: DISCREPANCIA EN MONTOS DE FACTURA VS TOTAL */}
+      {showDiscrepancyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 ring-1 ring-zinc-200 shadow-2xl max-w-md w-full space-y-5">
+            <div className="flex items-center space-x-3 text-amber-600">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900">
+                  Monto total no coincide
+                </h3>
+                <p className="text-xs text-zinc-500 font-medium">
+                  Verificación de los artículos
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 text-xs text-amber-900 space-y-1.5 leading-relaxed">
+              <p className="font-medium">
+                La suma de los artículos (<strong className="font-bold">{formatCurrency(itemsSum, currencyCode)}</strong>) no coincide con el monto total ingresado (<strong className="font-bold">{formatCurrency(numericTotal, currencyCode)}</strong>).
+              </p>
+            </div>
+
+            <div className="flex flex-col space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setTotalAmount(String(itemsSum));
+                  setShowDiscrepancyModal(false);
+                  setSplitType('itemized');
+                  setStep(4);
+                }}
+                className="w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Actualizar total a {formatCurrency(itemsSum, currencyCode)} y continuar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDiscrepancyModal(false);
+                  setSplitType('itemized');
+                  setStep(4);
+                }}
+                className="w-full py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Mantener total de {formatCurrency(numericTotal, currencyCode)} y continuar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDiscrepancyModal(false)}
+                className="w-full py-2 px-4 text-zinc-500 hover:text-zinc-800 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Ajustar artículos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

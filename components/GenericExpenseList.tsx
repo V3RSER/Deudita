@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 
-export type UnifiedTransaction =
+type UnifiedTransaction =
   | { type: 'expense'; date: string; data: Expense }
   | { type: 'payment'; date: string; data: Payment };
 

@@ -173,9 +173,9 @@ export function DraftsView({
 
                   <button
                     onClick={() => onOpenConfirmDraft(draft)}
-                    className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs shadow-sm transition-all active:scale-95"
+                    className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs shadow-sm hover:shadow-md transition-all duration-200 active:scale-95"
                   >
-                    <span>Asignar a Grupo</span>
+                    <span>Confirmar</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>

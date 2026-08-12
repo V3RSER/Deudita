@@ -54,17 +54,17 @@ export function SettleDebtModal({
       setPayerId(paymentToEdit.paid_by);
       setReceiverId(paymentToEdit.paid_to);
       setAmount(paymentToEdit.amount ? paymentToEdit.amount.toString() : '');
-      setNotes(paymentToEdit.note || '');
-      setProofUrl(paymentToEdit.proof_url || '');
+      setNotes(paymentToEdit.note ?? '');
+      setProofUrl(paymentToEdit.proof_url ?? '');
     } else {
       setProofUrl('');
       const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
       setGroupId(activeGroup);
 
-      const activePayer = defaultDebtorId || currentProfile?.id || profiles[0]?.id || '';
+      const activePayer = defaultDebtorId ?? currentProfile?.id ?? profiles[0]?.id ?? '';
       setPayerId(activePayer);
 
-      const activeReceiver = defaultCreditorId || profiles.find((p) => p.id !== activePayer)?.id || '';
+      const activeReceiver = defaultCreditorId ?? profiles.find((p) => p.id !== activePayer)?.id ?? '';
       setReceiverId(activeReceiver);
 
       setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');

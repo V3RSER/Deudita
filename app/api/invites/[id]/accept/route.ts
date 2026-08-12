@@ -59,7 +59,7 @@ export async function POST(
 
       // Ensure user profile is properly upserted
       const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario';
-      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
+      const avatarUrl = user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null;
 
       await db.from('profiles').upsert({
         id: user.id,

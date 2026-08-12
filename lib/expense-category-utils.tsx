@@ -37,7 +37,10 @@ interface CategoryConfig {
 }
 
 export function getCategoryConfig(category?: string): CategoryConfig {
-  const cat = (category || '').toLowerCase();
+  if (!category) {
+    return { icon: Receipt, bgClass: 'bg-zinc-100', textClass: 'text-zinc-600' };
+  }
+  const cat = category.toLowerCase();
 
   if (cat.includes('super') || cat.includes('mercado') || cat.includes('almacen')) {
     return { icon: ShoppingCart, bgClass: 'bg-emerald-100', textClass: 'text-emerald-700' };
