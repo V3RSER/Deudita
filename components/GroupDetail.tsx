@@ -233,27 +233,24 @@ export function GroupDetail({
         </div>
       </div>
 
-      {/* SOLO MEMBER EMPTY STATE STRATEGY */}
+      {/* SOLO MEMBER STRATEGY */}
       {isSoloMember && (
-        <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 text-white p-6 sm:p-8 rounded-[2rem] shadow-xl relative overflow-hidden border border-zinc-800">
+        <div className="bg-zinc-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-lg relative overflow-hidden border border-zinc-800">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-xl">
+            <div className="space-y-1.5 max-w-xl">
               <div className="inline-flex items-center space-x-2 bg-emerald-500/20 text-emerald-300 text-xs font-semibold px-3 py-1 rounded-full border border-emerald-500/30">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Grupo Creado Exitosamente</span>
+                <span>Grupo Listo</span>
               </div>
-              <h3 className="text-xl sm:text-2xl font-semibold tracking-tight text-white">
-                ¡Actualmente eres la única persona en este grupo!
+              <h3 className="text-xl font-semibold tracking-tight text-white">
+                Eres la única persona en este grupo
               </h3>
-              <p className="text-zinc-400 text-sm leading-relaxed">
-                Para empezar a dividir cuentas, añade a tus amigos directamente por correo electrónico o comparte el enlace directo de este grupo.
-              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <button
                 onClick={() => onOpenAddMember(group.id)}
-                className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-lg min-h-[44px]"
+                className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-md min-h-[44px] cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Añadir Integrante</span>
@@ -261,7 +258,7 @@ export function GroupDetail({
 
               <button
                 onClick={handleShareOrCopyLink}
-                className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-3 rounded-2xl text-sm ring-1 ring-zinc-700 transition-all active:scale-95 min-h-[44px]"
+                className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-3 rounded-2xl text-sm ring-1 ring-zinc-700 transition-all active:scale-95 min-h-[44px] cursor-pointer"
               >
                 {copiedLink ? (
                   <>
@@ -370,11 +367,8 @@ export function GroupDetail({
       {/* TAB CONTENT: Balances */}
       {activeTab === 'balances' && (
         <div className="space-y-6">
-          <div className="bg-zinc-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-md">
+          <div className="bg-zinc-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-md flex items-center justify-between">
             <h3 className="text-xl font-semibold tracking-tight text-zinc-50">Cuentas Claras en {group.name}</h3>
-            <p className="text-zinc-400 text-xs sm:text-sm mt-1 max-w-xl">
-              Deudas calculadas entre los miembros de este grupo. Presiona &quot;Saldar&quot; para registrar un pago.
-            </p>
           </div>
 
           {groupPairwise.length === 0 ? (

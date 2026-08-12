@@ -451,7 +451,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
                     key={cat.id}
                     type="button"
                     onClick={() => setCategory(cat.id)}
-                    className={`p-3.5 rounded-2xl ring-1 text-left transition-all flex flex-col justify-between space-y-2 ${
+                    className={`p-3.5 rounded-2xl ring-1 text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
                       cat.bgColor
                     } ${
                       isSelected

@@ -259,7 +259,7 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm transition-all focus:ring-2 focus:ring-zinc-900 appearance-none"
+                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-2xl text-sm font-medium transition-all focus:ring-2 focus:ring-zinc-900 cursor-pointer appearance-none"
               >
                 {COMMON_TIMEZONES.map((tz) => (
                   <option key={tz.value} value={tz.value}>
@@ -273,14 +273,14 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
           {/* Currency / Weight type Select */}
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              Tipo de Peso / Divisa Preferida (Predeterminada al crear grupos)
+              Moneda Predeterminada
             </label>
             <div className="relative">
               <Coins className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5 pointer-events-none" />
               <select
                 value={selectedCurrency}
                 onChange={(e) => setSelectedCurrency(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-2xl text-sm transition-all focus:ring-2 focus:ring-zinc-900 appearance-none"
+                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-2xl text-sm font-medium transition-all focus:ring-2 focus:ring-zinc-900 cursor-pointer appearance-none"
               >
                 {CURRENCY_OPTIONS.map((c) => (
                   <option key={c.currency} value={c.currency}>

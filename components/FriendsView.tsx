@@ -78,22 +78,19 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white">
             Amigos y Saldos Directos
           </h1>
-          <p className="text-zinc-400 text-sm sm:text-base max-w-xl leading-relaxed">
-            Revisa las deudas y saldos con cada uno de tus amigos de forma transparente e individual.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
             onClick={() => setIsAddFriendOpen(true)}
-            className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
+            className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px] cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Agregar Amigo</span>
           </button>
           <button
             onClick={() => setIsAddMemberOpen(true)}
-            className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px]"
+            className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Añadir a un Grupo</span>

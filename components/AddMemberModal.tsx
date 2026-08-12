@@ -246,7 +246,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                   <select
                     value={activeGroupId}
                     onChange={(e) => setSelectedGroupId(e.target.value)}
-                    className="w-full px-3.5 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
                   >
                     {userGroups.map((g) => (
                       <option key={g.id} value={g.id}>

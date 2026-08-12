@@ -136,14 +136,11 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 bg-white p-6 sm:p-8 rounded-[2rem] ring-1 ring-zinc-200 shadow-xs">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Historial de Gastos y Pagos</h1>
-          <p className="text-xs sm:text-sm text-zinc-500 mt-1 max-w-xl">
-            Gráficos, resúmenes y registro unificado de todos tus movimientos financieros en Deudita.
-          </p>
         </div>
 
         <button
           onClick={onOpenNewExpense}
-          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all active:scale-95 self-start sm:self-auto min-h-[44px]"
+          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 self-start sm:self-auto min-h-[44px] cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Registrar Gasto</span>
@@ -260,7 +257,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar..."
-              className="w-full pl-10 pr-3 py-2 bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all placeholder:text-zinc-400"
+              className="w-full pl-10 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all placeholder:text-zinc-400"
             />
           </div>
 
@@ -269,7 +266,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
             >
               <option value="all">Todos los meses / fechas</option>
               {months.map((m) => (
@@ -285,7 +282,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
             <select
               value={selectedGroupId}
               onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
             >
               <option value="all">Todos los grupos</option>
               {userGroups.map((g) => (
@@ -301,7 +298,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full bg-zinc-50 border-none ring-1 ring-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
             >
               <option value="all">Todas las categorías</option>
               {categories.map((c) => (

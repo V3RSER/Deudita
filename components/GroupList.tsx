@@ -131,14 +131,11 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
           <h2 className="text-xl sm:text-2xl font-semibold text-zinc-900 tracking-tight">
             Mis Grupos <span className="text-zinc-400 font-normal">({userGroups.length})</span>
           </h2>
-          <p className="text-xs text-zinc-500 mt-1">
-            Selecciona un grupo para ver gastos o crea uno nuevo en segundos.
-          </p>
         </div>
 
         <button
           onClick={onOpenNewGroup}
-          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-md transition-all active:scale-95 min-h-[44px]"
+          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 min-h-[44px] cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Crear Grupo</span>
