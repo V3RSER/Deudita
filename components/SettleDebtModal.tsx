@@ -78,6 +78,7 @@ export function SettleDebtModal({
 
   const isEditing = Boolean(paymentToEdit);
   const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;
+  const targetGroup = userGroups.find((g) => g.id === groupId);
 
   // Compute breakdown of group debts between payer and receiver
   const getGroupDebtBreakdown = () => {
@@ -104,6 +105,13 @@ export function SettleDebtModal({
 
   const groupDebts = getGroupDebtBreakdown();
   const totalOwed = groupDebts.reduce((sum, item) => sum + item.debt, 0);
+
+  // Auto-fill amount when payer or receiver changes and they have a debt
+  useEffect(() => {
+    if (!isEditing && isOpen && totalOwed > 0) {
+      setAmount(totalOwed.toString());
+    }
+  }, [payerId, receiverId, totalOwed, isEditing, isOpen]);
 
   // Calculate distributed allocation preview
   const numericAmount = parseFloat(amount) || 0;
@@ -284,7 +292,6 @@ export function SettleDebtModal({
 
   const payerProfile = profiles.find((p) => p.id === payerId);
   const receiverProfile = profiles.find((p) => p.id === receiverId);
-  const targetGroup = userGroups.find((g) => g.id === groupId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
@@ -310,18 +317,6 @@ export function SettleDebtModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Multi-group Distribution Hint */}
-          {!isLockedToGroup && (
-            <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 text-xs text-emerald-900">
-              <p className="font-bold flex items-center space-x-1.5 mb-1">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                <span>Repartición Automática</span>
-              </p>
-              <p className="text-emerald-800/80 leading-relaxed">
-                El pago se distribuirá de forma automática cubriendo primero los grupos con mayor deuda entre estas personas.
-              </p>
-            </div>
-          )}
 
           {/* Amount Hero */}
           <div className="text-center py-2">
