@@ -619,16 +619,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       <button 
                         key={p.id}
                         onClick={toggle}
-                        className={`flex items-center gap-2 p-1.5 pr-3 rounded-full transition-all border ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-zinc-200 bg-white opacity-60 hover:opacity-100 hover:border-zinc-300'}`}
+                        className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all ${isSelected ? 'opacity-100 scale-100' : 'opacity-50 grayscale scale-95 hover:grayscale-0 hover:opacity-80'}`}
                       >
                         {p.avatar_url ? (
-                          <Image src={p.avatar_url} alt="avatar" width={24} height={24} className={`rounded-full w-6 h-6 object-cover`} unoptimized />
+                          <Image src={p.avatar_url} alt="avatar" width={40} height={40} className={`rounded-full w-10 h-10 object-cover border-2 transition-all ${isSelected ? 'border-emerald-500 shadow-md' : 'border-transparent'}`} unoptimized />
                         ) : (
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-200 text-emerald-800' : 'bg-zinc-200 text-zinc-500'}`}>
-                            <span className="text-[10px] font-bold">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-emerald-100 border-emerald-500 text-emerald-700 shadow-md' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
+                            <span className="text-sm font-bold">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
                           </div>
                         )}
-                        <span className={`text-xs font-bold truncate max-w-[80px] ${isSelected ? 'text-emerald-900' : 'text-zinc-600'}`}>
+                        <span className={`text-[10px] font-bold truncate w-14 text-center ${isSelected ? 'text-emerald-900' : 'text-zinc-500'}`}>
                           {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
                         </span>
                       </button>
@@ -641,7 +641,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
               {/* Cómo se divide Section */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-zinc-900">¿Cómo se divide?</h3>
+                <h3 className="text-sm font-bold text-zinc-900">Dividir</h3>
                 <div className="flex flex-wrap gap-2">
                   {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
                     <button
@@ -703,7 +703,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                   currency={currency}
                                   hideSymbol
-                                  className="w-24 pl-6 pr-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
+                                  className="w-24 pl-6 pr-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
                                   placeholder="0.00"
                                 />
                               </div>
@@ -729,50 +729,50 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 )}
 
                 {splitType === 'itemized' && mode === 'itemized' && (
-                  <div className="space-y-6 mt-4">
-                    <div className="space-y-3">
-                      {items.map((item, idx) => {
-                        const amt = getItemTotal(item);
-                        const itemQty = parseFloat(item.quantity) || 1;
-                        return (
-                          <div key={item.id} className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-3">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-2">
-                                <span className="bg-zinc-100 text-zinc-600 text-xs font-bold px-2 py-1 rounded-md">
-                                  {itemQty}x
-                                </span>
-                                <span className="text-sm font-bold text-zinc-900 truncate max-w-[150px]">
+                  <div className="space-y-4 mt-4">
+                    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm mt-2 relative">
+                      <table className="w-full text-left border-collapse min-w-max">
+                        <thead>
+                          <tr className="bg-zinc-50 border-b border-zinc-200 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                            <th rowSpan={2} className="p-2 sticky left-0 bg-zinc-50 z-20 border-r border-zinc-200 text-center w-[40px]">Cant</th>
+                            <th rowSpan={2} className="p-2 sticky left-[40px] bg-zinc-50 z-20 border-r border-zinc-200 min-w-[120px]">Desc</th>
+                            <th rowSpan={2} className="p-2 text-right border-r border-zinc-200">Monto</th>
+                            <th colSpan={selectedMembers.length} className="p-2 text-center border-b border-zinc-200">Participaciones (Cuotas)</th>
+                          </tr>
+                          <tr className="bg-zinc-50 border-b border-zinc-200 text-[9px] font-bold text-zinc-600 tracking-wider">
+                            {selectedMembers.map(mId => {
+                              const p = activeProfiles.find(x => x.id === mId);
+                              return (
+                                <th key={mId} className="p-1.5 text-center border-r border-zinc-200 min-w-[48px] truncate max-w-[60px]">
+                                  {p?.full_name?.split(' ')[0] || 'User'}
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {items.map((item, idx) => {
+                            const amt = getItemTotal(item);
+                            const itemQty = parseFloat(item.quantity) || 1;
+                            return (
+                              <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
+                                <td className="p-2 sticky left-0 bg-white group-hover:bg-zinc-50/90 z-10 border-r border-zinc-200 text-center text-xs font-black text-zinc-900">
+                                  {itemQty}
+                                </td>
+                                <td className="p-2 sticky left-[40px] bg-white group-hover:bg-zinc-50/90 z-10 border-r border-zinc-200 text-xs font-bold text-zinc-900 max-w-[140px] truncate">
                                   {item.desc || `Art ${idx + 1}`}
-                                </span>
-                              </div>
-                              <span className="text-sm font-black text-zinc-900">
-                                {formatCurrency(amt, currency)}
-                              </span>
-                            </div>
-                            
-                            <div className="space-y-2 bg-zinc-50/50 rounded-xl p-2 border border-zinc-100">
-                              <div className="text-[10px] font-bold text-zinc-500 uppercase px-1">Participaciones (Cuotas)</div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                </td>
+                                <td className="p-2 text-xs font-black text-zinc-900 text-right border-r border-zinc-200">
+                                  {formatCurrency(amt, currency)}
+                                </td>
                                 {selectedMembers.map(mId => {
-                                  const p = activeProfiles.find(x => x.id === mId);
                                   const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
                                   return (
-                                    <div key={mId} className="flex items-center justify-between bg-white border border-zinc-200 rounded-lg p-1.5 shadow-sm">
-                                      <div className="flex items-center space-x-1.5 min-w-0">
-                                        {p?.avatar_url ? (
-                                          <Image src={p.avatar_url} alt="avatar" width={16} height={16} className="rounded-full w-4 h-4 object-cover shrink-0" unoptimized />
-                                        ) : (
-                                          <div className="w-4 h-4 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[8px] font-bold shrink-0">
-                                            {(p?.full_name || p?.email || 'U').charAt(0).toUpperCase()}
-                                          </div>
-                                        )}
-                                        <span className="text-[10px] font-bold text-zinc-700 truncate max-w-[40px]">
-                                          {p?.full_name?.split(' ')[0] || 'User'}
-                                        </span>
-                                      </div>
+                                    <td key={mId} className="p-1 text-center border-r border-zinc-100">
                                       <input 
                                         type="number" 
                                         min="0"
+                                        placeholder="0"
                                         value={val}
                                         onChange={e => {
                                           const newItems = [...items];
@@ -780,16 +780,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                           newItems[idx].shares![mId] = e.target.value;
                                           setItems(newItems);
                                         }}
-                                        className="w-8 px-1 py-0.5 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-emerald-500" 
+                                        className="w-10 mx-auto px-1 py-1.5 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20" 
                                       />
-                                    </div>
+                                    </td>
                                   );
                                 })}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
 
                     <div className="mt-4 space-y-2">
