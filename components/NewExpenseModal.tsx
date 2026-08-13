@@ -688,19 +688,19 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   )}
                 </div>
 
-                <div className="flex gap-2 mb-2 px-1">
-                  {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
-                    <button
-                      key={type}
-                      onClick={() => setSplitType(type as any)}
-                      className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-all ${splitType === type ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-zinc-500 hover:text-zinc-900 hover:border-zinc-300'}`}
-                    >
-                      {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
-                    </button>
-                  ))}
-                </div>
+                <div className={`bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'pb-0' : 'p-3'}`}>
+                  <div className={`flex gap-2 mb-3 px-1 ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'pt-3 mx-2' : ''}`}>
+                    {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setSplitType(type as any)}
+                        className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-all ${splitType === type ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-zinc-500 hover:text-zinc-900 hover:border-zinc-300'}`}
+                      >
+                        {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
+                      </button>
+                    ))}
+                  </div>
 
-                <div className={`bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'p-0' : 'p-3'}`}>
                   {splitType !== 'itemized' && (
                     <div className="flex flex-col">
                       {selectedMembers.map(mId => {
@@ -831,7 +831,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           </table>
                         </div>
                       ) : (
-                        <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-2 space-y-1">
+                        <div className="flex flex-col space-y-1">
                           {items.map((item, idx) => {
                             const itemQty = parseFloat(item.quantity) || 1;
                             const amt = getItemTotal(item);
