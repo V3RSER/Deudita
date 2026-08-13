@@ -13,6 +13,7 @@ interface FormattedCurrencyInputProps {
   disabled?: boolean;
   id?: string;
   autoFocus?: boolean;
+  hideSymbol?: boolean;
 }
 
 export function FormattedCurrencyInput({
@@ -25,6 +26,7 @@ export function FormattedCurrencyInput({
   disabled = false,
   id,
   autoFocus = false,
+  hideSymbol = false,
 }: FormattedCurrencyInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [editingValue, setEditingValue] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function FormattedCurrencyInput({
 
   const formattedDisplay =
     value !== '' && value !== undefined && value !== null && !isNaN(numVal) && numVal > 0
-      ? formatCurrency(numVal, currency)
+      ? (hideSymbol ? new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(numVal) : formatCurrency(numVal, currency))
       : '';
 
   const displayValue = isFocused
