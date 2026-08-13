@@ -69,6 +69,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
   const [step, setStep] = useState(1);
   const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
 
   // Computed
@@ -297,7 +298,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
-      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md flex flex-col my-auto max-h-[95vh] overflow-hidden">
+      <div className={`bg-white rounded-[24px] shadow-2xl w-full flex flex-col my-auto max-h-[95vh] overflow-hidden transition-all duration-300 ${isTableExpanded ? 'max-w-4xl' : 'max-w-md'}`}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
@@ -641,16 +642,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         <button
                           key={p.id}
                           onClick={toggle}
-                          className={`flex items-center gap-1.5 p-1 pr-2 rounded-xl border transition-all w-full text-left ${isSelected ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-zinc-50 border-zinc-200 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'}`}
+                          className={`flex items-center gap-1.5 p-1 pr-2 rounded-xl border transition-all w-full text-left ${isSelected ? 'bg-white border-zinc-300 shadow-sm' : 'bg-zinc-50 border-zinc-200 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'}`}
                         >
                           {p.avatar_url ? (
-                            <Image src={p.avatar_url} alt="avatar" width={24} height={24} className={`rounded-full shrink-0 w-6 h-6 object-cover border transition-all ${isSelected ? 'border-emerald-300' : 'border-transparent'}`} unoptimized />
+                            <Image src={p.avatar_url} alt="avatar" width={24} height={24} className={`rounded-full shrink-0 w-6 h-6 object-cover border transition-all ${isSelected ? 'border-zinc-300' : 'border-transparent'}`} unoptimized />
                           ) : (
-                            <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center border transition-all ${isSelected ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
+                            <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center border transition-all ${isSelected ? 'bg-zinc-100 border-zinc-300 text-zinc-900' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
                               <span className="text-[10px] font-bold">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
                             </div>
                           )}
-                          <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-emerald-900' : 'text-zinc-500'}`}>
+                          <span className={`text-[11px] font-bold truncate ${isSelected ? 'text-zinc-900' : 'text-zinc-500'}`}>
                             {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
                           </span>
                         </button>
@@ -668,21 +669,22 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     Dividir gasto
                   </h3>
                 </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-4 space-y-4">
-                  <div className="flex flex-wrap gap-2">
-                    {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
-                      <button
-                        key={type}
-                        onClick={() => setSplitType(type as any)}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-full transition-all border ${splitType === type ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:border-zinc-300'}`}
-                      >
-                        {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
-                      </button>
-                    ))}
-                  </div>
 
+                <div className="flex gap-2 mb-2 px-1">
+                  {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setSplitType(type as any)}
+                      className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-all ${splitType === type ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-zinc-500 hover:text-zinc-900 hover:border-zinc-300'}`}
+                    >
+                      {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-4 space-y-4">
                   {splitType !== 'itemized' && (
-                    <div className="space-y-2 mt-4">
+                    <div className="space-y-2">
                       {selectedMembers.map(mId => {
                         const p = activeProfiles.find(x => x.id === mId);
                         if (!p) return null;
@@ -711,8 +713,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             </div>
 
                             {splitType === 'shares' && (
-                              <div className="px-3 text-sm font-bold text-emerald-700 shrink-0">
-                                {formatCurrency(liveAmountShares, currency)}
+                              <div className="px-3 flex items-center gap-1.5 h-8 shrink-0">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="1"
+                                  value={splits[p.id]?.shares || '1'}
+                                  onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
+                                  className="w-12 px-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
+                                />
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
                               </div>
                             )}
 
@@ -736,17 +746,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                 </div>
                               )}
                               {splitType === 'shares' && (
-                                <div className="flex items-center gap-1.5 h-8">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    placeholder="1"
-                                    value={splits[p.id]?.shares || '1'}
-                                    onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
-                                    className="w-12 px-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
-                                  />
-                                  <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
-                                </div>
+                                <span className="text-sm font-black text-emerald-700 flex items-center h-8">
+                                  {formatCurrency(liveAmountShares, currency)}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -757,7 +759,25 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                   {splitType === 'itemized' && mode === 'itemized' && (
                     <div className="mt-4 flex flex-col space-y-3">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                        {!isItemizedVerticalView && (
+                          <button
+                            onClick={() => setIsTableExpanded(!isTableExpanded)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-white border border-zinc-200 rounded-lg shadow-sm hover:bg-zinc-50 transition-colors"
+                          >
+                            {isTableExpanded ? (
+                              <>
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                                <span>Contraer tabla</span>
+                              </>
+                            ) : (
+                              <>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                                <span>Expandir tabla</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                         <button
                           onClick={() => setIsItemizedVerticalView(!isItemizedVerticalView)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-white border border-zinc-200 rounded-lg shadow-sm hover:bg-zinc-50 transition-colors"
@@ -844,7 +864,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               <div key={item.id} className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-3">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-bold text-zinc-900 text-sm truncate pr-2">
-                                    {itemQty}x {item.desc || 'Sin nombre'}
+                                    {itemQty} · {item.desc || 'Sin nombre'}
                                   </span>
                                   <span className="font-black text-emerald-700 text-sm shrink-0">
                                     {formatCurrency(amt, currency)}
