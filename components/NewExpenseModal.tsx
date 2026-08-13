@@ -56,7 +56,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const fileRef = useRef<HTMLInputElement>(null);
   
   // Itemized State
-  const [items, setItems] = useState([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each' as 'total' | 'each', assignedTo: [] as string[] }]);
+  const [items, setItems] = useState<Array<{ id: number; desc: string; quantity: string; amount: string; amountType: 'total' | 'each'; assignedTo: string[]; shares?: Record<string, string> }>>([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
   
   // Split State
   const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage' | 'shares' | 'itemized'>('equal');
@@ -168,10 +168,19 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     activeProfiles.forEach(p => res[p.id] = 0);
     items.forEach(item => {
       const amt = getItemTotal(item);
-      const assigned = item.assignedTo.length > 0 ? item.assignedTo.filter(id => selectedMembers.includes(id)) : selectedMembers;
-      if (assigned.length > 0 && amt > 0) {
-        const share = amt / assigned.length;
-        assigned.forEach(id => res[id] = (res[id] || 0) + share);
+      const isAll = item.assignedTo.length === 0;
+      const assigned = isAll ? selectedMembers : item.assignedTo.filter(id => selectedMembers.includes(id));
+      
+      let totalShares = 0;
+      assigned.forEach(id => {
+        totalShares += parseFloat(item.shares?.[id] ?? '1') || 0;
+      });
+      
+      if (assigned.length > 0 && totalShares > 0 && amt > 0) {
+        assigned.forEach(id => {
+          const share = parseFloat(item.shares?.[id] ?? '1') || 0;
+          res[id] = (res[id] || 0) + (share / totalShares) * amt;
+        });
       }
     });
     return res;
@@ -578,45 +587,88 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
               <div className="space-y-3">
                 {items.map((item, idx) => {
                   const amt = getItemTotal(item);
-                  const assigned = item.assignedTo;
-                  const isAll = assigned.length === 0;
+                  const itemQty = parseFloat(item.quantity) || 1;
+                  const isAll = item.assignedTo.length === 0;
+                  const assigned = isAll ? selectedMembers : item.assignedTo.filter(id => selectedMembers.includes(id));
+                  
+                  let totalShares = 0;
+                  assigned.forEach(id => {
+                    totalShares += parseFloat(item.shares?.[id] ?? '1') || 0;
+                  });
+
                   return (
-                    <div key={item.id} className="p-3 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-3 transition-all">
-                      <div className="flex justify-between items-center px-1">
+                    <div key={item.id} className="p-3 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-2 transition-all">
+                      <div className="flex justify-between items-center px-1 mb-1">
                         <p className="text-sm font-bold text-zinc-900">
-                          {parseFloat(item.quantity) > 1 ? `${item.quantity}x ` : ''}{item.desc || `Artículo ${idx + 1}`}
+                          {itemQty > 1 ? `${itemQty}x ` : ''}{item.desc || `Artículo ${idx + 1}`}
                         </p>
                         <div className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                          {formatCurrency(amt / (isAll ? selectedMembers.length : assigned.length), currency)} c/u
+                          {formatCurrency(amt, currency)}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => {
-                            const newItems = [...items];
-                            newItems[idx].assignedTo = [];
-                            setItems(newItems);
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all ${isAll ? 'bg-zinc-900 text-white shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 border border-zinc-200'}`}
-                        >
-                          Todos
-                        </button>
-                        {activeProfiles.map(p => {
-                          const isSel = !isAll && assigned.includes(p.id);
+                      
+                      <div className="flex flex-col gap-1.5">
+                        {activeProfiles.filter(p => selectedMembers.includes(p.id)).map(p => {
+                          const isSel = isAll || item.assignedTo.includes(p.id);
+                          const userShareStr = item.shares?.[p.id] ?? '1';
+                          const userShareNum = parseFloat(userShareStr) || 0;
+                          
+                          const unitsConsumed = isSel && totalShares > 0 ? (userShareNum / totalShares) * itemQty : 0;
+                          const amountToPay = isSel && totalShares > 0 ? (userShareNum / totalShares) * amt : 0;
+                          
                           return (
-                            <button
-                              key={p.id}
-                              onClick={() => {
-                                const newItems = [...items];
-                                if (isSel) newItems[idx].assignedTo = assigned.filter(id => id !== p.id);
-                                else newItems[idx].assignedTo = [...assigned, p.id];
-                                setItems(newItems);
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center ${isSel ? 'bg-emerald-600 text-white shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100 border border-zinc-200'}`}
-                            >
-                              {p.full_name?.split(' ')[0] || p.email}
-                              {isSel && <Check className="w-3 h-3 ml-1" />}
-                            </button>
+                            <div key={p.id} className={`flex items-center justify-between p-2 rounded-xl border transition-all ${isSel ? 'bg-zinc-50 border-zinc-200' : 'opacity-50 border-transparent hover:bg-zinc-50 hover:opacity-100'}`}>
+                              <button 
+                                onClick={() => {
+                                  const newItems = [...items];
+                                  if (isAll) {
+                                    newItems[idx].assignedTo = selectedMembers.filter(id => id !== p.id);
+                                  } else {
+                                    if (isSel) {
+                                       newItems[idx].assignedTo = item.assignedTo.filter(id => id !== p.id);
+                                    } else {
+                                       newItems[idx].assignedTo = [...item.assignedTo, p.id];
+                                    }
+                                  }
+                                  setItems(newItems);
+                                }}
+                                className="flex items-center gap-2 flex-1 text-left"
+                              >
+                                <div className={`w-4 h-4 rounded-[4px] flex items-center justify-center border transition-colors shrink-0 ${isSel ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-zinc-300'}`}>
+                                   {isSel && <Check className="w-3 h-3" />}
+                                </div>
+                                <span className="text-xs font-bold text-zinc-900 truncate">
+                                  {p.full_name?.split(' ')[0] || p.email}
+                                </span>
+                              </button>
+                              
+                              {isSel && (
+                                <div className="flex items-center gap-3 shrink-0 ml-2">
+                                   <div className="flex items-center gap-1.5">
+                                      <input 
+                                        type="number" 
+                                        min="0"
+                                        step="0.1"
+                                        value={item.shares?.[p.id] !== undefined ? item.shares[p.id] : '1'}
+                                        onChange={e => {
+                                           const newItems = [...items];
+                                           if (!newItems[idx].shares) newItems[idx].shares = {};
+                                           newItems[idx].shares![p.id] = e.target.value;
+                                           setItems(newItems);
+                                        }}
+                                        className="w-12 px-1 py-1 text-center text-xs font-bold border border-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                                      />
+                                      <div className="text-[10px] font-bold text-zinc-500 flex flex-col leading-tight min-w-[32px]">
+                                        <span>unid.</span>
+                                        <span className="text-emerald-600">({unitsConsumed % 1 === 0 ? unitsConsumed : unitsConsumed.toFixed(2)})</span>
+                                      </div>
+                                   </div>
+                                   <div className="text-xs font-black text-zinc-900 w-16 text-right">
+                                      {formatCurrency(amountToPay, currency)}
+                                   </div>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
