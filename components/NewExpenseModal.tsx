@@ -10,7 +10,8 @@ import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import { 
   X, Plus, Trash2, AlertCircle, Loader2, 
   Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft, 
-  CheckCircle2, Camera, FileText, Users, PieChart, ListChecks
+  CheckCircle2, Camera, FileText, Users, PieChart, ListChecks,
+  Maximize2, Minimize2, ChevronRight, ChevronUp
 } from 'lucide-react';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 
@@ -67,6 +68,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
   
   const [step, setStep] = useState(1);
+  const [isItemizedMaximized, setIsItemizedMaximized] = useState(false);
+  const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
 
   // Computed
   const activeGroup = userGroups.find(g => g.id === groupId);
@@ -345,163 +348,178 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           {step === 1 && (
             <>
               {/* Amount and Description */}
-              <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-                {(() => {
-                  const catConfig = getCategoryConfig(subCategory);
-                  const CategoryIcon = catConfig.icon;
-                  return (
-                    <div className={`w-12 h-12 rounded-full ${catConfig.bgClass} flex items-center justify-center shrink-0 border border-black/5`}>
-                      <CategoryIcon className={`w-6 h-6 ${catConfig.textClass}`} />
-                    </div>
-                  );
-                })()}
-                
-                <div className="flex-1 flex flex-col gap-2">
-                  <input
-                    type="text"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="Introduce una descripción."
-                    className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors"
-                  />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                    <FileText className="w-4 h-4 mr-2 text-emerald-600" />
+                    Información general
+                  </h3>
+                </div>
+                <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+                  {(() => {
+                    const catConfig = getCategoryConfig(subCategory);
+                    const CategoryIcon = catConfig.icon;
+                    return (
+                      <div className={`w-12 h-12 rounded-full ${catConfig.bgClass} flex items-center justify-center shrink-0 border border-black/5`}>
+                        <CategoryIcon className={`w-6 h-6 ${catConfig.textClass}`} />
+                      </div>
+                    );
+                  })()}
                   
-                  {mode === 'quick' ? (
-                    <div className="flex items-center text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
-                      <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
-                      <FormattedCurrencyInput
-                        value={amount}
-                        onChange={setAmount}
-                        currency={currency}
-                        hideSymbol
-                        className="bg-transparent text-left focus:outline-none w-full placeholder:text-zinc-300 text-lg font-bold text-zinc-900"
-                        placeholder="0"
-                        autoFocus
-                      />
-                    </div>
-                  ) : itemsTotal > 0 ? (
-                    <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
-                      <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
-                      <span>{itemsTotal.toLocaleString('es-CO')}</span>
-                    </div>
-                  ) : null}
+                  <div className="flex-1 flex flex-col gap-2">
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="Introduce una descripción."
+                      className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors"
+                    />
+                    
+                    {mode === 'quick' ? (
+                      <div className="flex items-center text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
+                        <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
+                        <FormattedCurrencyInput
+                          value={amount}
+                          onChange={setAmount}
+                          currency={currency}
+                          hideSymbol
+                          className="bg-transparent text-left focus:outline-none w-full placeholder:text-zinc-300 text-lg font-bold text-zinc-900"
+                          placeholder="0"
+                          autoFocus
+                        />
+                      </div>
+                    ) : itemsTotal > 0 ? (
+                      <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
+                        <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
+                        <span>{itemsTotal.toLocaleString('es-CO')}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
               {/* Context Details */}
-              <div className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3 shadow-sm overflow-hidden">
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
-                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                      <select
-                        value={groupId}
-                        onChange={e => setGroupId(e.target.value)}
-                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                      >
-                        <option value="none">Sin grupo</option>
-                        {userGroups.map(g => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                    <ListChecks className="w-4 h-4 mr-2 text-emerald-600" />
+                    Detalles
+                  </h3>
+                </div>
+                <div className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3 shadow-sm overflow-hidden">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
+                      <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
+                        <select
+                          value={groupId}
+                          onChange={e => setGroupId(e.target.value)}
+                          className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
+                        >
+                          <option value="none">Sin grupo</option>
+                          {userGroups.map(g => (
+                            <option key={g.id} value={g.id}>{g.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
-                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                      <select
-                        value={paidById}
-                        onChange={e => setPaidById(e.target.value)}
-                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                      >
-                        {activeProfiles.map(p => (
-                          <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
+                      <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
+                        <select
+                          value={paidById}
+                          onChange={e => setPaidById(e.target.value)}
+                          className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
+                        >
+                          {activeProfiles.map(p => (
+                            <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
-                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                      <select
-                        value={subCategory}
-                        onChange={e => setSubCategory(e.target.value)}
-                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                      >
-                        {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
-                          <optgroup key={main} label={main}>
-                            {subs.map(sub => (
-                              <option key={sub} value={sub}>{sub}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                        {!Object.values(CATEGORY_GROUPS).flat().includes(subCategory) && (
-                          <option value={subCategory}>{subCategory}</option>
-                        )}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
+                      <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
+                        <select
+                          value={subCategory}
+                          onChange={e => setSubCategory(e.target.value)}
+                          className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
+                        >
+                          {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
+                            <optgroup key={main} label={main}>
+                              {subs.map(sub => (
+                                <option key={sub} value={sub}>{sub}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          {!Object.values(CATEGORY_GROUPS).flat().includes(subCategory) && (
+                            <option value={subCategory}>{subCategory}</option>
+                          )}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={e => setDate(e.target.value)}
-                      className="w-full pl-2.5 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
-                    />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
+                      <input
+                        type="date"
+                        value={date}
+                        onChange={e => setDate(e.target.value)}
+                        className="w-full pl-2.5 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                      />
+                    </div>
                   </div>
                 </div>
-
-                <div className="pt-1">
-                  <button
-                    onClick={() => {
-                      setShowAdditional(!showAdditional);
-                      if (showAdditional && !notes) setShowNoteInput(false);
-                    }}
-                    className="text-[11px] font-bold text-zinc-500 hover:text-emerald-600 transition-colors flex items-center"
-                  >
-                    <Plus className={`w-3 h-3 mr-1 transition-transform ${showAdditional ? 'rotate-45' : ''}`} />
-                    {showAdditional ? 'Ocultar opciones adicionales' : 'Añadir nota o foto'}
-                  </button>
-                </div>
-
-                {(showAdditional || notes || receiptUrl) && (
-                  <div className="flex gap-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button
-                      onClick={() => setShowNoteInput(!showNoteInput)}
-                      className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${(showNoteInput || notes) ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Nota</span>
-                    </button>
-                    <button
-                      onClick={() => fileRef.current?.click()}
-                      disabled={isUploading}
-                      className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${receiptUrl ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-                    >
-                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                      <span>Foto</span>
-                    </button>
-                    <input type="file" ref={fileRef} onChange={handleUpload} accept="image/*" className="hidden" />
-                  </div>
-                )}
-
-                {(showNoteInput || notes) && (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-200 pt-2">
-                    <textarea
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                      placeholder="Añade notas o detalles adicionales (opcional)..."
-                      className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm min-h-[80px] resize-y"
-                    />
-                  </div>
-                )}
               </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowNoteInput(!showNoteInput)}
+                  className={`flex-1 flex items-center justify-center space-x-1.5 py-2 text-xs font-bold transition-all ${
+                    (showNoteInput || notes) 
+                      ? 'border border-solid bg-emerald-50 border-emerald-200 text-emerald-700 rounded-xl shadow-sm' 
+                      : 'border border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 bg-zinc-50/50 hover:bg-emerald-50/50'
+                  }`}
+                >
+                  {(showNoteInput || notes) ? <FileText className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>{notes ? 'Editar nota' : 'Añadir nota'}</span>
+                </button>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={isUploading}
+                  className={`flex-1 flex items-center justify-center space-x-1.5 py-2 text-xs font-bold transition-all ${
+                    receiptUrl 
+                      ? 'border border-solid bg-emerald-50 border-emerald-200 text-emerald-700 rounded-xl shadow-sm' 
+                      : 'border border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 bg-zinc-50/50 hover:bg-emerald-50/50'
+                  }`}
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : receiptUrl ? (
+                    <Camera className="w-3.5 h-3.5" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  <span>{receiptUrl ? 'Cambiar foto' : 'Añadir foto'}</span>
+                </button>
+                <input type="file" ref={fileRef} onChange={handleUpload} accept="image/*" className="hidden" />
+              </div>
+
+              {(showNoteInput || notes) && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <textarea
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Añade notas o detalles adicionales (opcional)..."
+                    className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm min-h-[80px] resize-y"
+                  />
+                </div>
+              )}
               
               {/* Itemized list in Step 1 */}
               {mode === 'itemized' && (
@@ -613,8 +631,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     Participantes
                   </h3>
                 </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-4">
-                  <div className="flex flex-wrap gap-2">
+                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-3">
+                  <div className="flex flex-wrap gap-1.5">
                     {activeProfiles.map(p => {
                     const isSelected = selectedMembers.includes(p.id);
                     const toggle = () => {
@@ -625,16 +643,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       <button 
                         key={p.id}
                         onClick={toggle}
-                        className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all ${isSelected ? 'opacity-100 scale-100' : 'opacity-50 grayscale scale-95 hover:grayscale-0 hover:opacity-80'}`}
+                        className={`flex items-center gap-1.5 p-1 pr-2.5 rounded-full border transition-all ${isSelected ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-zinc-50 border-zinc-200 opacity-60 grayscale hover:grayscale-0 hover:opacity-100'}`}
                       >
                         {p.avatar_url ? (
-                          <Image src={p.avatar_url} alt="avatar" width={40} height={40} className={`rounded-full w-10 h-10 object-cover border-2 transition-all ${isSelected ? 'border-emerald-500 shadow-md' : 'border-transparent'}`} unoptimized />
+                          <Image src={p.avatar_url} alt="avatar" width={24} height={24} className={`rounded-full w-6 h-6 object-cover border transition-all ${isSelected ? 'border-emerald-300' : 'border-transparent'}`} unoptimized />
                         ) : (
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-emerald-100 border-emerald-500 text-emerald-700 shadow-md' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
-                            <span className="text-sm font-bold">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all ${isSelected ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
+                            <span className="text-[10px] font-bold">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
                           </div>
                         )}
-                        <span className={`text-[10px] font-bold truncate w-14 text-center ${isSelected ? 'text-emerald-900' : 'text-zinc-500'}`}>
+                        <span className={`text-[11px] font-bold truncate max-w-[80px] ${isSelected ? 'text-emerald-900' : 'text-zinc-500'}`}>
                           {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
                         </span>
                       </button>
@@ -740,62 +758,72 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 )}
 
                 {splitType === 'itemized' && mode === 'itemized' && (
-                  <div className="space-y-4 mt-4">
+                  <div className={`space-y-4 mt-4 transition-all ${isItemizedMaximized ? 'fixed inset-4 z-50 bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-2xl overflow-y-auto' : ''}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Asignación de artículos</h4>
+                      <button 
+                        onClick={() => setIsItemizedMaximized(!isItemizedMaximized)}
+                        className="p-1.5 text-zinc-400 hover:text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors"
+                      >
+                        {isItemizedMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    
                     <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm relative">
-                      <div className="min-w-max">
-                        <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-zinc-100">
-                          <div className="w-10 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Cant</div>
-                          <div className="w-32 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">Desc</div>
-                          <div className="w-20 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right pr-2">Monto</div>
-                          <div className="w-4 shrink-0 border-r border-zinc-200 h-4"></div>
-                          <div className="flex gap-2 pl-2">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr>
+                            <th rowSpan={2} className="px-4 pt-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap align-bottom border-r border-zinc-200 bg-zinc-50/50">
+                              Artículos
+                            </th>
+                            <th colSpan={selectedMembers.length} className="px-2 pt-2 pb-1 text-[9px] font-bold text-zinc-400 uppercase tracking-wider text-center border-b border-zinc-100 bg-white">
+                              Participaciones
+                            </th>
+                          </tr>
+                          <tr className="border-b border-zinc-100 bg-white">
                             {selectedMembers.map(mId => {
                               const p = activeProfiles.find(x => x.id === mId);
                               return (
-                                <div key={mId} className="w-16 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">
+                                <th key={mId} className="w-16 min-w-[64px] px-1 py-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">
                                   {p?.full_name?.split(' ')[0] || 'User'}
-                                </div>
+                                </th>
                               );
                             })}
-                          </div>
-                        </div>
-                        <div className="p-2 space-y-1">
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
                           {items.map((item, idx) => {
-                            const amt = getItemTotal(item);
                             const itemQty = parseFloat(item.quantity) || 1;
                             return (
-                              <div key={item.id} className="flex items-center gap-2 p-1 hover:bg-zinc-50/50 rounded-xl transition-colors group">
-                                <div className="w-10 shrink-0 text-center text-xs font-black text-zinc-900">{itemQty}</div>
-                                <div className="w-32 shrink-0 text-xs font-bold text-zinc-900 truncate pl-1">{item.desc || `Art ${idx + 1}`}</div>
-                                <div className="w-20 shrink-0 text-xs font-black text-zinc-900 text-right pr-2">{formatCurrency(amt, currency)}</div>
-                                <div className="w-4 shrink-0 border-r border-zinc-200 h-6"></div>
-                                <div className="flex gap-2 pl-2">
-                                  {selectedMembers.map(mId => {
-                                    const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
-                                    return (
-                                      <div key={mId} className="w-16 shrink-0 flex justify-center">
-                                        <input 
-                                          type="number" 
-                                          min="0"
-                                          placeholder="0"
-                                          value={val}
-                                          onChange={e => {
-                                            const newItems = [...items];
-                                            if (!newItems[idx].shares) newItems[idx].shares = {};
-                                            newItems[idx].shares![mId] = e.target.value;
-                                            setItems(newItems);
-                                          }}
-                                          className="w-12 px-1 py-1 bg-white border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors" 
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                              <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
+                                <td className="px-4 py-2 text-xs font-bold text-zinc-900 border-r border-zinc-200 whitespace-nowrap">
+                                  <span className="text-emerald-700">{itemQty}x</span> {item.desc || `Art ${idx + 1}`}
+                                </td>
+                                {selectedMembers.map(mId => {
+                                  const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                  return (
+                                    <td key={mId} className="px-1 py-1 text-center">
+                                      <input 
+                                        type="number" 
+                                        min="0"
+                                        placeholder="0"
+                                        value={val}
+                                        onChange={e => {
+                                          const newItems = [...items];
+                                          if (!newItems[idx].shares) newItems[idx].shares = {};
+                                          newItems[idx].shares![mId] = e.target.value;
+                                          setItems(newItems);
+                                        }}
+                                        className="w-12 mx-auto px-1 py-1 bg-white border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors" 
+                                      />
+                                    </td>
+                                  );
+                                })}
+                              </tr>
                             );
                           })}
-                        </div>
-                      </div>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
@@ -817,24 +845,67 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       if (!p) return null;
                       const sharesMap = calculateItemizedShares();
                       const amt = sharesMap[mId] || 0;
+                      
+                      const breakdown: { desc: string; qty: number; cost: number; shareQty: number }[] = [];
+                      items.forEach((item, idx) => {
+                        const itemAmt = getItemTotal(item);
+                        const val = item.shares?.[mId] !== undefined ? parseFloat(item.shares[mId] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
+                        if (val > 0) {
+                          let sumShares = 0;
+                          selectedMembers.forEach(id => {
+                            sumShares += item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                          });
+                          if (sumShares > 0) {
+                            breakdown.push({
+                              desc: item.desc || `Art ${idx + 1}`,
+                              qty: parseFloat(item.quantity) || 1,
+                              shareQty: val,
+                              cost: itemAmt * (val / sumShares)
+                            });
+                          }
+                        }
+                      });
+
+                      const isExpanded = expandedParticipant === mId;
+
                       return (
-                        <div key={p.id} className="flex items-center justify-between p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
-                          <div className="flex items-center space-x-3 text-left">
-                            {p.avatar_url ? (
-                              <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
-                                {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                            <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
-                              {p.full_name?.split(' ')[0] || p.email}
-                              {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
-                            </span>
+                        <div key={p.id} className="flex flex-col p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
+                          <div 
+                            className="flex items-center justify-between cursor-pointer"
+                            onClick={() => setExpandedParticipant(isExpanded ? null : mId)}
+                          >
+                            <div className="flex items-center space-x-3 text-left">
+                              {p.avatar_url ? (
+                                <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
+                                  {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
+                                {p.full_name?.split(' ')[0] || p.email}
+                                {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm font-black text-emerald-700">
+                               {formatCurrency(amt, currency)}
+                               {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
+                            </div>
                           </div>
-                          <div className="text-sm font-black text-emerald-700">
-                             {formatCurrency(amt, currency)}
-                          </div>
+                          
+                          {isExpanded && breakdown.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2 px-1">
+                              {breakdown.map((b, i) => (
+                                <div key={i} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{b.shareQty} cuota{b.shareQty > 1 ? 's' : ''}</span>
+                                    <span className="font-medium text-zinc-600 truncate max-w-[140px]">{b.qty}x {b.desc}</span>
+                                  </div>
+                                  <span className="font-bold text-zinc-900">{formatCurrency(b.cost, currency)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -848,7 +919,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         {/* Footer Actions */}
         <div className="p-5 border-t border-zinc-100 bg-white flex flex-col gap-3 rounded-b-[24px] shrink-0">
           <div className="flex justify-between items-center px-1">
-            <span className="text-sm font-bold text-zinc-500">Total a dividir</span>
+            <span className="text-sm font-bold text-zinc-500">Total gasto</span>
             <span className="text-lg font-black text-zinc-900">{formatCurrency(totalAmount, currency)}</span>
           </div>
 
