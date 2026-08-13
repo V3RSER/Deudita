@@ -699,79 +699,81 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   ))}
                 </div>
 
-                <div className={`bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'p-0' : 'p-4 space-y-4'}`}>
+                <div className={`bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'p-0' : 'p-3'}`}>
                   {splitType !== 'itemized' && (
-                    <div className="space-y-2">
-                      {selectedMembers.map(mId => {
-                        const p = activeProfiles.find(x => x.id === mId);
-                        if (!p) return null;
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-zinc-900 text-sm truncate pr-2">{description || 'Nuevo gasto'}</span>
+                        <span className="font-black text-emerald-700 text-sm shrink-0">{formatCurrency(totalAmount, currency)}</span>
+                      </div>
+                      <div className="space-y-1.5 border-t border-zinc-100 pt-2">
+                        {selectedMembers.map(mId => {
+                          const p = activeProfiles.find(x => x.id === mId);
+                          if (!p) return null;
 
-                        let liveAmountShares = 0;
-                        if (splitType === 'shares') {
-                          const totalShares = selectedMembers.reduce((acc, memId) => acc + (parseFloat(splits[memId]?.shares) || 1), 0);
-                          const userShares = parseFloat(splits[p.id]?.shares) || 1;
-                          liveAmountShares = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
-                        }
+                          let liveAmountShares = 0;
+                          if (splitType === 'shares') {
+                            const totalShares = selectedMembers.reduce((acc, memId) => acc + (parseFloat(splits[memId]?.shares) || 1), 0);
+                            const userShares = parseFloat(splits[p.id]?.shares) || 1;
+                            liveAmountShares = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
+                          }
 
-                        return (
-                          <div key={p.id} className="flex items-center justify-between px-3 py-2 h-14 rounded-xl border bg-white border-zinc-200 shadow-sm">
-                            <div className="flex items-center space-x-3 text-left flex-1 min-w-0">
-                              {p.avatar_url ? (
-                                <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
-                                  {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
-                                {p.full_name?.split(' ')[0] || p.email}
-                                {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
-                              </span>
-                            </div>
-
-                            {splitType === 'shares' && (
-                              <div className="px-3 flex items-center gap-1.5 h-8 shrink-0">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  placeholder="1"
-                                  value={splits[p.id]?.shares || '1'}
-                                  onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
-                                  className="w-12 px-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
-                                />
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
+                          return (
+                            <div key={p.id} className="flex items-center justify-between py-1 border-b border-zinc-50 last:border-0">
+                              <div className="flex items-center space-x-2 flex-1 min-w-0 pr-2">
+                                {p.avatar_url ? (
+                                  <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover border border-zinc-200 shrink-0" unoptimized />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold shadow-sm shrink-0">
+                                    {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="text-xs font-semibold text-zinc-700 truncate">
+                                  {p.full_name?.split(' ')[0] || p.email}
+                                  {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                                </span>
                               </div>
-                            )}
 
-                            <div className="shrink-0 flex justify-end items-center">
-                              {splitType === 'equal' && (
-                                <span className="text-sm font-black text-emerald-700 flex items-center h-8">
-                                  {formatCurrency(totalAmount / selectedMembers.length, currency)}
-                                </span>
-                              )}
-                              {splitType === 'exact' && (
-                                <div className="relative flex items-center h-8">
-                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
-                                  <FormattedCurrencyInput
-                                    value={splits[p.id]?.exact || ''}
-                                    onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
-                                    currency={currency}
-                                    hideSymbol
-                                    className="w-24 pl-5 pr-2 py-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
-                                    placeholder="0.00"
-                                  />
-                                </div>
-                              )}
-                              {splitType === 'shares' && (
-                                <span className="text-sm font-black text-emerald-700 flex items-center h-8">
-                                  {formatCurrency(liveAmountShares, currency)}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {splitType === 'shares' && (
+                                  <div className="flex items-center gap-1.5 h-8 shrink-0">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      placeholder="1"
+                                      value={splits[p.id]?.shares || '1'}
+                                      onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
+                                      className="w-12 h-7 px-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                    />
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
+                                  </div>
+                                )}
+
+                                {splitType === 'exact' && (
+                                  <div className="relative flex items-center h-8">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
+                                    <FormattedCurrencyInput
+                                      value={splits[p.id]?.exact || ''}
+                                      onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
+                                      currency={currency}
+                                      hideSymbol
+                                      className="w-20 pl-4 pr-1 h-7 bg-zinc-50 border border-zinc-200 rounded text-right text-xs font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                )}
+
+                                {(splitType === 'equal' || splitType === 'shares') && (
+                                  <span className="text-sm font-black flex items-center h-8">
+                                    {formatCurrency(splitType === 'equal' ? (totalAmount / selectedMembers.length) : liveAmountShares, currency)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
                   {splitType === 'itemized' && mode === 'itemized' && (
                     <div className={!isItemizedVerticalView ? "" : "flex flex-col space-y-3"}>
@@ -915,7 +917,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       const sharesMap = calculateItemizedShares();
                       const amt = sharesMap[mId] || 0;
 
-                      const breakdown: { desc: string; qty: number; cost: number; shareQty: number }[] = [];
+                      const breakdown: { desc: string; qty: number; cost: number; shareQty: number; totalShares: number }[] = [];
                       items.forEach((item, idx) => {
                         const itemAmt = getItemTotal(item);
                         const val = item.shares?.[mId] !== undefined ? parseFloat(item.shares[mId] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
@@ -929,6 +931,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               desc: item.desc || `Art ${idx + 1}`,
                               qty: parseFloat(item.quantity) || 1,
                               shareQty: val,
+                              totalShares: sumShares,
                               cost: itemAmt * (val / sumShares)
                             });
                           }
@@ -964,15 +967,19 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                           {isExpanded && breakdown.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2 px-1">
-                              {breakdown.map((b, i) => (
-                                <div key={i} className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{b.shareQty} cuota{b.shareQty > 1 ? 's' : ''}</span>
-                                    <span className="font-medium text-zinc-600 truncate max-w-[140px]">{b.qty}x {b.desc}</span>
+                              {breakdown.map((b, i) => {
+                                const myQty = b.qty * (b.shareQty / b.totalShares);
+                                const displayQty = Number.isInteger(myQty) ? myQty.toString() : Number(myQty.toFixed(2)).toString();
+                                return (
+                                  <div key={i} className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{displayQty} de {b.qty}</span>
+                                      <span className="font-medium text-zinc-600 truncate max-w-[140px]">{b.desc}</span>
+                                    </div>
+                                    <span className="font-bold text-zinc-900">{formatCurrency(b.cost, currency)}</span>
                                   </div>
-                                  <span className="font-bold text-zinc-900">{formatCurrency(b.cost, currency)}</span>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
