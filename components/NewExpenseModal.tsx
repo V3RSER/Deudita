@@ -181,13 +181,18 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
     items.forEach(item => {
       const amt = getItemTotal(item);
-      const isAll = item.assignedTo.length === 0;
-      const assigned = isAll ? selectedMembers : item.assignedTo.filter(id => selectedMembers.includes(id));
+      let sumShares = 0;
+      const parsedShares: Record<string, number> = {};
       
-      if (assigned.length > 0 && amt > 0) {
-        const splitAmount = amt / assigned.length;
-        assigned.forEach(id => {
-          res[id] = (res[id] || 0) + splitAmount;
+      selectedMembers.forEach(id => {
+        const val = item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+        parsedShares[id] = val;
+        sumShares += val;
+      });
+
+      if (sumShares > 0 && amt > 0) {
+        selectedMembers.forEach(id => {
+          res[id] = (res[id] || 0) + (amt * (parsedShares[id] / sumShares));
         });
       }
     });
@@ -373,12 +378,12 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         autoFocus
                       />
                     </div>
-                  ) : (
+                  ) : itemsTotal > 0 ? (
                     <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
                       <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
                       <span>{itemsTotal.toLocaleString('es-CO')}</span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -598,24 +603,12 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
           {/* Unified Split Section (Step 2) */}
           {step === 2 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900">¿Cómo se divide?</h3>
-                <div className="bg-zinc-100/80 p-1 rounded-xl flex shadow-inner overflow-x-auto no-scrollbar max-w-[200px] sm:max-w-none">
-                  {['equal', 'exact', 'shares', ...(mode === 'itemized' ? ['itemized'] : [])].map(type => (
-                    <button
-                      key={type}
-                      onClick={() => setSplitType(type as any)}
-                      className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg capitalize transition-all shrink-0 ${splitType === type ? 'bg-white shadow-sm text-zinc-900 scale-[1.02]' : 'text-zinc-500 hover:text-zinc-900'}`}
-                    >
-                      {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {splitType !== 'itemized' && (
-                <div className="space-y-2">
+            <div className="space-y-6">
+              
+              {/* Participantes Section */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-zinc-900">Participantes</h3>
+                <div className="flex flex-wrap gap-2">
                   {activeProfiles.map(p => {
                     const isSelected = selectedMembers.includes(p.id);
                     const toggle = () => {
@@ -623,26 +616,71 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       else if (!isSelected) setSelectedMembers([...selectedMembers, p.id]);
                     };
                     return (
-                      <div key={p.id} className={`flex items-center p-3 rounded-2xl border transition-all ${isSelected ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-50 border-zinc-100 opacity-60 hover:opacity-100'}`}>
-                        <button onClick={toggle} className="flex-1 flex items-center space-x-3 text-left group">
-                          <div className={`w-5 h-5 rounded-[6px] flex items-center justify-center border transition-colors shrink-0 ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-zinc-300 group-hover:border-emerald-300'}`}>
-                            {isSelected && <Check className="w-3 h-3" />}
+                      <button 
+                        key={p.id}
+                        onClick={toggle}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all ${isSelected ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-zinc-50 border-zinc-100 opacity-60 grayscale hover:grayscale-0'}`}
+                      >
+                        <div className={`w-4 h-4 rounded-md flex items-center justify-center border transition-colors shrink-0 ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-zinc-300'}`}>
+                          {isSelected && <Check className="w-3 h-3" />}
+                        </div>
+                        {p.avatar_url ? (
+                          <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover" unoptimized />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-zinc-200 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-zinc-600">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
                           </div>
-                          {p.avatar_url ? (
-                            <Image src={p.avatar_url} alt="avatar" width={32} height={32} className="rounded-full w-8 h-8 object-cover border border-zinc-200 shrink-0" unoptimized />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
-                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="text-sm font-bold text-zinc-900 truncate">
-                            {p.full_name?.split(' ')[0] || p.email}
-                            {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
-                          </span>
-                        </button>
+                        )}
+                        <span className={`text-xs font-bold truncate max-w-[80px] ${isSelected ? 'text-emerald-900' : 'text-zinc-500'}`}>
+                          {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                        {isSelected && (
-                          <div className="ml-3 pl-3 border-l border-zinc-100 shrink-0 flex justify-end min-w-[80px]">
+              <hr className="border-zinc-100" />
+
+              {/* Cómo se divide Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-zinc-900">¿Cómo se divide?</h3>
+                  <div className="bg-zinc-100/80 p-1 rounded-xl flex shadow-inner overflow-x-auto no-scrollbar max-w-[200px] sm:max-w-none">
+                    {['equal', 'exact', 'shares', ...(mode === 'itemized' ? ['itemized'] : [])].map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setSplitType(type as any)}
+                        className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg capitalize transition-all shrink-0 ${splitType === type ? 'bg-white shadow-sm text-zinc-900 scale-[1.02]' : 'text-zinc-500 hover:text-zinc-900'}`}
+                      >
+                        {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {splitType !== 'itemized' && (
+                  <div className="space-y-2">
+                    {selectedMembers.map(mId => {
+                      const p = activeProfiles.find(x => x.id === mId);
+                      if (!p) return null;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between p-3 rounded-2xl border bg-white border-zinc-200 shadow-sm">
+                          <div className="flex items-center space-x-3 text-left">
+                            {p.avatar_url ? (
+                              <Image src={p.avatar_url} alt="avatar" width={32} height={32} className="rounded-full w-8 h-8 object-cover border border-zinc-200 shrink-0" unoptimized />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
+                                {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
+                              {p.full_name?.split(' ')[0] || p.email}
+                              {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                            </span>
+                          </div>
+
+                          <div className="shrink-0 flex justify-end">
                             {splitType === 'equal' && (
                               <span className="text-sm font-bold text-zinc-900">
                                 {formatCurrency(totalAmount / selectedMembers.length, currency)}
@@ -656,13 +694,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                   currency={currency}
                                   hideSymbol
-                                  className="w-20 pl-6 pr-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                                  className="w-24 pl-6 pr-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
                                   placeholder="0.00"
                                 />
                               </div>
                             )}
                             {splitType === 'shares' && (() => {
-                              const totalShares = selectedMembers.reduce((acc, mId) => acc + (parseFloat(splits[mId]?.shares) || 1), 0);
+                              const totalShares = selectedMembers.reduce((acc, memId) => acc + (parseFloat(splits[memId]?.shares) || 1), 0);
                               const userShares = parseFloat(splits[p.id]?.shares) || 1;
                               const liveAmount = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
                               return (
@@ -685,100 +723,91 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               );
                             })()}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {splitType === 'itemized' && mode === 'itemized' && (
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between px-1">
-                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Repartir por Artículo</h3>
+                        </div>
+                      );
+                    })}
                   </div>
-                  
-                  {items.map((item, idx) => {
-                    const amt = getItemTotal(item);
-                    const itemQty = parseFloat(item.quantity) || 1;
-                    
-                    return (
-                      <div key={item.id} className="p-4 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-sm font-bold text-zinc-900">
-                              {itemQty > 1 ? <span className="text-emerald-600 mr-1">{itemQty}x</span> : null}
-                              {item.desc || `Artículo ${idx + 1}`}
-                            </p>
-                            <p className="text-[11px] text-zinc-500 font-bold mt-0.5">
-                              {formatCurrency(amt / itemQty, currency)} c/u
-                            </p>
-                          </div>
-                          <div className="text-sm font-black text-zinc-900 bg-zinc-50 px-2 py-1 rounded-lg border border-zinc-100">
-                            {formatCurrency(amt, currency)}
-                          </div>
-                        </div>
-                        
-                        <div className="pt-3 border-t border-zinc-100">
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Dividido entre</p>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedMembers.map(pId => {
-                               const p = activeProfiles.find(x => x.id === pId);
-                               if (!p) return null;
-                               const isAssigned = item.assignedTo.length === 0 || item.assignedTo.includes(pId);
-                               
-                               const toggleAssignment = () => {
-                                  const newItems = [...items];
-                                  let assigned = newItems[idx].assignedTo;
-                                  
-                                  if (assigned.length === 0) {
-                                    assigned = selectedMembers.filter(id => id !== pId);
-                                  } else {
-                                    if (assigned.includes(pId)) {
-                                      assigned = assigned.filter(id => id !== pId);
-                                    } else {
-                                      assigned = [...assigned, pId];
-                                    }
-                                  }
-                                  
-                                  newItems[idx].assignedTo = assigned;
-                                  setItems(newItems);
-                               };
-                               
-                               const currentAssignedCount = item.assignedTo.length === 0 ? selectedMembers.length : item.assignedTo.filter(id => selectedMembers.includes(id)).length;
-                               const amountToPay = isAssigned && currentAssignedCount > 0 ? amt / currentAssignedCount : 0;
-                               
-                               return (
-                                 <button 
-                                   key={pId}
-                                   onClick={toggleAssignment}
-                                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${isAssigned ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-zinc-50 border-zinc-100 opacity-60 grayscale hover:grayscale-0'}`}
-                                 >
-                                   {p.avatar_url ? (
-                                     <Image src={p.avatar_url} alt="avatar" width={16} height={16} className="rounded-full w-4 h-4 object-cover" unoptimized />
-                                   ) : (
-                                     <div className="w-4 h-4 rounded-full bg-zinc-200 flex items-center justify-center">
-                                       <span className="text-[8px] font-bold text-zinc-600">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
-                                     </div>
-                                   )}
-                                   <span className={`text-[10px] font-bold truncate max-w-[60px] ${isAssigned ? 'text-emerald-800' : 'text-zinc-500'}`}>
-                                     {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
-                                   </span>
-                                   {isAssigned && (
-                                     <span className="text-[10px] font-black text-emerald-700 ml-1 bg-white px-1.5 py-0.5 rounded-md border border-emerald-100/50">
-                                       {formatCurrency(amountToPay, currency)}
-                                     </span>
-                                   )}
-                                 </button>
-                               )
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                )}
+
+                {splitType === 'itemized' && mode === 'itemized' && (
+                  <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm mt-2">
+                    <table className="w-full text-left border-collapse min-w-max">
+                      <thead>
+                        <tr className="bg-zinc-50/80 border-b border-zinc-200">
+                          <th className="p-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider min-w-[120px]">Cant x Desc</th>
+                          <th className="p-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right">Monto</th>
+                          {selectedMembers.map(mId => {
+                            const p = activeProfiles.find(x => x.id === mId);
+                            return (
+                              <th key={mId} className="p-2 text-center min-w-[56px] border-l border-zinc-100">
+                                <div className="flex flex-col items-center gap-1">
+                                  {p?.avatar_url ? (
+                                    <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover" unoptimized />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center shrink-0">
+                                      <span className="text-[9px] font-bold text-zinc-600">{(p?.full_name || p?.email || 'U').charAt(0).toUpperCase()}</span>
+                                    </div>
+                                  )}
+                                  <span className="text-[9px] font-bold text-zinc-600 truncate w-full max-w-[50px]">{p?.full_name?.split(' ')[0] || 'User'}</span>
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {items.map((item, idx) => {
+                          const amt = getItemTotal(item);
+                          const itemQty = parseFloat(item.quantity) || 1;
+                          return (
+                            <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors">
+                              <td className="p-3 text-xs font-bold text-zinc-900 max-w-[140px] truncate">
+                                {itemQty > 1 && <span className="text-emerald-600 mr-1">{itemQty}x</span>}
+                                {item.desc || `Art ${idx + 1}`}
+                              </td>
+                              <td className="p-3 text-xs font-black text-zinc-900 text-right">
+                                {formatCurrency(amt, currency)}
+                              </td>
+                              {selectedMembers.map(mId => {
+                                const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                return (
+                                  <td key={mId} className="p-2 text-center border-l border-zinc-100">
+                                    <input 
+                                      type="number" 
+                                      min="0"
+                                      value={val}
+                                      onChange={e => {
+                                        const newItems = [...items];
+                                        if (!newItems[idx].shares) newItems[idx].shares = {};
+                                        newItems[idx].shares![mId] = e.target.value;
+                                        setItems(newItems);
+                                      }}
+                                      className="w-10 mx-auto px-1 py-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20" 
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-zinc-50 border-t border-zinc-200">
+                          <td colSpan={2} className="p-3 text-right text-[10px] font-bold text-zinc-500 uppercase">Totales:</td>
+                          {(() => {
+                            const sharesMap = calculateItemizedShares();
+                            return selectedMembers.map(mId => (
+                              <td key={mId} className="p-2 text-center text-xs font-black text-emerald-700 border-l border-zinc-100">
+                                {formatCurrency(sharesMap[mId] || 0, currency)}
+                              </td>
+                            ));
+                          })()}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
