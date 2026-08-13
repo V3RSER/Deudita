@@ -70,6 +70,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [step, setStep] = useState(1);
   const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
   const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
+  const [expandedItem, setExpandedItem] = useState<number | null>(null);
 
   // Computed
   const activeGroup = userGroups.find(g => g.id === groupId);
@@ -751,7 +752,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                     onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                     currency={currency}
                                     hideSymbol={false}
-                                    className="w-24 bg-transparent border-0 text-right text-sm font-black text-emerald-700 focus:outline-none p-0 m-0"
+                                    className="w-24 bg-transparent border border-transparent hover:border-zinc-200 focus:border-zinc-300 hover:bg-zinc-50 focus:bg-zinc-50 rounded text-right text-sm font-black text-zinc-900 focus:outline-none p-1 -mr-1 transition-colors"
                                     placeholder="$ 0"
                                   />
                                 </div>
@@ -830,60 +831,87 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           </table>
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-2 space-y-1">
                           {items.map((item, idx) => {
                             const itemQty = parseFloat(item.quantity) || 1;
                             const amt = getItemTotal(item);
+                            const isExpanded = expandedItem === item.id;
+                            
+                            let sumShares = 0;
+                            selectedMembers.forEach(id => {
+                              sumShares += item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                            });
+
                             return (
-                              <div key={item.id} className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-bold text-zinc-900 text-sm truncate pr-2">
-                                    {itemQty} · {item.desc || 'Sin nombre'}
-                                  </span>
-                                  <span className="font-black text-emerald-700 text-sm shrink-0">
+                              <div key={item.id} className="flex flex-col p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
+                                <div 
+                                  className="flex items-center justify-between cursor-pointer"
+                                  onClick={() => setExpandedItem(isExpanded ? null : item.id)}
+                                >
+                                  <div className="flex items-center space-x-3 text-left">
+                                    <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
+                                      {itemQty} · {item.desc || 'Sin nombre'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-sm font-black text-emerald-700">
                                     {formatCurrency(amt, currency)}
-                                  </span>
+                                    {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
+                                  </div>
                                 </div>
-                                <div className="space-y-1.5 border-t border-zinc-100 pt-2">
-                                  {selectedMembers.map(mId => {
-                                    const p = activeProfiles.find(x => x.id === mId);
-                                    if (!p) return null;
-                                    const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
-                                    
-                                    return (
-                                      <div key={mId} className="flex items-center justify-between py-1 border-b border-zinc-50 last:border-0">
-                                        <div className="flex items-center space-x-2 flex-1 min-w-0 pr-2">
-                                          {p.avatar_url ? (
-                                            <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover border border-zinc-200 shrink-0" unoptimized />
-                                          ) : (
-                                            <div className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold shadow-sm shrink-0">
-                                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+
+                                {isExpanded && (
+                                  <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2 px-1">
+                                    <div className="flex flex-col">
+                                      {selectedMembers.map(mId => {
+                                        const p = activeProfiles.find(x => x.id === mId);
+                                        if (!p) return null;
+                                        
+                                        const valStr = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                        const valNum = parseFloat(valStr) || 0;
+                                        const shareCost = sumShares > 0 ? (amt * (valNum / sumShares)) : 0;
+                                        
+                                        return (
+                                          <div key={mId} className="flex items-center justify-between py-1 border-b border-zinc-50 last:border-0 relative">
+                                            <div className="flex items-center space-x-2 w-[40%] min-w-0 pr-2">
+                                              {p.avatar_url ? (
+                                                <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover border border-zinc-200 shrink-0" unoptimized />
+                                              ) : (
+                                                <div className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold shadow-sm shrink-0">
+                                                  {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                                                </div>
+                                              )}
+                                              <span className="text-xs font-semibold text-zinc-700 truncate">
+                                                {p.full_name?.split(' ')[0] || p.email}
+                                                {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                                              </span>
                                             </div>
-                                          )}
-                                          <span className="text-xs font-semibold text-zinc-700 truncate">
-                                            {p.full_name?.split(' ')[0] || p.email}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            value={val}
-                                            onChange={e => {
-                                              const newItems = [...items];
-                                              if (!newItems[idx].shares) newItems[idx].shares = {};
-                                              newItems[idx].shares![mId] = e.target.value;
-                                              setItems(newItems);
-                                            }}
-                                            className="w-12 h-7 px-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                                          />
-                                          <span className="text-[10px] font-bold text-zinc-400">cuotas</span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                                            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 h-8 shrink-0">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                placeholder="0"
+                                                value={valStr}
+                                                onChange={e => {
+                                                  const newItems = [...items];
+                                                  if (!newItems[idx].shares) newItems[idx].shares = {};
+                                                  newItems[idx].shares![mId] = e.target.value;
+                                                  setItems(newItems);
+                                                }}
+                                                className="w-12 h-7 px-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                              />
+                                              <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
+                                            </div>
+                                            <div className="flex items-center justify-end w-[40%] shrink-0">
+                                              <span className="text-sm font-black flex items-center h-8">
+                                                {formatCurrency(shareCost, currency)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -989,7 +1017,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         <div className="p-5 border-t border-zinc-100 bg-white flex flex-col gap-3 rounded-b-[24px] shrink-0">
           <div className="flex justify-between items-center px-1">
             <span className="text-sm font-bold text-zinc-500">Total gasto</span>
-            <span className="text-lg font-black text-zinc-900">{formatCurrency(totalAmount, currency)}</span>
+            <span className="text-lg font-black text-emerald-700">{formatCurrency(totalAmount, currency)}</span>
           </div>
 
           <div className="flex gap-3 mt-1">
