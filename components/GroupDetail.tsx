@@ -84,6 +84,8 @@ function parseExpenseDate(dateStr: string) {
   return { year: 2026, monthIndex: 0, day: 1 };
 }
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function GroupDetail({
   group,
   onBack,
@@ -174,67 +176,51 @@ export function GroupDetail({
 
   return (
     <div className="space-y-6">
-      {/* Group Card Header */}
-      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center space-x-4 min-w-0">
-            {/* Foto a la izquierda */}
-            {groupImageUrl ? (
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden ring-2 ring-zinc-100 shrink-0 shadow-sm">
-                <Image
-                  src={groupImageUrl}
-                  alt={group.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            ) : (
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 text-white flex items-center justify-center text-2xl font-bold shrink-0 shadow-sm">
-                <Users className="w-8 h-8" />
-              </div>
-            )}
-
-            {/* A la derecha de la foto: Nombre en grande arriba, pequeña descripción de la cantidad de personas abajo */}
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight truncate">
-                {group.name}
-              </h1>
-            </div>
-          </div>
-
-          {/* A la derecha de todo esto: Botones de saldar y nuevo gasto */}
-          <div className="flex items-center space-x-2.5 shrink-0 self-start sm:self-center">
+      <PageHeader
+        title={group.name}
+        icon={groupImageUrl ? (
+          <Image
+            src={groupImageUrl}
+            alt={group.name}
+            width={32}
+            height={32}
+            className="rounded-lg object-cover"
+            unoptimized
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <Users className="w-5 h-5 text-zinc-600" />
+        )}
+        actions={
+          <>
             <button
               onClick={() => onOpenSettleModal(group.id)}
-              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all ring-1 ring-zinc-200 shadow-sm active:scale-95 min-h-[44px]"
+              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>Saldar</span>
             </button>
-
             <button
               onClick={() => onOpenNewExpense(group.id)}
-              className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-sm transition-all active:scale-95 min-h-[44px]"
+              className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo gasto</span>
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* SOLO MEMBER STRATEGY */}
       {isSoloMember && (
-        <div className="bg-zinc-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-lg relative overflow-hidden border border-zinc-800">
+        <div className="bg-amber-50 text-amber-900 p-6 rounded-[2rem] shadow-sm relative overflow-hidden border border-amber-200/60">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1.5 max-w-xl">
-              <div className="inline-flex items-center space-x-2 bg-emerald-500/20 text-emerald-300 text-xs font-semibold px-3 py-1 rounded-full border border-emerald-500/30">
+              <div className="inline-flex items-center space-x-2 bg-amber-200/50 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-md tracking-wider uppercase">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Grupo Listo</span>
               </div>
-              <h3 className="text-xl font-semibold tracking-tight text-white">
+              <h3 className="text-lg font-semibold tracking-tight text-amber-950">
                 Eres la única persona en este grupo
               </h3>
             </div>
@@ -242,7 +228,7 @@ export function GroupDetail({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <button
                 onClick={() => onOpenAddMember(group.id)}
-                className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-md min-h-[44px] cursor-pointer"
+                className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm min-h-[40px] cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Añadir Integrante</span>
@@ -250,16 +236,16 @@ export function GroupDetail({
 
               <button
                 onClick={handleShareOrCopyLink}
-                className="flex items-center justify-center space-x-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-3 rounded-2xl text-sm ring-1 ring-zinc-700 transition-all active:scale-95 min-h-[44px] cursor-pointer"
+                className="flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 py-2.5 rounded-xl text-sm ring-1 ring-zinc-200 shadow-sm transition-all active:scale-95 min-h-[40px] cursor-pointer"
               >
                 {copiedLink ? (
                   <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-300 font-semibold">¡Enlace Copiado!</span>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-700 font-semibold">¡Copiado!</span>
                   </>
                 ) : (
                   <>
-                    <Share2 className="w-4 h-4" />
+                    <Share2 className="w-4 h-4 text-zinc-500" />
                     <span>Compartir Enlace</span>
                   </>
                 )}

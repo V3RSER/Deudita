@@ -27,6 +27,8 @@ function getInitials(name?: string): string {
   return trimmed.charAt(0).toUpperCase();
 }
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
   const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
 
@@ -49,22 +51,12 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
   const netConsolidated = totalOwedToMe - totalIOwe;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center space-x-2 bg-zinc-100 text-zinc-700 px-3 py-1 rounded-full text-xs font-semibold mb-2 ring-1 ring-zinc-200/80">
-            <Wallet className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Saldos y deudas</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900">
-            Balances
-          </h1>
-          <p className="text-zinc-500 text-sm sm:text-base mt-1 max-w-2xl leading-relaxed">
-            Resumen de cobros, pagos pendientes y saldos entre integrantes de tus grupos.
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader 
+        title="Balances"
+        subtitle="Resumen de cobros, pagos pendientes y saldos entre integrantes de tus grupos."
+        icon={<Wallet className="w-5 h-5" />}
+      />
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -51,6 +51,8 @@ const CATEGORY_LABELS: Record<GroupCategory, string> = {
   other: 'Otros',
 };
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
   const { currentProfile, userGroups, members, expenses, payments, profiles, pendingInvites, acceptGroupInvite, rejectGroupInvite } = useExpense();
   const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
@@ -78,12 +80,18 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <PageHeader 
+        title={`Mis Grupos (${userGroups.length})`}
+        subtitle="Administra los grupos donde compartes gastos."
+        icon={<Users className="w-5 h-5" />}
+      />
+
       {/* PENDING INVITES BANNER */}
       {pendingInvites.length > 0 && (
-        <div className="bg-zinc-900 text-white rounded-[2rem] p-6 shadow-xl border border-zinc-800 space-y-4">
+        <div className="bg-amber-50 text-amber-900 rounded-[1.5rem] p-5 shadow-sm border border-amber-200/60 space-y-4">
           <div className="flex items-center space-x-2">
-            <span className="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-emerald-500/30">
+            <span className="bg-amber-200/50 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
               Invitación Pendiente
             </span>
           </div>
@@ -93,13 +101,13 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
             const inviterName = invite.inviter ? invite.inviter.full_name : 'Un integrante';
 
             return (
-              <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-800/80 p-4 rounded-2xl border border-zinc-700/60">
+              <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
                 <div>
-                  <h4 className="font-bold text-white text-base">
-                    Te han invitado al grupo <span className="text-emerald-400">&quot;{groupName}&quot;</span>
+                  <h4 className="font-semibold text-zinc-900 text-sm">
+                    Te han invitado al grupo <span className="font-bold">&quot;{groupName}&quot;</span>
                   </h4>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Invitado por <strong className="text-zinc-200">{inviterName}</strong>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Invitado por <strong className="text-zinc-700">{inviterName}</strong>
                   </p>
                 </div>
 
@@ -107,14 +115,14 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                   <button
                     onClick={() => handleRejectInvite(invite.id)}
                     disabled={processingInviteId === invite.id}
-                    className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded-xl text-xs font-medium transition"
+                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition"
                   >
                     Rechazar
                   </button>
                   <button
                     onClick={() => handleAcceptInvite(invite.id)}
                     disabled={processingInviteId === invite.id}
-                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-semibold shadow-md transition"
+                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-semibold shadow-sm transition"
                   >
                     Aceptar e Ingresar
                   </button>
@@ -124,23 +132,6 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
           })}
         </div>
       )}
-
-      {/* Group Grid Header */}
-      <div className="flex items-center justify-between pt-2">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-semibold text-zinc-900 tracking-tight">
-            Mis Grupos <span className="text-zinc-400 font-normal">({userGroups.length})</span>
-          </h2>
-        </div>
-
-        <button
-          onClick={onOpenNewGroup}
-          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 min-h-[44px] cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Crear Grupo</span>
-        </button>
-      </div>
 
       {/* Group Cards */}
       {userGroups.length === 0 ? (

@@ -43,6 +43,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Varios: '#64748b', // slate-500
 };
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment }: AllExpensesViewProps) {
   const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
@@ -132,20 +134,11 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 bg-white p-6 sm:p-8 rounded-[2rem] ring-1 ring-zinc-200 shadow-xs">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Historial de Gastos y Pagos</h1>
-        </div>
-
-        <button
-          onClick={onOpenNewExpense}
-          className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 self-start sm:self-auto min-h-[44px] cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Registrar Gasto</span>
-        </button>
-      </div>
+      <PageHeader 
+        title="Historial de Gastos y Pagos"
+        subtitle="Revisa, filtra y analiza todos tus movimientos."
+        icon={<Receipt className="w-5 h-5" />}
+      />
 
       {/* Chart & Summary Dashboard */}
       {filteredExpenses.length > 0 && (

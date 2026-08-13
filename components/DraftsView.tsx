@@ -22,6 +22,8 @@ interface DraftsViewProps {
   onOpenScanReceiptModal: () => void;
 }
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function DraftsView({
   onOpenConfirmDraft,
   onOpenScanReceiptModal,
@@ -53,43 +55,30 @@ export function DraftsView({
   };
 
   return (
-    <div className="space-y-8">
-      {/* Top Banner */}
-      <div className="bg-zinc-900 rounded-[2rem] p-8 sm:p-10 text-white shadow-xl relative overflow-hidden">
-        <div className="relative z-10">
-          <div className="flex items-center space-x-3 text-zinc-400 font-semibold text-[10px] uppercase tracking-widest mb-3">
-            <MailCheck className="w-4 h-4 text-zinc-300" />
-            <span>Lectura de Comprobantes y Boletas</span>
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50">
-            Borradores de Gastos
-          </h1>
-
-          <p className="text-zinc-400 text-base mt-3 max-w-3xl leading-relaxed">
-            Los comprobantes detectados o escaneados se guardan como <strong>borradores</strong>. Revisa los detalles, asígnales un grupo y confirma para agregarlos a tus balances reales.
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <button
-              onClick={onOpenScanReceiptModal}
-              className="flex items-center space-x-2 bg-white text-zinc-900 font-medium px-5 py-3 rounded-full text-sm shadow-sm transition-all hover:bg-zinc-100 active:scale-95"
-            >
-              <ScanLine className="w-4 h-4" />
-              <span>Escanear Comprobante</span>
-            </button>
-
+    <div className="space-y-6">
+      <PageHeader 
+        title="Tickets y Borradores"
+        subtitle="Los comprobantes escaneados o recibidos se guardan aquí. Asígnalos a un grupo para dividirlos."
+        icon={<MailCheck className="w-5 h-5" />}
+        actions={
+          <>
             <button
               onClick={simulateGmailArrival}
-              className="flex items-center space-x-2 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 px-5 py-3 rounded-full text-sm font-medium ring-1 ring-zinc-700/50 transition-all active:scale-95 backdrop-blur-sm"
+              className="bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px]"
             >
-              <RefreshCw className="w-4 h-4 text-zinc-400" />
+              <RefreshCw className="w-4 h-4" />
               <span>Importar Ejemplo</span>
             </button>
-          </div>
-        </div>
-        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none" />
-      </div>
+            <button
+              onClick={onOpenScanReceiptModal}
+              className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px]"
+            >
+              <ScanLine className="w-4 h-4" />
+              <span>Escanear</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Pending Drafts Section */}
       <div className="space-y-5">

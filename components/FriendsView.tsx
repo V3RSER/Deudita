@@ -25,6 +25,8 @@ interface FriendsViewProps {
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
 }
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   const { currentProfile, profiles, members, expenses, payments, userGroups, pendingInvites } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,36 +69,30 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   });
 
   return (
-    <div className="space-y-8">
-      {/* Header Banner */}
-      <div className="bg-zinc-900 rounded-[2rem] p-6 sm:p-10 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="inline-flex items-center space-x-2 bg-zinc-800 px-3 py-1 rounded-full text-xs font-semibold text-zinc-300">
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Red de Amigos</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white">
-            Amigos y Saldos Directos
-          </h1>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsAddFriendOpen(true)}
-            className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-5 py-3 rounded-full text-xs sm:text-sm shadow-md transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px] cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Agregar Amigo</span>
-          </button>
-          <button
-            onClick={() => setIsAddMemberOpen(true)}
-            className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-full text-xs sm:text-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[44px] cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Añadir a un Grupo</span>
-          </button>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader 
+        title="Amigos y Saldos"
+        subtitle="Agrega amigos y revisa saldos directos o en grupos."
+        icon={<Users className="w-5 h-5" />}
+        actions={
+          <>
+            <button
+              onClick={() => setIsAddMemberOpen(true)}
+              className="bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Añadir a Grupo</span>
+            </button>
+            <button
+              onClick={() => setIsAddFriendOpen(true)}
+              className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Agregar Amigo</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl ring-1 ring-zinc-200 shadow-sm flex items-center space-x-3">

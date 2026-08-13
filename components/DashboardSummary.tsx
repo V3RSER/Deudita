@@ -27,6 +27,8 @@ interface DashboardSummaryProps {
   onOpenScanReceiptModal: () => void;
 }
 
+import { PageHeader } from '@/components/PageHeader';
+
 export function DashboardSummary({
   onOpenNewExpense,
   onOpenNewGroup,
@@ -56,67 +58,54 @@ export function DashboardSummary({
 
   return (
     <div className="space-y-8">
-      {/* Welcome Banner */}
-      <div className="bg-zinc-900 rounded-[2rem] p-6 sm:p-10 text-white shadow-xl relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center space-x-2 bg-zinc-800/80 px-3 py-1 rounded-full text-xs font-semibold text-zinc-300 ring-1 ring-white/10">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Resumen General</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-50">
-              ¡Hola, {firstName}!
-            </h1>
-            <p className="text-zinc-400 text-sm sm:text-base max-w-xl leading-relaxed">
-              Aquí tienes el resumen actualizado de tus grupos, balances y actividad reciente.
-            </p>
+      <PageHeader 
+        title={`¡Hola, ${firstName}!`}
+        subtitle="Aquí tienes el resumen actualizado de tus balances y actividad reciente."
+        icon={<Sparkles className="w-4 h-4" />}
+      />
+
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
+          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+            Te deben
+          </span>
+          <div className="flex items-center space-x-2 mt-2">
+            <TrendingUp className="w-5 h-5 text-emerald-500 shrink-0" />
+            <span className="text-2xl font-bold text-zinc-900 tracking-tight">
+              {formatCurrency(totalOwedToMe)}
+            </span>
           </div>
         </div>
 
-        {/* 3 Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 relative z-10">
-          <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
-            <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Te deben
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
+          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+            Debes
+          </span>
+          <div className="flex items-center space-x-2 mt-2">
+            <TrendingDown className="w-5 h-5 text-rose-500 shrink-0" />
+            <span className="text-2xl font-bold text-zinc-900 tracking-tight">
+              {formatCurrency(totalIOwe)}
             </span>
-            <div className="flex items-center space-x-2 mt-2">
-              <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
-              <span className="text-2xl font-semibold text-emerald-400 tracking-tight">
-                {formatCurrency(totalOwedToMe)}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
-            <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Debes
-            </span>
-            <div className="flex items-center space-x-2 mt-2">
-              <TrendingDown className="w-5 h-5 text-rose-400 shrink-0" />
-              <span className="text-2xl font-semibold text-rose-400 tracking-tight">
-                {formatCurrency(totalIOwe)}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-zinc-800/50 backdrop-blur-md ring-1 ring-white/10 rounded-2xl p-5">
-            <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider block">
-              Balance neto
-            </span>
-            <div className="flex items-center space-x-2 mt-2">
-              <ArrowRightLeft className="w-5 h-5 text-zinc-300 shrink-0" />
-              <span
-                className={`text-2xl font-semibold tracking-tight ${
-                  netBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                {netBalance >= 0 ? '+' : ''}
-                {formatCurrency(netBalance)}
-              </span>
-            </div>
           </div>
         </div>
-        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none" />
+
+        <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
+          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+            Balance neto
+          </span>
+          <div className="flex items-center space-x-2 mt-2">
+            <ArrowRightLeft className="w-5 h-5 text-zinc-400 shrink-0" />
+            <span
+              className={`text-2xl font-bold tracking-tight ${
+                netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              }`}
+            >
+              {netBalance >= 0 ? '+' : ''}
+              {formatCurrency(netBalance)}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Quick Action Shortcuts */}

@@ -56,7 +56,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const fileRef = useRef<HTMLInputElement>(null);
   
   // Itemized State
-  const [items, setItems] = useState([{ id: 1, desc: '', total: '', assignedTo: [] as string[] }]);
+  const [items, setItems] = useState([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each' as 'total' | 'each', assignedTo: [] as string[] }]);
   
   // Split State
   const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage' | 'shares' | 'itemized'>('equal');
@@ -106,7 +106,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           setItems(expenseToEdit.items.map((i, idx) => ({
             id: idx + 1,
             desc: i.description,
-            total: String(i.amount),
+            quantity: '1',
+            amount: String(i.amount),
+            amountType: 'total',
             assignedTo: []
           })));
         }
@@ -133,7 +135,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setReceiptUrl('');
         setNotes('');
         setShowNotes(false);
-        setItems([{ id: 1, desc: '', total: '', assignedTo: [] }]);
+        setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
         setSplitType('equal');
       }
       setError(null);
@@ -152,14 +154,20 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfiles, isOpen, expenseToEdit]);
 
-  const itemsTotal = items.reduce((acc, i) => acc + (parseFloat(i.total) || 0), 0);
+  const getItemTotal = (item: any) => {
+    const qty = parseFloat(item.quantity) || 1;
+    const amt = parseFloat(item.amount) || 0;
+    return item.amountType === 'each' ? qty * amt : amt;
+  };
+
+  const itemsTotal = items.reduce((acc, i) => acc + getItemTotal(i), 0);
   const totalAmount = mode === 'quick' ? (parseFloat(amount) || 0) : itemsTotal;
 
   const calculateItemizedShares = () => {
     const res: Record<string, number> = {};
     activeProfiles.forEach(p => res[p.id] = 0);
     items.forEach(item => {
-      const amt = parseFloat(item.total) || 0;
+      const amt = getItemTotal(item);
       const assigned = item.assignedTo.length > 0 ? item.assignedTo.filter(id => selectedMembers.includes(id)) : selectedMembers;
       if (assigned.length > 0 && amt > 0) {
         const share = amt / assigned.length;
@@ -176,8 +184,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     if (!description.trim()) return setError('Ingresa una descripción.');
     if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
     if (!paidById) return setError('Selecciona quién pagó.');
-    if (mode === 'itemized' && items.some(i => !i.desc.trim() || !(parseFloat(i.total) > 0))) {
-      return setError('Completa la descripción y total de todos los artículos.');
+    if (mode === 'itemized' && items.some(i => !i.desc.trim() || !(parseFloat(i.amount) > 0))) {
+      return setError('Completa la descripción y monto de todos los artículos.');
     }
     if (selectedMembers.length === 0) return setError('Selecciona al menos un participante.');
     
@@ -223,8 +231,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
         id: "tmp_"+idx,
         expense_id: expenseToEdit?.id || '',
-        description: i.desc.trim(),
-        amount: parseFloat(i.total) || 0,
+        description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity}x ${i.desc.trim()}` : i.desc.trim(),
+        amount: getItemTotal(i),
         created_at: new Date().toISOString()
       })) : [];
 
@@ -464,41 +472,74 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
               </div>
               <div className="space-y-3 bg-white border border-zinc-200 rounded-2xl p-3 shadow-sm">
                 {items.map((item, idx) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Descripción"
-                      value={item.desc}
-                      onChange={e => {
-                        const newItems = [...items];
-                        newItems[idx].desc = e.target.value;
-                        setItems(newItems);
-                      }}
-                      className="flex-[2] px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-colors"
-                    />
-                    <div className="flex-[1.2] relative">
-                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 mt-0.5 text-zinc-400 font-bold">$</span>
+                  <div key={item.id} className="flex flex-col gap-2 p-2 border border-zinc-100 bg-zinc-50/50 rounded-xl">
+                    <div className="flex items-center gap-2">
                       <input
-                        type="number"
-                        placeholder="Total"
-                        value={item.total}
+                        type="text"
+                        placeholder="Descripción"
+                        value={item.desc}
                         onChange={e => {
                           const newItems = [...items];
-                          newItems[idx].total = e.target.value;
+                          newItems[idx].desc = e.target.value;
                           setItems(newItems);
                         }}
-                        className="w-full pl-6 pr-2 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-colors"
+                        className="flex-[2] px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                       />
+                      {items.length > 1 && (
+                        <button onClick={() => setItems(items.filter(i => i.id !== item.id))} className="p-2 text-zinc-400 hover:text-rose-500 transition-colors shrink-0">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {items.length > 1 && (
-                      <button onClick={() => setItems(items.filter(i => i.id !== item.id))} className="p-2 text-zinc-400 hover:text-rose-500 transition-colors shrink-0">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-[0.8] relative flex items-center">
+                        <span className="absolute left-2 text-xs font-bold text-zinc-400">x</span>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="1"
+                          value={item.quantity}
+                          onChange={e => {
+                            const newItems = [...items];
+                            newItems[idx].quantity = e.target.value;
+                            setItems(newItems);
+                          }}
+                          className="w-full pl-6 pr-2 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+                      
+                      <div className="flex-[1.5] relative">
+                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 mt-0.5 text-zinc-400 font-bold">$</span>
+                        <input
+                          type="number"
+                          placeholder="Monto"
+                          value={item.amount}
+                          onChange={e => {
+                            const newItems = [...items];
+                            newItems[idx].amount = e.target.value;
+                            setItems(newItems);
+                          }}
+                          className="w-full pl-6 pr-2 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                        />
+                      </div>
+
+                      <select
+                        value={item.amountType}
+                        onChange={e => {
+                          const newItems = [...items];
+                          newItems[idx].amountType = e.target.value as 'each' | 'total';
+                          setItems(newItems);
+                        }}
+                        className="flex-[1] px-2 py-2 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer"
+                      >
+                        <option value="each">c/u</option>
+                        <option value="total">Total</option>
+                      </select>
+                    </div>
                   </div>
                 ))}
                 <button
-                  onClick={() => setItems([...items, { id: Date.now(), desc: '', total: '', assignedTo: [] }])}
+                  onClick={() => setItems([...items, { id: Date.now(), desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }])}
                   className="w-full py-2 border border-dashed border-zinc-300 rounded-xl text-sm font-bold text-zinc-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all flex items-center justify-center cursor-pointer"
                 >
                   <Plus className="w-4 h-4 mr-1.5" /> Añadir otro artículo
@@ -528,13 +569,15 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             {splitType === 'itemized' && mode === 'itemized' ? (
               <div className="space-y-3">
                 {items.map((item, idx) => {
-                  const amt = parseFloat(item.total) || 0;
+                  const amt = getItemTotal(item);
                   const assigned = item.assignedTo;
                   const isAll = assigned.length === 0;
                   return (
                     <div key={item.id} className="p-3 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-3 transition-all">
                       <div className="flex justify-between items-center px-1">
-                        <p className="text-sm font-bold text-zinc-900">{item.desc || `Artículo ${idx + 1}`}</p>
+                        <p className="text-sm font-bold text-zinc-900">
+                          {parseFloat(item.quantity) > 1 ? `${item.quantity}x ` : ''}{item.desc || `Artículo ${idx + 1}`}
+                        </p>
                         <div className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
                           {formatCurrency(amt / (isAll ? selectedMembers.length : assigned.length), currency)} c/u
                         </div>
@@ -620,30 +663,45 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             </div>
                           )}
                           {splitType === 'percentage' && (
-                            <div className="relative flex items-center">
-                              <input
-                                type="number"
-                                placeholder="0"
-                                value={splits[p.id]?.pct || ''}
-                                onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], pct: e.target.value } })}
-                                className="w-16 px-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
-                              />
-                              <span className="ml-1.5 text-xs font-bold text-zinc-400">%</span>
+                            <div className="flex flex-col items-end">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={splits[p.id]?.pct || ''}
+                                  onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], pct: e.target.value } })}
+                                  className="w-16 px-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                                />
+                                <span className="ml-1.5 text-xs font-bold text-zinc-400">%</span>
+                              </div>
+                              <span className="text-[10px] font-bold text-emerald-600 mt-1">
+                                {formatCurrency(totalAmount * (parseFloat(splits[p.id]?.pct || '0') / 100), currency)}
+                              </span>
                             </div>
                           )}
-                          {splitType === 'shares' && (
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="number"
-                                min="1"
-                                placeholder="1"
-                                value={splits[p.id]?.shares || '1'}
-                                onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
-                                className="w-12 px-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
-                              />
-                              <span className="text-[10px] font-bold text-zinc-500">cuota(s)</span>
-                            </div>
-                          )}
+                          {splitType === 'shares' && (() => {
+                            const totalShares = selectedMembers.reduce((acc, mId) => acc + (parseFloat(splits[mId]?.shares) || 1), 0);
+                            const userShares = parseFloat(splits[p.id]?.shares) || 1;
+                            const liveAmount = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
+                            return (
+                              <div className="flex flex-col items-end">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="1"
+                                    value={splits[p.id]?.shares || '1'}
+                                    onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
+                                    className="w-12 px-2 py-1.5 bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                                  />
+                                  <span className="text-[10px] font-bold text-zinc-500">cuota(s)</span>
+                                </div>
+                                <span className="text-[10px] font-bold text-emerald-600 mt-1">
+                                  {formatCurrency(liveAmount, currency)}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

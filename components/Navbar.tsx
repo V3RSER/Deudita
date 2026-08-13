@@ -147,6 +147,24 @@ export function Navbar({
 
             {/* Right Action Area */}
             <div className="flex items-center space-x-3">
+              {/* Global Add Button */}
+              <div className="hidden sm:flex items-center space-x-2 mr-2">
+                <button
+                  onClick={onOpenNewExpense}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center space-x-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Gasto</span>
+                </button>
+                <button
+                  onClick={onOpenNewGroup}
+                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center space-x-1.5"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Grupo</span>
+                </button>
+              </div>
+
               {/* Notifications Center */}
               <NotificationCenter />
 
