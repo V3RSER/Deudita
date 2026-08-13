@@ -1,6 +1,19 @@
 import type {Metadata} from 'next';
+import { DM_Sans, Outfit } from 'next/font/google';
 import './globals.css'; // Global styles
 import { ExpenseProvider } from '@/lib/expense-context';
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+});
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-outfit',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Gastos Compartidos - Plataforma Multi-Grupo',
@@ -9,8 +22,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="en">
-      <body suppressHydrationWarning>
+    <html lang="es" className={`${dmSans.variable} ${outfit.variable}`}>
+      <body className="font-sans antialiased text-zinc-900 bg-white" suppressHydrationWarning>
         <ExpenseProvider>
           {children}
         </ExpenseProvider>

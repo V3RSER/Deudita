@@ -49,7 +49,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [groupId, setGroupId] = useState('none');
   
   // Notes & Image
-  const [showNotes, setShowNotes] = useState(false);
+  const [showAdditional, setShowAdditional] = useState(false);
+  const [showNoteInput, setShowNoteInput] = useState(false);
   const [notes, setNotes] = useState('');
   const [receiptUrl, setReceiptUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -100,7 +101,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setGroupId(expenseToEdit.group_id || 'none');
         setReceiptUrl(expenseToEdit.receipt_url || '');
         setNotes(expenseToEdit.notes || '');
-        setShowNotes(!!expenseToEdit.notes);
+        setShowNoteInput(!!expenseToEdit.notes);
+        if (expenseToEdit.notes || expenseToEdit.receipt_url) setShowAdditional(true);
         
         if (expenseToEdit.items && expenseToEdit.items.length > 0) {
           setItems(expenseToEdit.items.map((i, idx) => ({
@@ -134,7 +136,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setGroupId(defaultGroupId && userGroups.some(g => g.id === defaultGroupId) ? defaultGroupId : (userGroups[0]?.id || 'none'));
         setReceiptUrl('');
         setNotes('');
-        setShowNotes(false);
+        setShowAdditional(false);
+        setShowNoteInput(false);
         setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
         setSplitType('equal');
       }
@@ -329,22 +332,28 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
           
           {/* Amount and Description */}
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 border border-zinc-200">
-              <span className="text-xl font-black text-zinc-500">{subCategory.charAt(0).toUpperCase()}</span>
-            </div>
+          <div className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 shadow-sm">
+            {(() => {
+              const catConfig = getCategoryConfig(subCategory);
+              const CategoryIcon = catConfig.icon;
+              return (
+                <div className={`w-12 h-12 rounded-full ${catConfig.bgClass} flex items-center justify-center shrink-0 border border-black/5`}>
+                  <CategoryIcon className={`w-6 h-6 ${catConfig.textClass}`} />
+                </div>
+              );
+            })()}
             
-            <div className="flex-1 flex flex-col border-b border-dashed border-zinc-300 pb-1">
+            <div className="flex-1 flex flex-col gap-2">
               <input
                 type="text"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Introduce una descripción."
-                className="w-full text-left text-lg text-zinc-800 bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-zinc-400"
+                className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors"
               />
               
               {mode === 'quick' ? (
-                <div className="flex items-center text-lg font-bold text-zinc-900 mt-1">
+                <div className="flex items-center text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
                   <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
                   <FormattedCurrencyInput
                     value={amount}
@@ -357,7 +366,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   />
                 </div>
               ) : (
-                <div className="flex items-center text-lg font-bold text-zinc-400 mt-1">
+                <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
                   <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
                   <span>{itemsTotal.toLocaleString('es-CO')}</span>
                 </div>
@@ -366,52 +375,52 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           </div>
 
           {/* Context Details (Group, Paid By, Category, Date) */}
-          <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-3 space-y-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               
               {/* Group */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Grupo</label>
-                <div className="relative shadow-sm rounded-xl bg-white border border-zinc-200">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
+                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
                   <select
                     value={groupId}
                     onChange={e => setGroupId(e.target.value)}
-                    className="w-full pl-3 pr-8 py-2 text-sm font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
+                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                   >
                     <option value="none">Sin grupo</option>
                     {userGroups.map(g => (
                       <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
               {/* Paid By */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Pagado por</label>
-                <div className="relative shadow-sm rounded-xl bg-white border border-zinc-200">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
+                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
                   <select
                     value={paidById}
                     onChange={e => setPaidById(e.target.value)}
-                    className="w-full pl-3 pr-8 py-2 text-sm font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
+                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                   >
                     {activeProfiles.map(p => (
                       <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
               {/* Category */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Categoría</label>
-                <div className="relative shadow-sm rounded-xl bg-white border border-zinc-200">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
+                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
                   <select
                     value={subCategory}
                     onChange={e => setSubCategory(e.target.value)}
-                    className="w-full pl-3 pr-8 py-2 text-sm font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
+                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                   >
                     {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
                       <optgroup key={main} label={main}>
@@ -424,39 +433,44 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       <option value={subCategory}>{subCategory}</option>
                     )}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
 
               {/* Date */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Fecha</label>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
                 <input
                   type="date"
                   value={date}
                   onChange={e => setDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                  className="w-full pl-2.5 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
                 />
               </div>
 
             </div>
 
             {/* Attachments Row */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
-                onClick={() => setShowNotes(!showNotes)}
-                className="text-xs font-bold text-zinc-500 hover:text-emerald-600 transition-colors flex items-center"
+                onClick={() => {
+                  setShowAdditional(!showAdditional);
+                  if (showAdditional && !notes) {
+                    setShowNoteInput(false);
+                  }
+                }}
+                className="text-[11px] font-bold text-zinc-500 hover:text-emerald-600 transition-colors flex items-center"
               >
-                <Plus className={`w-3 h-3 mr-1 transition-transform ${showNotes ? 'rotate-45' : ''}`} />
-                {showNotes ? 'Ocultar opciones adicionales' : 'Añadir nota o foto'}
+                <Plus className={`w-3 h-3 mr-1 transition-transform ${showAdditional ? 'rotate-45' : ''}`} />
+                {showAdditional ? 'Ocultar opciones adicionales' : 'Añadir nota o foto'}
               </button>
             </div>
 
-            {(showNotes || notes || receiptUrl) && (
+            {(showAdditional || notes || receiptUrl) && (
               <div className="flex gap-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
                 <button
-                  onClick={() => setShowNotes(true)}
-                  className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${notes ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
+                  onClick={() => setShowNoteInput(!showNoteInput)}
+                  className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${(showNoteInput || notes) ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
                 >
                   <FileText className="w-4 h-4" />
                   <span>Nota</span>
@@ -474,7 +488,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             )}
 
             {/* Notes Input */}
-            {(showNotes || notes) && (
+            {(showNoteInput || notes) && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-200 pt-2">
                 <textarea
                   value={notes}
@@ -495,72 +509,89 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   Artículos
                 </h3>
               </div>
-              <div className="space-y-3 bg-white border border-zinc-200 rounded-2xl p-3 shadow-sm">
-                {items.map((item, idx) => (
-                  <div key={item.id} className="flex items-center gap-2 p-2 border border-zinc-100 bg-zinc-50/50 rounded-xl">
-                    <input
-                      type="text"
-                      placeholder="Desc."
-                      value={item.desc}
-                      onChange={e => {
-                        const newItems = [...items];
-                        newItems[idx].desc = e.target.value;
-                        setItems(newItems);
-                      }}
-                      className="w-full flex-[2.5] px-2 py-1.5 bg-white border border-zinc-200 rounded-md text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
-                    />
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="1"
-                      value={item.quantity}
-                      onChange={e => {
-                        const newItems = [...items];
-                        newItems[idx].quantity = e.target.value;
-                        setItems(newItems);
-                      }}
-                      className="w-12 px-1 py-1.5 bg-white border border-zinc-200 rounded-md text-xs font-bold text-center text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shrink-0"
-                    />
-                    <div className="relative w-20 shrink-0">
-                      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
-                      <FormattedCurrencyInput
-                        value={item.amount}
-                        onChange={val => {
+              <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-zinc-100">
+                  <div className="flex-1 min-w-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">Descripción</div>
+                  <div className="w-12 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Cant.</div>
+                  <div className="w-20 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right pr-2">Monto</div>
+                  <div className="w-14 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Tipo</div>
+                  <div className="w-7 shrink-0"></div>
+                </div>
+                
+                <div className="p-2 space-y-1">
+                  {items.map((item, idx) => (
+                    <div key={item.id} className="flex items-center gap-2 p-1 border border-transparent hover:border-zinc-100 hover:bg-zinc-50/50 rounded-xl transition-colors group">
+                      <input
+                        type="text"
+                        placeholder="Ej. Pan"
+                        value={item.desc}
+                        onChange={e => {
                           const newItems = [...items];
-                          newItems[idx].amount = val;
+                          newItems[idx].desc = e.target.value;
                           setItems(newItems);
                         }}
-                        currency={currency}
-                        hideSymbol
-                        placeholder="0"
-                        className="w-full pl-4 pr-1 py-1.5 bg-white border border-zinc-200 rounded-md text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                        className="flex-1 min-w-0 px-2 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                       />
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        value={item.quantity}
+                        onChange={e => {
+                          const newItems = [...items];
+                          newItems[idx].quantity = e.target.value;
+                          setItems(newItems);
+                        }}
+                        className="w-12 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-center text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                      />
+                      <div className="relative w-20 shrink-0">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
+                        <FormattedCurrencyInput
+                          value={item.amount}
+                          onChange={val => {
+                            const newItems = [...items];
+                            newItems[idx].amount = val;
+                            setItems(newItems);
+                          }}
+                          currency={currency}
+                          hideSymbol
+                          placeholder="0"
+                          className="w-full pl-4 pr-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors text-right"
+                        />
+                      </div>
+                      <select
+                        value={item.amountType}
+                        onChange={e => {
+                          const newItems = [...items];
+                          newItems[idx].amountType = e.target.value as 'each' | 'total';
+                          setItems(newItems);
+                        }}
+                        className="w-14 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-[10px] font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer"
+                      >
+                        <option value="each">c/u</option>
+                        <option value="total">Tot</option>
+                      </select>
+                      <div className="w-7 shrink-0 flex items-center justify-center">
+                        <button 
+                          onClick={() => setItems(items.filter(i => i.id !== item.id))} 
+                          className={`p-1 text-zinc-400 hover:text-rose-500 transition-colors ${items.length > 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                          disabled={items.length <= 1}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <select
-                      value={item.amountType}
-                      onChange={e => {
-                        const newItems = [...items];
-                        newItems[idx].amountType = e.target.value as 'each' | 'total';
-                        setItems(newItems);
-                      }}
-                      className="w-14 px-1 py-1.5 bg-white border border-zinc-200 rounded-md text-[10px] font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer shrink-0"
+                  ))}
+                  <div className="px-1 pt-1 pb-1">
+                    <button
+                      onClick={() => setItems([...items, { id: Date.now(), desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }])}
+                      className="w-full py-2 border border-dashed border-zinc-300 rounded-xl text-xs font-bold text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 transition-colors flex items-center justify-center bg-zinc-50/50 hover:bg-emerald-50/50"
                     >
-                      <option value="each">c/u</option>
-                      <option value="total">Tot</option>
-                    </select>
-                    {items.length > 1 && (
-                      <button onClick={() => setItems(items.filter(i => i.id !== item.id))} className="p-1 text-zinc-400 hover:text-rose-500 transition-colors shrink-0 ml-1">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                      <Plus className="w-3.5 h-3.5 mr-1.5" />
+                      Añadir otro artículo
+                    </button>
                   </div>
-                ))}
-                <button
-                  onClick={() => setItems([...items, { id: Date.now(), desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }])}
-                  className="w-full py-2 border border-dashed border-zinc-300 rounded-xl text-sm font-bold text-zinc-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all flex items-center justify-center cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 mr-1.5" /> Añadir otro artículo
-                </button>
+                </div>
               </div>
             </div>
           )}
