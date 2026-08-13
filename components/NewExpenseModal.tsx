@@ -68,8 +68,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
 
   const [step, setStep] = useState(1);
-  const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
-  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
 
   // Computed
@@ -298,7 +296,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
-      <div className={`bg-white rounded-[24px] shadow-2xl w-full flex flex-col my-auto max-h-[95vh] overflow-hidden transition-all duration-300 ${isTableExpanded ? 'max-w-4xl' : 'max-w-md'}`}>
+      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md flex flex-col my-auto max-h-[95vh] overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
@@ -759,44 +757,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                   {splitType === 'itemized' && mode === 'itemized' && (
                     <div className="mt-4 flex flex-col space-y-3">
-                      <div className="flex justify-end gap-2">
-                        {!isItemizedVerticalView && (
-                          <button
-                            onClick={() => setIsTableExpanded(!isTableExpanded)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-white border border-zinc-200 rounded-lg shadow-sm hover:bg-zinc-50 transition-colors"
-                          >
-                            {isTableExpanded ? (
-                              <>
-                                <ArrowLeft className="w-3.5 h-3.5" />
-                                <span>Contraer tabla</span>
-                              </>
-                            ) : (
-                              <>
-                                <ArrowRight className="w-3.5 h-3.5" />
-                                <span>Expandir tabla</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setIsItemizedVerticalView(!isItemizedVerticalView)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-white border border-zinc-200 rounded-lg shadow-sm hover:bg-zinc-50 transition-colors"
-                        >
-                          {isItemizedVerticalView ? (
-                            <>
-                              <Table className="w-3.5 h-3.5" />
-                              <span>Vista tabla</span>
-                            </>
-                          ) : (
-                            <>
-                              <List className="w-3.5 h-3.5" />
-                              <span>Vista vertical</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {!isItemizedVerticalView ? (
                         <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm relative flex-1">
                           <table className="w-full text-left border-collapse min-w-max">
                             <thead>
@@ -855,66 +815,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             </tbody>
                           </table>
                         </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {items.map((item, idx) => {
-                            const itemQty = parseFloat(item.quantity) || 1;
-                            const amt = getItemTotal(item);
-                            return (
-                              <div key={item.id} className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-bold text-zinc-900 text-sm truncate pr-2">
-                                    {itemQty} · {item.desc || 'Sin nombre'}
-                                  </span>
-                                  <span className="font-black text-emerald-700 text-sm shrink-0">
-                                    {formatCurrency(amt, currency)}
-                                  </span>
-                                </div>
-                                <div className="space-y-1.5 border-t border-zinc-100 pt-2">
-                                  {selectedMembers.map(mId => {
-                                    const p = activeProfiles.find(x => x.id === mId);
-                                    if (!p) return null;
-                                    const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
-                                    
-                                    return (
-                                      <div key={mId} className="flex items-center justify-between py-1 border-b border-zinc-50 last:border-0">
-                                        <div className="flex items-center space-x-2 flex-1 min-w-0 pr-2">
-                                          {p.avatar_url ? (
-                                            <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover border border-zinc-200 shrink-0" unoptimized />
-                                          ) : (
-                                            <div className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold shadow-sm shrink-0">
-                                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                                            </div>
-                                          )}
-                                          <span className="text-xs font-semibold text-zinc-700 truncate">
-                                            {p.full_name?.split(' ')[0] || p.email}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            value={val}
-                                            onChange={e => {
-                                              const newItems = [...items];
-                                              if (!newItems[idx].shares) newItems[idx].shares = {};
-                                              newItems[idx].shares![mId] = e.target.value;
-                                              setItems(newItems);
-                                            }}
-                                            className="w-12 h-7 px-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                                          />
-                                          <span className="text-[10px] font-bold text-zinc-400">cuotas</span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
