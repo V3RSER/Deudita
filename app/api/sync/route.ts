@@ -66,12 +66,14 @@ export async function GET() {
     const profileIdsToFetch = new Set<string>([user.id, ...members.map((m) => m.user_id)]);
 
     // Fetch standalone profiles created by current user
-    const { data: userCreatedProfiles } = await db
+    const { data: userCreatedProfiles, error: userCreatedProfilesErr } = await db
       .from('profiles')
       .select('id')
       .eq('created_by', user.id);
 
-    if (userCreatedProfiles && userCreatedProfiles.length > 0) {
+    if (userCreatedProfilesErr) {
+      console.warn('[API /api/sync] Could not fetch profiles by created_by (column might not exist):', userCreatedProfilesErr.message);
+    } else if (userCreatedProfiles && userCreatedProfiles.length > 0) {
       userCreatedProfiles.forEach((p) => profileIdsToFetch.add(p.id));
     }
 

@@ -193,7 +193,12 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     const frac = decimal - whole;
     for (const f of fractions) {
       if (Math.abs(frac - (f.num / f.den)) < 0.05) {
-        return whole > 0 ? `${whole} ${f.char}` : f.char;
+        return (
+          <span className="inline-flex items-baseline">
+            {whole > 0 && <span className="mr-0.5">{whole}</span>}
+            <span className="text-[15px] leading-none">{f.char}</span>
+          </span>
+        );
       }
     }
     return Number(decimal.toFixed(2)).toString();

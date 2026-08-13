@@ -51,6 +51,7 @@ create table if not exists public.groups (
   category text not null default 'home',
   description text,
   owner_id uuid not null references public.profiles(id),
+  currency text default 'COP',
   created_at timestamptz not null default now()
 );
 

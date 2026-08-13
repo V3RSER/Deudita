@@ -48,14 +48,14 @@ export async function POST(req: Request) {
       let { data: personalGroup } = await supabase
         .from('groups')
         .select('id')
-        .eq('created_by', user.id)
+        .eq('owner_id', user.id)
         .eq('name', 'Gastos Personales')
         .maybeSingle();
 
       if (!personalGroup) {
         const { data: createdGroup } = await supabase
           .from('groups')
-          .insert({ name: 'Gastos Personales', created_by: user.id, currency: 'COP' })
+          .insert({ name: 'Gastos Personales', owner_id: user.id, currency: 'COP' })
           .select('id')
           .single();
 
