@@ -11,7 +11,7 @@ import {
   X, Plus, Trash2, AlertCircle, Loader2,
   Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft,
   CheckCircle2, Camera, FileText, Users, PieChart, ListChecks,
-  Maximize2, Minimize2, ChevronRight, ChevronUp
+  List, Table, ChevronRight, ChevronUp
 } from 'lucide-react';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 
@@ -68,7 +68,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
 
   const [step, setStep] = useState(1);
-  const [isItemizedMaximized, setIsItemizedMaximized] = useState(false);
+  const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
   const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
 
   // Computed
@@ -695,7 +695,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         }
 
                         return (
-                          <div key={p.id} className="flex items-center justify-between p-3 rounded-2xl border bg-white border-zinc-200 shadow-sm">
+                          <div key={p.id} className="flex items-center justify-between px-3 py-2 h-14 rounded-xl border bg-white border-zinc-200 shadow-sm">
                             <div className="flex items-center space-x-3 text-left flex-1 min-w-0">
                               {p.avatar_url ? (
                                 <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
@@ -716,36 +716,36 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               </div>
                             )}
 
-                            <div className="shrink-0 flex justify-end">
+                            <div className="shrink-0 flex justify-end items-center">
                               {splitType === 'equal' && (
-                                <span className="text-sm font-black text-emerald-700">
+                                <span className="text-sm font-black text-emerald-700 flex items-center h-8">
                                   {formatCurrency(totalAmount / selectedMembers.length, currency)}
                                 </span>
                               )}
                               {splitType === 'exact' && (
-                                <div className="relative">
-                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+                                <div className="relative flex items-center h-8">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
                                   <FormattedCurrencyInput
                                     value={splits[p.id]?.exact || ''}
                                     onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                     currency={currency}
                                     hideSymbol
-                                    className="w-24 pl-6 pr-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
+                                    className="w-24 pl-5 pr-2 py-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-right text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
                                     placeholder="0.00"
                                   />
                                 </div>
                               )}
                               {splitType === 'shares' && (
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 h-8">
                                   <input
                                     type="number"
                                     min="1"
                                     placeholder="1"
                                     value={splits[p.id]?.shares || '1'}
                                     onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
-                                    className="w-14 px-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
+                                    className="w-12 px-1 h-8 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
                                   />
-                                  <span className="text-[10px] font-bold text-zinc-500 uppercase">cuotas</span>
+                                  <span className="text-[10px] font-bold text-zinc-500 uppercase leading-none">cuotas</span>
                                 </div>
                               )}
                             </div>
@@ -756,71 +756,145 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   )}
 
                   {splitType === 'itemized' && mode === 'itemized' && (
-                    <div className={`mt-4 transition-all ${isItemizedMaximized ? 'fixed inset-4 z-50 bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-2xl overflow-y-auto flex flex-col' : ''}`}>
-                      <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm relative flex-1">
-                        <table className="w-full text-left border-collapse min-w-max">
-                          <thead>
-                            <tr>
-                              <th rowSpan={2} className="px-4 pt-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap align-bottom border-r border-zinc-200 bg-zinc-50/50">
-                                Ítems
-                              </th>
-                              <th colSpan={selectedMembers.length} className="px-2 pt-2 pb-1 border-b border-zinc-100 bg-white">
-                                <div className="flex items-center justify-center relative">
-                                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Participaciones</span>
-                                  <button
-                                    onClick={() => setIsItemizedMaximized(!isItemizedMaximized)}
-                                    className="absolute right-0 p-1 text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-md transition-colors"
-                                  >
-                                    {isItemizedMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                                  </button>
-                                </div>
-                              </th>
-                            </tr>
-                            <tr className="border-b border-zinc-100 bg-white">
-                              {selectedMembers.map(mId => {
-                                const p = activeProfiles.find(x => x.id === mId);
+                    <div className="mt-4 flex flex-col space-y-3">
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => setIsItemizedVerticalView(!isItemizedVerticalView)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-white border border-zinc-200 rounded-lg shadow-sm hover:bg-zinc-50 transition-colors"
+                        >
+                          {isItemizedVerticalView ? (
+                            <>
+                              <Table className="w-3.5 h-3.5" />
+                              <span>Vista tabla</span>
+                            </>
+                          ) : (
+                            <>
+                              <List className="w-3.5 h-3.5" />
+                              <span>Vista vertical</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {!isItemizedVerticalView ? (
+                        <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm relative flex-1">
+                          <table className="w-full text-left border-collapse min-w-max">
+                            <thead>
+                              <tr>
+                                <th rowSpan={2} className="px-4 pt-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider whitespace-nowrap align-bottom border-r border-zinc-200 bg-zinc-50/50">
+                                  Ítems
+                                </th>
+                                <th colSpan={selectedMembers.length} className="px-2 pt-2 pb-1 border-b border-zinc-100 bg-white">
+                                  <div className="flex items-center justify-center relative">
+                                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Participaciones</span>
+                                  </div>
+                                </th>
+                              </tr>
+                              <tr className="border-b border-zinc-100 bg-white">
+                                {selectedMembers.map(mId => {
+                                  const p = activeProfiles.find(x => x.id === mId);
+                                  return (
+                                    <th key={mId} className="w-16 min-w-[64px] px-1 py-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">
+                                      {p?.full_name?.split(' ')[0] || 'User'}
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-100">
+                              {items.map((item, idx) => {
+                                const itemQty = parseFloat(item.quantity) || 1;
                                 return (
-                                  <th key={mId} className="w-16 min-w-[64px] px-1 py-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">
-                                    {p?.full_name?.split(' ')[0] || 'User'}
-                                  </th>
+                                  <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
+                                    <td className="px-4 py-2 text-xs font-bold text-zinc-900 border-r border-zinc-200 whitespace-nowrap">
+                                      {`${itemQty} · ${item.desc}`}
+                                    </td>
+                                    {selectedMembers.map(mId => {
+                                      const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                      return (
+                                        <td key={mId} className="px-1 py-1 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
+                                            value={val}
+                                            onChange={e => {
+                                              const newItems = [...items];
+                                              if (!newItems[idx].shares) newItems[idx].shares = {};
+                                              newItems[idx].shares![mId] = e.target.value;
+                                              setItems(newItems);
+                                            }}
+                                            className="w-12 mx-auto px-1 py-1 bg-white border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
+                                          />
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
                                 );
                               })}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100">
-                            {items.map((item, idx) => {
-                              const itemQty = parseFloat(item.quantity) || 1;
-                              return (
-                                <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
-                                  <td className="px-4 py-2 text-xs font-bold text-zinc-900 border-r border-zinc-200 whitespace-nowrap">
-                                    {`${itemQty} · ${item.desc}`}
-                                  </td>
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {items.map((item, idx) => {
+                            const itemQty = parseFloat(item.quantity) || 1;
+                            const amt = getItemTotal(item);
+                            return (
+                              <div key={item.id} className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-bold text-zinc-900 text-sm truncate pr-2">
+                                    {itemQty}x {item.desc || 'Sin nombre'}
+                                  </span>
+                                  <span className="font-black text-emerald-700 text-sm shrink-0">
+                                    {formatCurrency(amt, currency)}
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 border-t border-zinc-100 pt-2">
                                   {selectedMembers.map(mId => {
+                                    const p = activeProfiles.find(x => x.id === mId);
+                                    if (!p) return null;
                                     const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                    
                                     return (
-                                      <td key={mId} className="px-1 py-1 text-center">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          placeholder="0"
-                                          value={val}
-                                          onChange={e => {
-                                            const newItems = [...items];
-                                            if (!newItems[idx].shares) newItems[idx].shares = {};
-                                            newItems[idx].shares![mId] = e.target.value;
-                                            setItems(newItems);
-                                          }}
-                                          className="w-12 mx-auto px-1 py-1 bg-white border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors"
-                                        />
-                                      </td>
+                                      <div key={mId} className="flex items-center justify-between py-1 border-b border-zinc-50 last:border-0">
+                                        <div className="flex items-center space-x-2 flex-1 min-w-0 pr-2">
+                                          {p.avatar_url ? (
+                                            <Image src={p.avatar_url} alt="avatar" width={20} height={20} className="rounded-full w-5 h-5 object-cover border border-zinc-200 shrink-0" unoptimized />
+                                          ) : (
+                                            <div className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold shadow-sm shrink-0">
+                                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                                            </div>
+                                          )}
+                                          <span className="text-xs font-semibold text-zinc-700 truncate">
+                                            {p.full_name?.split(' ')[0] || p.email}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            placeholder="0"
+                                            value={val}
+                                            onChange={e => {
+                                              const newItems = [...items];
+                                              if (!newItems[idx].shares) newItems[idx].shares = {};
+                                              newItems[idx].shares![mId] = e.target.value;
+                                              setItems(newItems);
+                                            }}
+                                            className="w-12 h-7 px-1 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                          />
+                                          <span className="text-[10px] font-bold text-zinc-400">cuotas</span>
+                                        </div>
+                                      </div>
                                     );
                                   })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
