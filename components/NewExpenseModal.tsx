@@ -69,8 +69,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
   const [step, setStep] = useState(1);
   const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
-  const [expandedParticipant, setExpandedParticipant] = useState<string | null>(null);
-  const [expandedItem, setExpandedItem] = useState<number | null>(null);
+  const [expandedParticipants, setExpandedParticipants] = useState<string[]>([]);
+  const [expandedItems, setExpandedItems] = useState<number[]>([1]);
 
   // Computed
   const activeGroup = userGroups.find(g => g.id === groupId);
@@ -169,6 +169,35 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfiles, isOpen, expenseToEdit]);
+
+  const toFraction = (decimal: number) => {
+    if (Number.isInteger(decimal)) return decimal.toString();
+    const fractions = [
+      { num: 1, den: 2, char: '½' },
+      { num: 1, den: 3, char: '⅓' },
+      { num: 2, den: 3, char: '⅔' },
+      { num: 1, den: 4, char: '¼' },
+      { num: 3, den: 4, char: '¾' },
+      { num: 1, den: 5, char: '⅕' },
+      { num: 2, den: 5, char: '⅖' },
+      { num: 3, den: 5, char: '⅗' },
+      { num: 4, den: 5, char: '⅘' },
+      { num: 1, den: 6, char: '⅙' },
+      { num: 5, den: 6, char: '⅚' },
+      { num: 1, den: 8, char: '⅛' },
+      { num: 3, den: 8, char: '⅜' },
+      { num: 5, den: 8, char: '⅝' },
+      { num: 7, den: 8, char: '⅞' },
+    ];
+    const whole = Math.floor(decimal);
+    const frac = decimal - whole;
+    for (const f of fractions) {
+      if (Math.abs(frac - (f.num / f.den)) < 0.05) {
+        return whole > 0 ? `${whole} ${f.char}` : f.char;
+      }
+    }
+    return Number(decimal.toFixed(2)).toString();
+  };
 
   const getItemTotal = (item: any) => {
     const qty = parseFloat(item.quantity) || 1;
@@ -522,7 +551,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
               {/* Itemized list in Step 1 */}
               {mode === 'itemized' && (
-                <div className="space-y-3 pt-4">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-zinc-900 flex items-center">
                       <ShoppingCart className="w-4 h-4 mr-2 text-emerald-600" />
@@ -589,7 +618,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             className="w-14 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-[10px] font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer"
                           >
                             <option value="each">c/u</option>
-                            <option value="total">Tot</option>
+                            <option value="total">Total</option>
                           </select>
                           <div className="w-7 shrink-0 flex items-center justify-center">
                             <button
@@ -752,7 +781,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                     onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                     currency={currency}
                                     hideSymbol={false}
-                                    className="w-24 bg-transparent border border-transparent hover:border-zinc-200 focus:border-zinc-300 hover:bg-zinc-50 focus:bg-zinc-50 rounded text-right text-sm font-black text-zinc-900 focus:outline-none p-1 -mr-1 transition-colors"
+                                    className="w-24 bg-zinc-50 border border-zinc-200 focus:border-zinc-300 rounded text-right text-sm font-black text-zinc-900 focus:outline-none p-1 -mr-1 transition-colors"
                                     placeholder="$ 0"
                                   />
                                 </div>
@@ -831,11 +860,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           </table>
                         </div>
                       ) : (
-                        <div className="flex flex-col space-y-1">
+                        <div className="flex flex-col divide-y divide-zinc-100 border-t border-zinc-100 mt-2">
                           {items.map((item, idx) => {
                             const itemQty = parseFloat(item.quantity) || 1;
                             const amt = getItemTotal(item);
-                            const isExpanded = expandedItem === item.id;
+                            const isExpanded = expandedItems.includes(item.id);
                             
                             let sumShares = 0;
                             selectedMembers.forEach(id => {
@@ -843,10 +872,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             });
 
                             return (
-                              <div key={item.id} className="flex flex-col p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
+                              <div key={item.id} className="flex flex-col py-3 px-2 transition-colors">
                                 <div 
                                   className="flex items-center justify-between cursor-pointer"
-                                  onClick={() => setExpandedItem(isExpanded ? null : item.id)}
+                                  onClick={() => setExpandedItems(isExpanded ? expandedItems.filter(i => i !== item.id) : [...expandedItems, item.id])}
                                 >
                                   <div className="flex items-center space-x-3 text-left">
                                     <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
@@ -931,7 +960,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       Resumen por participante
                     </h3>
                   </div>
-                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-2 space-y-1">
+                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden divide-y divide-zinc-100">
                     {selectedMembers.map(mId => {
                       const p = activeProfiles.find(x => x.id === mId);
                       if (!p) return null;
@@ -959,13 +988,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         }
                       });
 
-                      const isExpanded = expandedParticipant === mId;
+                      const isExpanded = expandedParticipants.includes(mId);
 
                       return (
-                        <div key={p.id} className="flex flex-col p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
+                        <div key={p.id} className="flex flex-col py-3 px-3 transition-colors">
                           <div
                             className="flex items-center justify-between cursor-pointer"
-                            onClick={() => setExpandedParticipant(isExpanded ? null : mId)}
+                            onClick={() => setExpandedParticipants(isExpanded ? expandedParticipants.filter(id => id !== mId) : [...expandedParticipants, mId])}
                           >
                             <div className="flex items-center space-x-3 text-left">
                               {p.avatar_url ? (
@@ -980,7 +1009,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                 {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm font-black text-emerald-700">
+                            <div className="flex items-center gap-2 text-sm font-black text-zinc-900">
                               {formatCurrency(amt, currency)}
                               {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
                             </div>
@@ -990,12 +1019,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2 px-1">
                               {breakdown.map((b, i) => {
                                 const myQty = b.qty * (b.shareQty / b.totalShares);
-                                const displayQty = Number.isInteger(myQty) ? myQty.toString() : Number(myQty.toFixed(2)).toString();
                                 return (
                                   <div key={i} className="flex items-center justify-between text-xs">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{displayQty} de {b.qty}</span>
-                                      <span className="font-medium text-zinc-600 truncate max-w-[140px]">{b.desc}</span>
+                                      <span className="font-normal text-zinc-900 truncate max-w-[160px]">{toFraction(myQty)} · {b.desc}</span>
                                     </div>
                                     <span className="font-bold text-zinc-900">{formatCurrency(b.cost, currency)}</span>
                                   </div>
