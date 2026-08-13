@@ -10,7 +10,7 @@ import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import { 
   X, Plus, Trash2, AlertCircle, Loader2, 
   Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft, 
-  CheckCircle2, Camera, FileText
+  CheckCircle2, Camera, FileText, Users, PieChart, ListChecks
 } from 'lucide-react';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 
@@ -345,7 +345,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           {step === 1 && (
             <>
               {/* Amount and Description */}
-              <div className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 shadow-sm">
+              <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
                 {(() => {
                   const catConfig = getCategoryConfig(subCategory);
                   const CategoryIcon = catConfig.icon;
@@ -388,7 +388,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
               </div>
 
               {/* Context Details */}
-              <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-3 space-y-2">
+              <div className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3 shadow-sm overflow-hidden">
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
@@ -607,9 +607,15 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
               
               {/* Participantes Section */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-zinc-900">Participantes</h3>
-                <div className="flex flex-wrap gap-2">
-                  {activeProfiles.map(p => {
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                    <Users className="w-4 h-4 mr-2 text-emerald-600" />
+                    Participantes
+                  </h3>
+                </div>
+                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {activeProfiles.map(p => {
                     const isSelected = selectedMembers.includes(p.id);
                     const toggle = () => {
                       if (isSelected && selectedMembers.length > 1) setSelectedMembers(selectedMembers.filter(id => id !== p.id));
@@ -634,16 +640,21 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               </div>
 
-              <hr className="border-zinc-100" />
-
               {/* Cómo se divide Section */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-zinc-900">Dividir</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                    <PieChart className="w-4 h-4 mr-2 text-emerald-600" />
+                    Dividir gasto
+                  </h3>
+                </div>
+                <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-4 space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
                     <button
                       key={type}
                       onClick={() => setSplitType(type as any)}
@@ -730,100 +741,106 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                 {splitType === 'itemized' && mode === 'itemized' && (
                   <div className="space-y-4 mt-4">
-                    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm mt-2 relative">
-                      <table className="w-full text-left border-collapse min-w-max">
-                        <thead>
-                          <tr className="bg-zinc-50 border-b border-zinc-200 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                            <th rowSpan={2} className="p-2 sticky left-0 bg-zinc-50 z-20 border-r border-zinc-200 text-center w-[40px]">Cant</th>
-                            <th rowSpan={2} className="p-2 sticky left-[40px] bg-zinc-50 z-20 border-r border-zinc-200 min-w-[120px]">Desc</th>
-                            <th rowSpan={2} className="p-2 text-right border-r border-zinc-200">Monto</th>
-                            <th colSpan={selectedMembers.length} className="p-2 text-center border-b border-zinc-200">Participaciones (Cuotas)</th>
-                          </tr>
-                          <tr className="bg-zinc-50 border-b border-zinc-200 text-[9px] font-bold text-zinc-600 tracking-wider">
+                    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm relative">
+                      <div className="min-w-max">
+                        <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-zinc-100">
+                          <div className="w-10 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Cant</div>
+                          <div className="w-32 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">Desc</div>
+                          <div className="w-20 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right pr-2">Monto</div>
+                          <div className="w-4 shrink-0 border-r border-zinc-200 h-4"></div>
+                          <div className="flex gap-2 pl-2">
                             {selectedMembers.map(mId => {
                               const p = activeProfiles.find(x => x.id === mId);
                               return (
-                                <th key={mId} className="p-1.5 text-center border-r border-zinc-200 min-w-[48px] truncate max-w-[60px]">
+                                <div key={mId} className="w-16 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">
                                   {p?.full_name?.split(' ')[0] || 'User'}
-                                </th>
+                                </div>
                               );
                             })}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100">
+                          </div>
+                        </div>
+                        <div className="p-2 space-y-1">
                           {items.map((item, idx) => {
                             const amt = getItemTotal(item);
                             const itemQty = parseFloat(item.quantity) || 1;
                             return (
-                              <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
-                                <td className="p-2 sticky left-0 bg-white group-hover:bg-zinc-50/90 z-10 border-r border-zinc-200 text-center text-xs font-black text-zinc-900">
-                                  {itemQty}
-                                </td>
-                                <td className="p-2 sticky left-[40px] bg-white group-hover:bg-zinc-50/90 z-10 border-r border-zinc-200 text-xs font-bold text-zinc-900 max-w-[140px] truncate">
-                                  {item.desc || `Art ${idx + 1}`}
-                                </td>
-                                <td className="p-2 text-xs font-black text-zinc-900 text-right border-r border-zinc-200">
-                                  {formatCurrency(amt, currency)}
-                                </td>
-                                {selectedMembers.map(mId => {
-                                  const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
-                                  return (
-                                    <td key={mId} className="p-1 text-center border-r border-zinc-100">
-                                      <input 
-                                        type="number" 
-                                        min="0"
-                                        placeholder="0"
-                                        value={val}
-                                        onChange={e => {
-                                          const newItems = [...items];
-                                          if (!newItems[idx].shares) newItems[idx].shares = {};
-                                          newItems[idx].shares![mId] = e.target.value;
-                                          setItems(newItems);
-                                        }}
-                                        className="w-10 mx-auto px-1 py-1.5 bg-zinc-50 border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20" 
-                                      />
-                                    </td>
-                                  );
-                                })}
-                              </tr>
+                              <div key={item.id} className="flex items-center gap-2 p-1 hover:bg-zinc-50/50 rounded-xl transition-colors group">
+                                <div className="w-10 shrink-0 text-center text-xs font-black text-zinc-900">{itemQty}</div>
+                                <div className="w-32 shrink-0 text-xs font-bold text-zinc-900 truncate pl-1">{item.desc || `Art ${idx + 1}`}</div>
+                                <div className="w-20 shrink-0 text-xs font-black text-zinc-900 text-right pr-2">{formatCurrency(amt, currency)}</div>
+                                <div className="w-4 shrink-0 border-r border-zinc-200 h-6"></div>
+                                <div className="flex gap-2 pl-2">
+                                  {selectedMembers.map(mId => {
+                                    const val = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
+                                    return (
+                                      <div key={mId} className="w-16 shrink-0 flex justify-center">
+                                        <input 
+                                          type="number" 
+                                          min="0"
+                                          placeholder="0"
+                                          value={val}
+                                          onChange={e => {
+                                            const newItems = [...items];
+                                            if (!newItems[idx].shares) newItems[idx].shares = {};
+                                            newItems[idx].shares![mId] = e.target.value;
+                                            setItems(newItems);
+                                          }}
+                                          className="w-12 px-1 py-1 bg-white border border-zinc-200 rounded text-center text-xs font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-colors" 
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             );
                           })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 px-1">Resumen por participante</h4>
-                      {selectedMembers.map(mId => {
-                        const p = activeProfiles.find(x => x.id === mId);
-                        if (!p) return null;
-                        const sharesMap = calculateItemizedShares();
-                        const amt = sharesMap[mId] || 0;
-                        return (
-                          <div key={p.id} className="flex items-center justify-between p-3 rounded-2xl border bg-white border-zinc-200 shadow-sm">
-                            <div className="flex items-center space-x-3 text-left">
-                              {p.avatar_url ? (
-                                <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
-                                  {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
-                                {p.full_name?.split(' ')[0] || p.email}
-                                {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
-                              </span>
-                            </div>
-                            <div className="text-sm font-black text-emerald-700">
-                               {formatCurrency(amt, currency)}
-                            </div>
-                          </div>
-                        )
-                      })}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Resumen por participante Section */}
+              {splitType === 'itemized' && mode === 'itemized' && (
+                <div className="space-y-3 mt-6">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                      <ListChecks className="w-4 h-4 mr-2 text-emerald-600" />
+                      Resumen por participante
+                    </h3>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-2 space-y-1">
+                    {selectedMembers.map(mId => {
+                      const p = activeProfiles.find(x => x.id === mId);
+                      if (!p) return null;
+                      const sharesMap = calculateItemizedShares();
+                      const amt = sharesMap[mId] || 0;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between p-2 rounded-xl border border-transparent hover:bg-zinc-50 transition-colors">
+                          <div className="flex items-center space-x-3 text-left">
+                            {p.avatar_url ? (
+                              <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0">
+                                {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-sm font-bold text-zinc-900 truncate max-w-[120px]">
+                              {p.full_name?.split(' ')[0] || p.email}
+                              {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                            </span>
+                          </div>
+                          <div className="text-sm font-black text-emerald-700">
+                             {formatCurrency(amt, currency)}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
