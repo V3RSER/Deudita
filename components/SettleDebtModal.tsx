@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
@@ -45,36 +46,36 @@ export function SettleDebtModal({
 
   const [prevIsOpen, setPrevIsOpen] = useState(false);
 
-  if (isOpen && !prevIsOpen) {
-    setPrevIsOpen(true);
-    setErrorMsg(null);
+  useEffect(() => {
+    if (isOpen && !prevIsOpen) {
+      setPrevIsOpen(true);
+      setErrorMsg(null);
 
-    if (paymentToEdit) {
-      setGroupId(paymentToEdit.group_id);
-      setPayerId(paymentToEdit.paid_by);
-      setReceiverId(paymentToEdit.paid_to);
-      setAmount(paymentToEdit.amount ? paymentToEdit.amount.toString() : '');
-      setNotes(paymentToEdit.note ?? '');
-      setProofUrl(paymentToEdit.proof_url ?? '');
-    } else {
-      setProofUrl('');
-      const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
-      setGroupId(activeGroup);
+      if (paymentToEdit) {
+        setGroupId(paymentToEdit.group_id);
+        setPayerId(paymentToEdit.paid_by);
+        setReceiverId(paymentToEdit.paid_to);
+        setAmount(paymentToEdit.amount ? paymentToEdit.amount.toString() : '');
+        setNotes(paymentToEdit.note ?? '');
+        setProofUrl(paymentToEdit.proof_url ?? '');
+      } else {
+        setProofUrl('');
+        const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
+        setGroupId(activeGroup);
 
-      const activePayer = defaultDebtorId ?? currentProfile?.id ?? profiles[0]?.id ?? '';
-      setPayerId(activePayer);
+        const activePayer = defaultDebtorId ?? currentProfile?.id ?? profiles[0]?.id ?? '';
+        setPayerId(activePayer);
 
-      const activeReceiver = defaultCreditorId ?? profiles.find((p) => p.id !== activePayer)?.id ?? '';
-      setReceiverId(activeReceiver);
+        const activeReceiver = defaultCreditorId ?? profiles.find((p) => p.id !== activePayer)?.id ?? '';
+        setReceiverId(activeReceiver);
 
-      setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
-      setNotes('Transferencia bancaria');
+        setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
+        setNotes('Transferencia bancaria');
+      }
+    } else if (!isOpen && prevIsOpen) {
+      setPrevIsOpen(false);
     }
-  } else if (!isOpen && prevIsOpen) {
-    setPrevIsOpen(false);
-  }
-
-  if (!isOpen) return null;
+  }, [isOpen, prevIsOpen, paymentToEdit, defaultGroupId, userGroups, defaultDebtorId, currentProfile?.id, profiles, defaultCreditorId, defaultAmount]);
 
   const isEditing = Boolean(paymentToEdit);
   const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;
@@ -112,6 +113,8 @@ export function SettleDebtModal({
       setAmount(totalOwed.toString());
     }
   }, [payerId, receiverId, totalOwed, isEditing, isOpen]);
+
+  if (!isOpen) return null;
 
   // Calculate distributed allocation preview
   const numericAmount = parseFloat(amount) || 0;

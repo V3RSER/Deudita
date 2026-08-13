@@ -1,16 +1,16 @@
-'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
+'use client';
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Expense, ExpenseItem, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
 import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
-import {
-  X, Plus, Trash2, Users, AlertCircle, Loader2,
-  Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft,
-  CheckCircle2, Camera, FileText, Receipt, Wallet
+import { 
+  X, Plus, Trash2, AlertCircle, Loader2, 
+  Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft, 
+  CheckCircle2, Camera, FileText
 } from 'lucide-react';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 
@@ -32,22 +32,22 @@ const CATEGORY_GROUPS: Record<string, string[]> = {
 
 export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit }: NewExpenseModalProps) {
   const { currentProfile, userGroups, members, profiles, addExpense, updateExpense } = useExpense();
-  
+
   const [mode, setMode] = useState<'quick' | 'itemized'>('quick');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Form State
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  
+
   // Categories
   const [subCategory, setSubCategory] = useState('Supermercado');
-  
+
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [paidById, setPaidById] = useState('');
   const [groupId, setGroupId] = useState('none');
-  
+
   // Notes & Image
   const [showAdditional, setShowAdditional] = useState(false);
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -55,19 +55,23 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [receiptUrl, setReceiptUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  
+
   // Itemized State
-  const [items, setItems] = useState<Array<{ id: number; desc: string; quantity: string; amount: string; amountType: 'total' | 'each'; assignedTo: string[]; shares?: Record<string, string> }>>([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
-  
+  const [items, setItems] = useState<Array<{ id: number; desc: string; quantity: string; amount: string; amountType: 'total' | 'each'; assignedTo: string[]; shares?: Record<string, string> }>>([
+    { id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }
+  ]);
+
   // Split State
   const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage' | 'shares' | 'itemized'>('equal');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
+  
+  const [step, setStep] = useState(1);
 
   // Computed
   const activeGroup = userGroups.find(g => g.id === groupId);
   const currency = activeGroup?.currency || currentProfile?.currency || 'COP';
-  
+
   const activeProfiles = useMemo(() => {
     if (!groupId || groupId === 'none') return currentProfile ? [currentProfile] : [];
     const groupMemberIds = members.filter(m => m.group_id === groupId).map(m => m.user_id);
@@ -81,7 +85,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setAmount(String(expenseToEdit.total_amount || ''));
         setDescription(expenseToEdit.description);
         
-        // Match category
         let foundSub = 'General';
         if (expenseToEdit.category) {
           for (const [main, subs] of Object.entries(CATEGORY_GROUPS)) {
@@ -90,9 +93,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
               break;
             }
           }
-          if (foundSub === 'General' && expenseToEdit.category !== 'General') {
-             foundSub = expenseToEdit.category; // fallback
-          }
+          if (foundSub === 'General' && expenseToEdit.category !== 'General') foundSub = expenseToEdit.category;
         }
         setSubCategory(foundSub);
         
@@ -111,9 +112,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             quantity: '1',
             amount: String(i.amount),
             amountType: 'total',
-            assignedTo: []
+            assignedTo: [] // We don't restore exact complex splits per item in edit mode yet for simplicity
           })));
         }
+        
         if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
           const selected = expenseToEdit.splits.map(s => s.user_id);
           setSelectedMembers(selected);
@@ -125,7 +127,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             if (Math.abs(s.amount_owed - expected) > 0.05) isExact = true;
           });
           setSplits(newSplits);
-          setSplitType(isExact ? 'exact' : 'equal');
+          setSplitType(expenseToEdit.items && expenseToEdit.items.length > 0 ? 'itemized' : (isExact ? 'exact' : 'equal'));
         }
       } else {
         setMode('quick');
@@ -140,12 +142,12 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setShowNoteInput(false);
         setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
         setSplitType('equal');
+        setStep(1);
       }
       setError(null);
     }
   }, [isOpen, expenseToEdit, defaultGroupId, userGroups]);
 
-  // Sync paidById and selectedMembers when group changes
   useEffect(() => {
     if (!isOpen || expenseToEdit) return;
     if (activeProfiles.length > 0) {
@@ -169,6 +171,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const calculateItemizedShares = () => {
     const res: Record<string, number> = {};
     activeProfiles.forEach(p => res[p.id] = 0);
+
     items.forEach(item => {
       const amt = getItemTotal(item);
       const isAll = item.assignedTo.length === 0;
@@ -192,7 +195,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const handleSubmit = async () => {
     setError(null);
     
-    // Validation
     if (!description.trim()) return setError('Ingresa una descripción.');
     if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
     if (!paidById) return setError('Selecciona quién pagó.');
@@ -299,6 +301,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   onClick={() => {
                     setMode('quick');
                     setSplitType('equal');
+                    setStep(1);
                   }}
                   className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${mode === 'quick' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
@@ -308,6 +311,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   onClick={() => {
                     setMode('itemized');
                     setSplitType('itemized');
+                    setStep(1);
                   }}
                   className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${mode === 'itemized' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
@@ -331,383 +335,283 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
           
-          {/* Amount and Description */}
-          <div className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 shadow-sm">
-            {(() => {
-              const catConfig = getCategoryConfig(subCategory);
-              const CategoryIcon = catConfig.icon;
-              return (
-                <div className={`w-12 h-12 rounded-full ${catConfig.bgClass} flex items-center justify-center shrink-0 border border-black/5`}>
-                  <CategoryIcon className={`w-6 h-6 ${catConfig.textClass}`} />
-                </div>
-              );
-            })()}
-            
-            <div className="flex-1 flex flex-col gap-2">
-              <input
-                type="text"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Introduce una descripción."
-                className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors"
-              />
-              
-              {mode === 'quick' ? (
-                <div className="flex items-center text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
-                  <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
-                  <FormattedCurrencyInput
-                    value={amount}
-                    onChange={setAmount}
-                    currency={currency}
-                    hideSymbol
-                    className="bg-transparent text-left focus:outline-none w-full placeholder:text-zinc-300 text-lg font-bold text-zinc-900"
-                    placeholder="0"
-                    autoFocus
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
-                  <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
-                  <span>{itemsTotal.toLocaleString('es-CO')}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Context Details (Group, Paid By, Category, Date) */}
-          <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-3 space-y-2">
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-              
-              {/* Group */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
-                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                  <select
-                    value={groupId}
-                    onChange={e => setGroupId(e.target.value)}
-                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                  >
-                    <option value="none">Sin grupo</option>
-                    {userGroups.map(g => (
-                      <option key={g.id} value={g.id}>{g.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Paid By */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
-                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                  <select
-                    value={paidById}
-                    onChange={e => setPaidById(e.target.value)}
-                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                  >
-                    {activeProfiles.map(p => (
-                      <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Category */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
-                <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                  <select
-                    value={subCategory}
-                    onChange={e => setSubCategory(e.target.value)}
-                    className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                  >
-                    {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
-                      <optgroup key={main} label={main}>
-                        {subs.map(sub => (
-                          <option key={sub} value={sub}>{sub}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                    {!Object.values(CATEGORY_GROUPS).flat().includes(subCategory) && (
-                      <option value={subCategory}>{subCategory}</option>
-                    )}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Date */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className="w-full pl-2.5 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
-                />
-              </div>
-
-            </div>
-
-            {/* Attachments Row */}
-            <div className="pt-1">
-              <button
-                onClick={() => {
-                  setShowAdditional(!showAdditional);
-                  if (showAdditional && !notes) {
-                    setShowNoteInput(false);
-                  }
-                }}
-                className="text-[11px] font-bold text-zinc-500 hover:text-emerald-600 transition-colors flex items-center"
-              >
-                <Plus className={`w-3 h-3 mr-1 transition-transform ${showAdditional ? 'rotate-45' : ''}`} />
-                {showAdditional ? 'Ocultar opciones adicionales' : 'Añadir nota o foto'}
-              </button>
-            </div>
-
-            {(showAdditional || notes || receiptUrl) && (
-              <div className="flex gap-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                <button
-                  onClick={() => setShowNoteInput(!showNoteInput)}
-                  className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${(showNoteInput || notes) ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Nota</span>
-                </button>
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={isUploading}
-                  className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${receiptUrl ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-                >
-                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                  <span>Foto</span>
-                </button>
-                <input type="file" ref={fileRef} onChange={handleUpload} accept="image/*" className="hidden" />
-              </div>
-            )}
-
-            {/* Notes Input */}
-            {(showNoteInput || notes) && (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-200 pt-2">
-                <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Añade notas o detalles adicionales (opcional)..."
-                  className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm min-h-[80px] resize-y"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Itemized Builder */}
-          {mode === 'itemized' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                  <ShoppingCart className="w-4 h-4 mr-2 text-emerald-600" />
-                  Artículos
-                </h3>
-              </div>
-              <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
-                <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-zinc-100">
-                  <div className="flex-1 min-w-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">Descripción</div>
-                  <div className="w-12 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Cant.</div>
-                  <div className="w-20 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right pr-2">Monto</div>
-                  <div className="w-14 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Tipo</div>
-                  <div className="w-7 shrink-0"></div>
-                </div>
+          {step === 1 && (
+            <>
+              {/* Amount and Description */}
+              <div className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 shadow-sm">
+                {(() => {
+                  const catConfig = getCategoryConfig(subCategory);
+                  const CategoryIcon = catConfig.icon;
+                  return (
+                    <div className={`w-12 h-12 rounded-full ${catConfig.bgClass} flex items-center justify-center shrink-0 border border-black/5`}>
+                      <CategoryIcon className={`w-6 h-6 ${catConfig.textClass}`} />
+                    </div>
+                  );
+                })()}
                 
-                <div className="p-2 space-y-1">
-                  {items.map((item, idx) => (
-                    <div key={item.id} className="flex items-center gap-2 p-1 border border-transparent hover:border-zinc-100 hover:bg-zinc-50/50 rounded-xl transition-colors group">
-                      <input
-                        type="text"
-                        placeholder="Ej. Pan"
-                        value={item.desc}
-                        onChange={e => {
-                          const newItems = [...items];
-                          newItems[idx].desc = e.target.value;
-                          setItems(newItems);
-                        }}
-                        className="flex-1 min-w-0 px-2 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                <div className="flex-1 flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Introduce una descripción."
+                    className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors"
+                  />
+                  
+                  {mode === 'quick' ? (
+                    <div className="flex items-center text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
+                      <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
+                      <FormattedCurrencyInput
+                        value={amount}
+                        onChange={setAmount}
+                        currency={currency}
+                        hideSymbol
+                        className="bg-transparent text-left focus:outline-none w-full placeholder:text-zinc-300 text-lg font-bold text-zinc-900"
+                        placeholder="0"
+                        autoFocus
                       />
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="1"
-                        value={item.quantity}
-                        onChange={e => {
-                          const newItems = [...items];
-                          newItems[idx].quantity = e.target.value;
-                          setItems(newItems);
-                        }}
-                        className="w-12 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-center text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
-                      />
-                      <div className="relative w-20 shrink-0">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
-                        <FormattedCurrencyInput
-                          value={item.amount}
-                          onChange={val => {
-                            const newItems = [...items];
-                            newItems[idx].amount = val;
-                            setItems(newItems);
-                          }}
-                          currency={currency}
-                          hideSymbol
-                          placeholder="0"
-                          className="w-full pl-4 pr-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors text-right"
-                        />
-                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-lg font-bold text-zinc-400 border-b border-dashed border-zinc-300 pb-1">
+                      <span className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
+                      <span>{itemsTotal.toLocaleString('es-CO')}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Context Details */}
+              <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
+                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
                       <select
-                        value={item.amountType}
-                        onChange={e => {
-                          const newItems = [...items];
-                          newItems[idx].amountType = e.target.value as 'each' | 'total';
-                          setItems(newItems);
-                        }}
-                        className="w-14 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-[10px] font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer"
+                        value={groupId}
+                        onChange={e => setGroupId(e.target.value)}
+                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                       >
-                        <option value="each">c/u</option>
-                        <option value="total">Tot</option>
+                        <option value="none">Sin grupo</option>
+                        {userGroups.map(g => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
                       </select>
-                      <div className="w-7 shrink-0 flex items-center justify-center">
-                        <button 
-                          onClick={() => setItems(items.filter(i => i.id !== item.id))} 
-                          className={`p-1 text-zinc-400 hover:text-rose-500 transition-colors ${items.length > 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                          disabled={items.length <= 1}
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
+                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
+                      <select
+                        value={paidById}
+                        onChange={e => setPaidById(e.target.value)}
+                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
+                      >
+                        {activeProfiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
+                    <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
+                      <select
+                        value={subCategory}
+                        onChange={e => setSubCategory(e.target.value)}
+                        className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
+                      >
+                        {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
+                          <optgroup key={main} label={main}>
+                            {subs.map(sub => (
+                              <option key={sub} value={sub}>{sub}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        {!Object.values(CATEGORY_GROUPS).flat().includes(subCategory) && (
+                          <option value={subCategory}>{subCategory}</option>
+                        )}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      className="w-full pl-2.5 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    onClick={() => {
+                      setShowAdditional(!showAdditional);
+                      if (showAdditional && !notes) setShowNoteInput(false);
+                    }}
+                    className="text-[11px] font-bold text-zinc-500 hover:text-emerald-600 transition-colors flex items-center"
+                  >
+                    <Plus className={`w-3 h-3 mr-1 transition-transform ${showAdditional ? 'rotate-45' : ''}`} />
+                    {showAdditional ? 'Ocultar opciones adicionales' : 'Añadir nota o foto'}
+                  </button>
+                </div>
+
+                {(showAdditional || notes || receiptUrl) && (
+                  <div className="flex gap-3 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button
+                      onClick={() => setShowNoteInput(!showNoteInput)}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${(showNoteInput || notes) ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Nota</span>
+                    </button>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      disabled={isUploading}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 border rounded-xl py-2 text-sm font-semibold transition-all shadow-sm ${receiptUrl ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
+                    >
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                      <span>Foto</span>
+                    </button>
+                    <input type="file" ref={fileRef} onChange={handleUpload} accept="image/*" className="hidden" />
+                  </div>
+                )}
+
+                {(showNoteInput || notes) && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-200 pt-2">
+                    <textarea
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Añade notas o detalles adicionales (opcional)..."
+                      className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm min-h-[80px] resize-y"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              {/* Itemized list in Step 1 */}
+              {mode === 'itemized' && (
+                <div className="space-y-3 pt-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-zinc-900 flex items-center">
+                      <ShoppingCart className="w-4 h-4 mr-2 text-emerald-600" />
+                      Artículos
+                    </h3>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-zinc-100">
+                      <div className="flex-1 min-w-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-1">Descripción</div>
+                      <div className="w-12 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Cant.</div>
+                      <div className="w-20 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-right pr-2">Monto</div>
+                      <div className="w-14 shrink-0 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">Tipo</div>
+                      <div className="w-7 shrink-0"></div>
+                    </div>
+                    
+                    <div className="p-2 space-y-1">
+                      {items.map((item, idx) => (
+                        <div key={item.id} className="flex items-center gap-2 p-1 border border-transparent hover:border-zinc-100 hover:bg-zinc-50/50 rounded-xl transition-colors group">
+                          <input
+                            type="text"
+                            placeholder="Ej. Pan"
+                            value={item.desc}
+                            onChange={e => {
+                              const newItems = [...items];
+                              newItems[idx].desc = e.target.value;
+                              setItems(newItems);
+                            }}
+                            className="flex-1 min-w-0 px-2 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                          />
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="1"
+                            value={item.quantity}
+                            onChange={e => {
+                              const newItems = [...items];
+                              newItems[idx].quantity = e.target.value;
+                              setItems(newItems);
+                            }}
+                            className="w-12 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-center text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                          />
+                          <div className="relative w-20 shrink-0">
+                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">$</span>
+                            <FormattedCurrencyInput
+                              value={item.amount}
+                              onChange={val => {
+                                const newItems = [...items];
+                                newItems[idx].amount = val;
+                                setItems(newItems);
+                              }}
+                              currency={currency}
+                              hideSymbol
+                              placeholder="0"
+                              className="w-full pl-4 pr-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors text-right"
+                            />
+                          </div>
+                          <select
+                            value={item.amountType}
+                            onChange={e => {
+                              const newItems = [...items];
+                              newItems[idx].amountType = e.target.value as 'each' | 'total';
+                              setItems(newItems);
+                            }}
+                            className="w-14 shrink-0 px-1 py-1.5 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-md text-[10px] font-bold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none text-center cursor-pointer"
+                          >
+                            <option value="each">c/u</option>
+                            <option value="total">Tot</option>
+                          </select>
+                          <div className="w-7 shrink-0 flex items-center justify-center">
+                            <button 
+                              onClick={() => setItems(items.filter(i => i.id !== item.id))} 
+                              className={`p-1 text-zinc-400 hover:text-rose-500 transition-colors ${items.length > 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                              disabled={items.length <= 1}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="px-1 pt-1 pb-1">
+                        <button
+                          onClick={() => setItems([...items, { id: Date.now(), desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }])}
+                          className="w-full py-2 border border-dashed border-zinc-300 rounded-xl text-xs font-bold text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 transition-colors flex items-center justify-center bg-zinc-50/50 hover:bg-emerald-50/50"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />
+                          Añadir otro artículo
                         </button>
                       </div>
                     </div>
-                  ))}
-                  <div className="px-1 pt-1 pb-1">
-                    <button
-                      onClick={() => setItems([...items, { id: Date.now(), desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }])}
-                      className="w-full py-2 border border-dashed border-zinc-300 rounded-xl text-xs font-bold text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 transition-colors flex items-center justify-center bg-zinc-50/50 hover:bg-emerald-50/50"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1.5" />
-                      Añadir otro artículo
-                    </button>
                   </div>
                 </div>
-              </div>
-            </div>
+              )}
+            </>
           )}
 
-          {/* Split Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-zinc-900">¿Cómo se divide?</h3>
-              <div className="bg-zinc-100/80 p-1 rounded-xl flex shadow-inner">
-                {(mode === 'itemized' ? ['itemized', 'equal'] : ['equal', 'exact', 'shares']).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setSplitType(type as any)}
-                    className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg capitalize transition-all ${splitType === type ? 'bg-white shadow-sm text-zinc-900 scale-[1.02]' : 'text-zinc-500 hover:text-zinc-900'}`}
-                  >
-                    {type === 'equal' ? 'Iguales' : type === 'itemized' ? 'Artículos' : type === 'exact' ? 'Exacto' : 'Cuotas'}
-                  </button>
-                ))}
+          {/* Quick Mode Split Section */}
+          {step === 2 && mode === 'quick' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-zinc-900">¿Cómo se divide?</h3>
+                <div className="bg-zinc-100/80 p-1 rounded-xl flex shadow-inner">
+                  {['equal', 'exact', 'shares'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setSplitType(type as any)}
+                      className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-lg capitalize transition-all ${splitType === type ? 'bg-white shadow-sm text-zinc-900 scale-[1.02]' : 'text-zinc-500 hover:text-zinc-900'}`}
+                    >
+                      {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : 'Cuotas'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Split Type Content */}
-            {splitType === 'itemized' && mode === 'itemized' ? (
-              <div className="space-y-3">
-                {items.map((item, idx) => {
-                  const amt = getItemTotal(item);
-                  const itemQty = parseFloat(item.quantity) || 1;
-                  const isAll = item.assignedTo.length === 0;
-                  const assigned = isAll ? selectedMembers : item.assignedTo.filter(id => selectedMembers.includes(id));
-                  
-                  let totalShares = 0;
-                  assigned.forEach(id => {
-                    totalShares += parseFloat(item.shares?.[id] ?? '1') || 0;
-                  });
-
-                  return (
-                    <div key={item.id} className="p-3 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-2 transition-all">
-                      <div className="flex justify-between items-center px-1 mb-1">
-                        <p className="text-sm font-bold text-zinc-900">
-                          {itemQty > 1 ? `${itemQty}x ` : ''}{item.desc || `Artículo ${idx + 1}`}
-                        </p>
-                        <div className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                          {formatCurrency(amt, currency)}
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col gap-1.5">
-                        {activeProfiles.filter(p => selectedMembers.includes(p.id)).map(p => {
-                          const isSel = isAll || item.assignedTo.includes(p.id);
-                          const userShareStr = item.shares?.[p.id] ?? '1';
-                          const userShareNum = parseFloat(userShareStr) || 0;
-                          
-                          const unitsConsumed = isSel && totalShares > 0 ? (userShareNum / totalShares) * itemQty : 0;
-                          const amountToPay = isSel && totalShares > 0 ? (userShareNum / totalShares) * amt : 0;
-                          
-                          return (
-                            <div key={p.id} className={`flex items-center justify-between p-2 rounded-xl border transition-all ${isSel ? 'bg-zinc-50 border-zinc-200' : 'opacity-50 border-transparent hover:bg-zinc-50 hover:opacity-100'}`}>
-                              <button 
-                                onClick={() => {
-                                  const newItems = [...items];
-                                  if (isAll) {
-                                    newItems[idx].assignedTo = selectedMembers.filter(id => id !== p.id);
-                                  } else {
-                                    if (isSel) {
-                                       newItems[idx].assignedTo = item.assignedTo.filter(id => id !== p.id);
-                                    } else {
-                                       newItems[idx].assignedTo = [...item.assignedTo, p.id];
-                                    }
-                                  }
-                                  setItems(newItems);
-                                }}
-                                className="flex items-center gap-2 flex-1 text-left"
-                              >
-                                <div className={`w-4 h-4 rounded-[4px] flex items-center justify-center border transition-colors shrink-0 ${isSel ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-zinc-300'}`}>
-                                   {isSel && <Check className="w-3 h-3" />}
-                                </div>
-                                <span className="text-xs font-bold text-zinc-900 truncate">
-                                  {p.full_name?.split(' ')[0] || p.email}
-                                </span>
-                              </button>
-                              
-                              {isSel && (
-                                <div className="flex items-center gap-3 shrink-0 ml-2">
-                                   <div className="flex items-center gap-1.5">
-                                      <input 
-                                        type="number" 
-                                        min="0"
-                                        step="0.1"
-                                        value={item.shares?.[p.id] !== undefined ? item.shares[p.id] : '1'}
-                                        onChange={e => {
-                                           const newItems = [...items];
-                                           if (!newItems[idx].shares) newItems[idx].shares = {};
-                                           newItems[idx].shares![p.id] = e.target.value;
-                                           setItems(newItems);
-                                        }}
-                                        className="w-12 px-1 py-1 text-center text-xs font-bold border border-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                                      />
-                                      <div className="text-[10px] font-bold text-zinc-500 flex flex-col leading-tight min-w-[32px]">
-                                        <span>unid.</span>
-                                        <span className="text-emerald-600">({unitsConsumed % 1 === 0 ? unitsConsumed : unitsConsumed.toFixed(2)})</span>
-                                      </div>
-                                   </div>
-                                   <div className="text-xs font-black text-zinc-900 w-16 text-right">
-                                      {formatCurrency(amountToPay, currency)}
-                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
               <div className="space-y-2">
                 {activeProfiles.map(p => {
                   const isSelected = selectedMembers.includes(p.id);
@@ -783,8 +687,131 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                   );
                 })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Itemized Mode Split Section (Step 2) */}
+          {step === 2 && mode === 'itemized' && (
+            <div className="space-y-6">
+              
+              {/* Horizontal Participant Selector */}
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 mb-3">Personas que participaron</h3>
+                <div className="flex overflow-x-auto gap-3 pb-2 snap-x">
+                  {activeProfiles.map(p => {
+                    const isSelected = selectedMembers.includes(p.id);
+                    return (
+                      <button 
+                        key={p.id}
+                        onClick={() => {
+                          if (isSelected && selectedMembers.length > 1) setSelectedMembers(selectedMembers.filter(id => id !== p.id));
+                          else if (!isSelected) setSelectedMembers([...selectedMembers, p.id]);
+                        }}
+                        className={`flex flex-col items-center justify-start gap-1.5 snap-start shrink-0 p-1.5 rounded-2xl transition-colors min-w-[72px] ${isSelected ? 'bg-emerald-50' : 'hover:bg-zinc-50'}`}
+                      >
+                        <div className={`relative w-12 h-12 rounded-full border-2 transition-colors flex items-center justify-center shadow-sm bg-white ${isSelected ? 'border-emerald-500' : 'border-zinc-200 opacity-60'}`}>
+                          {p.avatar_url ? (
+                            <Image src={p.avatar_url} alt="avatar" fill className="rounded-full object-cover" unoptimized />
+                          ) : (
+                            <span className="text-sm font-bold text-zinc-600">
+                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                          {isSelected && (
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <span className={`text-[10px] font-bold truncate w-full text-center ${isSelected ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                          {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Items List with Horizontal Weights */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+                  <h3 className="text-sm font-bold text-zinc-900">Repartir Artículos</h3>
+                </div>
+                
+                {items.map((item, idx) => {
+                  const amt = getItemTotal(item);
+                  const itemQty = parseFloat(item.quantity) || 1;
+                  
+                  let totalShares = 0;
+                  selectedMembers.forEach(id => {
+                    totalShares += parseFloat(item.shares?.[id] ?? '1') || 0;
+                  });
+
+                  return (
+                    <div key={item.id} className="p-3 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-3 transition-all">
+                      <div className="flex justify-between items-center px-1">
+                        <p className="text-sm font-bold text-zinc-900">
+                          {itemQty > 1 ? <span className="text-emerald-600 mr-1">{itemQty}x</span> : null}
+                          {item.desc || `Artículo ${idx + 1}`}
+                        </p>
+                        <div className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                          {formatCurrency(amt, currency)}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-2.5">
+                        <div className="flex items-center justify-start overflow-x-auto gap-4 pb-1">
+                          {selectedMembers.map(pId => {
+                            const p = activeProfiles.find(x => x.id === pId);
+                            if (!p) return null;
+                            const userShareStr = item.shares?.[p.id] ?? '1';
+                            const userShareNum = parseFloat(userShareStr) || 0;
+                            const amountToPay = totalShares > 0 ? (userShareNum / totalShares) * amt : 0;
+                            
+                            return (
+                              <div key={p.id} className="flex flex-col items-center justify-center gap-1.5 min-w-[64px] shrink-0">
+                                <div className="flex items-center gap-1.5 w-full justify-center">
+                                  {p.avatar_url ? (
+                                    <Image src={p.avatar_url} alt="avatar" width={16} height={16} className="rounded-full w-4 h-4 object-cover" unoptimized />
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full bg-zinc-200 flex items-center justify-center">
+                                      <span className="text-[8px] font-bold text-zinc-600">{(p.full_name || p.email || 'U').charAt(0).toUpperCase()}</span>
+                                    </div>
+                                  )}
+                                  <span className="text-[9px] font-bold text-zinc-600 truncate max-w-[40px]">
+                                    {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex flex-col items-center gap-1">
+                                  <input 
+                                    type="number" 
+                                    min="0"
+                                    step="0.1"
+                                    value={userShareStr}
+                                    onChange={e => {
+                                       const newItems = [...items];
+                                       if (!newItems[idx].shares) newItems[idx].shares = {};
+                                       newItems[idx].shares![p.id] = e.target.value;
+                                       setItems(newItems);
+                                    }}
+                                    className="w-12 px-1 py-1 text-center text-xs font-bold border border-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                                  />
+                                  <span className="text-[10px] font-black text-zinc-800">
+                                    {formatCurrency(amountToPay, currency)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -793,17 +820,55 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             <span className="text-sm font-bold text-zinc-500">Total a dividir</span>
             <span className="text-lg font-black text-zinc-900">{formatCurrency(totalAmount, currency)}</span>
           </div>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="w-full px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
-          >
-            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
-            <span>{expenseToEdit ? 'Guardar Cambios' : 'Confirmar Gasto'}</span>
-          </button>
+
+          <div className="flex gap-3 mt-1">
+            {step > 1 && (
+              <button
+                onClick={() => setStep(step - 1)}
+                className="px-5 py-3.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-bold rounded-xl transition-all flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
+
+            {step === 1 ? (
+              <button
+                onClick={() => {
+                  if (!description.trim()) {
+                    setError('Por favor, ingresa una descripción');
+                    return;
+                  }
+                  if (mode === 'quick' && !amount) {
+                    setError('Por favor, ingresa un monto');
+                    return;
+                  }
+                  if (mode === 'itemized') {
+                    if (items.some(i => !i.desc || !i.amount)) {
+                      setError('Completa la descripción y monto de todos los artículos.');
+                      return;
+                    }
+                  }
+                  setError(null);
+                  setStep(step + 1);
+                }}
+                className="flex-1 px-8 py-3.5 bg-zinc-900 hover:bg-black text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center cursor-pointer"
+              >
+                <span>Siguiente</span>
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="flex-1 px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
+                <span>{expenseToEdit ? 'Guardar Cambios' : 'Confirmar Gasto'}</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
