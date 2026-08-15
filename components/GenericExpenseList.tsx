@@ -94,6 +94,7 @@ export function GenericExpenseList({
 }: GenericExpenseListProps) {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
   // Combine and sort chronologically (most recent first)
   const transactions: UnifiedTransaction[] = [
@@ -270,7 +271,7 @@ export function GenericExpenseList({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onDeleteExpense(exp.id);
+                                setExpenseToDelete(exp.id);
                               }}
                               className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-0 focus:opacity-100 absolute right-4 sm:relative sm:right-auto"
                               title="Eliminar gasto"
@@ -368,7 +369,7 @@ export function GenericExpenseList({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onDeleteExpense(exp.id);
+                                    setExpenseToDelete(exp.id);
                                   }}
                                   className="flex items-center space-x-1.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm md:hidden"
                                 >
@@ -506,6 +507,42 @@ export function GenericExpenseList({
           </div>
         </div>
       ))}
+
+      {/* Delete Expense Modal */}
+      {expenseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-6 shadow-2xl">
+            <div>
+              <h3 className="font-bold text-zinc-900 text-xl">Eliminar Gasto</h3>
+              <p className="text-zinc-600 mt-2">
+                ¿Estás seguro de que deseas eliminar este gasto? Esta acción no se puede deshacer y afectará los balances de todos los participantes.
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setExpenseToDelete(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteExpense && expenseToDelete) {
+                    onDeleteExpense(expenseToDelete);
+                  }
+                  setExpenseToDelete(null);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl font-semibold text-white bg-rose-600 hover:bg-rose-700 transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proof Modal */}
       {selectedProofUrl && (
