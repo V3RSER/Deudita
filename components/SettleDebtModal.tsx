@@ -51,7 +51,7 @@ export function SettleDebtModal({
   defaultAmount,
   paymentToEdit,
 }: SettleDebtModalProps) {
-  const { currentProfile, userGroups, profiles, expenses, payments, addPayment, updatePayment, deletePayment } = useExpense();
+  const { currentProfile, userGroups, profiles, expenses, payments, addPayment, updatePayment, deletePayment, isMutating } = useExpense();
 
   const [groupId, setGroupId] = useState<string>('');
   const [payerId, setPayerId] = useState<string>('');
@@ -710,10 +710,10 @@ export function SettleDebtModal({
 
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || isUploading || numericAmount <= 0}
+            disabled={isSubmitting || isMutating || isUploading || numericAmount <= 0}
             className="px-6 sm:px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold rounded-2xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer ml-auto"
           >
-            {isSubmitting ? (
+            {(isSubmitting || isMutating) ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
               <Check className="w-4 h-4 mr-1.5" />

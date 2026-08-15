@@ -22,6 +22,7 @@ import {
   Loader2,
   AlertCircle,
   ExternalLink,
+  History,
 } from 'lucide-react';
 
 export default function ExpenseDetailPage({
@@ -31,7 +32,7 @@ export default function ExpenseDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { currentProfile, expenses, userGroups, profiles, deleteExpense } = useExpense();
+  const { currentProfile, expenses, userGroups, profiles, deleteExpense, auditLogs: allAuditLogs } = useExpense();
 
   const [expense, setExpense] = useState<Expense | null>(null);
   const [loading, setLoading] = useState(true);
@@ -426,6 +427,76 @@ export default function ExpenseDetailPage({
               </div>
             </div>
           )}
+
+          {/* Historial de Cambios / Participantes */}
+          {(() => {
+            const relevantLogs = [
+              ...(expense.audit_logs || []),
+              ...allAuditLogs.filter((l) => l.expense_id === expense.id),
+            ].filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i);
+
+            if (relevantLogs.length === 0) return null;
+
+            return (
+              <div className="space-y-3 pt-4 border-t border-zinc-100">
+                <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider flex items-center space-x-1.5">
+                  <History className="w-4 h-4 text-zinc-400" />
+                  <span>Historial de Modificaciones ({relevantLogs.length})</span>
+                </h3>
+                <div className="space-y-2.5">
+                  {relevantLogs.map((log) => {
+                    const editor = profiles.find((p) => p.id === log.user_id);
+                    const changes = log.changes as any;
+                    const dateStr = new Date(log.created_at).toLocaleString();
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="p-3.5 bg-zinc-50 border border-zinc-200/80 rounded-2xl text-xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-zinc-900 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            {editor?.full_name || 'Un participante'} editó el gasto
+                          </span>
+                          <span className="text-[11px] text-zinc-400 font-medium">
+                            {dateStr}
+                          </span>
+                        </div>
+
+                        {changes?.summary && (
+                          <p className="text-zinc-700 font-medium pl-3.5">
+                            {changes.summary}
+                          </p>
+                        )}
+
+                        {(changes?.added_names?.length > 0 || changes?.removed_names?.length > 0) && (
+                          <div className="flex flex-wrap gap-1.5 pl-3.5 pt-0.5">
+                            {changes.added_names?.map((name: string, idx: number) => (
+                              <span
+                                key={`add-${idx}`}
+                                className="bg-emerald-100/90 text-emerald-800 px-2 py-0.5 rounded-md font-semibold text-[10px]"
+                              >
+                                + {name}
+                              </span>
+                            ))}
+                            {changes.removed_names?.map((name: string, idx: number) => (
+                              <span
+                                key={`rem-${idx}`}
+                                className="bg-rose-100/90 text-rose-800 px-2 py-0.5 rounded-md font-semibold text-[10px]"
+                              >
+                                - {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

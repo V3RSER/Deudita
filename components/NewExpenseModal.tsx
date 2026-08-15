@@ -23,7 +23,7 @@ interface NewExpenseModalProps {
 }
 
 export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit }: NewExpenseModalProps) {
-  const { currentProfile, userGroups, members, profiles, addExpense, updateExpense } = useExpense();
+  const { currentProfile, userGroups, members, profiles, addExpense, updateExpense, isMutating } = useExpense();
 
   const [mode, setMode] = useState<'quick' | 'itemized'>('quick');
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +72,24 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     const groupMemberIds = members.filter(m => m.group_id === groupId).map(m => m.user_id);
     return profiles.filter(p => groupMemberIds.includes(p.id));
   }, [groupId, members, profiles, currentProfile]);
+
+  const initialParticipantIds = useMemo(() => {
+    return expenseToEdit?.splits?.map(s => s.user_id) || [];
+  }, [expenseToEdit]);
+
+  const initialCount = initialParticipantIds.length;
+  const currentCount = selectedMembers.length;
+  const hasParticipantChanges = Boolean(
+    expenseToEdit &&
+    initialCount > 0 &&
+    (initialCount !== currentCount || selectedMembers.some(id => !initialParticipantIds.includes(id)) || initialParticipantIds.some(id => !selectedMembers.includes(id)))
+  );
+
+  const addedMemberIds = selectedMembers.filter(id => !initialParticipantIds.includes(id));
+  const removedMemberIds = initialParticipantIds.filter(id => !selectedMembers.includes(id));
+
+  const addedMemberNames = activeProfiles.filter(p => addedMemberIds.includes(p.id)).map(p => p.full_name || p.email);
+  const removedMemberNames = profiles.filter(p => removedMemberIds.includes(p.id)).map(p => p.full_name || p.email);
 
   const prevIsOpenRef = useRef(false);
   const prevExpenseIdRef = useRef<string | null>(null);
@@ -692,7 +710,39 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     <Users className="w-4 h-4 mr-2 text-emerald-600" />
                     Participantes
                   </h3>
+                  {expenseToEdit && (
+                    <span className="text-[11px] font-semibold text-zinc-500">
+                      {selectedMembers.length} seleccionados
+                    </span>
+                  )}
                 </div>
+
+                {hasParticipantChanges && (
+                  <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-xs space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-center justify-between font-bold text-amber-900">
+                      <span className="flex items-center space-x-1.5">
+                        <Users className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Cambio en participantes</span>
+                      </span>
+                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {initialCount} → {currentCount} personas
+                      </span>
+                    </div>
+                    <div className="text-[11px] flex flex-wrap gap-1.5 pt-0.5">
+                      {addedMemberNames.length > 0 && (
+                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-lg font-semibold">
+                          + Añadidos: {addedMemberNames.join(', ')}
+                        </span>
+                      )}
+                      {removedMemberNames.length > 0 && (
+                        <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-lg font-semibold">
+                          - Removidos: {removedMemberNames.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-3">
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {activeProfiles.map(p => {
@@ -1119,10 +1169,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isMutating}
                 className="flex-1 px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
               >
-                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
+                {(isSubmitting || isMutating) ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
                 <span>{expenseToEdit ? 'Guardar Cambios' : 'Confirmar Gasto'}</span>
               </button>
             )}

@@ -24,7 +24,13 @@ export async function GET(
       return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
     }
 
-    return NextResponse.json(expense);
+    const { data: auditLogs } = await supabase
+      .from('expense_audit_logs')
+      .select('*')
+      .eq('expense_id', id)
+      .order('created_at', { ascending: false });
+
+    return NextResponse.json({ ...expense, audit_logs: auditLogs || [] });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error al obtener detalle del gasto';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -46,6 +52,13 @@ export async function PUT(
     }
 
     const { expense, items, splits } = await request.json();
+
+    // Fetch previous expense and splits to calculate audit differences
+    const { data: previousExpense } = await supabase
+      .from('expenses')
+      .select('*, splits:expense_splits(*)')
+      .eq('id', id)
+      .maybeSingle();
 
     const updatePayload: Record<string, any> = {
       group_id: expense.group_id,
@@ -111,6 +124,81 @@ export async function PUT(
         amount_owed: s.amount_owed,
       }));
       await supabase.from('expense_splits').insert(splitsToInsert);
+    }
+
+    // Calculate participant differences for audit trail
+    try {
+      const prevSplits = (previousExpense?.splits as any[]) || [];
+      const prevUserIds = prevSplits.map((s: any) => s.user_id);
+      const newUserIds = (splits && Array.isArray(splits)) ? splits.map((s: any) => s.user_id) : [];
+
+      const addedUserIds = newUserIds.filter((uid: string) => !prevUserIds.includes(uid));
+      const removedUserIds = prevUserIds.filter((uid: string) => !newUserIds.includes(uid));
+      const prevCount = prevUserIds.length;
+      const newCount = newUserIds.length;
+
+      const allAffectedIds = Array.from(new Set([...addedUserIds, ...removedUserIds]));
+      let addedNames: string[] = [];
+      let removedNames: string[] = [];
+
+      if (allAffectedIds.length > 0) {
+        const { data: profileRecords } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', allAffectedIds);
+
+        const nameMap: Record<string, string> = {};
+        (profileRecords || []).forEach((p: any) => {
+          nameMap[p.id] = p.full_name || 'Participante';
+        });
+
+        addedNames = addedUserIds.map((uid) => nameMap[uid] || 'Nuevo participante');
+        removedNames = removedUserIds.map((uid) => nameMap[uid] || 'Participante removido');
+      }
+
+      const summaryParts: string[] = [];
+      if (prevCount !== newCount || addedUserIds.length > 0 || removedUserIds.length > 0) {
+        if (prevCount !== newCount) {
+          summaryParts.push(`Participantes modificados de ${prevCount} a ${newCount} personas`);
+        }
+        if (addedNames.length > 0) {
+          summaryParts.push(`Añadido(s): ${addedNames.join(', ')}`);
+        }
+        if (removedNames.length > 0) {
+          summaryParts.push(`Removido(s): ${removedNames.join(', ')}`);
+        }
+      }
+
+      if (previousExpense && previousExpense.total_amount !== expense.total_amount) {
+        summaryParts.push(`Monto modificado de ${previousExpense.total_amount} a ${expense.total_amount}`);
+      }
+
+      if (previousExpense && previousExpense.description !== expense.description) {
+        summaryParts.push(`Descripción cambiada a "${expense.description}"`);
+      }
+
+      const summaryText = summaryParts.length > 0 ? summaryParts.join(' | ') : 'Gasto actualizado';
+
+      await supabase.from('expense_audit_logs').insert({
+        expense_id: id,
+        group_id: expense.group_id || previousExpense?.group_id || null,
+        user_id: user.id,
+        action: 'update',
+        changes: {
+          summary: summaryText,
+          participants_before: prevCount,
+          participants_after: newCount,
+          added_user_ids: addedUserIds,
+          removed_user_ids: removedUserIds,
+          added_names: addedNames,
+          removed_names: removedNames,
+          amount_before: previousExpense?.total_amount,
+          amount_after: expense.total_amount,
+        },
+        created_at: new Date().toISOString(),
+      });
+    } catch (auditErr) {
+      console.warn('[API /api/expenses/[id]] Warning recording audit log:', auditErr);
     }
 
     return NextResponse.json(updatedExpense);

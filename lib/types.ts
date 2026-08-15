@@ -108,6 +108,7 @@ export interface Expense {
   updated_by?: string;
   items?: ExpenseItem[];
   splits?: ExpenseSplit[];
+  audit_logs?: ExpenseAuditLog[];
 }
 
 export interface ExpenseAuditLog {

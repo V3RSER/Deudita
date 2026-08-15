@@ -20,6 +20,8 @@ import { createClient } from '@/lib/supabase/client';
 interface ExpenseContextType {
   currentProfile: Profile | null;
   loading: boolean;
+  isMutating: boolean;
+  activeOperation: string | null;
   profiles: Profile[];
   userGroups: Group[];
   groups: Group[];
@@ -59,6 +61,8 @@ const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [activeOperation, setActiveOperation] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -70,6 +74,17 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const supabase = createClient();
+
+  const runOperation = async <T,>(operationLabel: string, action: () => Promise<T>): Promise<T> => {
+    setIsMutating(true);
+    setActiveOperation(operationLabel);
+    try {
+      return await action();
+    } finally {
+      setIsMutating(false);
+      setActiveOperation(null);
+    }
+  };
 
   const reloadFromSupabase = useCallback(async () => {
     try {
@@ -122,47 +137,51 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (updates: Partial<Profile>): Promise<void> => {
     if (!currentProfile) return;
-    const { error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', currentProfile.id);
+    await runOperation('Guardando perfil...', async () => {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', currentProfile.id);
 
-    if (error) {
-      console.error('Error al actualizar el perfil:', error);
-      throw new Error(error.message || 'Error al actualizar el perfil');
-    }
+      if (error) {
+        console.error('Error al actualizar el perfil:', error);
+        throw new Error(error.message || 'Error al actualizar el perfil');
+      }
 
-    await reloadFromSupabase();
+      await reloadFromSupabase();
+    });
   };
 
   const addFriend = async (fullName: string, email?: string): Promise<Profile> => {
-    const res = await fetch('/api/friends', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fullName, email }),
-    });
+    return await runOperation('Agregando amigo...', async () => {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, email }),
+      });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'Error al agregar amigo';
-      console.error('[ExpenseContext] Error in addFriend:', message);
-      throw new Error(message);
-    }
-
-    const data = await res.json();
-    const newProfile = data.profile as Profile;
-    
-    // Actualización optimista de estado
-    setProfiles((prev) => {
-      if (!prev.find((p) => p.id === newProfile.id)) {
-        return [...prev, newProfile];
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'Error al agregar amigo';
+        console.error('[ExpenseContext] Error in addFriend:', message);
+        throw new Error(message);
       }
-      return prev;
-    });
 
-    // Sincronizar en segundo plano
-    void reloadFromSupabase();
-    return newProfile;
+      const data = await res.json();
+      const newProfile = data.profile as Profile;
+      
+      // Actualización de estado
+      setProfiles((prev) => {
+        if (!prev.find((p) => p.id === newProfile.id)) {
+          return [...prev, newProfile];
+        }
+        return prev;
+      });
+
+      // Sincronizar
+      void reloadFromSupabase();
+      return newProfile;
+    });
   };
 
   const createGroup = async (
@@ -174,22 +193,24 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     memberIds?: string[],
     currency?: string
   ): Promise<Group> => {
-    const res = await fetch('/api/groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds, currency }),
+    return await runOperation('Creando grupo...', async () => {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds, currency }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo crear el grupo';
+        console.error('[ExpenseContext] Error in createGroup:', message);
+        throw new Error(message);
+      }
+
+      const createdGroup: Group = await res.json();
+      await reloadFromSupabase();
+      return createdGroup;
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo crear el grupo';
-      console.error('[ExpenseContext] Error in createGroup:', message);
-      throw new Error(message);
-    }
-
-    const createdGroup: Group = await res.json();
-    await reloadFromSupabase();
-    return createdGroup;
   };
 
   const updateGroup = async (
@@ -200,101 +221,113 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     imageUrl?: string,
     currency?: string
   ): Promise<Group> => {
-    const res = await fetch(`/api/groups/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, category, description, imageUrl, currency }),
+    return await runOperation('Actualizando grupo...', async () => {
+      const res = await fetch(`/api/groups/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, category, description, imageUrl, currency }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el grupo';
+        console.error('[ExpenseContext] Error in updateGroup:', message);
+        throw new Error(message);
+      }
+
+      const updatedGroup: Group = await res.json();
+      await reloadFromSupabase();
+      return updatedGroup;
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el grupo';
-      console.error('[ExpenseContext] Error in updateGroup:', message);
-      throw new Error(message);
-    }
-
-    const updatedGroup: Group = await res.json();
-    await reloadFromSupabase();
-    return updatedGroup;
   };
 
   const deleteGroup = async (id: string): Promise<void> => {
-    const res = await fetch(`/api/groups/${id}`, {
-      method: 'DELETE',
+    await runOperation('Eliminando grupo...', async () => {
+      const res = await fetch(`/api/groups/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el grupo';
+        console.error('[ExpenseContext] Error in deleteGroup:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el grupo';
-      console.error('[ExpenseContext] Error in deleteGroup:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const addGroupInvite = async (groupId: string, email?: string, name?: string, memberId?: string): Promise<{ inviteUrl: string; message: string; memberId?: string }> => {
-    const res = await fetch('/api/groups/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId, email, name, memberId }),
+    return await runOperation('Añadiendo integrante...', async () => {
+      const res = await fetch('/api/groups/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, email, name, memberId }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo enviar la invitación';
+        console.error('[ExpenseContext] Error in addGroupInvite:', message);
+        throw new Error(message);
+      }
+
+      const data = await res.json();
+      await reloadFromSupabase();
+      return {
+        inviteUrl: data.inviteUrl,
+        message: data.message,
+        memberId: data.memberId,
+      };
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo enviar la invitación';
-      console.error('[ExpenseContext] Error in addGroupInvite:', message);
-      throw new Error(message);
-    }
-
-    const data = await res.json();
-    await reloadFromSupabase();
-    return {
-      inviteUrl: data.inviteUrl,
-      message: data.message,
-      memberId: data.memberId,
-    };
   };
 
   const deleteFriend = async (friendId: string): Promise<void> => {
-    const res = await fetch(`/api/friends/${friendId}`, {
-      method: 'DELETE',
+    await runOperation('Eliminando amigo...', async () => {
+      const res = await fetch(`/api/friends/${friendId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo eliminar al amigo');
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'No se pudo eliminar al amigo');
-    }
-
-    await reloadFromSupabase();
   };
 
   const acceptGroupInvite = async (inviteId: string): Promise<string> => {
-    const res = await fetch(`/api/invites/${inviteId}/accept`, {
-      method: 'POST',
+    return await runOperation('Aceptando invitación...', async () => {
+      const res = await fetch(`/api/invites/${inviteId}/accept`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo aceptar la invitación');
+      }
+
+      const data = await res.json();
+      await reloadFromSupabase();
+      return data.groupId;
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'No se pudo aceptar la invitación');
-    }
-
-    const data = await res.json();
-    await reloadFromSupabase();
-    return data.groupId;
   };
 
   const rejectGroupInvite = async (inviteId: string): Promise<void> => {
-    const res = await fetch(`/api/invites/${inviteId}/reject`, {
-      method: 'POST',
+    await runOperation('Rechazando invitación...', async () => {
+      const res = await fetch(`/api/invites/${inviteId}/reject`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo rechazar la invitación');
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'No se pudo rechazar la invitación');
-    }
-
-    await reloadFromSupabase();
   };
 
   const markNotificationAsRead = async (notificationId?: string): Promise<void> => {
@@ -310,131 +343,147 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addExpense = async (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
-    const res = await fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expense, items, splits }),
+    await runOperation('Guardando gasto...', async () => {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expense, items, splits }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo registrar el gasto';
+        console.error('[ExpenseContext] Error in addExpense:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo registrar el gasto';
-      console.error('[ExpenseContext] Error in addExpense:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const updateExpense = async (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
-    const res = await fetch(`/api/expenses/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expense, items, splits }),
+    await runOperation('Actualizando gasto y participantes...', async () => {
+      const res = await fetch(`/api/expenses/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expense, items, splits }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el gasto';
+        console.error('[ExpenseContext] Error in updateExpense:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el gasto';
-      console.error('[ExpenseContext] Error in updateExpense:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const deleteExpense = async (id: string) => {
-    const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+    await runOperation('Eliminando gasto...', async () => {
+      const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el gasto';
-      console.error('[ExpenseContext] Error in deleteExpense:', message);
-      throw new Error(message);
-    }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el gasto';
+        console.error('[ExpenseContext] Error in deleteExpense:', message);
+        throw new Error(message);
+      }
 
-    await reloadFromSupabase();
+      await reloadFromSupabase();
+    });
   };
 
   const addPayment = async (payment: Omit<Payment, 'id' | 'created_at'>) => {
-    const res = await fetch('/api/payments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payment),
+    await runOperation('Registrando pago...', async () => {
+      const res = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payment),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo registrar el pago';
+        console.error('[ExpenseContext] Error in addPayment:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo registrar el pago';
-      console.error('[ExpenseContext] Error in addPayment:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const updatePayment = async (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => {
-    const res = await fetch(`/api/payments/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payment),
+    await runOperation('Actualizando pago...', async () => {
+      const res = await fetch(`/api/payments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payment),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el pago';
+        console.error('[ExpenseContext] Error in updatePayment:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el pago';
-      console.error('[ExpenseContext] Error in updatePayment:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const deletePayment = async (id: string) => {
-    const res = await fetch(`/api/payments/${id}`, {
-      method: 'DELETE',
+    await runOperation('Eliminando pago...', async () => {
+      const res = await fetch(`/api/payments/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el pago';
+        console.error('[ExpenseContext] Error in deletePayment:', message);
+        throw new Error(message);
+      }
+
+      await reloadFromSupabase();
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el pago';
-      console.error('[ExpenseContext] Error in deletePayment:', message);
-      throw new Error(message);
-    }
-
-    await reloadFromSupabase();
   };
 
   const confirmDraft = async (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => {
-    await fetch('/api/drafts/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ draftId, groupId, paidBy, splits }),
+    await runOperation('Confirmando borrador...', async () => {
+      await fetch('/api/drafts/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draftId, groupId, paidBy, splits }),
+      });
+      await reloadFromSupabase();
     });
-    await reloadFromSupabase();
   };
 
   const discardDraft = async (draftId: string) => {
-    await fetch(`/api/drafts/${draftId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'discarded' }),
+    await runOperation('Descartando borrador...', async () => {
+      await fetch(`/api/drafts/${draftId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'discarded' }),
+      });
+      await reloadFromSupabase();
     });
-    await reloadFromSupabase();
   };
 
   const addDraft = async (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => {
-    // In real app, this is created from Gmail webhook.
-    // For demo purposes, we can add it here if needed.
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    await supabase.from('expense_drafts').insert({
-      ...draft,
-      user_id: user.id,
-      status: 'pending'
+    await runOperation('Agregando borrador...', async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      await supabase.from('expense_drafts').insert({
+        ...draft,
+        user_id: user.id,
+        status: 'pending'
+      });
+      await reloadFromSupabase();
     });
-    await reloadFromSupabase();
   };
 
   const userGroups = groups.filter((g) => members.some((m) => m.group_id === g.id && m.user_id === currentProfile?.id));
@@ -444,6 +493,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentProfile,
         loading,
+        isMutating,
+        activeOperation,
         profiles,
         userGroups,
         groups,
