@@ -26,6 +26,7 @@ import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { EditGroupModal } from '@/components/EditGroupModal';
 
 interface GroupDetailProps {
   group: Group;
@@ -101,6 +102,7 @@ export function GroupDetail({
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
+  const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
@@ -193,6 +195,13 @@ export function GroupDetail({
         )}
         actions={
           <>
+            <button
+              onClick={() => setIsEditGroupModalOpen(true)}
+              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center shrink-0 min-h-[40px] cursor-pointer"
+              title="Editar grupo"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
             <button
               onClick={() => onOpenSettleModal(group.id)}
               className="flex items-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
@@ -484,6 +493,14 @@ export function GroupDetail({
             setSelectedExpenseForModal(null);
             if (onEditExpense) onEditExpense(exp);
           }}
+        />
+      )}
+      {/* Edit Group Modal */}
+      {isEditGroupModalOpen && (
+        <EditGroupModal
+          isOpen={isEditGroupModalOpen}
+          group={group}
+          onClose={() => setIsEditGroupModalOpen(false)}
         />
       )}
     </div>

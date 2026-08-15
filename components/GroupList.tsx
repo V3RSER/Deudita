@@ -13,42 +13,30 @@ import {
   Briefcase,
   Folder,
   Users,
-  ArrowRight,
   Plus,
-  Receipt,
   TrendingUp,
   TrendingDown,
   MinusCircle,
   Calculator,
+  ChevronRight,
 } from 'lucide-react';
 
-import { getGroupImage, getCleanGroupDescription, getGroupCategoryLabel } from '@/lib/group-utils';
+import { getGroupImage } from '@/lib/group-utils';
 
 interface GroupListProps {
   onSelectGroup: (group: Group) => void;
   onOpenNewGroup: () => void;
 }
 
-const CATEGORY_ICONS: Record<GroupCategory, React.ReactNode> = {
-  friends: <Users className="w-5 h-5 text-emerald-500" />,
-  trip: <Plane className="w-5 h-5 text-sky-500" />,
-  home: <Home className="w-5 h-5 text-indigo-500" />,
-  couple: <Heart className="w-5 h-5 text-rose-500" />,
-  event: <Calendar className="w-5 h-5 text-amber-500" />,
-  accounting: <Calculator className="w-5 h-5 text-purple-500" />,
-  work: <Briefcase className="w-5 h-5 text-blue-500" />,
-  other: <Folder className="w-5 h-5 text-slate-500" />,
-};
-
-const CATEGORY_LABELS: Record<GroupCategory, string> = {
-  friends: 'Amigos',
-  trip: 'Viajes',
-  home: 'Hogar',
-  couple: 'Pareja',
-  event: 'Eventos',
-  accounting: 'Contabilidad',
-  work: 'Trabajo',
-  other: 'Otros',
+const CATEGORY_STYLES: Record<GroupCategory, { icon: React.ReactNode; bg: string; text: string }> = {
+  friends: { icon: <Users className="w-6 h-6" />, bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  trip: { icon: <Plane className="w-6 h-6" />, bg: 'bg-sky-50', text: 'text-sky-600' },
+  home: { icon: <Home className="w-6 h-6" />, bg: 'bg-indigo-50', text: 'text-indigo-600' },
+  couple: { icon: <Heart className="w-6 h-6" />, bg: 'bg-rose-50', text: 'text-rose-600' },
+  event: { icon: <Calendar className="w-6 h-6" />, bg: 'bg-amber-50', text: 'text-amber-600' },
+  accounting: { icon: <Calculator className="w-6 h-6" />, bg: 'bg-purple-50', text: 'text-purple-600' },
+  work: { icon: <Briefcase className="w-6 h-6" />, bg: 'bg-blue-50', text: 'text-blue-600' },
+  other: { icon: <Folder className="w-6 h-6" />, bg: 'bg-slate-50', text: 'text-slate-600' },
 };
 
 import { PageHeader } from '@/components/PageHeader';
@@ -154,134 +142,55 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {userGroups.map((group) => {
-            const groupMembers = members.filter((m) => m.group_id === group.id);
-            const memberProfiles = groupMembers
-              .map((m) => profiles.find((p) => p.id === m.user_id))
-              .filter((p): p is NonNullable<typeof p> => p !== undefined);
-
-            const groupExpenses = expenses.filter((e) => e.group_id === group.id);
-            const totalGroupSpent = groupExpenses.reduce((acc, curr) => acc + curr.total_amount, 0);
-
             // Calculate current user's balance in this specific group
             const userSummaries = calculateUserSummaries(expenses, payments, profiles, group.id);
             const mySummary = userSummaries.find((s) => s.user.id === currentProfile?.id);
             const netBalance = mySummary ? mySummary.netBalance : 0;
 
             const groupImg = getGroupImage(group);
-            const cleanDesc = getCleanGroupDescription(group.description);
 
             return (
               <div
                 key={group.id}
                 onClick={() => onSelectGroup(group)}
-                className="group bg-white rounded-[1.5rem] p-6 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden active:scale-[0.98]"
+                className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-4 relative overflow-hidden active:scale-[0.98]"
               >
-                <div>
-                  {/* Optional Group Banner Image */}
-                  {groupImg && (
-                    <div className="relative w-[calc(100%+3rem)] h-28 -mt-6 -mx-6 mb-4 overflow-hidden border-b border-zinc-100 bg-zinc-100">
-                      <Image
-                        src={groupImg}
-                        alt={group.name}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        unoptimized
-                        referrerPolicy="no-referrer"
-                      />
+                {/* Square rounded image or Icon */}
+                <div className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? (CATEGORY_STYLES[group.category]?.bg || 'bg-zinc-50') : ''}`}>
+                  {groupImg ? (
+                    <Image src={groupImg} alt={group.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" unoptimized referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className={`${CATEGORY_STYLES[group.category]?.text || 'text-zinc-400'}`}>
+                      {CATEGORY_STYLES[group.category]?.icon || <Folder className="w-6 h-6" />}
                     </div>
                   )}
-
-                  {/* Category & Status Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2.5 bg-zinc-50 px-3 py-1.5 rounded-lg ring-1 ring-zinc-100">
-                      {CATEGORY_ICONS[group.category] ?? CATEGORY_ICONS.other}
-                      <span className="text-[11px] font-medium text-zinc-600 uppercase tracking-wider">
-                        {getGroupCategoryLabel(group.category)}
-                      </span>
-                    </div>
-
-                    <span className="text-xs text-zinc-400 font-medium flex items-center space-x-1">
-                      <Receipt className="w-3.5 h-3.5" />
-                      <span>{groupExpenses.length}</span>
-                    </span>
-                  </div>
-
-                  {/* Group Name & Description */}
-                  <h3 className="text-lg font-semibold text-zinc-900 group-hover:text-zinc-700 transition-colors">
-                    {group.name}
-                  </h3>
-                  {cleanDesc && (
-                    <p className="text-sm text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">
-                      {cleanDesc}
-                    </p>
-                  )}
-
-                  {/* Member Avatars */}
-                  <div className="mt-6 flex items-center justify-between">
-                    <div className="flex -space-x-2 overflow-hidden">
-                      {memberProfiles.map((p) =>
-                        p.avatar_url ? (
-                          <Image
-                            key={p.id}
-                            src={p.avatar_url}
-                            alt={p.full_name}
-                            title={p.full_name}
-                            width={32}
-                            height={32}
-                            className="w-8 h-8 rounded-full ring-2 ring-white object-cover"
-                            unoptimized
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div
-                            key={p.id}
-                            title={p.full_name}
-                            className="w-8 h-8 rounded-full ring-2 ring-white bg-zinc-800 text-white flex items-center justify-center text-xs font-semibold"
-                          >
-                            {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
-                          </div>
-                        )
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-zinc-400">
-                      {memberProfiles.length} integrantes
-                    </span>
-                  </div>
                 </div>
 
-                {/* Footer Metrics */}
-                <div className="mt-8 pt-5 border-t border-zinc-100 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block">
-                      Total Gastado
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-900 mt-0.5 block">
-                      {formatCurrency(totalGroupSpent)}
-                    </span>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">
-                      Tu Estado
-                    </span>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-zinc-900 truncate group-hover:text-emerald-700 transition-colors">
+                    {group.name}
+                  </h3>
+                  
+                  {/* Balance Status */}
+                  <div className="mt-1.5">
                     {Math.abs(netBalance) < 0.5 ? (
-                      <span className="inline-flex items-center text-xs font-medium text-zinc-500 bg-zinc-50 px-2 py-1 rounded-md">
-                        <MinusCircle className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                        Al día
+                      <span className="text-sm font-medium text-zinc-500 flex items-center">
+                        <MinusCircle className="w-4 h-4 mr-1.5" /> Al día
                       </span>
                     ) : netBalance > 0 ? (
-                      <span className="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md">
-                        <TrendingUp className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
-                        +{formatCurrency(netBalance)}
+                      <span className="text-sm font-bold text-emerald-600 flex items-center">
+                        <TrendingUp className="w-4 h-4 mr-1.5" /> Te deben {formatCurrency(netBalance)}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center text-xs font-medium text-rose-700 bg-rose-50 px-2 py-1 rounded-md">
-                        <TrendingDown className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
-                        -{formatCurrency(Math.abs(netBalance))}
+                      <span className="text-sm font-bold text-rose-600 flex items-center">
+                        <TrendingDown className="w-4 h-4 mr-1.5" /> Debes {formatCurrency(Math.abs(netBalance))}
                       </span>
                     )}
                   </div>
                 </div>
+                
+                <ChevronRight className="w-5 h-5 text-zinc-300 group-hover:text-emerald-500 transition-colors shrink-0" />
               </div>
             );
           })}

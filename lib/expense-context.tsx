@@ -31,6 +31,7 @@ interface ExpenseContextType {
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
   createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[], currency?: string) => Promise<Group>;
+  updateGroup: (id: string, name: string, category: GroupCategory, description?: string, imageUrl?: string, currency?: string) => Promise<Group>;
   addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
   deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
@@ -184,6 +185,32 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const createdGroup: Group = await res.json();
     await reloadFromSupabase();
     return createdGroup;
+  };
+
+  const updateGroup = async (
+    id: string,
+    name: string,
+    category: GroupCategory,
+    description?: string,
+    imageUrl?: string,
+    currency?: string
+  ): Promise<Group> => {
+    const res = await fetch(`/api/groups/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category, description, imageUrl, currency }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo actualizar el grupo';
+      console.error('[ExpenseContext] Error in updateGroup:', message);
+      throw new Error(message);
+    }
+
+    const updatedGroup: Group = await res.json();
+    await reloadFromSupabase();
+    return updatedGroup;
   };
 
   const addGroupInvite = async (groupId: string, email?: string, name?: string, memberId?: string): Promise<{ inviteUrl: string; message: string; memberId?: string }> => {
@@ -409,6 +436,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         addFriend,
         createGroup,
+        updateGroup,
         addGroupInvite,
         deleteFriend,
         acceptGroupInvite,
