@@ -13,7 +13,7 @@ import {
   CheckCircle2, Camera, FileText, Users, PieChart, ListChecks,
   List, Table, ChevronRight, ChevronUp
 } from 'lucide-react';
-import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { getCategoryConfig, EXPENSE_CATEGORY_GROUPS, DEFAULT_EXPENSE_CATEGORY } from '@/lib/expense-category-utils';
 
 interface NewExpenseModalProps {
   isOpen: boolean;
@@ -21,15 +21,6 @@ interface NewExpenseModalProps {
   defaultGroupId?: string;
   expenseToEdit?: Expense | null;
 }
-
-const CATEGORY_GROUPS: Record<string, string[]> = {
-  'Alimentos': ['Supermercado', 'Restaurante', 'Cafetería', 'Delivery', 'Bar'],
-  'Hogar': ['Alquiler', 'Servicios', 'Internet', 'Limpieza', 'Mascotas', 'Hogar'],
-  'Transporte': ['Gasolina', 'Taxi', 'Uber', 'Transporte público', 'Vuelo', 'Peaje'],
-  'Entretenimiento': ['Cine', 'Evento', 'Gimnasio', 'Hotel', 'Entretenimiento'],
-  'Salud': ['Salud', 'Farmacia', 'Médico'],
-  'Otros': ['Regalo', 'Tienda', 'General', 'Otros']
-};
 
 export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit }: NewExpenseModalProps) {
   const { currentProfile, userGroups, members, profiles, addExpense, updateExpense } = useExpense();
@@ -42,8 +33,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  // Categories
-  const [subCategory, setSubCategory] = useState('Supermercado');
+  // Categories - default to General
+  const [subCategory, setSubCategory] = useState(DEFAULT_EXPENSE_CATEGORY);
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [paidById, setPaidById] = useState('');
@@ -114,15 +105,17 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setAmount(expenseToEdit.total_amount ? String(expenseToEdit.total_amount) : '');
         setDescription(expenseToEdit.description || '');
 
-        let foundSub = 'General';
+        let foundSub = DEFAULT_EXPENSE_CATEGORY;
         if (expenseToEdit.category) {
-          for (const [main, subs] of Object.entries(CATEGORY_GROUPS)) {
+          for (const [main, subs] of Object.entries(EXPENSE_CATEGORY_GROUPS)) {
             if (subs.includes(expenseToEdit.category)) {
               foundSub = expenseToEdit.category;
               break;
             }
           }
-          if (foundSub === 'General' && expenseToEdit.category !== 'General') foundSub = expenseToEdit.category;
+          if (foundSub === DEFAULT_EXPENSE_CATEGORY && expenseToEdit.category !== DEFAULT_EXPENSE_CATEGORY) {
+            foundSub = expenseToEdit.category;
+          }
         }
         setSubCategory(foundSub);
 
@@ -169,7 +162,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setMode('quick');
         setAmount('');
         setDescription('');
-        setSubCategory('Supermercado');
+        setSubCategory(DEFAULT_EXPENSE_CATEGORY);
         setDate(new Date().toISOString().split('T')[0]);
 
         const initialGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
@@ -520,14 +513,14 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           onChange={e => setSubCategory(e.target.value)}
                           className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                         >
-                          {Object.entries(CATEGORY_GROUPS).map(([main, subs]) => (
+                          {Object.entries(EXPENSE_CATEGORY_GROUPS).map(([main, subs]) => (
                             <optgroup key={main} label={main}>
                               {subs.map(sub => (
                                 <option key={sub} value={sub}>{sub}</option>
                               ))}
                             </optgroup>
                           ))}
-                          {!Object.values(CATEGORY_GROUPS).flat().includes(subCategory) && (
+                          {!Object.values(EXPENSE_CATEGORY_GROUPS).flat().includes(subCategory) && (
                             <option value={subCategory}>{subCategory}</option>
                           )}
                         </select>

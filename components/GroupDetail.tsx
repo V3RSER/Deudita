@@ -26,8 +26,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 
-import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
-import { getGroupCategoryLabel } from '@/lib/group-utils';
+import { getGroupImage, getCleanGroupDescription, getGroupCategoryConfig, getGroupCategoryLabel } from '@/lib/group-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 
 import { MemberDetailModal } from '@/components/MemberDetailModal';
@@ -419,10 +418,16 @@ export function GroupDetail({
         <div className="relative z-10 w-full p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <div className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-white/20 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold ring-1 ring-white/10">
-                <Folder className="w-3 h-3" />
-                <span>{getGroupCategoryLabel(group.category)}</span>
-              </div>
+              {(() => {
+                const catConfig = getGroupCategoryConfig(group.category);
+                const GroupCategoryIcon = catConfig.icon;
+                return (
+                  <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-white/20 backdrop-blur-md text-white text-[11px] uppercase tracking-wider font-bold ring-1 ring-white/20 shadow-xs">
+                    <GroupCategoryIcon className="w-3.5 h-3.5" />
+                    <span>{catConfig.label}</span>
+                  </div>
+                );
+              })()}
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight drop-shadow-md">
               {group.name}

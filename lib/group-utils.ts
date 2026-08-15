@@ -1,4 +1,78 @@
+import {
+  Users,
+  Plane,
+  Home,
+  Heart,
+  Calendar,
+  Briefcase,
+  Folder,
+  Calculator,
+  LucideIcon
+} from 'lucide-react';
 import { Group, GroupCategory, Expense, Payment } from './types';
+
+export interface GroupCategoryConfig {
+  id: GroupCategory;
+  label: string;
+  icon: LucideIcon;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+}
+
+export const GROUP_CATEGORY_OPTIONS: GroupCategoryConfig[] = [
+  { id: 'friends', label: 'Amigos', icon: Users, bgColor: 'bg-emerald-50', textColor: 'text-emerald-700', borderColor: 'border-emerald-200' },
+  { id: 'trip', label: 'Viajes', icon: Plane, bgColor: 'bg-sky-50', textColor: 'text-sky-700', borderColor: 'border-sky-200' },
+  { id: 'home', label: 'Hogar', icon: Home, bgColor: 'bg-indigo-50', textColor: 'text-indigo-700', borderColor: 'border-indigo-200' },
+  { id: 'couple', label: 'Pareja', icon: Heart, bgColor: 'bg-rose-50', textColor: 'text-rose-700', borderColor: 'border-rose-200' },
+  { id: 'event', label: 'Eventos', icon: Calendar, bgColor: 'bg-amber-50', textColor: 'text-amber-700', borderColor: 'border-amber-200' },
+  { id: 'accounting', label: 'Contabilidad', icon: Calculator, bgColor: 'bg-purple-50', textColor: 'text-purple-700', borderColor: 'border-purple-200' },
+  { id: 'work', label: 'Trabajo', icon: Briefcase, bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
+  { id: 'other', label: 'Otros', icon: Folder, bgColor: 'bg-slate-50', textColor: 'text-slate-700', borderColor: 'border-slate-200' },
+];
+
+export function getGroupCategoryConfig(category?: string): GroupCategoryConfig {
+  if (!category) {
+    return GROUP_CATEGORY_OPTIONS[0]; // friends / general
+  }
+  const cat = category.toLowerCase().trim();
+  switch (cat) {
+    case 'friends':
+    case 'amigos':
+      return GROUP_CATEGORY_OPTIONS[0];
+    case 'trip':
+    case 'viajes':
+    case 'viaje':
+    case 'travel':
+      return GROUP_CATEGORY_OPTIONS[1];
+    case 'home':
+    case 'hogar':
+    case 'house':
+    case 'vivienda':
+      return GROUP_CATEGORY_OPTIONS[2];
+    case 'couple':
+    case 'pareja':
+      return GROUP_CATEGORY_OPTIONS[3];
+    case 'event':
+    case 'eventos':
+    case 'evento':
+      return GROUP_CATEGORY_OPTIONS[4];
+    case 'accounting':
+    case 'contabilidad':
+      return GROUP_CATEGORY_OPTIONS[5];
+    case 'work':
+    case 'trabajo':
+    case 'negocio':
+    case 'business':
+      return GROUP_CATEGORY_OPTIONS[6];
+    case 'other':
+    case 'otros':
+    case 'otro':
+      return GROUP_CATEGORY_OPTIONS[7];
+    default:
+      return GROUP_CATEGORY_OPTIONS.find((opt) => opt.id === cat) || GROUP_CATEGORY_OPTIONS[7];
+  }
+}
 
 const DEFAULT_GROUP_IMAGES: Record<GroupCategory, string> = {
   trip: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
@@ -32,44 +106,7 @@ export function getCleanGroupDescription(description?: string): string {
 }
 
 export function getGroupCategoryLabel(category?: string): string {
-  if (!category) return 'General';
-  const cat = category.toLowerCase().trim();
-  switch (cat) {
-    case 'friends':
-    case 'amigos':
-      return 'Amigos';
-    case 'trip':
-    case 'viajes':
-    case 'viaje':
-    case 'travel':
-      return 'Viajes';
-    case 'home':
-    case 'hogar':
-    case 'house':
-    case 'vivienda':
-      return 'Hogar';
-    case 'couple':
-    case 'pareja':
-      return 'Pareja';
-    case 'event':
-    case 'eventos':
-    case 'evento':
-      return 'Eventos';
-    case 'accounting':
-    case 'contabilidad':
-      return 'Contabilidad';
-    case 'work':
-    case 'trabajo':
-    case 'negocio':
-    case 'business':
-      return 'Trabajo';
-    case 'other':
-    case 'otros':
-    case 'otro':
-      return 'Otros';
-    default:
-      return category.charAt(0).toUpperCase() + category.slice(1);
-  }
+  return getGroupCategoryConfig(category).label;
 }
 
 export function calculatePairwiseBalance(

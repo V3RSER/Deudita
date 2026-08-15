@@ -3,41 +3,23 @@
 import React from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Group, GroupCategory } from '@/lib/types';
+import { Group } from '@/lib/types';
 import { formatCurrency, calculateUserSummaries } from '@/lib/balance-utils';
 import {
-  Home,
-  Plane,
-  Heart,
-  Calendar,
-  Briefcase,
-  Folder,
-  Users,
   Plus,
+  Users,
   TrendingUp,
   TrendingDown,
   MinusCircle,
-  Calculator,
   ChevronRight,
 } from 'lucide-react';
 
-import { getGroupImage } from '@/lib/group-utils';
+import { getGroupImage, getGroupCategoryConfig } from '@/lib/group-utils';
 
 interface GroupListProps {
   onSelectGroup: (group: Group) => void;
   onOpenNewGroup: () => void;
 }
-
-const CATEGORY_STYLES: Record<GroupCategory, { icon: React.ReactNode; bg: string; text: string }> = {
-  friends: { icon: <Users className="w-6 h-6" />, bg: 'bg-emerald-50', text: 'text-emerald-600' },
-  trip: { icon: <Plane className="w-6 h-6" />, bg: 'bg-sky-50', text: 'text-sky-600' },
-  home: { icon: <Home className="w-6 h-6" />, bg: 'bg-indigo-50', text: 'text-indigo-600' },
-  couple: { icon: <Heart className="w-6 h-6" />, bg: 'bg-rose-50', text: 'text-rose-600' },
-  event: { icon: <Calendar className="w-6 h-6" />, bg: 'bg-amber-50', text: 'text-amber-600' },
-  accounting: { icon: <Calculator className="w-6 h-6" />, bg: 'bg-purple-50', text: 'text-purple-600' },
-  work: { icon: <Briefcase className="w-6 h-6" />, bg: 'bg-blue-50', text: 'text-blue-600' },
-  other: { icon: <Folder className="w-6 h-6" />, bg: 'bg-slate-50', text: 'text-slate-600' },
-};
 
 import { PageHeader } from '@/components/PageHeader';
 
@@ -148,6 +130,8 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
             const netBalance = mySummary ? mySummary.netBalance : 0;
 
             const groupImg = getGroupImage(group);
+            const catConfig = getGroupCategoryConfig(group.category);
+            const CategoryIcon = catConfig.icon;
 
             return (
               <div
@@ -156,12 +140,12 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                 className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-4 relative overflow-hidden active:scale-[0.98]"
               >
                 {/* Square rounded image or Icon */}
-                <div className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? (CATEGORY_STYLES[group.category]?.bg || 'bg-zinc-50') : ''}`}>
+                <div className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? catConfig.bgColor : ''}`}>
                   {groupImg ? (
                     <Image src={groupImg} alt={group.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" unoptimized referrerPolicy="no-referrer" />
                   ) : (
-                    <div className={`${CATEGORY_STYLES[group.category]?.text || 'text-zinc-400'}`}>
-                      {CATEGORY_STYLES[group.category]?.icon || <Folder className="w-6 h-6" />}
+                    <div className={catConfig.textColor}>
+                      <CategoryIcon className="w-6 h-6" />
                     </div>
                   )}
                 </div>

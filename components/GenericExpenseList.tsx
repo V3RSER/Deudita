@@ -18,8 +18,11 @@ import {
   ChevronDown,
   ChevronUp,
   User,
+  Users,
   Clock,
-  ImageIcon
+  ImageIcon,
+  ShoppingBag,
+  Layers
 } from 'lucide-react';
 
 type UnifiedTransaction =
@@ -315,80 +318,213 @@ export function GenericExpenseList({
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
-                      <div className="border-t border-zinc-200/70 bg-zinc-50/40 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                          {/* Participation without redundant "Pagó" badges */}
-                          <div className="bg-white p-3.5 rounded-xl border border-zinc-200/70 shadow-2xs space-y-2.5">
-                            <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                              División del gasto
-                            </h4>
-                            <div className="space-y-2">
-                              {exp.splits?.map((split) => {
-                                const profile = profiles.find((p) => p.id === split.user_id);
-                                return (
-                                  <div key={split.id} className="flex items-center justify-between group/split">
-                                    <div className="flex items-center space-x-2.5">
-                                      <div className="w-6 h-6 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
-                                        {profile?.avatar_url ? (
-                                          <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
-                                        ) : (
-                                          <User className="w-3.5 h-3.5 m-[5px] text-zinc-400" />
-                                        )}
-                                      </div>
-                                      <span className="text-xs sm:text-sm font-medium text-zinc-800 group-hover/split:text-zinc-900 transition-colors">
-                                        {profile ? profile.full_name : 'Usuario'}
-                                      </span>
-                                    </div>
-                                    <span className="text-xs sm:text-sm font-semibold text-zinc-900">
-                                      {formatCurrency(split.amount_owed, currency)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                      <div className="border-t border-zinc-200/70 bg-zinc-50/50 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                        {/* Top Context Summary Bar */}
+                        <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-white rounded-xl border border-zinc-200/80 shadow-2xs">
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <div className="w-7 h-7 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
+                              {paidBy?.avatar_url ? (
+                                <Image src={paidBy.avatar_url} alt={paidBy.full_name} width={28} height={28} className="w-full h-full object-cover" unoptimized />
+                              ) : (
+                                <User className="w-4 h-4 m-[6px] text-zinc-400" />
+                              )}
+                            </div>
+                            <div className="text-xs text-zinc-600 truncate">
+                              Pagado por <strong className="font-semibold text-zinc-900">{paidBy ? paidBy.full_name : 'Usuario'}</strong>
+                              {isPayer && (
+                                <span className="ml-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  Tú
+                                </span>
+                              )}
                             </div>
                           </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${catConfig.bgClass} ${catConfig.textClass} border-current/10`}>
+                              <CategoryIcon className="w-3 h-3" />
+                              <span>{exp.category || 'General'}</span>
+                            </div>
+                            <span className="text-xs font-bold text-zinc-900">
+                              Total: {formatCurrency(exp.total_amount, currency)}
+                            </span>
+                          </div>
+                        </div>
 
-                          {/* Notes and Receipt (if available) */}
-                          {(exp.notes || exp.receipt_url) && (
-                            <div className="bg-white p-3.5 rounded-xl border border-zinc-200/70 shadow-2xs space-y-3">
-                              {exp.notes && (
-                                <div className="space-y-1">
-                                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1">
-                                    <FileText className="w-3 h-3" />
-                                    <span>Notas</span>
-                                  </h4>
-                                  <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50 p-2.5 rounded-lg border border-zinc-100">
-                                    {exp.notes}
-                                  </p>
-                                </div>
-                              )}
+                        {/* Content Grid */}
+                        {(() => {
+                          const hasItems = Boolean(exp.items && exp.items.length > 0);
+                          const hasNotes = Boolean(exp.notes && exp.notes.trim().length > 0);
+                          const hasReceipt = Boolean(exp.receipt_url);
+                          const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
 
-                              {exp.receipt_url && (
-                                <div className="space-y-1.5">
-                                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1">
-                                    <ImageIcon className="w-3 h-3" />
-                                    <span>Comprobante / Recibo</span>
-                                  </h4>
-                                  <div
-                                    onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
-                                    className="group/img relative w-20 h-20 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-zinc-400 transition-all"
-                                  >
-                                    <Image
-                                      src={exp.receipt_url}
-                                      alt="Comprobante"
-                                      fill
-                                      className="object-cover group-hover/img:scale-105 transition-transform"
-                                      unoptimized
-                                    />
-                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold">
-                                      <ExternalLink className="w-3.5 h-3.5" />
+                          if (hasSecondaryDetails) {
+                            return (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                                {/* Participation list (left col) */}
+                                <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3 flex flex-col justify-between">
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-100">
+                                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                                        <Users className="w-3.5 h-3.5 text-zinc-400" />
+                                        <span>División del gasto ({exp.splits?.length || 0})</span>
+                                      </h4>
+                                      <span className="text-[11px] font-medium text-zinc-400">Cuota individual</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {exp.splits?.map((split) => {
+                                        const profile = profiles.find((p) => p.id === split.user_id);
+                                        const isPayer = split.user_id === exp.paid_by;
+                                        return (
+                                          <div key={split.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-50/80 transition-colors">
+                                            <div className="flex items-center space-x-2.5 min-w-0">
+                                              <div className="w-6 h-6 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
+                                                {profile?.avatar_url ? (
+                                                  <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
+                                                ) : (
+                                                  <User className="w-3.5 h-3.5 m-[5px] text-zinc-400" />
+                                                )}
+                                              </div>
+                                              <span className="text-xs sm:text-sm font-medium text-zinc-800 truncate">
+                                                {profile ? profile.full_name : 'Usuario'}
+                                                {split.user_id === currentProfile?.id && (
+                                                  <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
+                                                )}
+                                              </span>
+                                              {isPayer && (
+                                                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                                  Pagó
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
+                                              {formatCurrency(split.amount_owed, currency)}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 </div>
-                              )}
+
+                                {/* Items, Notes and Receipt (right col) */}
+                                <div className="space-y-3.5">
+                                  {hasItems && (
+                                    <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-2.5">
+                                      <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                                        <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                                          <ShoppingBag className="w-3.5 h-3.5 text-zinc-400" />
+                                          <span>Desglose de artículos ({exp.items?.length || 0})</span>
+                                        </h4>
+                                      </div>
+                                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                        {exp.items?.map((item, idx) => (
+                                          <div key={item.id || idx} className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-zinc-50">
+                                            <div className="flex items-center space-x-2 min-w-0">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                              <span className="font-medium text-zinc-800 truncate">{item.description}</span>
+                                            </div>
+                                            <span className="font-bold text-zinc-900 shrink-0 ml-2">
+                                              {formatCurrency(item.amount, currency)}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {(hasNotes || hasReceipt) && (
+                                    <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3">
+                                      {hasNotes && (
+                                        <div className="space-y-1.5">
+                                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
+                                            <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Notas</span>
+                                          </h4>
+                                          <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50/80 p-2.5 rounded-lg border border-zinc-200/60">
+                                            {exp.notes}
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {hasReceipt && (
+                                        <div className="space-y-2">
+                                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
+                                            <ImageIcon className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Comprobante / Recibo</span>
+                                          </h4>
+                                          <div
+                                            onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
+                                            className="group/img relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                          >
+                                            <Image
+                                              src={exp.receipt_url!}
+                                              alt="Comprobante"
+                                              fill
+                                              className="object-cover group-hover/img:scale-105 transition-transform"
+                                              unoptimized
+                                            />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                                              <ExternalLink className="w-3.5 h-3.5" />
+                                              <span>Ver</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          // Full-width balanced splits card when there are no extra notes/items
+                          return (
+                            <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3">
+                              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                                <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                                  <span>División del gasto ({exp.splits?.length || 0} participantes)</span>
+                                </h4>
+                                <span className="text-[11px] font-medium text-zinc-400">Distribución de saldos</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                {exp.splits?.map((split) => {
+                                  const profile = profiles.find((p) => p.id === split.user_id);
+                                  const isPayer = split.user_id === exp.paid_by;
+                                  return (
+                                    <div
+                                      key={split.id}
+                                      className="flex items-center justify-between p-2.5 bg-zinc-50/60 hover:bg-zinc-100/60 rounded-xl border border-zinc-200/60 transition-colors"
+                                    >
+                                      <div className="flex items-center space-x-2.5 min-w-0">
+                                        <div className="w-7 h-7 rounded-full bg-zinc-200 overflow-hidden shrink-0 border border-zinc-200">
+                                          {profile?.avatar_url ? (
+                                            <Image src={profile.avatar_url} alt={profile.full_name} width={28} height={28} className="w-full h-full object-cover" unoptimized />
+                                          ) : (
+                                            <User className="w-4 h-4 m-[6px] text-zinc-400" />
+                                          )}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <span className="text-xs font-semibold text-zinc-900 truncate block">
+                                            {profile ? profile.full_name : 'Usuario'}
+                                            {split.user_id === currentProfile?.id && (
+                                              <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
+                                            )}
+                                          </span>
+                                          {isPayer && (
+                                            <span className="text-[10px] font-medium text-emerald-600">Pagador del total</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
+                                        {formatCurrency(split.amount_owed, currency)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          )}
-                        </div>
+                          );
+                        })()}
 
                         {/* Streamlined Informative Footer: exact timestamp with date & hour, author & actions */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-zinc-200/60 text-xs text-zinc-500">

@@ -5,19 +5,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Group, GroupCategory } from '@/lib/types';
-import { getGroupImage, getCleanGroupDescription, DEFAULT_GROUP_IMAGE } from '@/lib/group-utils';
+import { getGroupImage, getCleanGroupDescription, DEFAULT_GROUP_IMAGE, GROUP_CATEGORY_OPTIONS, getGroupCategoryConfig } from '@/lib/group-utils';
 import {
   X,
-  Users,
-  Plane,
-  Home,
-  Heart,
-  Calendar,
-  Briefcase,
-  Folder,
   Camera,
   Loader2,
-  Calculator,
   AlertCircle,
   FileText,
   ListChecks,
@@ -30,23 +22,6 @@ interface EditGroupModalProps {
   onClose: () => void;
   onDeleted?: () => void;
 }
-
-const CATEGORY_OPTIONS: Array<{
-  id: GroupCategory;
-  label: string;
-  icon: any;
-  bgColor: string;
-  textColor: string;
-}> = [
-  { id: 'friends', label: 'Amigos', icon: Users, bgColor: 'bg-emerald-50', textColor: 'text-emerald-700' },
-  { id: 'trip', label: 'Viajes', icon: Plane, bgColor: 'bg-sky-50', textColor: 'text-sky-700' },
-  { id: 'home', label: 'Hogar', icon: Home, bgColor: 'bg-indigo-50', textColor: 'text-indigo-700' },
-  { id: 'couple', label: 'Pareja', icon: Heart, bgColor: 'bg-rose-50', textColor: 'text-rose-700' },
-  { id: 'event', label: 'Eventos', icon: Calendar, bgColor: 'bg-amber-50', textColor: 'text-amber-700' },
-  { id: 'accounting', label: 'Contabilidad', icon: Calculator, bgColor: 'bg-purple-50', textColor: 'text-purple-700' },
-  { id: 'work', label: 'Trabajo', icon: Briefcase, bgColor: 'bg-blue-50', textColor: 'text-blue-700' },
-  { id: 'other', label: 'Otros', icon: Folder, bgColor: 'bg-slate-50', textColor: 'text-slate-700' },
-];
 
 export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupModalProps) {
   const { updateGroup, deleteGroup } = useExpense();
@@ -141,7 +116,7 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
     }
   };
 
-  const selectedCatConfig = CATEGORY_OPTIONS.find(c => c.id === category) || CATEGORY_OPTIONS[0];
+  const selectedCatConfig = getGroupCategoryConfig(category);
   const CategoryIcon = selectedCatConfig.icon;
 
   return (
@@ -225,7 +200,7 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
                       onChange={e => setCategory(e.target.value as GroupCategory)}
                       className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
                     >
-                      {CATEGORY_OPTIONS.map(cat => (
+                      {GROUP_CATEGORY_OPTIONS.map(cat => (
                         <option key={cat.id} value={cat.id}>{cat.label}</option>
                       ))}
                     </select>

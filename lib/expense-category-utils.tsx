@@ -36,6 +36,17 @@ interface CategoryConfig {
   textClass: string;
 }
 
+export const DEFAULT_EXPENSE_CATEGORY = 'General';
+
+export const EXPENSE_CATEGORY_GROUPS: Record<string, string[]> = {
+  'General': ['General', 'Otros', 'Varios', 'Regalo', 'Tienda'],
+  'Alimentos': ['Supermercado', 'Restaurante', 'Cafetería', 'Delivery', 'Bar'],
+  'Hogar': ['Alquiler', 'Servicios', 'Internet', 'Limpieza', 'Mascotas', 'Hogar'],
+  'Transporte': ['Gasolina', 'Taxi', 'Uber', 'Transporte público', 'Vuelo', 'Peaje'],
+  'Entretenimiento': ['Cine', 'Evento', 'Gimnasio', 'Hotel', 'Entretenimiento'],
+  'Salud': ['Salud', 'Farmacia', 'Médico'],
+};
+
 export function getCategoryConfig(category?: string): CategoryConfig {
   if (!category) {
     return { icon: Receipt, bgClass: 'bg-zinc-100', textClass: 'text-zinc-600' };
