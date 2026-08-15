@@ -15,6 +15,10 @@ import {
   ArrowRight,
   CheckCircle2,
   X,
+  ChevronDown,
+  ChevronUp,
+  User,
+  History
 } from 'lucide-react';
 
 type UnifiedTransaction =
@@ -89,6 +93,7 @@ export function GenericExpenseList({
   showGroupBadge = true,
 }: GenericExpenseListProps) {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
 
   // Combine and sort chronologically (most recent first)
   const transactions: UnifiedTransaction[] = [
@@ -147,6 +152,8 @@ export function GenericExpenseList({
                 const exp = tx.data;
                 const groupObj = userGroups.find((g) => g.id === exp.group_id);
                 const paidBy = profiles.find((p) => p.id === exp.paid_by);
+                const createdBy = profiles.find((p) => p.id === exp.created_by);
+                const updatedBy = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
                 const catConfig = getCategoryConfig(exp.category);
                 const CategoryIcon = catConfig.icon;
                 const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
@@ -171,15 +178,20 @@ export function GenericExpenseList({
                   statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
                 }
 
+                const isExpanded = expandedExpenseId === exp.id;
+
                 return (
                   <div
                     key={`exp-${exp.id}`}
-                    onClick={() => onSelectExpense?.(exp)}
-                    className="bg-white rounded-2xl ring-1 ring-zinc-200 p-4 sm:p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
+                    className={`bg-white rounded-2xl ring-1 ring-zinc-200 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group flex flex-col overflow-hidden relative ${isExpanded ? 'ring-emerald-500/50 hover:ring-emerald-500/50 shadow-md' : 'active:scale-[0.99]'}`}
+                    onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    {isExpanded && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
+                    )}
+                    <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-start space-x-3 min-w-0">
-                        {/* Date Block: AGO / 01 - Same dimensions as SVG category icon box */}
+                        {/* Date Block: AGO / 01 */}
                         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none mt-0.5 shadow-2xs">
                           <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">
                             {parsed.monthAbbr}
@@ -243,22 +255,24 @@ export function GenericExpenseList({
                         </div>
 
                         <div className="flex items-center space-x-1 bg-zinc-50/80 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
-                          {onEditExpense && (
-                            <button
-                              type="button"
-                              onClick={() => onEditExpense(exp)}
-                              className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors"
-                              title="Editar gasto"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
+                          {!isExpanded && (
+                            <div className="p-1.5 text-zinc-400 transition-colors">
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
                           )}
-
-                          {onDeleteExpense && (
+                          {isExpanded && (
+                            <div className="p-1.5 text-zinc-400 transition-colors">
+                              <ChevronUp className="w-4 h-4" />
+                            </div>
+                          )}
+                          {!isExpanded && onDeleteExpense && (
                             <button
                               type="button"
-                              onClick={() => onDeleteExpense(exp.id)}
-                              className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteExpense(exp.id);
+                              }}
+                              className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-0 focus:opacity-100 absolute right-4 sm:relative sm:right-auto"
                               title="Eliminar gasto"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -267,6 +281,107 @@ export function GenericExpenseList({
                         </div>
                       </div>
                     </div>
+
+                    {/* EXPANDED CONTENT */}
+                    {isExpanded && (
+                      <div className="border-t border-zinc-100 bg-zinc-50/50 p-4 sm:p-5 pl-5 sm:pl-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          
+                          {/* Left Column: Splits / Participation */}
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-extrabold uppercase tracking-wider text-zinc-500">
+                              Participación en el gasto
+                            </h4>
+                            <div className="space-y-2">
+                              {exp.splits?.map((split) => {
+                                const profile = profiles.find((p) => p.id === split.user_id);
+                                const isSplitPayer = exp.paid_by === split.user_id;
+                                return (
+                                  <div key={split.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-zinc-200/60 shadow-sm">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-6 h-6 rounded-full bg-zinc-200 overflow-hidden shrink-0">
+                                        {profile?.avatar_url ? (
+                                          <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
+                                        ) : (
+                                          <User className="w-4 h-4 m-1 text-zinc-400" />
+                                        )}
+                                      </div>
+                                      <span className="text-sm font-medium text-zinc-800">
+                                        {profile?.full_name || 'Usuario Desconocido'}
+                                      </span>
+                                      {isSplitPayer && (
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wide">
+                                          Pagó
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-sm font-bold text-zinc-900">
+                                      {formatCurrency(split.amount_owed, currency)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Right Column: History & Actions */}
+                          <div className="space-y-4 md:border-l md:border-zinc-200/80 md:pl-6">
+                            
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-extrabold uppercase tracking-wider text-zinc-500 flex items-center space-x-1.5">
+                                <History className="w-3.5 h-3.5" />
+                                <span>Historial del Gasto</span>
+                              </h4>
+                              
+                              <div className="text-xs space-y-2 text-zinc-600">
+                                <div className="flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-zinc-200/60">
+                                  <span>Añadido por <strong className="text-zinc-800">{createdBy?.full_name || 'Desconocido'}</strong></span>
+                                  <span className="text-zinc-500">{new Date(exp.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                </div>
+                                
+                                {exp.updated_at && exp.updated_at !== exp.created_at && (
+                                  <div className="flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-zinc-200/60">
+                                    <span>Última mod. por <strong className="text-zinc-800">{updatedBy?.full_name || 'Desconocido'}</strong></span>
+                                    <span className="text-zinc-500">{new Date(exp.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2 flex flex-wrap gap-2">
+                              {onEditExpense && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditExpense(exp);
+                                  }}
+                                  className="flex items-center space-x-1.5 bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm"
+                                >
+                                  <Pencil className="w-4 h-4 text-zinc-500" />
+                                  <span>Editar Gasto</span>
+                                </button>
+                              )}
+                              
+                              {onDeleteExpense && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteExpense(exp.id);
+                                  }}
+                                  className="flex items-center space-x-1.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm md:hidden"
+                                >
+                                  <Trash2 className="w-4 h-4 text-rose-600" />
+                                  <span>Eliminar Gasto</span>
+                                </button>
+                              )}
+                            </div>
+
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -376,7 +491,7 @@ export function GenericExpenseList({
                           <button
                             type="button"
                             onClick={() => onDeletePayment(payment.id)}
-                            className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors"
+                            className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-0 focus:opacity-100 absolute right-4 sm:relative sm:right-auto"
                             title="Eliminar pago"
                           >
                             <Trash2 className="w-4 h-4" />

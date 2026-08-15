@@ -55,6 +55,8 @@ export async function PUT(
       expense_date: expense.expense_date,
       source: expense.source ?? 'manual',
       receipt_url: expense.receipt_url,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
     };
 
     if (expense.category) updatePayload.category = expense.category;
@@ -67,9 +69,11 @@ export async function PUT(
       .select()
       .single();
 
-    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes'))) {
+    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at'))) {
       delete updatePayload.category;
       delete updatePayload.notes;
+      delete updatePayload.updated_at;
+      delete updatePayload.updated_by;
 
       const fallbackRes = await supabase
         .from('expenses')

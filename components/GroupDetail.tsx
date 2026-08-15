@@ -26,7 +26,7 @@ import {
 import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
 import { getGroupCategoryLabel } from '@/lib/group-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
-import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
+
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { EditGroupModal } from '@/components/EditGroupModal';
@@ -105,7 +105,7 @@ export function GroupDetail({
   const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment, deleteGroup } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
-  const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
+
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -389,7 +389,6 @@ export function GroupDetail({
             userGroups={userGroups}
             currentProfile={currentProfile}
             groupCurrency={group.currency || 'COP'}
-            onSelectExpense={(exp) => setSelectedExpenseForModal(exp)}
             onEditExpense={onEditExpense}
             onDeleteExpense={(expId) => deleteExpense(expId)}
             onEditPayment={onEditPayment}
@@ -582,18 +581,7 @@ export function GroupDetail({
           onClose={() => setSelectedMemberForDetail(null)}
         />
       )}
-      {/* Expense Detail Modal */}
-      {selectedExpenseForModal && (
-        <ExpenseDetailModal
-          expense={selectedExpenseForModal}
-          isOpen={Boolean(selectedExpenseForModal)}
-          onClose={() => setSelectedExpenseForModal(null)}
-          onEditExpense={(exp) => {
-            setSelectedExpenseForModal(null);
-            if (onEditExpense) onEditExpense(exp);
-          }}
-        />
-      )}
+
       {/* Edit Group Modal */}
       {isEditGroupModalOpen && (
         <EditGroupModal

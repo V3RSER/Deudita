@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
-import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
+
 import { Expense, Payment } from '@/lib/types';
 import {
   Receipt,
@@ -52,7 +52,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
-  const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
+
 
   const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
   const myExpenses = useMemo(() => expenses.filter((exp) => userGroupIds.has(exp.group_id)), [expenses, userGroupIds]);
@@ -311,7 +311,6 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         profiles={profiles}
         userGroups={userGroups}
         currentProfile={currentProfile}
-        onSelectExpense={(exp) => setSelectedExpenseForModal(exp)}
         onEditExpense={onEditExpense}
         onDeleteExpense={(expId) => deleteExpense(expId)}
         onEditPayment={onEditPayment}
@@ -319,18 +318,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         showGroupBadge={true}
       />
 
-      {/* Expense Detail Modal */}
-      {selectedExpenseForModal && (
-        <ExpenseDetailModal
-          expense={selectedExpenseForModal}
-          isOpen={Boolean(selectedExpenseForModal)}
-          onClose={() => setSelectedExpenseForModal(null)}
-          onEditExpense={(exp) => {
-            setSelectedExpenseForModal(null);
-            if (onEditExpense) onEditExpense(exp);
-          }}
-        />
-      )}
+
     </div>
   );
 }

@@ -104,8 +104,20 @@ export interface Expense {
   notes?: string;
   created_by: string;
   created_at: string;
+  updated_at?: string;
+  updated_by?: string;
   items?: ExpenseItem[];
   splits?: ExpenseSplit[];
+}
+
+export interface ExpenseAuditLog {
+  id: string;
+  expense_id: string;
+  user_id: string;
+  action: 'create' | 'update' | 'delete';
+  changes?: Record<string, any>;
+  created_at: string;
+  user?: Profile;
 }
 
 export interface ExpenseDraft {
