@@ -69,7 +69,7 @@ export async function PUT(
       .select()
       .single();
 
-    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at'))) {
+    if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at'))) {
       delete updatePayload.category;
       delete updatePayload.notes;
       delete updatePayload.updated_at;

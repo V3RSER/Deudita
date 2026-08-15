@@ -200,6 +200,17 @@ export async function GET() {
       group_name: inv.groups?.name || 'Grupo',
     }));
 
+    // 11. Expense Audit Logs
+    let auditLogs: any[] = [];
+    if (userGroupIds.length > 0) {
+      const { data: auditLogsData } = await db
+        .from('expense_audit_logs')
+        .select('*')
+        .in('group_id', userGroupIds)
+        .order('created_at', { ascending: false });
+      auditLogs = auditLogsData || [];
+    }
+
     return NextResponse.json({
       profile,
       profiles,
@@ -210,6 +221,7 @@ export async function GET() {
       drafts: draftsData || [],
       notifications: notificationsData || [],
       pendingInvites,
+      auditLogs,
     });
   } catch (error: any) {
     console.error('[API /api/sync] Error:', error);

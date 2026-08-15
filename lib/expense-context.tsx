@@ -12,6 +12,7 @@ import {
   ExpenseSplit,
   GroupInvite,
   Notification,
+  ExpenseAuditLog,
   GroupCategory,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
@@ -24,6 +25,7 @@ interface ExpenseContextType {
   groups: Group[];
   members: GroupMember[];
   expenses: Expense[];
+  auditLogs: ExpenseAuditLog[];
   drafts: ExpenseDraft[];
   payments: Payment[];
   pendingInvites: GroupInvite[];
@@ -61,6 +63,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [auditLogs, setAuditLogs] = useState<ExpenseAuditLog[]>([]);
   const [drafts, setDrafts] = useState<ExpenseDraft[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
@@ -445,6 +448,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         groups,
         members,
         expenses,
+        auditLogs,
         drafts,
         payments,
         pendingInvites,

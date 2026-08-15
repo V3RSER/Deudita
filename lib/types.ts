@@ -113,6 +113,7 @@ export interface Expense {
 export interface ExpenseAuditLog {
   id: string;
   expense_id: string;
+  group_id: string;
   user_id: string;
   action: 'create' | 'update' | 'delete';
   changes?: Record<string, any>;
