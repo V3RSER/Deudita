@@ -21,6 +21,9 @@ import {
   Settings, Activity,
   Folder,
   ArrowRight,
+  Clock,
+  HandCoins,
+  PlusCircle,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
@@ -90,6 +93,23 @@ function parseExpenseDate(dateStr: string) {
   return { year: 2026, monthIndex: 0, day: 1 };
 }
 
+function formatActivityDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const dateFormatted = d.toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeFormatted = d.toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${dateFormatted}, ${timeFormatted}`;
+}
+
 import { PageHeader } from '@/components/PageHeader';
 
 export function GroupDetail({
@@ -137,6 +157,170 @@ export function GroupDetail({
   const groupPairwise = calculatePairwiseBalances(expenses, payments, profiles, group.id);
 
   const isSoloMember = memberProfiles.length <= 1;
+
+  // Group activities calculation (creates, updates, deletes, payments)
+  const effectiveCurrency = group.currency ?? currentProfile?.currency ?? 'COP';
+  const groupAuditLogs = (auditLogs ?? []).filter((a) => a.group_id === group.id);
+  const expenseIdsWithCreateLog = new Set(
+    groupAuditLogs.filter((l) => l.action === 'create').map((l) => l.expense_id)
+  );
+
+  interface GroupActivityItem {
+    id: string;
+    type: 'create' | 'update' | 'delete' | 'payment';
+    user: Profile | null;
+    userName: string;
+    timestamp: string;
+    titleAction: string;
+    targetTitle: string;
+    amount?: number;
+    currency: string;
+    badgeLabel: string;
+    badgeClass: string;
+    IconComponent: React.ElementType;
+    iconBgClass: string;
+    iconTextClass: string;
+    changesList?: string[];
+  }
+
+  const activities: GroupActivityItem[] = [];
+
+  // 1. Audit logs
+  groupAuditLogs.forEach((log) => {
+    const user = profiles.find((p) => p.id === log.user_id) ?? null;
+    const userName = user?.full_name ?? 'Usuario';
+    const oldData = log.changes?.old;
+    const newData = log.changes?.new;
+    const currentExp = expenses.find((e) => e.id === log.expense_id);
+
+    if (log.action === 'create') {
+      const data = newData ?? currentExp;
+      const desc = data?.description ?? 'Gasto';
+      const amount = typeof data?.total_amount === 'number' ? data.total_amount : undefined;
+      activities.push({
+        id: `audit-${log.id}`,
+        type: 'create',
+        user,
+        userName,
+        timestamp: log.created_at,
+        titleAction: 'agregó el gasto',
+        targetTitle: desc,
+        amount,
+        currency: effectiveCurrency,
+        badgeLabel: 'Nuevo',
+        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        IconComponent: PlusCircle,
+        iconBgClass: 'bg-emerald-50',
+        iconTextClass: 'text-emerald-700',
+      });
+    } else if (log.action === 'update') {
+      const desc = newData?.description ?? oldData?.description ?? currentExp?.description ?? 'Gasto';
+      const changesList: string[] = [];
+
+      if (oldData && newData) {
+        if (typeof oldData.total_amount === 'number' && typeof newData.total_amount === 'number' && oldData.total_amount !== newData.total_amount) {
+          changesList.push(`Monto modificado: ${formatCurrency(oldData.total_amount, effectiveCurrency)} → ${formatCurrency(newData.total_amount, effectiveCurrency)}`);
+        }
+        if (oldData.description && newData.description && oldData.description !== newData.description) {
+          changesList.push(`Nombre: "${oldData.description}" → "${newData.description}"`);
+        }
+        if (oldData.category && newData.category && oldData.category !== newData.category) {
+          changesList.push(`Categoría actualizada`);
+        }
+        if (oldData.notes !== newData.notes) {
+          changesList.push(`Notas del gasto modificadas`);
+        }
+      }
+
+      activities.push({
+        id: `audit-${log.id}`,
+        type: 'update',
+        user,
+        userName,
+        timestamp: log.created_at,
+        titleAction: 'editó el gasto',
+        targetTitle: desc,
+        amount: typeof newData?.total_amount === 'number' ? newData.total_amount : currentExp?.total_amount,
+        currency: effectiveCurrency,
+        badgeLabel: 'Editado',
+        badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+        IconComponent: Pencil,
+        iconBgClass: 'bg-amber-50',
+        iconTextClass: 'text-amber-700',
+        changesList,
+      });
+    } else if (log.action === 'delete') {
+      const desc = oldData?.description ?? 'Gasto';
+      const amount = typeof oldData?.total_amount === 'number' ? oldData.total_amount : undefined;
+      activities.push({
+        id: `audit-${log.id}`,
+        type: 'delete',
+        user,
+        userName,
+        timestamp: log.created_at,
+        titleAction: 'eliminó el gasto',
+        targetTitle: desc,
+        amount,
+        currency: effectiveCurrency,
+        badgeLabel: 'Eliminado',
+        badgeClass: 'bg-rose-50 text-rose-800 border-rose-200',
+        IconComponent: Trash2,
+        iconBgClass: 'bg-rose-50',
+        iconTextClass: 'text-rose-700',
+      });
+    }
+  });
+
+  // 2. Pre-audit expenses
+  groupExpenses.forEach((exp) => {
+    if (!expenseIdsWithCreateLog.has(exp.id)) {
+      const user = profiles.find((p) => p.id === exp.created_by) ?? null;
+      const userName = user?.full_name ?? 'Usuario';
+      activities.push({
+        id: `exp-init-${exp.id}`,
+        type: 'create',
+        user,
+        userName,
+        timestamp: exp.created_at,
+        titleAction: 'agregó el gasto',
+        targetTitle: exp.description,
+        amount: exp.total_amount,
+        currency: effectiveCurrency,
+        badgeLabel: 'Nuevo',
+        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        IconComponent: PlusCircle,
+        iconBgClass: 'bg-emerald-50',
+        iconTextClass: 'text-emerald-700',
+      });
+    }
+  });
+
+  // 3. Group payments (abonos)
+  groupPayments.forEach((p) => {
+    const payer = profiles.find((prof) => prof.id === p.paid_by) ?? null;
+    const receiver = profiles.find((prof) => prof.id === p.paid_to) ?? null;
+    const payerName = payer?.full_name ?? 'Usuario';
+    const receiverName = receiver?.full_name ?? 'Usuario';
+    activities.push({
+      id: `payment-${p.id}`,
+      type: 'payment',
+      user: payer,
+      userName: payerName,
+      timestamp: p.created_at || p.payment_date,
+      titleAction: `registró un abono a ${receiverName}`,
+      targetTitle: p.note ?? 'Abono registrado',
+      amount: p.amount,
+      currency: effectiveCurrency,
+      badgeLabel: 'Abono',
+      badgeClass: 'bg-sky-50 text-sky-800 border-sky-200',
+      IconComponent: HandCoins,
+      iconBgClass: 'bg-sky-50',
+      iconTextClass: 'text-sky-700',
+    });
+  });
+
+  // Sort chronologically descending
+  activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const handleDeleteGroup = async () => {
     setIsDeletingGroup(true);
@@ -599,54 +783,71 @@ export function GroupDetail({
 
       {/* TAB CONTENT: Activity */}
       {activeTab === 'activity' && (
-        <div className="space-y-4">
-          {(!auditLogs || auditLogs.filter(a => a.group_id === group.id).length === 0) ? (
+        <div className="space-y-3">
+          {activities.length === 0 ? (
             <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-12 text-center text-zinc-500 shadow-2xs">
               <Activity className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
               <h3 className="font-semibold text-zinc-900 text-base">Sin actividad</h3>
-              <p className="text-xs text-zinc-500 mt-1">Aún no hay registros de modificaciones en este grupo.</p>
+              <p className="text-xs text-zinc-500 mt-1">Aún no hay registros de movimientos o modificaciones en este grupo.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl ring-1 ring-zinc-200 divide-y divide-zinc-100 shadow-2xs">
-              {auditLogs.filter(a => a.group_id === group.id).map(log => {
-                const user = profiles.find(p => p.id === log.user_id);
-                const expense = expenses.find(e => e.id === log.expense_id) || (log.changes?.old as any);
-                const desc = expense?.description || 'un gasto';
-                let actionText = '';
-                let bgColor = '';
-                
-                if (log.action === 'create') {
-                  actionText = 'añadió';
-                  bgColor = 'bg-emerald-50 text-emerald-700';
-                } else if (log.action === 'update') {
-                  actionText = 'editó';
-                  bgColor = 'bg-amber-50 text-amber-700';
-                } else if (log.action === 'delete') {
-                  actionText = 'eliminó';
-                  bgColor = 'bg-rose-50 text-rose-700';
-                }
-
+            <div className="bg-white rounded-2xl ring-1 ring-zinc-200/80 shadow-2xs divide-y divide-zinc-100 overflow-hidden">
+              {activities.map((act) => {
+                const IconComponent = act.IconComponent;
                 return (
-                  <div key={log.id} className="p-4 sm:p-5 flex items-start space-x-3 sm:space-x-4 hover:bg-zinc-50 transition-colors">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200">
-                      {user?.avatar_url ? (
-                        <Image src={user.avatar_url} alt={user.full_name} width={40} height={40} className="w-full h-full object-cover" unoptimized />
-                      ) : (
-                        <User className="w-5 h-5 m-2.5 text-zinc-400" />
-                      )}
+                  <div key={act.id} className="p-3.5 sm:p-4.5 flex items-start space-x-3 hover:bg-zinc-50/70 transition-colors">
+                    {/* User Avatar with Action icon badge */}
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/90 shadow-2xs">
+                        {act.user?.avatar_url ? (
+                          <Image src={act.user.avatar_url} alt={act.userName} width={40} height={40} className="w-full h-full object-cover" unoptimized />
+                        ) : (
+                          <User className="w-4 h-4 sm:w-5 sm:h-5 m-2.5 text-zinc-400" />
+                        )}
+                      </div>
+                      <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full ${act.iconBgClass} ${act.iconTextClass} border border-white flex items-center justify-center shadow-2xs`}>
+                        <IconComponent className="w-2.5 h-2.5" />
+                      </div>
                     </div>
+
+                    {/* Activity Content */}
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-zinc-800">
-                        <strong className="font-bold text-zinc-900">{user?.full_name || 'Alguien'}</strong>{' '}
-                        {actionText} el gasto <strong className="font-semibold">{desc}</strong>.
-                      </p>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-xs text-zinc-500">
-                          {new Date(log.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${bgColor}`}>
-                          {log.action}
-                        </span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs sm:text-sm text-zinc-800 leading-snug">
+                            <strong className="font-bold text-zinc-900">{act.userName}</strong>{' '}
+                            <span className="text-zinc-600">{act.titleAction}</span>{' '}
+                            <strong className="font-semibold text-zinc-900">{act.targetTitle}</strong>
+                          </p>
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end">
+                          {act.amount !== undefined && (
+                            <span className="text-xs sm:text-sm font-bold text-zinc-900">
+                              {formatCurrency(act.amount, act.currency)}
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold border mt-0.5 ${act.badgeClass}`}>
+                            {act.badgeLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Detail changes list if any */}
+                      {act.changesList && act.changesList.length > 0 && (
+                        <div className="mt-2 space-y-1 bg-zinc-50 rounded-lg p-2 border border-zinc-200/60 text-[11px] text-zinc-600">
+                          {act.changesList.map((chg, idx) => (
+                            <div key={idx} className="flex items-center space-x-1.5">
+                              <span className="w-1 h-1 rounded-full bg-zinc-400 shrink-0" />
+                              <span>{chg}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Exact Date & Time */}
+                      <div className="flex items-center space-x-1.5 text-[11px] text-zinc-400 mt-1.5">
+                        <Clock className="w-3 h-3 text-zinc-400 shrink-0" />
+                        <span>{formatActivityDateTime(act.timestamp)}</span>
                       </div>
                     </div>
                   </div>

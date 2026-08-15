@@ -92,6 +92,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       if (data.drafts) setDrafts(data.drafts as ExpenseDraft[]);
       if (data.notifications) setNotifications(data.notifications as Notification[]);
       if (data.pendingInvites) setPendingInvites(data.pendingInvites as GroupInvite[]);
+      if (data.auditLogs) setAuditLogs(data.auditLogs as ExpenseAuditLog[]);
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {

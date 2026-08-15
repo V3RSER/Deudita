@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   User,
-  History
+  Clock,
+  ImageIcon
 } from 'lucide-react';
 
 type UnifiedTransaction =
@@ -76,6 +77,23 @@ function parseTxDate(dateStr: string) {
     return { year, monthIndex, dayStr, monthAbbr, monthLabel, key };
   }
   return { year: 2026, monthIndex: 0, dayStr: '01', monthAbbr: 'ENE', monthLabel: 'Enero 2026', key: '2026-00' };
+}
+
+function formatFullDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const dateFormatted = d.toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeFormatted = d.toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${dateFormatted}, ${timeFormatted}`;
 }
 
 export function GenericExpenseList({
@@ -233,12 +251,14 @@ export function GenericExpenseList({
                               Pagó <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
                             </span>
                             {exp.notes && (
-                              <>
-                                <span>•</span>
-                                <span className="text-zinc-500 truncate max-w-[120px] sm:max-w-[200px]">
-                                  {exp.notes}
-                                </span>
-                              </>
+                              <span className="inline-flex items-center text-zinc-400 hover:text-zinc-600" title="Contiene notas">
+                                <FileText className="w-3 h-3 ml-0.5" />
+                              </span>
+                            )}
+                            {exp.receipt_url && (
+                              <span className="inline-flex items-center text-zinc-400 hover:text-zinc-600" title="Contiene comprobante adjunto">
+                                <ImageIcon className="w-3 h-3 ml-0.5" />
+                              </span>
                             )}
                           </div>
                         </div>
@@ -285,21 +305,19 @@ export function GenericExpenseList({
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
-                      <div className="border-t border-zinc-100 bg-white p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-col md:flex-row gap-8">
-                          
-                          {/* Left Column: Splits / Participation */}
-                          <div className="flex-1">
-                            <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-3">
-                              Participación en el gasto
+                      <div className="border-t border-zinc-100 bg-zinc-50/50 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                          {/* Participation without redundant "Pagó" badges */}
+                          <div className="bg-white p-3.5 rounded-xl border border-zinc-200/70 shadow-2xs space-y-2.5">
+                            <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                              División del gasto
                             </h4>
-                            <div className="space-y-1.5">
+                            <div className="space-y-2">
                               {exp.splits?.map((split) => {
                                 const profile = profiles.find((p) => p.id === split.user_id);
-                                const isSplitPayer = exp.paid_by === split.user_id;
                                 return (
                                   <div key={split.id} className="flex items-center justify-between group/split">
-                                    <div className="flex items-center space-x-3">
+                                    <div className="flex items-center space-x-2.5">
                                       <div className="w-6 h-6 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
                                         {profile?.avatar_url ? (
                                           <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
@@ -307,18 +325,11 @@ export function GenericExpenseList({
                                           <User className="w-3.5 h-3.5 m-[5px] text-zinc-400" />
                                         )}
                                       </div>
-                                      <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-medium text-zinc-700 group-hover/split:text-zinc-900 transition-colors">
-                                          {profile?.full_name || 'Usuario Desconocido'}
-                                        </span>
-                                        {isSplitPayer && (
-                                          <span className="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
-                                            Pagó
-                                          </span>
-                                        )}
-                                      </div>
+                                      <span className="text-xs sm:text-sm font-medium text-zinc-800 group-hover/split:text-zinc-900 transition-colors">
+                                        {profile ? profile.full_name : 'Usuario'}
+                                      </span>
                                     </div>
-                                    <span className="text-sm font-semibold text-zinc-900">
+                                    <span className="text-xs sm:text-sm font-semibold text-zinc-900">
                                       {formatCurrency(split.amount_owed, currency)}
                                     </span>
                                   </div>
@@ -327,72 +338,92 @@ export function GenericExpenseList({
                             </div>
                           </div>
 
-                          {/* Divider for md screens */}
-                          <div className="hidden md:block w-px bg-zinc-100" />
-                          <div className="block md:hidden h-px w-full bg-zinc-100" />
-
-                          {/* Right Column: History & Actions */}
-                          <div className="w-full md:w-64 shrink-0 flex flex-col justify-between space-y-6">
-                            <div>
-                              <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center space-x-1.5">
-                                <History className="w-3.5 h-3.5" />
-                                <span>Historial del Gasto</span>
-                              </h4>
-                              
-                              <div className="text-sm space-y-2.5 text-zinc-600">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-zinc-500">Añadido por</span>
-                                  <strong className="text-zinc-900 font-medium">{createdBy?.full_name?.split(' ')[0] || 'Desconocido'}</strong>
+                          {/* Notes and Receipt (if available) */}
+                          {(exp.notes || exp.receipt_url) && (
+                            <div className="bg-white p-3.5 rounded-xl border border-zinc-200/70 shadow-2xs space-y-3">
+                              {exp.notes && (
+                                <div className="space-y-1">
+                                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1">
+                                    <FileText className="w-3 h-3" />
+                                    <span>Notas</span>
+                                  </h4>
+                                  <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50 p-2.5 rounded-lg border border-zinc-100">
+                                    {exp.notes}
+                                  </p>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-zinc-500">Fecha</span>
-                                  <span className="text-zinc-900 font-medium">{new Date(exp.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                </div>
-                                
-                                {exp.updated_at && exp.updated_at !== exp.created_at && (
-                                  <>
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-zinc-500">Editado por</span>
-                                      <strong className="text-zinc-900 font-medium">{updatedBy?.full_name?.split(' ')[0] || 'Desconocido'}</strong>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-zinc-500">Última mod.</span>
-                                      <span className="text-zinc-900 font-medium">{new Date(exp.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-2">
-                              {onEditExpense && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditExpense(exp);
-                                  }}
-                                  className="flex-1 flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                  <span>Editar</span>
-                                </button>
                               )}
-                              
-                              {onDeleteExpense && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpenseToDelete(exp.id);
-                                  }}
-                                  className="flex-1 flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Eliminar</span>
-                                </button>
+
+                              {exp.receipt_url && (
+                                <div className="space-y-1.5">
+                                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1">
+                                    <ImageIcon className="w-3 h-3" />
+                                    <span>Comprobante / Recibo</span>
+                                  </h4>
+                                  <div
+                                    onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
+                                    className="group/img relative w-20 h-20 rounded-lg overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-zinc-400 transition-all"
+                                  >
+                                    <Image
+                                      src={exp.receipt_url}
+                                      alt="Comprobante"
+                                      fill
+                                      className="object-cover group-hover/img:scale-105 transition-transform"
+                                      unoptimized
+                                    />
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold">
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </div>
+                                  </div>
+                                </div>
                               )}
                             </div>
+                          )}
+                        </div>
+
+                        {/* Streamlined Informative Footer: exact timestamp with date & hour, author & actions */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-zinc-200/60 text-xs text-zinc-500">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-1.5 flex-wrap">
+                              <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                              <span>
+                                Registrado por <strong className="font-medium text-zinc-700">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
+                              </span>
+                            </div>
+                            {exp.updated_at && exp.updated_at !== exp.created_at && (
+                              <p className="text-[11px] text-zinc-400 pl-5">
+                                Última modificación por <strong className="font-medium text-zinc-600">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+                            {onEditExpense && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEditExpense(exp);
+                                }}
+                                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition-colors shadow-2xs"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                <span>Editar</span>
+                              </button>
+                            )}
+                            
+                            {onDeleteExpense && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpenseToDelete(exp.id);
+                                }}
+                                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Eliminar</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -466,7 +497,7 @@ export function GenericExpenseList({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedProofUrl(payment.proof_url || null);
+                                setSelectedProofUrl(payment.proof_url ?? null);
                               }}
                               className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center space-x-0.5"
                             >

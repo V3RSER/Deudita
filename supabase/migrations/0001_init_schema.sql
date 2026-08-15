@@ -1,18 +1,11 @@
 -- ============================================================================
 -- ESQUEMA UNIFICADO — versión final
--- Reemplaza 0001..0006 + todos los parches posteriores.
--- Idempotente: se puede correr sobre una base nueva o sobre una que ya
--- tenga cualquier versión anterior de estas tablas/policies/triggers.
--- No borra datos existentes de PERFILES REALES (usa IF NOT EXISTS /
--- OR REPLACE / DROP...IF EXISTS solo sobre objetos que se recrean).
+-- Reemplaza 0001..0006 + todos los parches posteriores (incluye auditoría
+-- de gastos). Idempotente: se puede correr sobre una base nueva o sobre una
+-- que ya tenga cualquier versión anterior de estas tablas/policies/triggers.
 --
--- INCLUYE: fusión de MÚLTIPLES perfiles temporales al registrarse.
--- Si a la misma persona la agregaron como miembro (solo con nombre) en
--- varios grupos distintos, y luego se registra -- por cualquiera de los
--- links de invitación, o directo desde la app -- el trigger reclama TODOS
--- los perfiles temporales que le correspondan (por token y/o por email)
--- y los fusiona en un único perfil real, migrando todo su historial
--- (grupos, gastos, pagos, splits, notificaciones) sin perder datos.
+-- INCLUYE: fusión de MÚLTIPLES perfiles temporales al registrarse, y
+-- auditoría completa de cambios en expenses (expense_audit_logs + trigger).
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -30,16 +23,8 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
--- profiles.email es OPCIONAL: un perfil temporal (miembro agregado solo
--- con nombre, sin cuenta todavía) puede no tener correo.
 alter table public.profiles alter column email drop not null;
-
--- profiles.id NO tiene FK a auth.users a propósito: permite perfiles
--- temporales cuyo id se genera antes de que la persona se registre.
--- El "claim" (vincular el perfil temporal a la cuenta real) se hace por
--- TOKEN de invitación, ver la función handle_new_user() más abajo.
 alter table public.profiles drop constraint if exists profiles_id_fkey;
-
 alter table public.profiles add column if not exists is_temp boolean not null default false;
 alter table public.profiles add column if not exists created_by uuid references public.profiles(id);
 
@@ -74,22 +59,11 @@ create table if not exists public.group_invites (
   created_at timestamptz not null default now()
 );
 
--- email opcional: se puede invitar por link genérico sin correo capturado
 alter table public.group_invites alter column email drop not null;
-
--- token: identificador canónico del link de invitación. Esto es lo que
--- realmente vincula "esta persona que se está registrando" con "este
--- perfil temporal / esta invitación", sin depender de que el correo
--- coincida (la persona puede registrarse con cualquier correo, ej. Google).
 alter table public.group_invites add column if not exists token uuid not null default gen_random_uuid();
-
--- referencia directa al perfil temporal que esta invitación reclama
--- (para el flujo: "agregar miembro por nombre" -> "invitarlo después")
 alter table public.group_invites add column if not exists invitee_profile_id uuid references public.profiles(id);
-
 alter table public.group_invites drop constraint if exists group_invites_group_id_email_key;
 create unique index if not exists group_invites_token_key on public.group_invites (token);
-
 alter table public.group_invites drop constraint if exists group_invites_email_or_profile_check;
 alter table public.group_invites add constraint group_invites_email_or_profile_check
   check (email is not null or invitee_profile_id is not null);
@@ -110,8 +84,14 @@ create table if not exists public.expenses (
   receipt_url text,
   category text default 'General',
   notes text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id)
 );
+
+-- por si la tabla ya existía de una versión previa sin estas columnas
+alter table public.expenses add column if not exists updated_at timestamptz not null default now();
+alter table public.expenses add column if not exists updated_by uuid references public.profiles(id);
 
 create table if not exists public.expense_items (
   id uuid primary key default gen_random_uuid(),
@@ -142,7 +122,78 @@ create table if not exists public.payments (
 );
 
 -- ----------------------------------------------------------------------------
--- 4) BORRADORES DESDE GMAIL
+-- 4) EXPENSE AUDIT LOGS (tabla + trigger)
+-- ----------------------------------------------------------------------------
+create table if not exists public.expense_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  expense_id uuid not null,
+  group_id uuid not null references public.groups(id) on delete cascade,
+  user_id uuid references public.profiles(id) not null,
+  action text not null check (action in ('create', 'update', 'delete')),
+  changes jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- por si la tabla ya existía de una versión previa: alinear al estado final
+alter table public.expense_audit_logs add column if not exists group_id uuid references public.groups(id) on delete cascade;
+-- sin FK a expenses para poder loguear deletes sin que la referencia se rompa
+alter table public.expense_audit_logs drop constraint if exists expense_audit_logs_expense_id_fkey;
+
+alter table public.expense_audit_logs enable row level security;
+
+create or replace function public.log_expense_changes()
+returns trigger
+language plpgsql
+security definer
+as $$
+declare
+  v_user_id uuid;
+begin
+  v_user_id := auth.uid();
+
+  if TG_OP = 'INSERT' then
+    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+    values (
+      NEW.id,
+      NEW.group_id,
+      coalesce(v_user_id, NEW.created_by),
+      'create',
+      jsonb_build_object('new', row_to_json(NEW))
+    );
+    return NEW;
+  elsif TG_OP = 'UPDATE' then
+    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+    values (
+      NEW.id,
+      NEW.group_id,
+      coalesce(NEW.updated_by, v_user_id, NEW.created_by),
+      'update',
+      jsonb_build_object('old', row_to_json(OLD), 'new', row_to_json(NEW))
+    );
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+    values (
+      OLD.id,
+      OLD.group_id,
+      coalesce(v_user_id, OLD.created_by),
+      'delete',
+      jsonb_build_object('old', row_to_json(OLD))
+    );
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists trg_log_expense_changes on public.expenses;
+create trigger trg_log_expense_changes
+after insert or update or delete on public.expenses
+for each row
+execute function public.log_expense_changes();
+
+-- ----------------------------------------------------------------------------
+-- 5) BORRADORES DESDE GMAIL
 -- ----------------------------------------------------------------------------
 create table if not exists public.expense_drafts (
   id uuid primary key default gen_random_uuid(),
@@ -163,7 +214,7 @@ alter table public.expenses add constraint expenses_source_draft_id_fkey
   foreign key (source_draft_id) references public.expense_drafts(id);
 
 -- ----------------------------------------------------------------------------
--- 5) NOTIFICACIONES
+-- 6) NOTIFICACIONES
 -- ----------------------------------------------------------------------------
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
@@ -177,7 +228,7 @@ create table if not exists public.notifications (
 );
 
 -- ----------------------------------------------------------------------------
--- 6) VISTA DE BALANCES NETOS
+-- 7) VISTA DE BALANCES NETOS
 -- ----------------------------------------------------------------------------
 drop view if exists public.net_balances;
 create view public.net_balances as
@@ -203,9 +254,7 @@ full outer join payment_totals pt
   on ed.group_id = pt.group_id and ed.creditor = pt.creditor and ed.debtor = pt.debtor;
 
 -- ----------------------------------------------------------------------------
--- 7) FUNCIÓN AUXILIAR: chequeo de membresía sin recursión de RLS
---    (security definer -> se salta RLS al consultar group_members desde
---    dentro de la propia policy de group_members)
+-- 8) FUNCIÓN AUXILIAR: chequeo de membresía sin recursión de RLS
 -- ----------------------------------------------------------------------------
 create or replace function public.is_group_member(p_group_id uuid, p_user_id uuid)
 returns boolean
@@ -221,25 +270,9 @@ as $$
 $$;
 
 -- ----------------------------------------------------------------------------
--- 8) TRIGGER: crear perfil / reclamar perfil temporal por TOKEN, y
---    aceptar invitaciones pendientes.
---
---    Flujo esperado de la app:
---    a) Agregar miembro solo con nombre -> insert en profiles
---       (is_temp=true, email=null) + insert directo en group_members.
---    b) Invitarlo (opcional) -> insert en group_invites con
---       invitee_profile_id apuntando al perfil temporal; el `token`
---       generado va en el link/correo de invitación.
---    c) Al registrarse, la app pasa el token como
---       options.data.invite_token en supabase.auth.signUp(...).
---       El trigger usa ese token (no el email) para reclamar el perfil.
---    d) Fallback: si alguien se registra con el mismo email que se puso
---       al invitar, pero sin pasar por el link con token, igual se
---       vincula automáticamente vía group_invites.email.
+-- 9) TRIGGER: crear perfil / reclamar perfil(es) temporal(es) por TOKEN
+--    y/o EMAIL, y aceptar invitaciones pendientes.
 -- ----------------------------------------------------------------------------
--- Reclama TODAS las referencias de un perfil temporal (temp_id) y las
--- reasigna al perfil real (real_id). Idempotente por diseño: si ya no
--- quedan filas apuntando a temp_id, simplemente no hace nada.
 create or replace function public.claim_temp_profile(temp_id uuid, real_id uuid)
 returns void
 language plpgsql
@@ -256,7 +289,6 @@ begin
       select 1 from public.group_members gm2
       where gm2.group_id = group_members.group_id and gm2.user_id = real_id
     );
-  -- si ya era miembro del mismo grupo con el id real, solo borra el duplicado
   delete from public.group_members where user_id = temp_id;
 
   update public.group_members set invited_by = real_id where invited_by = temp_id;
@@ -280,14 +312,6 @@ begin
 end;
 $$;
 
--- ----------------------------------------------------------------------------
--- Trigger: crea el perfil real y reclama TODOS los perfiles temporales que
--- le correspondan a este usuario nuevo -- ya sea porque llegó con un token
--- de invitación específico, o porque su email coincide con el de una o más
--- invitaciones pendientes (caso: lo invitaron a varios grupos distintos
--- antes de registrarse, y se registra directo o desde cualquiera de los
--- links -- todos esos perfiles temporales deben fusionarse en uno solo).
--- ----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -306,11 +330,6 @@ begin
   )
   on conflict (id) do nothing;
 
-  -- Recorre TODAS las invitaciones pendientes relevantes para este usuario:
-  -- por token exacto (si vino de un link) Y/O por email coincidente
-  -- (cualquier grupo que lo haya invitado a ese correo, sin importar el
-  -- token). Se deduplica por invitee_profile_id para no fusionar el mismo
-  -- perfil temporal dos veces si aparece en ambos criterios.
   for inv in
     select distinct on (gi.invitee_profile_id, gi.id)
       gi.id as invite_id, gi.group_id, gi.invited_by, gi.invitee_profile_id, g.name as group_name
@@ -323,12 +342,8 @@ begin
       )
   loop
     if inv.invitee_profile_id is not null then
-      -- Fusiona el perfil temporal (con todo su historial) al usuario real.
       perform public.claim_temp_profile(inv.invitee_profile_id, new.id);
     else
-      -- Invitación sin perfil temporal asociado (invitación "abierta" por
-      -- email, sin haber agregado antes a nadie con nombre): solo agrega
-      -- al grupo directamente.
       insert into public.group_members (group_id, user_id, invited_by)
       values (inv.group_id, new.id, inv.invited_by)
       on conflict (group_id, user_id) do nothing;
@@ -354,7 +369,7 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ----------------------------------------------------------------------------
--- 9) STORAGE: bucket de uploads
+-- 10) STORAGE: bucket de uploads
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('uploads', 'uploads', true)
@@ -373,7 +388,7 @@ create policy "Authenticated Update Uploads" on storage.objects
   for update using (bucket_id = 'uploads' and auth.role() = 'authenticated');
 
 -- ============================================================================
--- 10) ROW LEVEL SECURITY
+-- 11) ROW LEVEL SECURITY
 -- ============================================================================
 alter table public.profiles enable row level security;
 alter table public.groups enable row level security;
@@ -385,6 +400,7 @@ alter table public.expense_splits enable row level security;
 alter table public.payments enable row level security;
 alter table public.expense_drafts enable row level security;
 alter table public.notifications enable row level security;
+-- expense_audit_logs ya se habilitó en la sección 4
 
 -- ---- profiles ----
 drop policy if exists "select_profiles" on public.profiles;
@@ -394,9 +410,6 @@ drop policy if exists "insert_profiles" on public.profiles;
 create policy "insert_profiles" on public.profiles
   for insert with check (auth.uid() = id or is_temp = true);
 
--- Solo el dueño real del perfil, o un compañero de grupo cuando el
--- perfil objetivo es temporal (nunca se puede editar/borrar el perfil
--- de otro usuario ya registrado).
 drop policy if exists "update_profiles" on public.profiles;
 create policy "update_profiles" on public.profiles
   for update using (
@@ -447,8 +460,6 @@ create policy "delete_own_groups" on public.groups
   for delete using (auth.uid() = owner_id);
 
 -- ---- group_members ----
--- select: usa la función security definer is_group_member para evitar que
--- la policy se auto-referencie (eso causaba "infinite recursion", 42P17).
 drop policy if exists "select_group_members" on public.group_members;
 create policy "select_group_members" on public.group_members
   for select using (
@@ -456,10 +467,6 @@ create policy "select_group_members" on public.group_members
     or group_id in (select id from public.groups where owner_id = auth.uid())
   );
 
--- CUALQUIER miembro del grupo (no solo el owner) puede agregar a otras
--- personas -- ya sea un miembro real insertándose a sí mismo tras aceptar
--- una invitación, o un miembro agregando directamente a alguien más
--- (ej. agregar por nombre, perfil temporal).
 drop policy if exists "insert_group_members" on public.group_members;
 create policy "insert_group_members" on public.group_members
   for insert with check (
@@ -493,7 +500,6 @@ create policy "select_group_invites" on public.group_invites
     or email = (select email from public.profiles where id = auth.uid())
   );
 
--- CUALQUIER miembro del grupo puede invitar a alguien más, no solo el owner.
 drop policy if exists "insert_group_invites" on public.group_invites;
 create policy "insert_group_invites" on public.group_invites
   for insert with check (
@@ -519,6 +525,16 @@ create policy "select_group_expenses" on public.expenses
 drop policy if exists "insert_group_expenses" on public.expenses;
 create policy "insert_group_expenses" on public.expenses
   for insert with check (public.is_group_member(group_id, auth.uid()));
+
+drop policy if exists "update_group_expenses" on public.expenses;
+create policy "update_group_expenses" on public.expenses
+  for update using (
+    exists (
+      select 1 from public.group_members gm
+      where gm.group_id = expenses.group_id
+      and gm.user_id = auth.uid()
+    )
+  );
 
 drop policy if exists "delete_group_expenses" on public.expenses;
 create policy "delete_group_expenses" on public.expenses
@@ -559,6 +575,30 @@ create policy "insert_expense_splits" on public.expense_splits
     expense_id in (
       select e.id from public.expenses e
       where public.is_group_member(e.group_id, auth.uid())
+    )
+  );
+
+-- ---- expense_audit_logs ----
+drop policy if exists "select_expense_audit_logs" on public.expense_audit_logs;
+drop policy if exists "insert_expense_audit_logs" on public.expense_audit_logs;
+drop policy if exists "Members can view expense audit logs in their groups" on public.expense_audit_logs;
+drop policy if exists "Users can create audit logs for their groups" on public.expense_audit_logs;
+
+create policy "select_expense_audit_logs" on public.expense_audit_logs
+  for select using (
+    exists (
+      select 1 from public.group_members gm
+      where gm.group_id = expense_audit_logs.group_id
+      and gm.user_id = auth.uid()
+    )
+  );
+
+create policy "insert_expense_audit_logs" on public.expense_audit_logs
+  for insert with check (
+    exists (
+      select 1 from public.group_members gm
+      where gm.group_id = expense_audit_logs.group_id
+      and gm.user_id = auth.uid()
     )
   );
 
