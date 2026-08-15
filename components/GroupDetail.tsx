@@ -198,68 +198,70 @@ export function GroupDetail({
   });
 
   return (
-    <div className="space-y-6">
-      <div className="relative w-full h-56 sm:h-64 rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group">
+    <div className="space-y-4">
+      <div className="relative w-full h-32 sm:h-40 rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group flex items-end">
         {groupImageUrl ? (
           <Image
             src={groupImageUrl}
             alt={group.name}
             fill
-            className="object-cover opacity-60"
+            className="object-cover opacity-50"
             unoptimized
             referrerPolicy="no-referrer"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 opacity-90" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/60 to-transparent" />
         
         {/* Top actions */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+        <div className="absolute top-3 left-3 right-3 flex justify-between items-start">
           <button
             onClick={onBack}
-            className="px-3 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white text-sm font-semibold transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white text-xs font-semibold transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
           >
             Volver
           </button>
           <button
             onClick={() => setIsSettingsModalOpen(true)}
-            className="p-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
+            className="p-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
             title="Configuración del grupo"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-4 h-4" />
           </button>
         </div>
 
         {/* Bottom info & actions */}
-        <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+        <div className="relative z-10 w-full p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center space-x-1.5 px-2 py-1 rounded-md bg-white/20 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold mb-1.5 ring-1 ring-white/10">
-              <Folder className="w-3.5 h-3.5" />
-              <span>{getGroupCategoryLabel(group.category)}</span>
+            <div className="flex items-center space-x-2">
+              <div className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-white/20 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold ring-1 ring-white/10">
+                <Folder className="w-3 h-3" />
+                <span>{getGroupCategoryLabel(group.category)}</span>
+              </div>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight drop-shadow-md">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight drop-shadow-md">
               {group.name}
             </h1>
             {getCleanGroupDescription(group.description) && (
-              <p className="text-white/80 text-sm max-w-xl line-clamp-2">
+              <p className="text-white/80 text-xs max-w-xl line-clamp-1">
                 {getCleanGroupDescription(group.description)}
               </p>
             )}
           </div>
           
           {/* Actions: Settle and New Expense */}
-          <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
             <button
               onClick={() => onOpenSettleModal(group.id)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm ring-1 ring-white/20"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-3 py-2 rounded-xl text-xs transition-all active:scale-95 shadow-sm ring-1 ring-white/20"
             >
               <Wallet className="w-4 h-4" />
               <span>Saldar</span>
             </button>
             <button
               onClick={() => onOpenNewExpense(group.id)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-3 py-2 rounded-xl text-xs transition-all active:scale-95 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo gasto</span>

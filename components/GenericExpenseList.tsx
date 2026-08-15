@@ -285,38 +285,40 @@ export function GenericExpenseList({
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
-                      <div className="border-t border-zinc-100 bg-zinc-50/50 p-4 sm:p-5 pl-5 sm:pl-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="border-t border-zinc-100 bg-white p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-col md:flex-row gap-8">
                           
                           {/* Left Column: Splits / Participation */}
-                          <div className="space-y-3">
-                            <h4 className="text-xs font-extrabold uppercase tracking-wider text-zinc-500">
+                          <div className="flex-1">
+                            <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-3">
                               Participación en el gasto
                             </h4>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {exp.splits?.map((split) => {
                                 const profile = profiles.find((p) => p.id === split.user_id);
                                 const isSplitPayer = exp.paid_by === split.user_id;
                                 return (
-                                  <div key={split.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-zinc-200/60 shadow-sm">
-                                    <div className="flex items-center space-x-2">
-                                      <div className="w-6 h-6 rounded-full bg-zinc-200 overflow-hidden shrink-0">
+                                  <div key={split.id} className="flex items-center justify-between group/split">
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-6 h-6 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
                                         {profile?.avatar_url ? (
                                           <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
                                         ) : (
-                                          <User className="w-4 h-4 m-1 text-zinc-400" />
+                                          <User className="w-3.5 h-3.5 m-[5px] text-zinc-400" />
                                         )}
                                       </div>
-                                      <span className="text-sm font-medium text-zinc-800">
-                                        {profile?.full_name || 'Usuario Desconocido'}
-                                      </span>
-                                      {isSplitPayer && (
-                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wide">
-                                          Pagó
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm font-medium text-zinc-700 group-hover/split:text-zinc-900 transition-colors">
+                                          {profile?.full_name || 'Usuario Desconocido'}
                                         </span>
-                                      )}
+                                        {isSplitPayer && (
+                                          <span className="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
+                                            Pagó
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <span className="text-sm font-bold text-zinc-900">
+                                    <span className="text-sm font-semibold text-zinc-900">
                                       {formatCurrency(split.amount_owed, currency)}
                                     </span>
                                   </div>
@@ -325,31 +327,44 @@ export function GenericExpenseList({
                             </div>
                           </div>
 
+                          {/* Divider for md screens */}
+                          <div className="hidden md:block w-px bg-zinc-100" />
+                          <div className="block md:hidden h-px w-full bg-zinc-100" />
+
                           {/* Right Column: History & Actions */}
-                          <div className="space-y-4 md:border-l md:border-zinc-200/80 md:pl-6">
-                            
-                            <div className="space-y-3">
-                              <h4 className="text-xs font-extrabold uppercase tracking-wider text-zinc-500 flex items-center space-x-1.5">
+                          <div className="w-full md:w-64 shrink-0 flex flex-col justify-between space-y-6">
+                            <div>
+                              <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center space-x-1.5">
                                 <History className="w-3.5 h-3.5" />
                                 <span>Historial del Gasto</span>
                               </h4>
                               
-                              <div className="text-xs space-y-2 text-zinc-600">
-                                <div className="flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-zinc-200/60">
-                                  <span>Añadido por <strong className="text-zinc-800">{createdBy?.full_name || 'Desconocido'}</strong></span>
-                                  <span className="text-zinc-500">{new Date(exp.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                              <div className="text-sm space-y-2.5 text-zinc-600">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-zinc-500">Añadido por</span>
+                                  <strong className="text-zinc-900 font-medium">{createdBy?.full_name?.split(' ')[0] || 'Desconocido'}</strong>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-zinc-500">Fecha</span>
+                                  <span className="text-zinc-900 font-medium">{new Date(exp.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                 </div>
                                 
                                 {exp.updated_at && exp.updated_at !== exp.created_at && (
-                                  <div className="flex justify-between items-center bg-white px-3 py-2 rounded-lg border border-zinc-200/60">
-                                    <span>Última mod. por <strong className="text-zinc-800">{updatedBy?.full_name || 'Desconocido'}</strong></span>
-                                    <span className="text-zinc-500">{new Date(exp.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                  </div>
+                                  <>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-zinc-500">Editado por</span>
+                                      <strong className="text-zinc-900 font-medium">{updatedBy?.full_name?.split(' ')[0] || 'Desconocido'}</strong>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-zinc-500">Última mod.</span>
+                                      <span className="text-zinc-900 font-medium">{new Date(exp.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </div>
 
-                            <div className="pt-2 flex flex-wrap gap-2">
+                            <div className="flex items-center gap-2 pt-2">
                               {onEditExpense && (
                                 <button
                                   type="button"
@@ -357,10 +372,10 @@ export function GenericExpenseList({
                                     e.stopPropagation();
                                     onEditExpense(exp);
                                   }}
-                                  className="flex items-center space-x-1.5 bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm"
+                                  className="flex-1 flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
                                 >
-                                  <Pencil className="w-4 h-4 text-zinc-500" />
-                                  <span>Editar Gasto</span>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                  <span>Editar</span>
                                 </button>
                               )}
                               
@@ -371,14 +386,13 @@ export function GenericExpenseList({
                                     e.stopPropagation();
                                     setExpenseToDelete(exp.id);
                                   }}
-                                  className="flex items-center space-x-1.5 bg-rose-50 border border-rose-100 hover:bg-rose-100 text-rose-700 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm md:hidden"
+                                  className="flex-1 flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
                                 >
-                                  <Trash2 className="w-4 h-4 text-rose-600" />
-                                  <span>Eliminar Gasto</span>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Eliminar</span>
                                 </button>
                               )}
                             </div>
-
                           </div>
                         </div>
                       </div>
