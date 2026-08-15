@@ -134,18 +134,18 @@ export function GenericExpenseList({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {groupedByMonth.map((group) => (
-        <div key={group.key} className="space-y-3">
+        <div key={group.key} className="space-y-2">
           {/* Monthly Section Header Cut */}
-          <div className="flex items-center space-x-3 pt-1 pb-1">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-600 bg-zinc-100 px-3 py-1 rounded-full border border-zinc-200/80 shadow-2xs">
+          <div className="flex items-center space-x-2.5 px-1 py-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80">
               {group.label}
             </span>
-            <div className="h-px bg-zinc-200/80 flex-1" />
+            <div className="h-px bg-zinc-200/70 flex-1" />
           </div>
 
-          <div className="space-y-3">
+          <div className="bg-white rounded-2xl ring-1 ring-zinc-200/80 shadow-2xs divide-y divide-zinc-100 overflow-hidden">
             {group.items.map((tx) => {
               const parsed = parseTxDate(tx.date);
 
@@ -184,85 +184,85 @@ export function GenericExpenseList({
                 return (
                   <div
                     key={`exp-${exp.id}`}
-                    className={`bg-white rounded-2xl ring-1 ring-zinc-200 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group flex flex-col overflow-hidden relative ${isExpanded ? 'ring-emerald-500/50 hover:ring-emerald-500/50 shadow-md' : 'active:scale-[0.99]'}`}
+                    className={`transition-colors cursor-pointer group flex flex-col relative ${isExpanded ? 'bg-zinc-50/80' : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'}`}
                     onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
                   >
                     {isExpanded && (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
                     )}
-                    <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-start space-x-3 min-w-0">
-                        {/* Date Block: AGO / 01 */}
-                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none mt-0.5 shadow-2xs">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">
+                    <div className="px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0">
+                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                        {/* Date Block */}
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs">
+                          <span className="text-[8px] font-black uppercase tracking-wider text-zinc-500 leading-none">
                             {parsed.monthAbbr}
                           </span>
-                          <span className="text-sm sm:text-base font-black text-zinc-900 leading-none mt-0.5">
+                          <span className="text-xs sm:text-sm font-black text-zinc-900 leading-none mt-0.5">
                             {parsed.dayStr}
                           </span>
                         </div>
 
                         {/* Category SVG Icon Box */}
-                        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 mt-0.5`}>
-                          <CategoryIcon className="w-5 h-5" />
+                        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-zinc-200/60 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}>
+                          <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                         </div>
 
                         {/* Expense Name & Details */}
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-bold text-zinc-900 text-sm sm:text-base group-hover:text-emerald-700 transition-colors truncate">
+                          <div className="flex items-center space-x-1.5">
+                            <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm group-hover:text-emerald-700 transition-colors truncate">
                               {exp.description}
                             </h3>
                             {exp.source === 'gmail' && (
-                              <span className="bg-zinc-900 text-white text-[10px] uppercase font-semibold tracking-widest px-2 py-0.5 rounded-md shrink-0">
+                              <span className="bg-zinc-900 text-white text-[9px] uppercase font-semibold tracking-widest px-1.5 py-0.5 rounded shrink-0">
                                 AI
                               </span>
                             )}
                           </div>
 
-                          {exp.notes && (
-                            <p className="text-xs text-zinc-600 mt-1 flex items-center space-x-1 font-normal bg-zinc-50 px-2 py-1 rounded-md border border-zinc-100 w-fit truncate">
-                              <FileText className="w-3 h-3 text-zinc-400 shrink-0" />
-                              <span className="truncate">{exp.notes}</span>
-                            </p>
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5">
                             {showGroupBadge && groupObj && (
                               <>
-                                <span className="font-semibold text-zinc-700 bg-zinc-100 px-2.5 py-0.5 rounded-md">
+                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded text-[10px]">
                                   {groupObj.name}
                                 </span>
                                 <span>•</span>
                               </>
                             )}
-                            <span>
-                              Pagó:{' '}
-                              <strong className="text-zinc-800 font-semibold">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
+                            <span className="truncate">
+                              Pagó <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
                             </span>
+                            {exp.notes && (
+                              <>
+                                <span>•</span>
+                                <span className="text-zinc-500 truncate max-w-[120px] sm:max-w-[200px]">
+                                  {exp.notes}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
 
                       {/* Right Amount & Status & Actions */}
-                      <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100 shrink-0">
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                         <div className="text-right">
-                          <span className="text-sm sm:text-base font-bold text-zinc-900 block tracking-tight">
+                          <span className="text-xs sm:text-sm font-bold text-zinc-900 block tracking-tight">
                             {formatCurrency(exp.total_amount, currency)}
                           </span>
-                          <div className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusBg}`}>
+                          <div className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusBg}`}>
                             {statusText}
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-1 bg-zinc-50/80 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center space-x-0.5 text-zinc-400" onClick={(e) => e.stopPropagation()}>
                           {!isExpanded && (
-                            <div className="p-1.5 text-zinc-400 transition-colors">
+                            <div className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors">
                               <ChevronDown className="w-4 h-4" />
                             </div>
                           )}
                           {isExpanded && (
-                            <div className="p-1.5 text-zinc-400 transition-colors">
+                            <div className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors">
                               <ChevronUp className="w-4 h-4" />
                             </div>
                           )}
@@ -273,10 +273,10 @@ export function GenericExpenseList({
                                 e.stopPropagation();
                                 setExpenseToDelete(exp.id);
                               }}
-                              className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-0 focus:opacity-100 absolute right-4 sm:relative sm:right-auto"
+                              className="p-1 hover:bg-rose-50 hover:text-rose-600 rounded-md text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 hidden sm:block"
                               title="Eliminar gasto"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
@@ -293,7 +293,7 @@ export function GenericExpenseList({
                             <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-3">
                               Participación en el gasto
                             </h4>
-                            <div className="space-y-3">
+                            <div className="space-y-1.5">
                               {exp.splits?.map((split) => {
                                 const profile = profiles.find((p) => p.id === split.user_id);
                                 const isSplitPayer = exp.paid_by === split.user_id;
@@ -414,51 +414,51 @@ export function GenericExpenseList({
               return (
                 <div
                   key={`pay-${payment.id}`}
-                  className="bg-white rounded-2xl ring-1 ring-zinc-200 p-4 sm:p-5 shadow-2xs hover:shadow-md hover:ring-zinc-300 transition-all cursor-pointer group active:scale-[0.99]"
+                  className="px-3.5 py-2.5 sm:px-4 sm:py-3 transition-colors cursor-pointer group hover:bg-zinc-50/60 active:bg-zinc-100/50"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start space-x-3 min-w-0">
-                      {/* Date Block: AGO / 01 - Same dimensions as SVG category icon box */}
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none mt-0.5 shadow-2xs">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500 leading-none">
+                  <div className="flex items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                      {/* Date Block */}
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-zinc-500 leading-none">
                           {parsed.monthAbbr}
                         </span>
-                        <span className="text-sm sm:text-base font-black text-zinc-900 leading-none mt-0.5">
+                        <span className="text-xs sm:text-sm font-black text-zinc-900 leading-none mt-0.5">
                           {parsed.dayStr}
                         </span>
                       </div>
 
                       {/* Payment SVG Icon Box */}
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200/80 flex items-center justify-center shrink-0 mt-0.5">
-                        <HandCoins className="w-5 h-5 text-emerald-700" />
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/80 flex items-center justify-center shrink-0">
+                        <HandCoins className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-700" />
                       </div>
 
                       {/* Payment Description & Details */}
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-bold text-zinc-900 text-sm sm:text-base group-hover:text-emerald-700 transition-colors flex items-center space-x-1.5 flex-wrap">
-                          <span className={isIpaid ? 'text-emerald-700 font-extrabold' : ''}>
+                        <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm group-hover:text-emerald-700 transition-colors flex items-center space-x-1 flex-wrap truncate">
+                          <span className={isIpaid ? 'text-emerald-700 font-bold' : ''}>
                             {payer ? payer.full_name : 'Usuario'}
                           </span>
-                          <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className={isIreceived ? 'text-emerald-700 font-extrabold' : ''}>
+                          <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span className={isIreceived ? 'text-emerald-700 font-bold' : ''}>
                             {receiver ? receiver.full_name : 'Usuario'}
                           </span>
                         </h3>
 
-                        {payment.note && (
-                          <p className="text-xs text-zinc-600 mt-1 flex items-center space-x-1 font-normal bg-zinc-50 px-2 py-1 rounded-md border border-zinc-100 w-fit truncate">
-                            <span className="truncate">{payment.note}</span>
-                          </p>
-                        )}
-
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 mt-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5">
                           {showGroupBadge && groupObj && (
                             <>
-                              <span className="font-semibold text-zinc-700 bg-zinc-100 px-2.5 py-0.5 rounded-md">
+                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded text-[10px]">
                                 {groupObj.name}
                               </span>
                               <span>•</span>
                             </>
+                          )}
+
+                          {payment.note && (
+                            <span className="text-zinc-500 truncate max-w-[120px] sm:max-w-[200px]">
+                              {payment.note}
+                            </span>
                           )}
 
                           {payment.proof_url && (
@@ -468,10 +468,10 @@ export function GenericExpenseList({
                                 e.stopPropagation();
                                 setSelectedProofUrl(payment.proof_url || null);
                               }}
-                              className="text-xs text-emerald-700 font-semibold hover:underline flex items-center space-x-1"
+                              className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center space-x-0.5"
                             >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>Ver comprobante</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              <span>Comprobante</span>
                             </button>
                           )}
                         </div>
@@ -479,26 +479,26 @@ export function GenericExpenseList({
                     </div>
 
                     {/* Right Amount & Status & Action Buttons */}
-                    <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-zinc-100 shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                       <div className="text-right">
-                        <span className="text-sm sm:text-base font-bold text-zinc-900 block tracking-tight">
+                        <span className="text-xs sm:text-sm font-bold text-zinc-900 block tracking-tight">
                           {formatCurrency(payment.amount, currency)}
                         </span>
-                        <div className="mt-1 inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Pago de Deuda</span>
+                        <div className="mt-0.5 inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                          <span>Abono</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-1 bg-zinc-50/80 p-1 rounded-xl" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center space-x-0.5" onClick={(e) => e.stopPropagation()}>
                         {onEditPayment && (
                           <button
                             type="button"
                             onClick={() => onEditPayment(payment)}
-                            className="p-1.5 hover:bg-zinc-200 hover:text-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                            className="p-1 hover:bg-zinc-200 hover:text-zinc-900 rounded-md text-zinc-400 transition-colors"
                             title="Editar pago"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
                         )}
 
@@ -506,10 +506,10 @@ export function GenericExpenseList({
                           <button
                             type="button"
                             onClick={() => onDeletePayment(payment.id)}
-                            className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-0 focus:opacity-100 absolute right-4 sm:relative sm:right-auto"
+                            className="p-1 hover:bg-rose-50 hover:text-rose-600 rounded-md text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 hidden sm:block"
                             title="Eliminar pago"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>

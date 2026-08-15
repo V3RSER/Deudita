@@ -318,80 +318,80 @@ export function GroupDetail({
       <div className="flex border-b border-zinc-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center space-x-2 py-3.5 px-5 font-semibold text-sm border-b-2 whitespace-nowrap transition-all min-h-[44px] ${
+          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'expenses'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <Receipt className="w-4 h-4" />
+          <Receipt className="w-3.5 h-3.5" />
           <span>Gastos ({groupExpenses.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('balances')}
-          className={`flex items-center space-x-2 py-3.5 px-5 font-semibold text-sm border-b-2 whitespace-nowrap transition-all min-h-[44px] ${
+          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'balances'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <Wallet className="w-4 h-4" />
+          <Wallet className="w-3.5 h-3.5" />
           <span>Balances ({groupPairwise.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('members')}
-          className={`flex items-center space-x-2 py-3.5 px-5 font-semibold text-sm border-b-2 whitespace-nowrap transition-all min-h-[44px] ${
+          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'members'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <Users className="w-4 h-4" />
+          <Users className="w-3.5 h-3.5" />
           <span>Miembros ({memberProfiles.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('activity')}
-          className={`flex items-center space-x-2 py-3.5 px-5 font-semibold text-sm border-b-2 whitespace-nowrap transition-all min-h-[44px] ${
+          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'activity'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <Activity className="w-4 h-4" />
+          <Activity className="w-3.5 h-3.5" />
           <span>Actividad</span>
         </button>
       </div>
 
       {/* TAB CONTENT: Expenses */}
       {activeTab === 'expenses' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Expenses Filter Bar */}
-          <div className="flex items-center justify-between bg-zinc-50 p-1.5 rounded-2xl border border-zinc-200/80">
-            <div className="flex items-center space-x-1">
+          <div className="flex items-center justify-between">
+            <div className="inline-flex items-center p-0.5 bg-zinc-100 rounded-xl border border-zinc-200/60">
               <button
                 type="button"
                 onClick={() => setExpenseFilter('all')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                   expenseFilter === 'all'
                     ? 'bg-white text-zinc-900 shadow-2xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                Todos los gastos ({groupExpenses.length})
+                Todos ({groupExpenses.length})
               </button>
               <button
                 type="button"
                 onClick={() => setExpenseFilter('mine')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                   expenseFilter === 'mine'
                     ? 'bg-white text-zinc-900 shadow-2xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                En los que interactúo
+                Mis gastos
               </button>
             </div>
           </div>
