@@ -32,6 +32,7 @@ interface ExpenseContextType {
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
   createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[], currency?: string) => Promise<Group>;
   updateGroup: (id: string, name: string, category: GroupCategory, description?: string, imageUrl?: string, currency?: string) => Promise<Group>;
+  deleteGroup: (id: string) => Promise<void>;
   addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
   deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
@@ -211,6 +212,21 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const updatedGroup: Group = await res.json();
     await reloadFromSupabase();
     return updatedGroup;
+  };
+
+  const deleteGroup = async (id: string): Promise<void> => {
+    const res = await fetch(`/api/groups/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo eliminar el grupo';
+      console.error('[ExpenseContext] Error in deleteGroup:', message);
+      throw new Error(message);
+    }
+
+    await reloadFromSupabase();
   };
 
   const addGroupInvite = async (groupId: string, email?: string, name?: string, memberId?: string): Promise<{ inviteUrl: string; message: string; memberId?: string }> => {
@@ -437,6 +453,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         addFriend,
         createGroup,
         updateGroup,
+        deleteGroup,
         addGroupInvite,
         deleteFriend,
         acceptGroupInvite,

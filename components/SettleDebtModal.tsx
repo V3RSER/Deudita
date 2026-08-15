@@ -7,7 +7,21 @@ import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
 import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import { Payment } from '@/lib/types';
-import { X, Wallet, ArrowRight, Camera, Loader2, Sparkles, AlertCircle, FileText, Trash2 } from 'lucide-react';
+import {
+  X,
+  Wallet,
+  ArrowRight,
+  ArrowLeftRight,
+  Camera,
+  Loader2,
+  AlertCircle,
+  Trash2,
+  Check,
+  CheckCircle2,
+  Sparkles,
+  Layers,
+  Image as ImageIcon
+} from 'lucide-react';
 import Image from 'next/image';
 
 interface SettleDebtModalProps {
@@ -19,6 +33,14 @@ interface SettleDebtModalProps {
   defaultAmount?: number;
   paymentToEdit?: Payment | null;
 }
+
+const PAYMENT_METHODS = [
+  { id: 'transfer', label: 'Transferencia' },
+  { id: 'nequi', label: 'Nequi' },
+  { id: 'daviplata', label: 'Daviplata' },
+  { id: 'cash', label: 'Efectivo' },
+  { id: 'bizum', label: 'Bizum' },
+];
 
 export function SettleDebtModal({
   isOpen,
@@ -35,7 +57,7 @@ export function SettleDebtModal({
   const [payerId, setPayerId] = useState<string>('');
   const [receiverId, setReceiverId] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
-  const [notes, setNotes] = useState<string>('Transferencia bancaria');
+  const [notes, setNotes] = useState<string>('Transferencia');
   const [proofUrl, setProofUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +65,6 @@ export function SettleDebtModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [prevIsOpen, setPrevIsOpen] = useState(false);
 
   useEffect(() => {
@@ -70,7 +91,7 @@ export function SettleDebtModal({
         setReceiverId(activeReceiver);
 
         setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
-        setNotes('Transferencia bancaria');
+        setNotes('Transferencia');
       }
     } else if (!isOpen && prevIsOpen) {
       setPrevIsOpen(false);
@@ -80,6 +101,7 @@ export function SettleDebtModal({
   const isEditing = Boolean(paymentToEdit);
   const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;
   const targetGroup = userGroups.find((g) => g.id === groupId);
+  const currency = targetGroup?.currency || currentProfile?.currency || 'COP';
 
   // Compute breakdown of group debts between payer and receiver
   const getGroupDebtBreakdown = () => {
@@ -87,7 +109,6 @@ export function SettleDebtModal({
 
     const groupDebts: Array<{ group: typeof userGroups[0]; debt: number }> = [];
 
-    // Filter relevant groups (if locked to a group, only consider that group)
     const targetGroups = isLockedToGroup
       ? userGroups.filter((g) => g.id === groupId)
       : userGroups;
@@ -114,6 +135,12 @@ export function SettleDebtModal({
     }
   }, [payerId, receiverId, totalOwed, isEditing, isOpen]);
 
+  const handleSwapPayerReceiver = () => {
+    const temp = payerId;
+    setPayerId(receiverId);
+    setReceiverId(temp);
+  };
+
   if (!isOpen) return null;
 
   // Calculate distributed allocation preview
@@ -122,9 +149,8 @@ export function SettleDebtModal({
     if (numericAmount <= 0 || groupDebts.length === 0) return [];
 
     let remaining = numericAmount;
-    const distribution: Array<{ groupName: string; currency: string; allocated: number }> = [];
+    const distribution: Array<{ groupName: string; currency: string; allocated: number; totalDebt: number }> = [];
 
-    // Sort group debts descending
     const sorted = [...groupDebts].sort((a, b) => b.debt - a.debt);
 
     for (const item of sorted) {
@@ -134,20 +160,20 @@ export function SettleDebtModal({
         groupName: item.group.name,
         currency: item.group.currency || 'COP',
         allocated: alloc,
+        totalDebt: item.debt,
       });
       remaining -= alloc;
     }
 
-    // If remaining amount left and no group allocated all, add remainder to first group
     if (remaining > 0 && distribution.length > 0) {
       distribution[0].allocated += remaining;
     } else if (remaining > 0 && userGroups.length > 0) {
-      // If debtor had 0 registered debt, assign to active/first group
       const fallbackGroup = targetGroup || userGroups[0];
       distribution.push({
         groupName: fallbackGroup.name,
         currency: fallbackGroup.currency || 'COP',
         allocated: remaining,
+        totalDebt: 0,
       });
     }
 
@@ -220,7 +246,6 @@ export function SettleDebtModal({
           proof_url: proofUrl || undefined,
         });
       } else if (isLockedToGroup && groupId) {
-        // Single group payment
         await addPayment({
           group_id: groupId,
           paid_by: payerId,
@@ -231,7 +256,6 @@ export function SettleDebtModal({
           proof_url: proofUrl || undefined,
         });
       } else {
-        // Multi-group distributed payment from consolidated balances view
         let remainingToPay = numericAmount;
         const sortedDebts = [...groupDebts].sort((a, b) => b.debt - a.debt);
 
@@ -254,7 +278,6 @@ export function SettleDebtModal({
           }
         }
 
-        // If leftover or no prior registered debt, assign remaining to first available group
         if (remainingToPay > 0 && userGroups.length > 0) {
           const targetG = sortedDebts[0]?.group || userGroups[0];
           await addPayment({
@@ -297,149 +320,326 @@ export function SettleDebtModal({
   const receiverProfile = profiles.find((p) => p.id === receiverId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
-      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/50 backdrop-blur-md overflow-y-auto">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh] ring-1 ring-zinc-200/80 animate-in fade-in zoom-in-95 duration-150">
+        
+        {/* Top Bar */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 bg-white shrink-0">
           <div className="flex items-center space-x-3">
-            <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
-              {isEditing ? 'Editar pago' : 'Registrar pago'}
-            </h2>
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs ring-1 ring-emerald-100">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-zinc-900 tracking-tight">
+                {isEditing ? 'Editar pago' : 'Registrar transferencia / pago'}
+              </h2>
+              <p className="text-xs text-zinc-500 font-medium">
+                {targetGroup ? `En "${targetGroup.name}"` : 'Abono general de cuentas'}
+              </p>
+            </div>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Error Banner */}
         {errorMsg && (
-          <div className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700">
+          <div className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-xs font-semibold text-rose-700">
             <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMsg}
           </div>
         )}
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Form Content */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+          
+          {/* Transfer Flow Card: Payer ➔ Receiver */}
+          <div className="bg-zinc-50/90 border border-zinc-200/90 rounded-3xl p-4 sm:p-5 relative shadow-xs">
+            <div className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-3">
+              Flujo del dinero
+            </div>
 
-          {/* Amount Hero */}
-          <div className="text-center py-2">
-            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Monto a pagar</p>
-            <div className="flex items-center justify-center text-5xl font-black text-zinc-900">
+            <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-2 sm:gap-3">
+              
+              {/* Payer Card */}
+              <div className="relative bg-white rounded-2xl p-3 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all flex flex-col items-center text-center group cursor-pointer">
+                <div className="relative">
+                  {payerProfile?.avatar_url ? (
+                    <Image
+                      src={payerProfile.avatar_url}
+                      alt="Payer"
+                      width={44}
+                      height={44}
+                      className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-zinc-900 text-white flex items-center justify-center text-sm font-bold shadow-xs">
+                      {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                  )}
+                  <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ring-2 ring-white">
+                    PAGA
+                  </span>
+                </div>
+
+                <div className="mt-2 w-full">
+                  <div className="text-xs font-extrabold text-zinc-900 truncate">
+                    {payerProfile?.full_name?.split(' ')[0] || 'Pagador'}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-medium truncate">
+                    {payerProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                  </div>
+                </div>
+
+                <select
+                  value={payerId}
+                  onChange={(e) => setPayerId(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                >
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Swap Button */}
+              <div className="flex flex-col items-center justify-center">
+                <button
+                  type="button"
+                  onClick={handleSwapPayerReceiver}
+                  className="p-2.5 rounded-full bg-white border border-zinc-200/90 text-zinc-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all shadow-xs active:scale-90"
+                  title="Invertir pagador y receptor"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Receiver Card */}
+              <div className="relative bg-white rounded-2xl p-3 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all flex flex-col items-center text-center group cursor-pointer">
+                <div className="relative">
+                  {receiverProfile?.avatar_url ? (
+                    <Image
+                      src={receiverProfile.avatar_url}
+                      alt="Receiver"
+                      width={44}
+                      height={44}
+                      className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">
+                      {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                  )}
+                  <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ring-2 ring-white">
+                    RECIBE
+                  </span>
+                </div>
+
+                <div className="mt-2 w-full">
+                  <div className="text-xs font-extrabold text-zinc-900 truncate">
+                    {receiverProfile?.full_name?.split(' ')[0] || 'Receptor'}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-medium truncate">
+                    {receiverProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                  </div>
+                </div>
+
+                <select
+                  value={receiverId}
+                  onChange={(e) => setReceiverId(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                >
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Pending Debt Pill */}
+            {totalOwed > 0 ? (
+              <div className="mt-3 flex items-center justify-center">
+                <div className="inline-flex items-center space-x-1.5 bg-emerald-100/70 border border-emerald-200/80 px-3 py-1 rounded-full text-xs font-bold text-emerald-800 shadow-2xs">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Deuda pendiente: {formatCurrency(totalOwed, currency)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-center text-[11px] text-zinc-400 font-medium">
+                Sin deudas calculadas previas
+              </div>
+            )}
+          </div>
+
+          {/* Amount Stage */}
+          <div className="bg-white rounded-3xl p-5 border border-zinc-200/90 shadow-xs text-center space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
+                Monto transferido
+              </span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                Moneda: {currency}
+              </span>
+            </div>
+
+            <div className="py-1">
               <FormattedCurrencyInput
                 required
                 value={amount}
                 onChange={(val) => setAmount(val)}
-                currency={targetGroup?.currency || 'COP'}
+                currency={currency}
                 placeholder="0"
-                className="bg-transparent text-center focus:outline-none w-full max-w-[250px] placeholder:text-zinc-200"
+                className="bg-transparent text-center text-4xl sm:text-5xl font-black text-zinc-950 focus:outline-none w-full tracking-tight placeholder:text-zinc-200"
                 autoFocus
               />
             </div>
+
+            {/* Fast Percentage Presets */}
+            {totalOwed > 0 && (
+              <div className="flex items-center justify-center gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAmount(totalOwed.toString())}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    numericAmount === totalOwed
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700'
+                  }`}
+                >
+                  Pagar total (100%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount((Math.round(totalOwed / 2)).toString())}
+                  className="px-3 py-1 rounded-full text-xs font-bold bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 transition-all"
+                >
+                  50%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount('')}
+                  className="px-2.5 py-1 rounded-full text-xs font-bold text-zinc-400 hover:text-zinc-700 transition-all"
+                >
+                  Borrar
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Payer & Receiver Pair with Avatars */}
-          <div className="flex items-center justify-between bg-zinc-50 p-2 rounded-2xl border border-zinc-100 relative shadow-inner">
-            {/* Payer */}
-            <div className="flex-1 relative bg-white border border-zinc-200 rounded-xl flex items-center p-2 sm:px-3 sm:py-2.5 shadow-sm overflow-hidden group">
-              {payerProfile?.avatar_url ? (
-                <Image src={payerProfile.avatar_url} alt="Payer" width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" unoptimized />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
-                </div>
-              )}
-              <div className="ml-2.5 overflow-hidden flex-1">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Quien paga</p>
-                <p className="text-sm font-bold text-zinc-900 truncate">
-                  {payerProfile?.full_name?.split(' ')[0] || payerProfile?.email}
-                </p>
-              </div>
-              <select
-                value={payerId}
-                onChange={(e) => setPayerId(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Arrow */}
-            <div className="w-8 flex justify-center shrink-0 z-10 mx-1">
-              <div className="bg-white border border-zinc-200 p-1.5 rounded-full shadow-sm text-zinc-400">
-                <ArrowRight className="w-4 h-4" />
-              </div>
-            </div>
-
-            {/* Receiver */}
-            <div className="flex-1 relative bg-white border border-zinc-200 rounded-xl flex items-center p-2 sm:px-3 sm:py-2.5 shadow-sm overflow-hidden group">
-              {receiverProfile?.avatar_url ? (
-                <Image src={receiverProfile.avatar_url} alt="Receiver" width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" unoptimized />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-zinc-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
-                </div>
-              )}
-              <div className="ml-2.5 overflow-hidden flex-1">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Recibe</p>
-                <p className="text-sm font-bold text-zinc-900 truncate">
-                  {receiverProfile?.full_name?.split(' ')[0] || receiverProfile?.email}
-                </p>
-              </div>
-              <select
-                value={receiverId}
-                onChange={(e) => setReceiverId(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Receiver Payment Instructions Card */}
+          {/* Receiver Instructions Card (If profile has bank / phone data) */}
           {receiverProfile?.payment_instructions && (
             <PaymentInstructionsView instructions={receiverProfile.payment_instructions} />
           )}
 
-          {/* Details / Notes / File */}
-          <div className="space-y-4 pt-2">
-            <div>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notas (Ej. Transferencia Bancolombia)"
-                className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
-              />
-            </div>
+          {/* Payment Method / Concept */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 block">
+              Método o concepto
+            </label>
             
-            <div className="flex gap-2">
-               <button
+            {/* Quick chips */}
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {PAYMENT_METHODS.map((method) => {
+                const isSelected = notes.toLowerCase().includes(method.label.toLowerCase());
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => setNotes(method.label)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      isSelected
+                        ? 'bg-zinc-900 text-white shadow-xs'
+                        : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 border border-zinc-200/50'
+                    }`}
+                  >
+                    {method.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Nota o descripción (ej. Transferencia Nequi)"
+              className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-2xl text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-2xs"
+            />
+          </div>
+
+          {/* Receipt / Proof Upload Section */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 block">
+              Comprobante de pago (Opcional)
+            </label>
+
+            {proofUrl ? (
+              <div className="flex items-center justify-between p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-emerald-200">
+                    <Image
+                      src={proofUrl}
+                      alt="Comprobante"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-emerald-950 flex items-center space-x-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Comprobante adjuntado</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-700/80 truncate">
+                      Listo para guardar con la transferencia
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-2.5 py-1.5 bg-white text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100/50 transition"
+                  >
+                    Cambiar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProofUrl('')}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition"
+                    title="Quitar"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
                 type="button"
                 disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
-                className={`flex-1 flex items-center justify-center space-x-2 py-3 border rounded-xl text-sm font-semibold transition-all shadow-sm ${proofUrl ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-zinc-50/70 hover:bg-zinc-100/80 border border-dashed border-zinc-300 rounded-2xl text-xs font-bold text-zinc-600 hover:text-zinc-900 transition-all shadow-2xs group cursor-pointer"
               >
-                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                <span>{proofUrl ? 'Cambiar comprobante' : 'Adjuntar comprobante'}</span>
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                ) : (
+                  <Camera className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600" />
+                )}
+                <span>{isUploading ? 'Subiendo comprobante...' : 'Subir foto o captura del comprobante'}</span>
               </button>
-              {proofUrl && (
-                <button
-                  type="button"
-                  onClick={() => setProofUrl('')}
-                  className="px-4 py-3 bg-white border border-zinc-200 text-rose-600 hover:bg-rose-50 rounded-xl text-sm font-semibold shadow-sm transition-all"
-                >
-                  Quitar
-                </button>
-              )}
-            </div>
+            )}
+
             <input
               ref={fileInputRef}
               type="file"
@@ -451,17 +651,21 @@ export function SettleDebtModal({
 
           {/* Multi-group Distribution Breakdown Preview */}
           {!isLockedToGroup && distributionPreview.length > 0 && (
-            <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-4 space-y-2">
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                Distribución estimada por grupo:
-              </p>
+            <div className="bg-zinc-50/80 border border-zinc-200/70 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-center space-x-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+                <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Distribución del abono entre tus grupos:</span>
+              </div>
               <div className="space-y-1.5">
                 {distributionPreview.map((item, idx) => (
-                  <div key={`dist-${idx}`} className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-700 font-medium">{item.groupName}</span>
-                    <span className="font-bold text-emerald-700">
+                  <div
+                    key={`dist-${idx}`}
+                    className="flex items-center justify-between text-xs bg-white p-2.5 rounded-xl border border-zinc-200/60 shadow-2xs"
+                  >
+                    <div className="font-semibold text-zinc-800">{item.groupName}</div>
+                    <div className="font-extrabold text-emerald-700">
                       {formatCurrency(item.allocated, item.currency)}
-                    </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -469,25 +673,38 @@ export function SettleDebtModal({
           )}
         </form>
 
-        {/* Footer Actions */}
-        <div className="p-5 sm:px-6 border-t border-zinc-100 bg-zinc-50/80 flex items-center justify-between rounded-b-[24px]">
+        {/* Modal Footer */}
+        <div className="p-4 sm:px-6 border-t border-zinc-100 bg-zinc-50/90 flex items-center justify-between shrink-0">
           {isEditing ? (
-             <button
+            <button
               type="button"
               onClick={handleDelete}
               disabled={isDeleting || isSubmitting}
-              className="p-3 rounded-xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              className="p-3 rounded-2xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200"
+              title="Eliminar este pago"
             >
               {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
             </button>
-          ) : <div />}
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 transition"
+            >
+              Cancelar
+            </button>
+          )}
 
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || isUploading || numericAmount <= 0}
-            className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer ml-auto"
+            className="px-6 sm:px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold rounded-2xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer ml-auto"
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Check className="w-4 h-4 mr-1.5" />
+            )}
             <span>{isEditing ? 'Guardar Cambios' : 'Confirmar Pago'}</span>
           </button>
         </div>

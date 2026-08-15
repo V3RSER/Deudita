@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
@@ -27,6 +28,7 @@ interface EditGroupModalProps {
   isOpen: boolean;
   group: Group;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
 const CATEGORY_OPTIONS: Array<{
@@ -46,8 +48,8 @@ const CATEGORY_OPTIONS: Array<{
   { id: 'other', label: 'Otros', icon: Folder, bgColor: 'bg-slate-50', textColor: 'text-slate-700' },
 ];
 
-export function EditGroupModal({ isOpen, group, onClose }: EditGroupModalProps) {
-  const { updateGroup } = useExpense();
+export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupModalProps) {
+  const { updateGroup, deleteGroup } = useExpense();
 
   const [name, setName] = useState(group.name);
   const [category, setCategory] = useState<GroupCategory>(group.category || 'home');

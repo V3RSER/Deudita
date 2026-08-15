@@ -18,15 +18,20 @@ import {
   Sparkles,
   Pencil,
   FileText,
+  Settings,
+  Folder,
+  ArrowRight,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription } from '@/lib/group-utils';
-import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { getGroupCategoryLabel } from '@/lib/group-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { EditGroupModal } from '@/components/EditGroupModal';
+import { GroupSettingsModal } from '@/components/GroupSettingsModal';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface GroupDetailProps {
   group: Group;
@@ -97,12 +102,15 @@ export function GroupDetail({
   onOpenSettleModal,
   onOpenAddMember,
 }: GroupDetailProps) {
-  const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment } = useExpense();
+  const { currentProfile, expenses, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment, deleteGroup } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [selectedExpenseForModal, setSelectedExpenseForModal] = useState<Expense | null>(null);
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
@@ -129,6 +137,19 @@ export function GroupDetail({
   const groupPairwise = calculatePairwiseBalances(expenses, payments, profiles, group.id);
 
   const isSoloMember = memberProfiles.length <= 1;
+
+  const handleDeleteGroup = async () => {
+    setIsDeletingGroup(true);
+    try {
+      await deleteGroup(group.id);
+      setIsDeleteModalOpen(false);
+      onBack();
+    } catch (err: unknown) {
+      console.error('Error al eliminar grupo:', err);
+    } finally {
+      setIsDeletingGroup(false);
+    }
+  };
 
   const handleShareOrCopyLink = async () => {
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -178,47 +199,74 @@ export function GroupDetail({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={group.name}
-        icon={groupImageUrl ? (
+      <div className="relative w-full h-56 sm:h-64 rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group">
+        {groupImageUrl ? (
           <Image
             src={groupImageUrl}
             alt={group.name}
-            width={32}
-            height={32}
-            className="rounded-lg object-cover"
+            fill
+            className="object-cover opacity-60"
             unoptimized
             referrerPolicy="no-referrer"
           />
         ) : (
-          <Users className="w-5 h-5 text-zinc-600" />
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 opacity-90" />
         )}
-        actions={
-          <>
-            <button
-              onClick={() => setIsEditGroupModalOpen(true)}
-              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center shrink-0 min-h-[40px] cursor-pointer"
-              title="Editar grupo"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/30 to-transparent" />
+        
+        {/* Top actions */}
+        <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+          <button
+            onClick={onBack}
+            className="px-3 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white text-sm font-semibold transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
+          >
+            Volver
+          </button>
+          <button
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="p-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
+            title="Configuración del grupo"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Bottom info & actions */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center space-x-1.5 px-2 py-1 rounded-md bg-white/20 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold mb-1.5 ring-1 ring-white/10">
+              <Folder className="w-3.5 h-3.5" />
+              <span>{getGroupCategoryLabel(group.category)}</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight drop-shadow-md">
+              {group.name}
+            </h1>
+            {getCleanGroupDescription(group.description) && (
+              <p className="text-white/80 text-sm max-w-xl line-clamp-2">
+                {getCleanGroupDescription(group.description)}
+              </p>
+            )}
+          </div>
+          
+          {/* Actions: Settle and New Expense */}
+          <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
             <button
               onClick={() => onOpenSettleModal(group.id)}
-              className="flex items-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm ring-1 ring-white/20"
             >
               <Wallet className="w-4 h-4" />
               <span>Saldar</span>
             </button>
             <button
               onClick={() => onOpenNewExpense(group.id)}
-              className="flex items-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo gasto</span>
             </button>
-          </>
-        }
-      />
+          </div>
+        </div>
+      </div>
 
       {/* SOLO MEMBER STRATEGY */}
       {isSoloMember && (
@@ -355,40 +403,91 @@ export function GroupDetail({
       {activeTab === 'balances' && (
         <div className="space-y-6">
           {groupPairwise.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 ring-1 ring-zinc-200 text-center space-y-2">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-              <h4 className="font-semibold text-zinc-900 text-base">¡Todas las cuentas están al día!</h4>
-              <p className="text-zinc-500 text-xs">Nadie tiene deudas pendientes en este grupo.</p>
+            <div className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <h4 className="font-extrabold text-zinc-900 text-base">¡Todas las cuentas están al día!</h4>
+              <p className="text-zinc-500 text-xs max-w-sm mx-auto">
+                No hay deudas pendientes entre los integrantes de este grupo.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {groupPairwise.map((p, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white rounded-2xl p-5 ring-1 ring-zinc-200 shadow-sm flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-zinc-800 text-white flex items-center justify-center text-sm font-bold shrink-0">
-                      {p.debtor.full_name ? p.debtor.full_name.charAt(0).toUpperCase() : 'U'}
-                    </div>
-                    <div className="text-sm">
-                      <p className="font-medium text-zinc-900">
-                        {p.debtor.full_name} <span className="text-zinc-400 font-normal">le debe a</span> {p.creditor.full_name}
-                      </p>
-                      <p className="text-base font-semibold text-emerald-600 mt-0.5">
-                        {formatCurrency(p.amount)}
-                      </p>
-                    </div>
-                  </div>
+              {groupPairwise.map((p, idx) => {
+                const isMyDebt = p.debtor.id === currentProfile?.id;
+                const isOwedToMe = p.creditor.id === currentProfile?.id;
 
-                  <button
-                    onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-4 py-2 rounded-full text-xs transition-all active:scale-95"
+                return (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-3xl p-5 border border-zinc-200/80 shadow-2xs hover:shadow-md hover:border-zinc-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
-                    Saldar
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center space-x-3.5 min-w-0">
+                      <div className="flex items-center -space-x-2 shrink-0">
+                        {p.debtor.avatar_url ? (
+                          <Image
+                            src={p.debtor.avatar_url}
+                            alt="Debtor"
+                            width={40}
+                            height={40}
+                            className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                            {p.debtor.full_name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        )}
+                        {p.creditor.avatar_url ? (
+                          <Image
+                            src={p.creditor.avatar_url}
+                            alt="Creditor"
+                            width={40}
+                            height={40}
+                            className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                            {p.creditor.full_name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
+                          <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
+                            {p.debtor.full_name?.split(' ')[0] || 'Integrante'}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
+                            {p.creditor.full_name?.split(' ')[0] || 'Integrante'}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isMyDebt
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                              : isOwedToMe
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+                              : 'bg-zinc-100 text-zinc-700'
+                          }`}>
+                            {formatCurrency(p.amount, group.currency || 'COP')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center"
+                    >
+                      Saldar
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -503,6 +602,41 @@ export function GroupDetail({
           onClose={() => setIsEditGroupModalOpen(false)}
         />
       )}
+
+      {/* Group Settings Menu */}
+      <GroupSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onEditGroup={() => {
+          setIsSettingsModalOpen(false);
+          setIsEditGroupModalOpen(true);
+        }}
+        onAddMembers={() => {
+          setIsSettingsModalOpen(false);
+          onOpenAddMember(group.id);
+        }}
+        onInviteLink={() => {
+          setIsSettingsModalOpen(false);
+          onOpenAddMember(group.id);
+        }}
+        onDeleteGroup={() => {
+          setIsSettingsModalOpen(false);
+          setIsDeleteModalOpen(true);
+        }}
+      />
+
+      {/* Delete Group Confirm */}
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteGroup}
+        title="¿Eliminar grupo?"
+        description="Esta acción no se puede deshacer. Todos los gastos y pagos registrados en este grupo serán eliminados de forma permanente."
+        confirmText="Sí, eliminar"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={isDeletingGroup}
+      />
     </div>
   );
 }

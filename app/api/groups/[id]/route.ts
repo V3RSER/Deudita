@@ -76,3 +76,50 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    // Await params here as required in Next.js 15
+    const paramsResolved = await params;
+    const groupId = paramsResolved.id;
+
+    if (authError || !user) {
+      console.error('[API DELETE /api/groups/:id] Unauthorized user:', authError);
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    // Verify ownership
+    const { data: group, error: fetchErr } = await supabase
+      .from('groups')
+      .select('owner_id')
+      .eq('id', groupId)
+      .single();
+
+    if (fetchErr || !group) {
+      return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 });
+    }
+
+    if (group.owner_id !== user.id) {
+      return NextResponse.json({ error: 'Solo el creador del grupo puede eliminarlo' }, { status: 403 });
+    }
+
+    const { error: deleteErr } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId);
+
+    if (deleteErr) {
+      console.error('[API DELETE /api/groups/:id] Error deleting group:', deleteErr);
+      return NextResponse.json({ error: deleteErr.message ?? 'Error al eliminar el grupo' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    console.error('[API DELETE /api/groups/:id] Unhandled error:', err);
+    const message = err instanceof Error ? err.message : 'Error interno al eliminar el grupo';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

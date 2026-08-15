@@ -156,7 +156,7 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                 className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-4 relative overflow-hidden active:scale-[0.98]"
               >
                 {/* Square rounded image or Icon */}
-                <div className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? (CATEGORY_STYLES[group.category]?.bg || 'bg-zinc-50') : ''}`}>
+                <div className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? (CATEGORY_STYLES[group.category]?.bg || 'bg-zinc-50') : ''}`}>
                   {groupImg ? (
                     <Image src={groupImg} alt={group.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" unoptimized referrerPolicy="no-referrer" />
                   ) : (
