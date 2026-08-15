@@ -18,7 +18,7 @@ alter table public.expense_audit_logs enable row level security;
 
 -- Policies for expense_audit_logs
 -- Only members of the group can view the audit logs for an expense in that group.
-create policy "Members can view expense audit logs in their groups" on public.expense_audit_logs
+create policy "select_expense_audit_logs" on public.expense_audit_logs
   for select
   using (
     exists (
@@ -29,7 +29,7 @@ create policy "Members can view expense audit logs in their groups" on public.ex
     )
   );
 
-create policy "Users can create audit logs for their groups" on public.expense_audit_logs
+create policy "insert_expense_audit_logs" on public.expense_audit_logs
   for insert
   with check (
     exists (
