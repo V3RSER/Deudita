@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
@@ -62,16 +62,33 @@ export function MemberDetailModal({
   const [showConfirmDeleteMember, setShowConfirmDeleteMember] = useState(false);
   const [showConfirmDeleteFriend, setShowConfirmDeleteFriend] = useState(false);
 
-  const [prevProfileId, setPrevProfileId] = useState<string | null>(null);
+  const prevIsOpenRef = useRef(false);
+  const prevProfileIdRef = useRef<string | null>(null);
 
-  if (memberProfile && memberProfile.id !== prevProfileId) {
-    setPrevProfileId(memberProfile.id);
-    setName(memberProfile.full_name ?? '');
-    const rawEmail = memberProfile.email ?? '';
-    setEmail(isTempEmail(rawEmail) ? '' : rawEmail);
-    setSuccessMsg(null);
-    setErrorMsg(null);
-  }
+  useEffect(() => {
+    if (!isOpen || !memberProfile) {
+      prevIsOpenRef.current = false;
+      prevProfileIdRef.current = null;
+      return;
+    }
+
+    const isOpening = !prevIsOpenRef.current;
+    const isProfileChanged = memberProfile.id !== prevProfileIdRef.current;
+
+    if (isOpening || isProfileChanged) {
+      prevIsOpenRef.current = true;
+      prevProfileIdRef.current = memberProfile.id;
+      setName(memberProfile.full_name ?? '');
+      const rawEmail = memberProfile.email ?? '';
+      setEmail(isTempEmail(rawEmail) ? '' : rawEmail);
+      setSuccessMsg(null);
+      setErrorMsg(null);
+      setCopied(false);
+      setIsSubmitting(false);
+      setShowConfirmDeleteMember(false);
+      setShowConfirmDeleteFriend(false);
+    }
+  }, [isOpen, memberProfile]);
 
   if (!isOpen || !memberProfile) return null;
 

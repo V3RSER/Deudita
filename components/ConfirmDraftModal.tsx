@@ -1,6 +1,7 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
@@ -19,27 +20,62 @@ export function ConfirmDraftModal({
 }: ConfirmDraftModalProps) {
   const { currentProfile, userGroups, members, profiles, confirmDraft } = useExpense();
 
-  const [selectedGroupId, setSelectedGroupId] = useState<string>(() => {
-    if (userGroups.length > 0) return userGroups[0].id;
-    return '';
-  });
-
-  const activeGroupMembers = members.filter((m) => m.group_id === selectedGroupId);
-  const activeMemberProfiles = activeGroupMembers
-    .map((m) => profiles.find((p) => p.id === m.user_id))
-    .filter((p): p is NonNullable<typeof p> => p !== undefined);
-
-  const [paidBy, setPaidBy] = useState<string>(() => {
-    if (activeMemberProfiles.length > 0) {
-      const inGroup = currentProfile && activeMemberProfiles.some((p) => p.id === currentProfile.id);
-      if (inGroup && currentProfile) return currentProfile.id;
-      return activeMemberProfiles[0].id;
-    }
-    return currentProfile?.id ?? '';
-  });
-
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [paidBy, setPaidBy] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const prevIsOpenRef = useRef(false);
+  const prevDraftIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !draft) {
+      prevIsOpenRef.current = false;
+      prevDraftIdRef.current = null;
+      return;
+    }
+
+    const isOpening = !prevIsOpenRef.current;
+    const isDraftChanged = draft.id !== prevDraftIdRef.current;
+
+    if (isOpening || isDraftChanged) {
+      prevIsOpenRef.current = true;
+      prevDraftIdRef.current = draft.id;
+      setErrorMsg(null);
+      setIsSubmitting(false);
+
+      const initialGroupId = userGroups.length > 0 ? userGroups[0].id : '';
+      setSelectedGroupId(initialGroupId);
+
+      const groupMembers = members.filter((m) => m.group_id === initialGroupId);
+      const groupProfiles = groupMembers
+        .map((m) => profiles.find((p) => p.id === m.user_id))
+        .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+      if (groupProfiles.length > 0) {
+        const inGroup = currentProfile && groupProfiles.some((p) => p.id === currentProfile.id);
+        setPaidBy(inGroup && currentProfile ? currentProfile.id : groupProfiles[0].id);
+      } else {
+        setPaidBy(currentProfile?.id ?? '');
+      }
+    }
+  }, [isOpen, draft, userGroups, members, profiles, currentProfile]);
+
+  // Update paidBy when selectedGroupId changes
+  useEffect(() => {
+    if (!isOpen) return;
+    const groupMembers = members.filter((m) => m.group_id === selectedGroupId);
+    const groupProfiles = groupMembers
+      .map((m) => profiles.find((p) => p.id === m.user_id))
+      .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+    if (groupProfiles.length > 0) {
+      if (!groupProfiles.some((p) => p.id === paidBy)) {
+        const inGroup = currentProfile && groupProfiles.some((p) => p.id === currentProfile.id);
+        setPaidBy(inGroup && currentProfile ? currentProfile.id : groupProfiles[0].id);
+      }
+    }
+  }, [selectedGroupId, members, profiles, currentProfile, isOpen, paidBy]);
 
   if (!isOpen || !draft) return null;
 

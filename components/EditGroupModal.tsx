@@ -70,6 +70,8 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
       setSelectedCurrency(group.currency || 'COP');
       setGroupImageUrl(getGroupImage(group) || '');
       setErrorMessage(null);
+      setIsSubmitting(false);
+      setIsUploading(false);
     }
   }, [isOpen, group]);
 

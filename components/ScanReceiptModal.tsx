@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { X, ScanLine, Sparkles, Upload, FileText, Loader2 } from 'lucide-react';
 
@@ -18,6 +18,24 @@ export function ScanReceiptModal({ isOpen, onClose }: ScanReceiptModalProps) {
   const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const prevIsOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+      setInputMode('text');
+      setEmailText('');
+      setSelectedImage(null);
+      setImageMimeType('image/jpeg');
+      setLoading(false);
+      setError(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

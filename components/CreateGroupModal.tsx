@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useExpense } from '@/lib/expense-context';
@@ -63,6 +63,27 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevIsOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+      setName('');
+      setCategory('friends');
+      setSelectedCurrency(currentProfile?.currency || 'COP');
+      setGroupImageUrl('');
+      setSelectedMemberIds([]);
+      setNewFriendName('');
+      setIsAddingNewFriend(false);
+      setIsUploading(false);
+      setIsSubmitting(false);
+      setErrorMessage(null);
+    }
+  }, [isOpen, currentProfile]);
 
   // Available friend profiles (excluding current user)
   const availableFriends = useMemo(() => profiles.filter((p) => p.id && p.id !== currentProfile?.id), [profiles, currentProfile]);

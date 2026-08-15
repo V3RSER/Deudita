@@ -65,12 +65,27 @@ export function SettleDebtModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [prevIsOpen, setPrevIsOpen] = useState(false);
+  const prevIsOpenRef = useRef(false);
+  const prevPaymentIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isOpen && !prevIsOpen) {
-      setPrevIsOpen(true);
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      prevPaymentIdRef.current = null;
+      return;
+    }
+
+    const currentPaymentId = paymentToEdit ? paymentToEdit.id : null;
+    const isOpening = !prevIsOpenRef.current;
+    const isPaymentChanged = currentPaymentId !== prevPaymentIdRef.current;
+
+    if (isOpening || isPaymentChanged) {
+      prevIsOpenRef.current = true;
+      prevPaymentIdRef.current = currentPaymentId;
       setErrorMsg(null);
+      setIsSubmitting(false);
+      setIsUploading(false);
+      setIsDeleting(false);
 
       if (paymentToEdit) {
         setGroupId(paymentToEdit.group_id);
@@ -93,10 +108,8 @@ export function SettleDebtModal({
         setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
         setNotes('Transferencia');
       }
-    } else if (!isOpen && prevIsOpen) {
-      setPrevIsOpen(false);
     }
-  }, [isOpen, prevIsOpen, paymentToEdit, defaultGroupId, userGroups, defaultDebtorId, currentProfile?.id, profiles, defaultCreditorId, defaultAmount]);
+  }, [isOpen, paymentToEdit, defaultGroupId, userGroups, defaultDebtorId, currentProfile?.id, profiles, defaultCreditorId, defaultAmount]);
 
   const isEditing = Boolean(paymentToEdit);
   const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;

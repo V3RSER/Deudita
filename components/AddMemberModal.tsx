@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
@@ -29,6 +29,34 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   const [copied, setCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const prevIsOpenRef = useRef(false);
+  const prevGroupIdRef = useRef<string | undefined>(groupId);
+
+  useEffect(() => {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+    const isOpening = !prevIsOpenRef.current;
+    const isGroupChanged = groupId !== prevGroupIdRef.current;
+
+    if (isOpening || isGroupChanged) {
+      prevIsOpenRef.current = true;
+      prevGroupIdRef.current = groupId;
+      setStep(1);
+      setSelectedGroupId(groupId ?? userGroups[0]?.id ?? '');
+      setName('');
+      setAddedMemberName('');
+      setAddedMemberId(null);
+      setEmail('');
+      setGeneratedLink(null);
+      setCopied(false);
+      setSuccessMsg(null);
+      setErrorMsg(null);
+      setIsSubmitting(false);
+    }
+  }, [isOpen, groupId, userGroups]);
 
   const activeGroupId = groupId || selectedGroupId || (userGroups[0] ? userGroups[0].id : '');
 

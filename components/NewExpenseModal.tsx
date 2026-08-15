@@ -82,93 +82,129 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     return profiles.filter(p => groupMemberIds.includes(p.id));
   }, [groupId, members, profiles, currentProfile]);
 
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const prevIsOpenRef = useRef(false);
+  const prevExpenseIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setHasInitialized(false);
+      prevIsOpenRef.current = false;
+      prevExpenseIdRef.current = null;
       return;
     }
-    if (hasInitialized) return;
 
-    if (expenseToEdit) {
-      setMode(expenseToEdit.items && expenseToEdit.items.length > 0 ? 'itemized' : 'quick');
-      setAmount(String(expenseToEdit.total_amount || ''));
-      setDescription(expenseToEdit.description);
+    const currentExpenseId = expenseToEdit ? expenseToEdit.id : null;
+    const isOpening = !prevIsOpenRef.current;
+    const isExpenseChanged = currentExpenseId !== prevExpenseIdRef.current;
 
-      let foundSub = 'General';
-      if (expenseToEdit.category) {
-        for (const [main, subs] of Object.entries(CATEGORY_GROUPS)) {
-          if (subs.includes(expenseToEdit.category)) {
-            foundSub = expenseToEdit.category;
-            break;
-          }
-        }
-        if (foundSub === 'General' && expenseToEdit.category !== 'General') foundSub = expenseToEdit.category;
-      }
-      setSubCategory(foundSub);
+    if (isOpening || isExpenseChanged) {
+      prevIsOpenRef.current = true;
+      prevExpenseIdRef.current = currentExpenseId;
 
-      setDate(expenseToEdit.expense_date);
-      setPaidById(expenseToEdit.paid_by);
-      setGroupId(expenseToEdit.group_id || 'none');
-      setReceiptUrl(expenseToEdit.receipt_url || '');
-      setNotes(expenseToEdit.notes || '');
-      setShowNoteInput(!!expenseToEdit.notes);
-      if (expenseToEdit.notes || expenseToEdit.receipt_url) setShowAdditional(true);
-
-      if (expenseToEdit.items && expenseToEdit.items.length > 0) {
-        setItems(expenseToEdit.items.map((i, idx) => ({
-          id: idx + 1,
-          desc: i.description,
-          quantity: '1',
-          amount: String(i.amount),
-          amountType: 'total',
-          assignedTo: [] // We don't restore exact complex splits per item in edit mode yet for simplicity
-        })));
-      }
-
-      if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
-        const selected = expenseToEdit.splits.map(s => s.user_id);
-        setSelectedMembers(selected);
-        const newSplits: Record<string, any> = {};
-        let isExact = false;
-        const expected = (expenseToEdit.total_amount || 0) / selected.length;
-        expenseToEdit.splits.forEach(s => {
-          newSplits[s.user_id] = { exact: String(s.amount_owed), pct: '', shares: '1' };
-          if (Math.abs(s.amount_owed - expected) > 0.05) isExact = true;
-        });
-        setSplits(newSplits);
-        setSplitType(expenseToEdit.items && expenseToEdit.items.length > 0 ? 'itemized' : (isExact ? 'exact' : 'equal'));
-      }
-    } else {
-      setMode('quick');
-      setAmount('');
-      setDescription('');
-      setSubCategory('Supermercado');
-      setDate(new Date().toISOString().split('T')[0]);
-      setGroupId(defaultGroupId && userGroups.some(g => g.id === defaultGroupId) ? defaultGroupId : (userGroups[0]?.id || 'none'));
-      setReceiptUrl('');
-      setNotes('');
-      setShowAdditional(false);
-      setShowNoteInput(false);
-      setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
-      setSplitType('equal');
+      // Always reset view to step 1
       setStep(1);
-    }
-    setError(null);
-    setHasInitialized(true);
-  }, [isOpen, hasInitialized, expenseToEdit, defaultGroupId, userGroups]);
+      setError(null);
+      setIsSubmitting(false);
+      setIsItemizedVerticalView(false);
+      setExpandedParticipants([]);
+      setExpandedItems([1]);
 
+      if (expenseToEdit) {
+        const isItemized = Boolean(expenseToEdit.items && expenseToEdit.items.length > 0);
+        setMode(isItemized ? 'itemized' : 'quick');
+        setAmount(expenseToEdit.total_amount ? String(expenseToEdit.total_amount) : '');
+        setDescription(expenseToEdit.description || '');
+
+        let foundSub = 'General';
+        if (expenseToEdit.category) {
+          for (const [main, subs] of Object.entries(CATEGORY_GROUPS)) {
+            if (subs.includes(expenseToEdit.category)) {
+              foundSub = expenseToEdit.category;
+              break;
+            }
+          }
+          if (foundSub === 'General' && expenseToEdit.category !== 'General') foundSub = expenseToEdit.category;
+        }
+        setSubCategory(foundSub);
+
+        setDate(expenseToEdit.expense_date || new Date().toISOString().split('T')[0]);
+        setPaidById(expenseToEdit.paid_by || (currentProfile?.id ?? ''));
+        const expGroupId = expenseToEdit.group_id || 'none';
+        setGroupId(expGroupId);
+        setReceiptUrl(expenseToEdit.receipt_url || '');
+        setNotes(expenseToEdit.notes || '');
+        setShowNoteInput(Boolean(expenseToEdit.notes));
+        setShowAdditional(Boolean(expenseToEdit.notes || expenseToEdit.receipt_url));
+
+        if (isItemized && expenseToEdit.items && expenseToEdit.items.length > 0) {
+          setItems(expenseToEdit.items.map((i, idx) => ({
+            id: idx + 1,
+            desc: i.description ? i.description.replace(/^\d+x\s*/, '') : '',
+            quantity: i.description?.match(/^(\d+)x\s*/)?.[1] || '1',
+            amount: String(i.amount || ''),
+            amountType: 'total',
+            assignedTo: []
+          })));
+        } else {
+          setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
+        }
+
+        if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
+          const selected = expenseToEdit.splits.map(s => s.user_id);
+          setSelectedMembers(selected);
+          const newSplits: Record<string, { exact: string; pct: string; shares: string }> = {};
+          let isExact = false;
+          const expected = (expenseToEdit.total_amount || 0) / (selected.length || 1);
+          expenseToEdit.splits.forEach(s => {
+            newSplits[s.user_id] = { exact: String(s.amount_owed || ''), pct: '', shares: '1' };
+            if (Math.abs(s.amount_owed - expected) > 0.05) isExact = true;
+          });
+          setSplits(newSplits);
+          setSplitType(isItemized ? 'itemized' : (isExact ? 'exact' : 'equal'));
+        } else {
+          setSplits({});
+          setSplitType(isItemized ? 'itemized' : 'equal');
+        }
+      } else {
+        // Reset to brand new expense form
+        setMode('quick');
+        setAmount('');
+        setDescription('');
+        setSubCategory('Supermercado');
+        setDate(new Date().toISOString().split('T')[0]);
+
+        const initialGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
+          ? defaultGroupId
+          : (userGroups[0]?.id || 'none');
+        setGroupId(initialGroupId);
+
+        setReceiptUrl('');
+        setNotes('');
+        setShowAdditional(false);
+        setShowNoteInput(false);
+        setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
+        setSplitType('equal');
+        setSplits({});
+      }
+    }
+  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile]);
+
+  // Sync paidById and selectedMembers when changing group in new expense mode
   useEffect(() => {
     if (!isOpen || expenseToEdit) return;
     if (activeProfiles.length > 0) {
-      if (!activeProfiles.find(p => p.id === paidById)) {
-        setPaidById(currentProfile && activeProfiles.find(p => p.id === currentProfile.id) ? currentProfile.id : activeProfiles[0].id);
+      if (!activeProfiles.some(p => p.id === paidById)) {
+        const defaultPayer = currentProfile && activeProfiles.some(p => p.id === currentProfile.id)
+          ? currentProfile.id
+          : activeProfiles[0].id;
+        setPaidById(defaultPayer);
       }
       setSelectedMembers(activeProfiles.map(p => p.id));
+    } else {
+      if (currentProfile) setPaidById(currentProfile.id);
+      setSelectedMembers(currentProfile ? [currentProfile.id] : []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProfiles, isOpen, expenseToEdit]);
+  }, [groupId, activeProfiles.length, isOpen, expenseToEdit]);
 
   const toFraction = (decimal: number) => {
     if (Number.isInteger(decimal)) return decimal.toString();

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { X, UserPlus, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 
@@ -16,6 +16,23 @@ export function AddFriendModal({ isOpen, onClose }: AddFriendModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const prevIsOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+      setFullName('');
+      setEmail('');
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

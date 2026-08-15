@@ -47,20 +47,26 @@ export function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalPr
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevIsOpenRef = useRef(false);
 
-  // Sync state when modal opens or profile changes
-  const [prevProfile, setPrevProfile] = useState(currentProfile);
-  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-
-  if ((currentProfile !== prevProfile || isOpen !== prevIsOpen) && currentProfile && isOpen) {
-    setPrevProfile(currentProfile);
-    setPrevIsOpen(isOpen);
-    setFullName(currentProfile.full_name ?? '');
-    setTimezone(currentProfile.timezone ?? 'America/Mexico_City');
-    setSelectedCurrency(currentProfile.currency ?? 'COP');
-    setPaymentInstructions(currentProfile.payment_instructions ?? '');
-    setAvatarUrl(currentProfile.avatar_url ?? '');
-  }
+  useEffect(() => {
+    if (!isOpen || !currentProfile) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+      setFullName(currentProfile.full_name ?? '');
+      setTimezone(currentProfile.timezone ?? 'America/Mexico_City');
+      setSelectedCurrency(currentProfile.currency ?? 'COP');
+      setPaymentInstructions(currentProfile.payment_instructions ?? '');
+      setAvatarUrl(currentProfile.avatar_url ?? '');
+      setErrorMsg(null);
+      setSuccessMsg(null);
+      setIsSaving(false);
+      setIsUploading(false);
+    }
+  }, [isOpen, currentProfile]);
 
   if (!isOpen || !currentProfile) return null;
 
