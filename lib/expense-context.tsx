@@ -144,8 +144,19 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await res.json();
-    await reloadFromSupabase();
-    return data.profile as Profile;
+    const newProfile = data.profile as Profile;
+    
+    // Actualización optimista de estado
+    setProfiles((prev) => {
+      if (!prev.find((p) => p.id === newProfile.id)) {
+        return [...prev, newProfile];
+      }
+      return prev;
+    });
+
+    // Sincronizar en segundo plano
+    void reloadFromSupabase();
+    return newProfile;
   };
 
   const createGroup = async (

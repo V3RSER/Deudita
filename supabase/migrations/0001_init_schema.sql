@@ -41,6 +41,7 @@ alter table public.profiles alter column email drop not null;
 alter table public.profiles drop constraint if exists profiles_id_fkey;
 
 alter table public.profiles add column if not exists is_temp boolean not null default false;
+alter table public.profiles add column if not exists created_by uuid references public.profiles(id);
 
 -- ----------------------------------------------------------------------------
 -- 2) GRUPOS Y MEMBRESÍA
@@ -400,6 +401,7 @@ drop policy if exists "update_profiles" on public.profiles;
 create policy "update_profiles" on public.profiles
   for update using (
     auth.uid() = id
+    or created_by = auth.uid()
     or (
       is_temp = true
       and exists (
@@ -414,6 +416,7 @@ drop policy if exists "delete_profiles" on public.profiles;
 create policy "delete_profiles" on public.profiles
   for delete using (
     auth.uid() = id
+    or created_by = auth.uid()
     or (
       is_temp = true
       and exists (
