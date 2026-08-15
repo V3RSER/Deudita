@@ -202,13 +202,21 @@ export function GenericExpenseList({
                 return (
                   <div
                     key={`exp-${exp.id}`}
-                    className={`transition-colors cursor-pointer group flex flex-col relative ${isExpanded ? 'bg-zinc-50/80' : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'}`}
-                    onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
+                    className={`flex flex-col relative transition-colors ${
+                      isExpanded ? 'bg-zinc-50/40' : ''
+                    }`}
                   >
                     {isExpanded && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-l" />
                     )}
-                    <div className="px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0">
+                    <div
+                      className={`px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
+                        isExpanded
+                          ? 'bg-zinc-100/70 hover:bg-zinc-200/50'
+                          : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
+                      }`}
+                      onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
+                    >
                       <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                         {/* Date Block */}
                         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs">
@@ -228,7 +236,9 @@ export function GenericExpenseList({
                         {/* Expense Name & Details */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
-                            <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm group-hover:text-emerald-700 transition-colors truncate">
+                            <h3 className={`font-semibold text-zinc-900 text-xs sm:text-sm transition-colors truncate ${
+                              !isExpanded ? 'group-hover:text-emerald-700' : ''
+                            }`}>
                               {exp.description}
                             </h3>
                             {exp.source === 'gmail' && (
@@ -305,7 +315,7 @@ export function GenericExpenseList({
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
-                      <div className="border-t border-zinc-100 bg-zinc-50/50 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="border-t border-zinc-200/70 bg-zinc-50/40 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                           {/* Participation without redundant "Pagó" badges */}
                           <div className="bg-white p-3.5 rounded-xl border border-zinc-200/70 shadow-2xs space-y-2.5">

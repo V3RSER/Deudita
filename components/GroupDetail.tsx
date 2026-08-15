@@ -795,17 +795,17 @@ export function GroupDetail({
               {activities.map((act) => {
                 const IconComponent = act.IconComponent;
                 return (
-                  <div key={act.id} className="p-3.5 sm:p-4.5 flex items-start space-x-3 hover:bg-zinc-50/70 transition-colors">
+                  <div key={act.id} className="p-3 sm:p-3.5 flex items-start space-x-3 hover:bg-zinc-50/70 transition-colors">
                     {/* User Avatar with Action icon badge */}
-                    <div className="relative shrink-0">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/90 shadow-2xs">
+                    <div className="relative shrink-0 mt-0.5">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/90 shadow-2xs">
                         {act.user?.avatar_url ? (
-                          <Image src={act.user.avatar_url} alt={act.userName} width={40} height={40} className="w-full h-full object-cover" unoptimized />
+                          <Image src={act.user.avatar_url} alt={act.userName} width={32} height={32} className="w-full h-full object-cover" unoptimized />
                         ) : (
-                          <User className="w-4 h-4 sm:w-5 sm:h-5 m-2.5 text-zinc-400" />
+                          <User className="w-4 h-4 m-2 text-zinc-400" />
                         )}
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full ${act.iconBgClass} ${act.iconTextClass} border border-white flex items-center justify-center shadow-2xs`}>
+                      <div className={`absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full ${act.iconBgClass} ${act.iconTextClass} border border-white flex items-center justify-center shadow-2xs`}>
                         <IconComponent className="w-2.5 h-2.5" />
                       </div>
                     </div>
@@ -813,40 +813,40 @@ export function GroupDetail({
                     {/* Activity Content */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs sm:text-sm text-zinc-800 leading-snug">
-                            <strong className="font-bold text-zinc-900">{act.userName}</strong>{' '}
-                            <span className="text-zinc-600">{act.titleAction}</span>{' '}
-                            <strong className="font-semibold text-zinc-900">{act.targetTitle}</strong>
-                          </p>
-                        </div>
-                        <div className="shrink-0 flex flex-col items-end">
+                        <p className="text-xs sm:text-sm text-zinc-800 leading-snug min-w-0">
+                          <strong className="font-semibold text-zinc-900">{act.userName}</strong>{' '}
+                          <span className="text-zinc-600">{act.titleAction}</span>{' '}
+                          <strong className="font-medium text-zinc-900">{act.targetTitle}</strong>
+                        </p>
+                        <div className="shrink-0 flex items-center space-x-1.5 self-start">
                           {act.amount !== undefined && (
                             <span className="text-xs sm:text-sm font-bold text-zinc-900">
                               {formatCurrency(act.amount, act.currency)}
                             </span>
                           )}
-                          <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold border mt-0.5 ${act.badgeClass}`}>
+                          <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold border ${act.badgeClass}`}>
                             {act.badgeLabel}
                           </span>
                         </div>
                       </div>
 
-                      {/* Detail changes list if any */}
+                      {/* Compact change badges / details */}
                       {act.changesList && act.changesList.length > 0 && (
-                        <div className="mt-2 space-y-1 bg-zinc-50 rounded-lg p-2 border border-zinc-200/60 text-[11px] text-zinc-600">
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
                           {act.changesList.map((chg, idx) => (
-                            <div key={idx} className="flex items-center space-x-1.5">
-                              <span className="w-1 h-1 rounded-full bg-zinc-400 shrink-0" />
-                              <span>{chg}</span>
-                            </div>
+                            <span
+                              key={idx}
+                              className="inline-flex items-center text-[10px] text-zinc-600 bg-zinc-100/90 px-1.5 py-0.5 rounded border border-zinc-200/60 leading-none"
+                            >
+                              {chg}
+                            </span>
                           ))}
                         </div>
                       )}
 
                       {/* Exact Date & Time */}
-                      <div className="flex items-center space-x-1.5 text-[11px] text-zinc-400 mt-1.5">
-                        <Clock className="w-3 h-3 text-zinc-400 shrink-0" />
+                      <div className="flex items-center space-x-1 text-[10px] text-zinc-400 mt-1">
+                        <Clock className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
                         <span>{formatActivityDateTime(act.timestamp)}</span>
                       </div>
                     </div>
