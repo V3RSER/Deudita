@@ -51,6 +51,7 @@ export interface GroupInvite {
   invited_by: string;
   status: 'pending' | 'accepted' | 'rejected';
   created_at: string;
+  expires_at?: string | null;
   token?: string;
   invitee_profile_id?: string | null;
   group?: Group;

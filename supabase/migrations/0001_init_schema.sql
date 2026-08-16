@@ -19,6 +19,7 @@ create table if not exists public.profiles (
   timezone text default 'America/Mexico_City',
   currency text default 'COP',
   currency_symbol text default '$',
+  payment_instructions text,
   is_temp boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -27,6 +28,7 @@ alter table public.profiles alter column email drop not null;
 alter table public.profiles drop constraint if exists profiles_id_fkey;
 alter table public.profiles add column if not exists is_temp boolean not null default false;
 alter table public.profiles add column if not exists created_by uuid references public.profiles(id);
+alter table public.profiles add column if not exists payment_instructions text;
 
 -- ----------------------------------------------------------------------------
 -- 2) GRUPOS Y MEMBRESÍA

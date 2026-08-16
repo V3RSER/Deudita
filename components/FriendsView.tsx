@@ -28,7 +28,7 @@ interface FriendsViewProps {
 import { PageHeader } from '@/components/PageHeader';
 
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
-  const { currentProfile, profiles, members, expenses, payments, userGroups, pendingInvites } = useExpense();
+  const { currentProfile, profiles, members, expenses, payments, userGroups, pendingInvites, hiddenFriendIds } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -42,8 +42,11 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
       .map((m) => m.user_id)
   );
 
+  const hiddenFriendSet = new Set(hiddenFriendIds || []);
+
   const friendProfiles = profiles.filter((p) => {
     if (!p.id || p.id === currentProfile?.id) return false;
+    if (hiddenFriendSet.has(p.id)) return false;
     const isSharedInGroup = sharedMemberUserIds.has(p.id);
     const isCreatedByMe = Boolean(p.created_by && currentProfile?.id && p.created_by === currentProfile.id);
     const isInvitedByMe = pendingInvites.some(

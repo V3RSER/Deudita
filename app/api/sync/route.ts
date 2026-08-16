@@ -127,6 +127,18 @@ export async function GET() {
       }
     }
 
+    // Attach payment_instructions from user_metadata if missing in DB record
+    if (profile) {
+      profile = {
+        ...profile,
+        payment_instructions:
+          profile.payment_instructions ?? user.user_metadata?.payment_instructions ?? '',
+      };
+      profiles = profiles.map((p) =>
+        p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions } : p
+      );
+    }
+
     // 6. Expenses
     let expenses: any[] = [];
     const expenseIdsSeen = new Set<string>();
@@ -215,6 +227,8 @@ export async function GET() {
       auditLogs = auditLogsData || [];
     }
 
+    const hiddenFriendIds: string[] = user.user_metadata?.hidden_friend_ids || [];
+
     return NextResponse.json({
       profile,
       profiles,
@@ -226,6 +240,7 @@ export async function GET() {
       notifications: notificationsData || [],
       pendingInvites,
       auditLogs,
+      hiddenFriendIds,
       isNewUser,
     });
   } catch (error: any) {

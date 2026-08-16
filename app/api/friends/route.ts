@@ -54,7 +54,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error?.message ?? 'Error al agregar el amigo' }, { status: 500 });
     }
 
-    return NextResponse.json({ profile: newProfile });
+    let targetProfile = newProfile;
+
+    // If targetProfile was previously hidden, unhide it from user_metadata
+    const currentHidden: string[] = user.user_metadata?.hidden_friend_ids || [];
+    if (targetProfile && currentHidden.includes(targetProfile.id)) {
+      const newHidden = currentHidden.filter((id) => id !== targetProfile.id);
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            ...user.user_metadata,
+            hidden_friend_ids: newHidden,
+          },
+        });
+      } catch (metaErr) {
+        console.warn('[API POST /api/friends] Warning updating user_metadata:', metaErr);
+      }
+    }
+
+    return NextResponse.json({ profile: targetProfile });
   } catch (err: unknown) {
     console.error('[API POST /api/friends] Error:', err);
     const message = err instanceof Error ? err.message : 'Error al procesar la solicitud';

@@ -540,7 +540,7 @@ export function MemberDetailModal({
         onClose={() => setShowConfirmDeleteFriend(false)}
         onConfirm={handleDeleteFriend}
         title="Eliminar Amigo"
-        description={`¿Estás seguro de que deseas eliminar a "${memberProfile.full_name}" de tu lista de amigos?`}
+        description={`¿Estás seguro de que deseas eliminar a "${memberProfile.full_name}" de tu lista de amigos? Seguirá formando parte de los grupos que compartan y se conservarán todos sus gastos.`}
         confirmText="Eliminar"
         isLoading={isSubmitting}
       />

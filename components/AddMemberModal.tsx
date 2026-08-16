@@ -19,20 +19,73 @@ import {
   Loader2,
   Users,
   CheckCircle2,
+  Clock,
+  RefreshCw,
+  Copy,
 } from 'lucide-react';
 
 interface AddMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   groupId?: string;
+  initialTab?: 'link' | 'new' | 'friends';
 }
 
-export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps) {
-  const { currentProfile, profiles, members, userGroups, addGroupInvite } = useExpense();
+function formatExpirationText(expiresAtStr?: string): string {
+  if (!expiresAtStr) return 'Válido durante 7 días';
+  const expDate = new Date(expiresAtStr);
+  if (isNaN(expDate.getTime())) return 'Válido durante 7 días';
 
-  const [activeTab, setActiveTab] = useState<'new' | 'friends'>('new');
+  const now = new Date();
+  const diffMs = expDate.getTime() - now.getTime();
+  if (diffMs <= 0) return 'Enlace caducado';
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (diffDays > 0) {
+    if (diffHours > 0) {
+      return `Expira en ${diffDays} día${diffDays > 1 ? 's' : ''} y ${diffHours}h (validez: 7 días)`;
+    }
+    return `Expira en ${diffDays} día${diffDays > 1 ? 's' : ''} (validez: 7 días)`;
+  }
+
+  if (diffHours > 0) {
+    return `Expira en ${diffHours}h ${diffMinutes}m (validez: 7 días)`;
+  }
+  return `Expira en ${diffMinutes} minutos (validez: 7 días)`;
+}
+
+export function AddMemberModal({
+  isOpen,
+  onClose,
+  groupId,
+  initialTab = 'link',
+}: AddMemberModalProps) {
+  const {
+    currentProfile,
+    profiles,
+    members,
+    userGroups,
+    addGroupInvite,
+    getGroupInviteLink,
+    regenerateGroupInviteLink,
+  } = useExpense();
+
+  const [activeTab, setActiveTab] = useState<'link' | 'new' | 'friends'>(initialTab);
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId ?? userGroups[0]?.id ?? '');
-  
+
+  // Direct link state
+  const [linkData, setLinkData] = useState<{
+    inviteUrl: string;
+    expiresAt: string;
+    token: string;
+  } | null>(null);
+  const [isLoadingLink, setIsLoadingLink] = useState(false);
+  const [isRegeneratingLink, setIsRegeneratingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   // New member inputs
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -40,7 +93,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   // Friend search
   const [friendSearch, setFriendSearch] = useState('');
 
-  // Submission state & Success result
+  // Submission state & Success result for individual add
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addedMember, setAddedMember] = useState<{
     name: string;
@@ -55,6 +108,11 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   const prevIsOpenRef = useRef(false);
   const prevGroupIdRef = useRef<string | undefined>(groupId);
 
+  const activeGroupId = groupId ?? selectedGroupId ?? (userGroups[0] ? userGroups[0].id : '');
+  const group = userGroups.find((g) => g.id === activeGroupId);
+  const groupName = group ? group.name : 'Grupo';
+
+  // Load link when activeGroupId changes or modal opens
   useEffect(() => {
     if (!isOpen) {
       prevIsOpenRef.current = false;
@@ -66,24 +124,56 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     if (isOpening || isGroupChanged) {
       prevIsOpenRef.current = true;
       prevGroupIdRef.current = groupId;
-      setActiveTab('new');
+      setActiveTab(initialTab);
       setSelectedGroupId(groupId ?? userGroups[0]?.id ?? '');
       setName('');
       setEmail('');
       setFriendSearch('');
       setAddedMember(null);
       setCopied(false);
+      setLinkCopied(false);
       setErrorMsg(null);
       setIsSubmitting(false);
+      setLinkData(null);
     }
-  }, [isOpen, groupId, userGroups]);
+  }, [isOpen, groupId, initialTab, userGroups]);
 
-  const activeGroupId = groupId ?? selectedGroupId ?? (userGroups[0] ? userGroups[0].id : '');
+  // Fetch direct invite link when on 'link' tab
+  useEffect(() => {
+    if (!isOpen || !activeGroupId || activeTab !== 'link') return;
+
+    let isMounted = true;
+    async function loadLink() {
+      try {
+        setIsLoadingLink(true);
+        setErrorMsg(null);
+        const data = await getGroupInviteLink(activeGroupId);
+        if (isMounted && data) {
+          setLinkData({
+            inviteUrl: data.inviteUrl,
+            expiresAt: data.expiresAt,
+            token: data.token,
+          });
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          const message = err instanceof Error ? err.message : 'No se pudo cargar el enlace de invitación';
+          setErrorMsg(message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingLink(false);
+        }
+      }
+    }
+
+    void loadLink();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, activeGroupId, activeTab, getGroupInviteLink]);
 
   if (!isOpen) return null;
-
-  const group = userGroups.find((g) => g.id === activeGroupId);
-  const groupName = group ? group.name : 'Grupo';
 
   // Filter friends who are NOT currently in this group
   const groupMemberUserIds = new Set(
@@ -104,10 +194,60 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     return nameMatch || emailMatch;
   });
 
+  // Handle direct link regeneration
+  const handleRegenerateLink = async () => {
+    if (!activeGroupId || isRegeneratingLink) return;
+    try {
+      setIsRegeneratingLink(true);
+      setErrorMsg(null);
+      const res = await regenerateGroupInviteLink(activeGroupId);
+      if (res) {
+        setLinkData({
+          inviteUrl: res.inviteUrl,
+          expiresAt: res.expiresAt,
+          token: res.token,
+        });
+        setLinkCopied(false);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'No se pudo generar un nuevo enlace';
+      setErrorMsg(message);
+    } finally {
+      setIsRegeneratingLink(false);
+    }
+  };
+
+  // Copy direct invite link
+  const handleCopyDirectLink = async () => {
+    if (linkData?.inviteUrl && typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(linkData.inviteUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    }
+  };
+
+  // Share direct invite link via Web Share or WhatsApp
+  const handleShareDirectLink = async () => {
+    if (!linkData?.inviteUrl) return;
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `Invitación al grupo ${groupName}`,
+          text: `¡Hola! Únete al grupo "${groupName}" en Deudita para organizar y dividir gastos:`,
+          url: linkData.inviteUrl,
+        });
+        return;
+      } catch {
+        // Dismissed or fallback
+      }
+    }
+    await handleCopyDirectLink();
+  };
+
   // Handle smart name input (if user types/pastes an email into the name field)
   const handleNameChange = (val: string) => {
     if (val.includes('@') && !email) {
-      // User entered an email in the name field
       const parts = val.trim().split('@');
       const cleanName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : '';
       setName(cleanName);
@@ -204,6 +344,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     setFriendSearch('');
     setAddedMember(null);
     setCopied(false);
+    setLinkCopied(false);
     setErrorMsg(null);
   };
 
@@ -223,7 +364,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
             </div>
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-zinc-50">
-                {addedMember ? '¡Integrante Añadido!' : 'Añadir Integrante'}
+                {addedMember ? '¡Integrante Añadido!' : 'Invitar al Grupo'}
               </h2>
               <p className="text-xs text-zinc-400">
                 Grupo <span className="font-medium text-white">{groupName}</span>
@@ -268,7 +409,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
             </div>
           )}
 
-          {/* SUCCESS STATE */}
+          {/* SUCCESS STATE FOR INDIVIDUAL ADD */}
           {addedMember ? (
             <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
               {/* Member Card */}
@@ -348,23 +489,35 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
               </div>
             </div>
           ) : (
-            /* FORM STATE */
+            /* MAIN TABS */
             <div className="space-y-4">
-              {/* Tab Selector if available friends exist */}
-              {availableFriends.length > 0 && (
-                <div className="flex bg-zinc-100 p-1 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('new')}
-                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
-                      activeTab === 'new'
-                        ? 'bg-white text-zinc-900 shadow-xs'
-                        : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Nuevo Integrante</span>
-                  </button>
+              {/* Tab Selector */}
+              <div className="flex bg-zinc-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('link')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                    activeTab === 'link'
+                      ? 'bg-white text-zinc-900 shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <LinkIcon className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Enlace de invitación</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('new')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                    activeTab === 'new'
+                      ? 'bg-white text-zinc-900 shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Nuevo integrante</span>
+                </button>
+                {availableFriends.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setActiveTab('friends')}
@@ -375,13 +528,102 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                     }`}
                   >
                     <Users className="w-3.5 h-3.5" />
-                    <span>Tus Amigos ({availableFriends.length})</span>
+                    <span>Amigos ({availableFriends.length})</span>
                   </button>
+                )}
+              </div>
+
+              {/* TAB 1: ENLACE DE INVITACIÓN (DIRECT LINK WITH 1-DAY EXPIRATION) */}
+              {activeTab === 'link' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                        Enlace de acceso directo
+                      </span>
+                      <div className="inline-flex items-center space-x-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                        <Clock className="w-3 h-3 text-emerald-600" />
+                        <span>Caducidad de 7 días</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Cualquier persona que abra este enlace podrá entrar directamente al grupo sin necesidad de registrarla previamente.
+                    </p>
+
+                    {isLoadingLink ? (
+                      <div className="py-4 flex items-center justify-center space-x-2 text-xs text-zinc-500">
+                        <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                        <span>Generando enlace de invitación...</span>
+                      </div>
+                    ) : linkData ? (
+                      <div className="space-y-3 pt-1">
+                        <div className="flex items-center bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs font-mono text-zinc-600 select-all overflow-x-auto">
+                          <span className="truncate flex-1">{linkData.inviteUrl}</span>
+                        </div>
+
+                        <div className="text-[11px] text-zinc-500 font-medium flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-zinc-400" />
+                            {formatExpirationText(linkData.expiresAt)}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleCopyDirectLink}
+                            className="w-full flex items-center justify-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white py-3 px-4 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+                          >
+                            {linkCopied ? (
+                              <>
+                                <Check className="w-4 h-4 text-emerald-400" />
+                                <span className="text-emerald-300 font-bold">¡Enlace Copiado al Portapapeles!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-4 h-4 text-zinc-300" />
+                                <span>Copiar Enlace de Invitación</span>
+                              </>
+                            )}
+                          </button>
+
+                          {typeof navigator !== 'undefined' && 'share' in navigator && (
+                            <button
+                              type="button"
+                              onClick={handleShareDirectLink}
+                              className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                            >
+                              <Share2 className="w-4 h-4 text-emerald-600" />
+                              <span>Compartir por WhatsApp u otras apps</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Regenerate link button */}
+                  <div className="flex items-center justify-between pt-1 px-1">
+                    <span className="text-[11px] text-zinc-400">
+                      ¿Necesitas renovar la validez?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRegenerateLink}
+                      disabled={isRegeneratingLink || isLoadingLink}
+                      className="inline-flex items-center space-x-1.5 text-xs font-semibold text-zinc-700 hover:text-zinc-900 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRegeneratingLink ? 'animate-spin' : ''}`} />
+                      <span>Generar nuevo enlace</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {activeTab === 'new' ? (
-                <form onSubmit={handleAddNewMember} className="space-y-4">
+              {/* TAB 2: NUEVO INTEGRANTE (INDIVIDUAL PROFILE/EMAIL) */}
+              {activeTab === 'new' && (
+                <form onSubmit={handleAddNewMember} className="space-y-4 animate-in fade-in duration-150">
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                       Nombre o Apodo *
@@ -423,7 +665,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                   <button
                     type="submit"
                     disabled={isSubmitting || !name.trim()}
-                    className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2 mt-2"
+                    className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2 mt-2 cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -443,9 +685,11 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                     )}
                   </button>
                 </form>
-              ) : (
-                /* FRIENDS TAB */
-                <div className="space-y-3">
+              )}
+
+              {/* TAB 3: FRIENDS TAB */}
+              {activeTab === 'friends' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
                   <div className="relative">
                     <input
                       type="text"
@@ -499,7 +743,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                               type="button"
                               onClick={() => handleSelectFriend(friend)}
                               disabled={isSubmitting}
-                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1 active:scale-95 disabled:opacity-50"
+                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1 active:scale-95 disabled:opacity-50 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>Añadir</span>

@@ -27,6 +27,7 @@ export default function GroupDetailPage() {
   }>({});
 
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [addMemberTab, setAddMemberTab] = useState<'link' | 'new' | 'friends'>('link');
 
   const group = groups.find((g) => g.id === groupId);
 
@@ -60,6 +61,11 @@ export default function GroupDetailPage() {
     setIsSettleOpen(true);
   };
 
+  const handleOpenAddMember = (_gId?: string, tab: 'link' | 'new' | 'friends' = 'link') => {
+    setAddMemberTab(tab);
+    setIsAddMemberOpen(true);
+  };
+
   return (
     <>
       <GroupDetail
@@ -70,7 +76,7 @@ export default function GroupDetailPage() {
         onEditPayment={handleEditPayment}
         onDeletePayment={(payId) => deletePayment(payId)}
         onOpenSettleModal={handleOpenSettleModal}
-        onOpenAddMember={() => setIsAddMemberOpen(true)}
+        onOpenAddMember={handleOpenAddMember}
       />
 
       <NewExpenseModal
@@ -101,6 +107,7 @@ export default function GroupDetailPage() {
         isOpen={isAddMemberOpen}
         onClose={() => setIsAddMemberOpen(false)}
         groupId={groupId}
+        initialTab={addMemberTab}
       />
     </>
   );

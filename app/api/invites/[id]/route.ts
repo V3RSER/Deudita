@@ -21,7 +21,7 @@ export async function GET(
 
     const { data: inviteByToken } = await db
       .from('group_invites')
-      .select('id, group_id, email, status, token, created_at, invited_by, invitee_profile_id')
+      .select('id, group_id, email, status, token, created_at, expires_at, invited_by, invitee_profile_id')
       .eq('token', inviteId)
       .maybeSingle();
 
@@ -30,20 +30,39 @@ export async function GET(
     } else {
       const { data: inviteById } = await db
         .from('group_invites')
-        .select('id, group_id, email, status, token, created_at, invited_by, invitee_profile_id')
+        .select('id, group_id, email, status, token, created_at, expires_at, invited_by, invitee_profile_id')
         .eq('id', inviteId)
         .maybeSingle();
       invite = inviteById;
     }
 
     if (!invite) {
-      return NextResponse.json({ error: 'Invitación no encontrada o expirada' }, { status: 404 });
+      return NextResponse.json({ error: 'Invitación no encontrada o no válida' }, { status: 404 });
+    }
+
+    // Calculate expiration (7 days from creation or explicit expires_at)
+    const createdAtMs = invite.created_at ? new Date(invite.created_at).getTime() : Date.now();
+    const computedExpiresAt = invite.expires_at
+      ? new Date(invite.expires_at).toISOString()
+      : new Date(createdAtMs + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const isExpired = new Date(computedExpiresAt).getTime() < Date.now();
+
+    if (isExpired) {
+      return NextResponse.json(
+        {
+          error: 'Este enlace de invitación ha caducado. Los enlaces tienen una validez de 7 días.',
+          isExpired: true,
+          expiresAt: computedExpiresAt,
+        },
+        { status: 410 }
+      );
     }
 
     // Fetch group details
     const { data: group } = await db
       .from('groups')
-      .select('id, name, category, description')
+      .select('id, name, category, description, image_url')
       .eq('id', invite.group_id)
       .maybeSingle();
 
@@ -65,6 +84,8 @@ export async function GET(
       inviteeProfile = invitee;
     }
 
+    const isGeneralLink = !invite.invitee_profile_id && !invite.email;
+
     return NextResponse.json({
       invite: {
         id: invite.id,
@@ -73,9 +94,12 @@ export async function GET(
         email: invite.email,
         inviteeProfileId: invite.invitee_profile_id,
         createdAt: invite.created_at,
+        expiresAt: computedExpiresAt,
+        isExpired: false,
+        isGeneralLink,
       },
-      group: group || { name: 'Grupo' },
-      inviter: inviter || { full_name: 'Un integrante' },
+      group: group ?? { name: 'Grupo' },
+      inviter: inviter ?? { full_name: 'Un integrante' },
       invitee: inviteeProfile,
     });
   } catch (err: unknown) {

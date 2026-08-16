@@ -22,72 +22,77 @@ export async function DELETE(
 
     const db = supabase;
 
-    // 1. Get all group IDs where current user is a member or owner
-    const { data: userMemberships } = await db
+    // IMPORTANT: Deleting a friend only removes them from the 1:1 friends list.
+    // It MUST NEVER remove the user from group memberships (group_members) or delete group expenses/balances!
+
+    // Check if the friend is part of any group memberships
+    const { data: friendMemberships } = await db
       .from('group_members')
       .select('group_id')
-      .eq('user_id', user.id);
+      .eq('user_id', friendId);
 
-    const { data: userOwnedGroups } = await db
-      .from('groups')
+    const hasGroupMemberships = Boolean(friendMemberships && friendMemberships.length > 0);
+
+    // Check if friend has any associated expense splits or payments
+    const { data: friendSplits } = await db
+      .from('expense_splits')
       .select('id')
-      .eq('owner_id', user.id);
-
-    const groupIdsSet = new Set<string>();
-    if (userMemberships) userMemberships.forEach((m) => groupIdsSet.add(m.group_id));
-    if (userOwnedGroups) userOwnedGroups.forEach((g) => groupIdsSet.add(g.id));
-
-    const groupIds = Array.from(groupIdsSet);
-
-    // 2. Remove friend from shared groups
-    if (groupIds.length > 0) {
-      await db
-        .from('group_members')
-        .delete()
-        .eq('user_id', friendId)
-        .in('group_id', groupIds);
-    }
-
-    // Also remove friend where invited_by = user.id
-    await db
-      .from('group_members')
-      .delete()
       .eq('user_id', friendId)
-      .eq('invited_by', user.id);
+      .limit(1);
 
-    // Also remove pending invitations for this friend invited by current user
-    await db
-      .from('group_invites')
-      .delete()
-      .eq('invitee_profile_id', friendId)
-      .eq('invited_by', user.id);
+    const { data: friendExpenses } = await db
+      .from('expenses')
+      .select('id')
+      .eq('paid_by', friendId)
+      .limit(1);
 
-    // 3. If friend is a temporary profile and has no remaining memberships, clean up profile
+    const hasExpenses = Boolean(
+      (friendSplits && friendSplits.length > 0) || (friendExpenses && friendExpenses.length > 0)
+    );
+
+    // Check if the friend profile is a temporary standalone profile created by current user
     const { data: friendProfile } = await db
       .from('profiles')
-      .select('email, is_temp')
+      .select('id, email, is_temp, created_by')
       .eq('id', friendId)
       .maybeSingle();
 
-    if (friendProfile) {
-      const isTemp = Boolean(
-        friendProfile.is_temp ||
-        (friendProfile.email && (friendProfile.email.startsWith('temp_') || friendProfile.email.includes('@deudita.app')))
-      );
+    const isTempCreatedByMe = Boolean(
+      friendProfile?.is_temp &&
+      (friendProfile?.created_by === user.id || !friendProfile?.created_by)
+    );
 
-      if (isTemp) {
-        const { data: remainingMemberships } = await db
-          .from('group_members')
-          .select('group_id')
-          .eq('user_id', friendId);
+    // If it is an isolated temporary profile with NO group memberships and NO expenses, delete the orphan profile
+    if (isTempCreatedByMe && !hasGroupMemberships && !hasExpenses) {
+      await db
+        .from('group_invites')
+        .delete()
+        .eq('invitee_profile_id', friendId)
+        .eq('invited_by', user.id);
 
-        if (!remainingMemberships || remainingMemberships.length === 0) {
-          await db.from('profiles').delete().eq('id', friendId);
-        }
+      await db.from('profiles').delete().eq('id', friendId);
+    }
+
+    // Always add to current user's hidden_friend_ids in auth metadata so they are removed from 1:1 friends list
+    const currentHidden: string[] = user.user_metadata?.hidden_friend_ids || [];
+    if (!currentHidden.includes(friendId)) {
+      const newHidden = [...currentHidden, friendId];
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            ...user.user_metadata,
+            hidden_friend_ids: newHidden,
+          },
+        });
+      } catch (metaErr) {
+        console.warn('[API DELETE /api/friends/[id]] Warning updating user_metadata:', metaErr);
       }
     }
 
-    return NextResponse.json({ success: true, message: 'Amigo eliminado correctamente' });
+    return NextResponse.json({
+      success: true,
+      message: 'Amigo eliminado de la lista de amigos correctamente',
+    });
   } catch (err: unknown) {
     console.error('[API DELETE /api/friends/[id]] Error:', err);
     const message = err instanceof Error ? err.message : 'Error al eliminar amigo';

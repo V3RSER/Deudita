@@ -347,7 +347,7 @@ export default function FriendDetailPage({
         onClose={() => setShowConfirmDelete(false)}
         onConfirm={handleDeleteFriend}
         title="Eliminar de Mis Amigos"
-        description={`¿Estás seguro de que deseas eliminar a "${friendProfile.full_name}" de tu lista de amigos?`}
+        description={`¿Estás seguro de que deseas eliminar a "${friendProfile.full_name}" de tu lista de amigos? Seguirá formando parte de los grupos que compartan y se conservarán todos sus gastos.`}
         confirmText="Eliminar"
         isLoading={isDeleting}
       />

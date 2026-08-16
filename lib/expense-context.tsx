@@ -32,12 +32,15 @@ interface ExpenseContextType {
   payments: Payment[];
   pendingInvites: GroupInvite[];
   notifications: Notification[];
+  hiddenFriendIds: string[];
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
   createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[], currency?: string) => Promise<Group>;
   updateGroup: (id: string, name: string, category: GroupCategory, description?: string, imageUrl?: string, currency?: string) => Promise<Group>;
   deleteGroup: (id: string) => Promise<void>;
   addGroupInvite: (groupId: string, email?: string, name?: string, memberId?: string) => Promise<{ inviteUrl: string; message: string; memberId?: string }>;
+  getGroupInviteLink: (groupId: string) => Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean }>;
+  regenerateGroupInviteLink: (groupId: string) => Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean; message: string }>;
   deleteFriend: (friendId: string) => Promise<void>;
   acceptGroupInvite: (inviteId: string) => Promise<string>;
   rejectGroupInvite: (inviteId: string) => Promise<void>;
@@ -72,6 +75,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [hiddenFriendIds, setHiddenFriendIds] = useState<string[]>([]);
 
   const supabase = createClient();
 
@@ -108,6 +112,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       if (data.notifications) setNotifications(data.notifications as Notification[]);
       if (data.pendingInvites) setPendingInvites(data.pendingInvites as GroupInvite[]);
       if (data.auditLogs) setAuditLogs(data.auditLogs as ExpenseAuditLog[]);
+      if (data.hiddenFriendIds) setHiddenFriendIds(data.hiddenFriendIds as string[]);
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {
@@ -138,14 +143,24 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = async (updates: Partial<Profile>): Promise<void> => {
     if (!currentProfile) return;
     await runOperation('Guardando perfil...', async () => {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', currentProfile.id);
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
 
-      if (error) {
-        console.error('Error al actualizar el perfil:', error);
-        throw new Error(error.message || 'Error al actualizar el perfil');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error ?? 'Error al actualizar el perfil');
+      }
+
+      const data = await res.json();
+      if (data.profile) {
+        const updated = data.profile as Profile;
+        setCurrentProfile(updated);
+        setProfiles((prev) =>
+          prev.map((p) => (p.id === updated.id ? updated : p))
+        );
       }
 
       await reloadFromSupabase();
@@ -280,6 +295,32 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         message: data.message,
         memberId: data.memberId,
       };
+    });
+  };
+
+  const getGroupInviteLink = async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean }> => {
+    return await runOperation('Obteniendo enlace de invitación...', async () => {
+      const res = await fetch(`/api/groups/${groupId}/invite-link`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo obtener el enlace de invitación';
+        throw new Error(message);
+      }
+      return await res.json();
+    });
+  };
+
+  const regenerateGroupInviteLink = async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean; message: string }> => {
+    return await runOperation('Generando nuevo enlace...', async () => {
+      const res = await fetch(`/api/groups/${groupId}/invite-link`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.error ? String(errData.error) : 'No se pudo generar el enlace';
+        throw new Error(message);
+      }
+      return await res.json();
     });
   };
 
@@ -505,12 +546,15 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         payments,
         pendingInvites,
         notifications,
+        hiddenFriendIds,
         updateProfile,
         addFriend,
         createGroup,
         updateGroup,
         deleteGroup,
         addGroupInvite,
+        getGroupInviteLink,
+        regenerateGroupInviteLink,
         deleteFriend,
         acceptGroupInvite,
         rejectGroupInvite,

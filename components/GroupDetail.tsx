@@ -33,6 +33,7 @@ import {
   Clock,
   HandCoins,
   PlusCircle,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription, getGroupCategoryConfig, getGroupCategoryLabel } from '@/lib/group-utils';
@@ -52,7 +53,7 @@ interface GroupDetailProps {
   onEditPayment?: (payment: Payment) => void;
   onDeletePayment?: (paymentId: string) => void;
   onOpenSettleModal: (groupId: string, debtorId?: string, creditorId?: string, amount?: number) => void;
-  onOpenAddMember: (groupId: string) => void;
+  onOpenAddMember: (groupId: string, tab?: 'link' | 'new' | 'friends') => void;
 }
 
 const MONTH_NAMES_ES = [
@@ -488,7 +489,7 @@ export function GroupDetail({
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <button
-                onClick={() => onOpenAddMember(group.id)}
+                onClick={() => onOpenAddMember(group.id, 'new')}
                 className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm min-h-[40px] cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
@@ -496,20 +497,11 @@ export function GroupDetail({
               </button>
 
               <button
-                onClick={handleShareOrCopyLink}
+                onClick={() => onOpenAddMember(group.id, 'link')}
                 className="flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 py-2.5 rounded-xl text-sm ring-1 ring-zinc-200 shadow-sm transition-all active:scale-95 min-h-[40px] cursor-pointer"
               >
-                {copiedLink ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span className="text-emerald-700 font-semibold">¡Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="w-4 h-4 text-zinc-500" />
-                    <span>Compartir Enlace</span>
-                  </>
-                )}
+                <LinkIcon className="w-4 h-4 text-emerald-600" />
+                <span>Invitar con enlace</span>
               </button>
             </div>
           </div>
@@ -957,11 +949,11 @@ export function GroupDetail({
         }}
         onAddMembers={() => {
           setIsSettingsModalOpen(false);
-          onOpenAddMember(group.id);
+          onOpenAddMember(group.id, 'new');
         }}
         onInviteLink={() => {
           setIsSettingsModalOpen(false);
-          onOpenAddMember(group.id);
+          onOpenAddMember(group.id, 'link');
         }}
         onDeleteGroup={() => {
           setIsSettingsModalOpen(false);

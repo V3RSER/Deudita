@@ -3,24 +3,28 @@
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Users, Sparkles, CheckCircle2, ArrowRight, XCircle, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Users, Sparkles, CheckCircle2, ArrowRight, Loader2, AlertCircle, ShieldCheck, Clock, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 interface InviteData {
   invite: {
     id: string;
     status: string;
-    email: string;
+    email?: string | null;
+    expiresAt?: string;
+    isExpired?: boolean;
+    isGeneralLink?: boolean;
   };
   group: {
     id: string;
     name: string;
     category?: string;
     description?: string;
+    image_url?: string;
   };
   inviter: {
     full_name: string;
-    email: string;
+    email?: string;
     avatar_url?: string;
   };
 }
@@ -34,6 +38,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -48,18 +53,29 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
     async function loadData() {
       try {
         setLoading(true);
+        setError(null);
+        setIsExpired(false);
+
         // Check current user session
         const { data: { user } } = await supabase.auth.getUser();
         setCurrentUser(user);
 
         // Fetch invitation details by token or id
         const res = await fetch(`/api/invites/${inviteId}`);
+        const data = await res.json().catch(() => ({}));
+
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'La invitación no fue encontrada');
+          if (res.status === 410 || data.isExpired) {
+            setIsExpired(true);
+            throw new Error(data.error || 'Este enlace de invitación ha caducado (duración: 1 día).');
+          }
+          throw new Error(data.error || 'La invitación no fue encontrada');
         }
 
-        const data: InviteData = await res.json();
+        if (data.invite?.isExpired) {
+          setIsExpired(true);
+        }
+
         setInviteData(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'No se pudo cargar la invitación';
@@ -141,6 +157,40 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
     );
   }
 
+  if (isExpired || (error && error.includes('caducado'))) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 ring-1 ring-zinc-200 shadow-xl max-w-md w-full text-center space-y-4">
+          <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
+            <Clock className="w-7 h-7" />
+          </div>
+          <div className="inline-flex items-center space-x-1.5 bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Enlace caducado (7 días)</span>
+          </div>
+          <h2 className="text-xl font-bold text-zinc-900">Este enlace de invitación ha expirado</h2>
+          <p className="text-sm text-zinc-500">
+            Por seguridad, los enlaces para unirse al grupo tienen una validez de 7 días. Puedes pedir a un integrante del grupo que genere y comparta un nuevo enlace.
+          </p>
+          <div className="pt-2 flex flex-col gap-2">
+            <Link
+              href="/groups"
+              className="inline-flex items-center justify-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white px-6 py-3 rounded-2xl text-sm font-medium transition-all shadow-sm"
+            >
+              <span>Ir a mis grupos</span>
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center text-xs text-zinc-500 hover:text-zinc-800 py-2 font-medium transition-colors"
+            >
+              <span>Ir al Panel Principal</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error || !inviteData) {
     return (
       <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-4">
@@ -190,6 +240,14 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
 
         {/* Content Body */}
         <div className="p-8 space-y-6">
+          {/* Expiration badge */}
+          <div className="flex items-center justify-between px-1 text-xs">
+            <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200/60 font-semibold px-2.5 py-1 rounded-lg">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Enlace activo • Validez de 7 días</span>
+            </span>
+          </div>
+
           {/* Group & Inviter Card */}
           <div className="bg-zinc-50 ring-1 ring-zinc-200 rounded-2xl p-5 space-y-4">
             <div className="flex items-center space-x-4">

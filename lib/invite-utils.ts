@@ -42,7 +42,7 @@ export async function claimAndJoinGroupInvite(
   // By token
   const { data: inviteByToken } = await db
     .from('group_invites')
-    .select('id, group_id, email, status, token, invited_by, invitee_profile_id')
+    .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
     .eq('token', cleanToken)
     .maybeSingle();
 
@@ -52,7 +52,7 @@ export async function claimAndJoinGroupInvite(
     // By id
     const { data: inviteById } = await db
       .from('group_invites')
-      .select('id, group_id, email, status, token, invited_by, invitee_profile_id')
+      .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
       .eq('id', cleanToken)
       .maybeSingle();
 
@@ -62,7 +62,7 @@ export async function claimAndJoinGroupInvite(
       // By email match
       const { data: inviteByEmail } = await db
         .from('group_invites')
-        .select('id, group_id, email, status, token, invited_by, invitee_profile_id')
+        .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
         .eq('email', userEmailLower)
         .eq('status', 'pending')
         .maybeSingle();
@@ -70,6 +70,17 @@ export async function claimAndJoinGroupInvite(
       if (inviteByEmail) {
         invite = inviteByEmail;
       }
+    }
+  }
+
+  // Check expiration if invite record was found
+  if (invite) {
+    const isExpired =
+      (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) ||
+      (!invite.expires_at && invite.created_at && new Date(invite.created_at).getTime() + 7 * 24 * 60 * 60 * 1000 < Date.now());
+
+    if (isExpired) {
+      throw new Error('El enlace de invitación ha caducado. Los enlaces tienen una validez de 7 días.');
     }
   }
 
@@ -105,6 +116,29 @@ export async function claimAndJoinGroupInvite(
     }
 
     throw new Error('Invitación no encontrada o expirada');
+  }
+
+  // Check if user is already a member of target group
+  const { data: alreadyMember } = await db
+    .from('group_members')
+    .select('group_id')
+    .eq('group_id', targetGroupId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (alreadyMember) {
+    const { data: groupDetails } = await db
+      .from('groups')
+      .select('name')
+      .eq('id', targetGroupId)
+      .maybeSingle();
+
+    return {
+      success: true,
+      groupId: targetGroupId,
+      groupName: groupDetails?.name ?? 'Grupo',
+      message: 'Ya formas parte de este grupo',
+    };
   }
 
   // 3. If there is a temporary profile linked to this invite, migrate all records to real user.id
@@ -172,8 +206,9 @@ export async function claimAndJoinGroupInvite(
     });
   }
 
-  // 5. Update group_invites record to accepted
-  if (invite?.id) {
+  // 5. Update group_invites record if it was an individual invite (with email or designated profile)
+  const isDedicatedInvite = Boolean(invite?.invitee_profile_id || invite?.email);
+  if (invite?.id && isDedicatedInvite) {
     await db
       .from('group_invites')
       .update({
@@ -183,7 +218,7 @@ export async function claimAndJoinGroupInvite(
       .eq('id', invite.id);
   }
 
-  // Also accept any pending invites for this group matching the user email or profile id
+  // Also accept any pending individual invites for this group matching the user email
   if (userEmailLower) {
     await db
       .from('group_invites')
