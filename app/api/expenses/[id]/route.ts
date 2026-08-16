@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function GET(
   request: Request,
@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { data: expense, error } = await supabase
+    const adminDb = createAdminClient();
+    const { data: expense, error } = await adminDb
       .from('expenses')
       .select('*, items:expense_items(*), splits:expense_splits(*)')
       .eq('id', id)
@@ -24,7 +25,7 @@ export async function GET(
       return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
     }
 
-    const { data: auditLogs } = await supabase
+    const { data: auditLogs } = await adminDb
       .from('expense_audit_logs')
       .select('*')
       .eq('expense_id', id)
@@ -51,44 +52,54 @@ export async function PUT(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    const adminDb = createAdminClient();
     const { expense, items, splits } = await request.json();
 
     // Fetch previous expense and splits to calculate audit differences
-    const { data: previousExpense } = await supabase
+    const { data: previousExpense, error: prevErr } = await adminDb
       .from('expenses')
       .select('*, splits:expense_splits(*)')
       .eq('id', id)
       .maybeSingle();
 
+    if (prevErr || !previousExpense) {
+      return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
+    }
+
+    const rawGroupId = expense.group_id && expense.group_id !== 'none' ? expense.group_id : (previousExpense.group_id || null);
+    const parsedAmount = typeof expense.total_amount === 'number'
+      ? expense.total_amount
+      : parseFloat(String(expense.total_amount).replace(/[^0-9.]/g, '')) || 0;
+
     const updatePayload: Record<string, any> = {
-      group_id: expense.group_id,
-      paid_by: expense.paid_by,
-      total_amount: expense.total_amount,
-      description: expense.description,
-      expense_date: expense.expense_date,
-      source: expense.source ?? 'manual',
-      receipt_url: expense.receipt_url,
+      group_id: rawGroupId,
+      paid_by: expense.paid_by || previousExpense.paid_by,
+      total_amount: parsedAmount,
+      description: expense.description || previousExpense.description,
+      expense_date: expense.expense_date || previousExpense.expense_date,
+      source: expense.source ?? previousExpense.source ?? 'manual',
+      receipt_url: expense.receipt_url !== undefined ? expense.receipt_url : previousExpense.receipt_url,
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     };
 
-    if (expense.category) updatePayload.category = expense.category;
-    if (expense.notes) updatePayload.notes = expense.notes;
+    if (expense.category !== undefined) updatePayload.category = expense.category;
+    if (expense.notes !== undefined) updatePayload.notes = expense.notes;
 
-    let { data: updatedExpense, error: expErr } = await supabase
+    let { data: updatedExpense, error: expErr } = await adminDb
       .from('expenses')
       .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
-    if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at'))) {
+    if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at') || expErr.message?.includes('updated_by'))) {
       delete updatePayload.category;
       delete updatePayload.notes;
       delete updatePayload.updated_at;
       delete updatePayload.updated_by;
 
-      const fallbackRes = await supabase
+      const fallbackRes = await adminDb
         .from('expenses')
         .update(updatePayload)
         .eq('id', id)
@@ -105,25 +116,25 @@ export async function PUT(
     }
 
     // Replace items
-    await supabase.from('expense_items').delete().eq('expense_id', id);
+    await adminDb.from('expense_items').delete().eq('expense_id', id);
     if (items && Array.isArray(items) && items.length > 0) {
       const itemsToInsert = items.map((i: any) => ({
         expense_id: id,
         description: i.description,
-        amount: i.amount,
+        amount: typeof i.amount === 'number' ? i.amount : parseFloat(String(i.amount).replace(/[^0-9.]/g, '')) || 0,
       }));
-      await supabase.from('expense_items').insert(itemsToInsert);
+      await adminDb.from('expense_items').insert(itemsToInsert);
     }
 
     // Replace splits
-    await supabase.from('expense_splits').delete().eq('expense_id', id);
+    await adminDb.from('expense_splits').delete().eq('expense_id', id);
     if (splits && Array.isArray(splits) && splits.length > 0) {
       const splitsToInsert = splits.map((s: any) => ({
         expense_id: id,
         user_id: s.user_id,
-        amount_owed: s.amount_owed,
+        amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
       }));
-      await supabase.from('expense_splits').insert(splitsToInsert);
+      await adminDb.from('expense_splits').insert(splitsToInsert);
     }
 
     // Calculate participant differences for audit trail
@@ -142,7 +153,7 @@ export async function PUT(
       let removedNames: string[] = [];
 
       if (allAffectedIds.length > 0) {
-        const { data: profileRecords } = await supabase
+        const { data: profileRecords } = await adminDb
           .from('profiles')
           .select('id, full_name')
           .in('id', allAffectedIds);
@@ -169,8 +180,8 @@ export async function PUT(
         }
       }
 
-      if (previousExpense && previousExpense.total_amount !== expense.total_amount) {
-        summaryParts.push(`Monto modificado de ${previousExpense.total_amount} a ${expense.total_amount}`);
+      if (previousExpense && Number(previousExpense.total_amount) !== Number(parsedAmount)) {
+        summaryParts.push(`Monto modificado de ${previousExpense.total_amount} a ${parsedAmount}`);
       }
 
       if (previousExpense && previousExpense.description !== expense.description) {
@@ -179,29 +190,38 @@ export async function PUT(
 
       const summaryText = summaryParts.length > 0 ? summaryParts.join(' | ') : 'Gasto actualizado';
 
-      await supabase.from('expense_audit_logs').insert({
-        expense_id: id,
-        group_id: expense.group_id || previousExpense?.group_id || null,
-        user_id: user.id,
-        action: 'update',
-        changes: {
-          summary: summaryText,
-          participants_before: prevCount,
-          participants_after: newCount,
-          added_user_ids: addedUserIds,
-          removed_user_ids: removedUserIds,
-          added_names: addedNames,
-          removed_names: removedNames,
-          amount_before: previousExpense?.total_amount,
-          amount_after: expense.total_amount,
-        },
-        created_at: new Date().toISOString(),
-      });
+      if (rawGroupId) {
+        await adminDb.from('expense_audit_logs').insert({
+          expense_id: id,
+          group_id: rawGroupId,
+          user_id: user.id,
+          action: 'update',
+          changes: {
+            summary: summaryText,
+            participants_before: prevCount,
+            participants_after: newCount,
+            added_user_ids: addedUserIds,
+            removed_user_ids: removedUserIds,
+            added_names: addedNames,
+            removed_names: removedNames,
+            amount_before: previousExpense?.total_amount,
+            amount_after: parsedAmount,
+          },
+          created_at: new Date().toISOString(),
+        });
+      }
     } catch (auditErr) {
       console.warn('[API /api/expenses/[id]] Warning recording audit log:', auditErr);
     }
 
-    return NextResponse.json(updatedExpense);
+    // Fetch complete updated expense with items and splits to return
+    const { data: fullUpdatedExpense } = await adminDb
+      .from('expenses')
+      .select('*, items:expense_items(*), splits:expense_splits(*)')
+      .eq('id', id)
+      .single();
+
+    return NextResponse.json(fullUpdatedExpense || updatedExpense);
   } catch (err: unknown) {
     console.error('[API /api/expenses/[id]] Unhandled PUT error:', err);
     const message = err instanceof Error ? err.message : 'Error interno al actualizar gasto';
@@ -223,7 +243,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { error } = await supabase
+    const adminDb = createAdminClient();
+    const { error } = await adminDb
       .from('expenses')
       .delete()
       .eq('id', id);

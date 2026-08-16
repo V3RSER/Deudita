@@ -73,24 +73,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     return profiles.filter(p => groupMemberIds.includes(p.id));
   }, [groupId, members, profiles, currentProfile]);
 
-  const initialParticipantIds = useMemo(() => {
-    return expenseToEdit?.splits?.map(s => s.user_id) || [];
-  }, [expenseToEdit]);
-
-  const initialCount = initialParticipantIds.length;
-  const currentCount = selectedMembers.length;
-  const hasParticipantChanges = Boolean(
-    expenseToEdit &&
-    initialCount > 0 &&
-    (initialCount !== currentCount || selectedMembers.some(id => !initialParticipantIds.includes(id)) || initialParticipantIds.some(id => !selectedMembers.includes(id)))
-  );
-
-  const addedMemberIds = selectedMembers.filter(id => !initialParticipantIds.includes(id));
-  const removedMemberIds = initialParticipantIds.filter(id => !selectedMembers.includes(id));
-
-  const addedMemberNames = activeProfiles.filter(p => addedMemberIds.includes(p.id)).map(p => p.full_name || p.email);
-  const removedMemberNames = profiles.filter(p => removedMemberIds.includes(p.id)).map(p => p.full_name || p.email);
-
   const prevIsOpenRef = useRef(false);
   const prevExpenseIdRef = useRef<string | null>(null);
 
@@ -467,7 +449,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           hideSymbol
                           className="bg-transparent text-left focus:outline-none w-full placeholder:text-zinc-300 text-lg font-bold text-zinc-900"
                           placeholder="0"
-                          autoFocus
                         />
                       </div>
                     ) : itemsTotal > 0 ? (
@@ -716,32 +697,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     </span>
                   )}
                 </div>
-
-                {hasParticipantChanges && (
-                  <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-xs space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="flex items-center justify-between font-bold text-amber-900">
-                      <span className="flex items-center space-x-1.5">
-                        <Users className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Cambio en participantes</span>
-                      </span>
-                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        {initialCount} → {currentCount} personas
-                      </span>
-                    </div>
-                    <div className="text-[11px] flex flex-wrap gap-1.5 pt-0.5">
-                      {addedMemberNames.length > 0 && (
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-lg font-semibold">
-                          + Añadidos: {addedMemberNames.join(', ')}
-                        </span>
-                      )}
-                      {removedMemberNames.length > 0 && (
-                        <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-lg font-semibold">
-                          - Removidos: {removedMemberNames.join(', ')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-3">
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">

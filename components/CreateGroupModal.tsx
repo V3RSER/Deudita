@@ -25,7 +25,7 @@ interface CreateGroupModalProps {
 
 export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
   const router = useRouter();
-  const { createGroup, profiles, currentProfile, addFriend } = useExpense();
+  const { createGroup, profiles, currentProfile, addFriend, isMutating } = useExpense();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<GroupCategory>('friends');
@@ -345,11 +345,11 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
         <div className="p-4 border-t border-zinc-100 bg-zinc-50/80 shrink-0 rounded-b-[24px]">
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || isMutating || !name.trim()}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            <span>Crear grupo</span>
+            {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <span>{(isSubmitting || isMutating) ? 'Creando grupo...' : 'Crear grupo'}</span>
           </button>
         </div>
       </div>

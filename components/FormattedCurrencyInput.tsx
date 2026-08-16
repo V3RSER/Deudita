@@ -42,9 +42,21 @@ export function FormattedCurrencyInput({
     ? (editingValue !== null ? editingValue : (value ? String(value) : ''))
     : formattedDisplay;
 
+  const parseRawValue = (raw: string): string => {
+    let s = raw.trim();
+    if (!s) return '';
+    // If it has multiple dots, or dots followed by 3 digits (e.g. 150.000 or 1.500.000), treat dots as thousand separators
+    if (/\.\d{3}/.test(s) && !/\.\d{1,2}$/.test(s)) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(',', '.');
+    }
+    return s.replace(/[^0-9.]/g, '');
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const cleanRaw = raw.replace(/[^0-9.,]/g, '').replace(',', '.');
+    const cleanRaw = parseRawValue(raw);
     setEditingValue(raw);
     onChange(cleanRaw);
   };
@@ -66,7 +78,7 @@ export function FormattedCurrencyInput({
       inputMode="decimal"
       required={required}
       disabled={disabled}
-      autoFocus={autoFocus}
+      autoFocus={false}
       value={displayValue}
       onChange={handleInputChange}
       onFocus={handleFocus}

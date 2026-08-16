@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
-import { X, MailCheck, CheckCircle2 } from 'lucide-react';
+import { X, MailCheck, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface ConfirmDraftModalProps {
   isOpen: boolean;
@@ -212,7 +212,11 @@ export function ConfirmDraftModal({
               disabled={isSubmitting}
               className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 flex items-center space-x-2 disabled:opacity-50"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
               <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}</span>
             </button>
           </div>

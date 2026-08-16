@@ -512,7 +512,6 @@ export function SettleDebtModal({
                 currency={currency}
                 placeholder="0"
                 className="bg-transparent text-center text-4xl sm:text-5xl font-black text-zinc-950 focus:outline-none w-full tracking-tight placeholder:text-zinc-200"
-                autoFocus
               />
             </div>
 

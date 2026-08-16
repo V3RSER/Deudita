@@ -6,7 +6,6 @@ import { Navbar, ActiveTab } from '@/components/Navbar';
 import { usePathname, useRouter } from 'next/navigation';
 import { CreateGroupModal } from '@/components/CreateGroupModal';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
-import { GlobalActionIndicator } from '@/components/GlobalActionIndicator';
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { currentProfile, loading } = useExpense();
@@ -77,9 +76,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           <p>Plataforma de Gastos Compartidos</p>
         </div>
       </footer>
-
-      {/* Global Action Loading Indicator */}
-      <GlobalActionIndicator />
 
       {/* Global Modals triggered from Navbar or anywhere */}
       <CreateGroupModal

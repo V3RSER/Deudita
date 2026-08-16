@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
 import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
-import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, ArrowRight, Plus } from 'lucide-react';
+import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, ArrowRight, Plus, Loader2 } from 'lucide-react';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -378,8 +378,17 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                 disabled={isSubmitting || !name.trim()}
                 className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
               >
-                <span>Añadir Integrante</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Añadiendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Añadir Integrante</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
           ) : (
@@ -417,8 +426,12 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                       disabled={isSubmitting || !email.trim()}
                       className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-1 shrink-0"
                     >
-                      <Send className="w-3 h-3" />
-                      <span>Enviar</span>
+                      {isSubmitting ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-white" />
+                      ) : (
+                        <Send className="w-3 h-3" />
+                      )}
+                      <span>{isSubmitting ? 'Enviando...' : 'Enviar'}</span>
                     </button>
                   </div>
                 </form>

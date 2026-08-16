@@ -24,7 +24,7 @@ interface EditGroupModalProps {
 }
 
 export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupModalProps) {
-  const { updateGroup, deleteGroup } = useExpense();
+  const { updateGroup, deleteGroup, isMutating } = useExpense();
 
   const [name, setName] = useState(group.name);
   const [category, setCategory] = useState<GroupCategory>(group.category || 'home');
@@ -255,11 +255,11 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
         <div className="p-4 border-t border-zinc-100 bg-zinc-50/80 shrink-0 rounded-b-[24px]">
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || isMutating || !name.trim()}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            <span>Guardar cambios</span>
+            {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            <span>{(isSubmitting || isMutating) ? 'Guardando cambios...' : 'Guardar cambios'}</span>
           </button>
         </div>
       </div>

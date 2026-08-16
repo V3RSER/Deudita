@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
-import { X, UserPlus, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { X, UserPlus, CheckCircle2, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
 
 interface AddFriendModalProps {
   isOpen: boolean;
@@ -167,7 +167,10 @@ export function AddFriendModal({ isOpen, onClose }: AddFriendModalProps) {
                 className="px-6 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-semibold shadow-sm hover:bg-zinc-800 disabled:opacity-50 flex items-center space-x-2 transition-all active:scale-95"
               >
                 {isSubmitting ? (
-                  <span>Guardando...</span>
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    <span>Guardando...</span>
+                  </>
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-emerald-400" />

@@ -45,26 +45,24 @@ export default function ExpenseDetailPage({
     let isMounted = true;
     async function loadExpense() {
       const foundInContext = expenses.find((e) => e.id === id);
-      if (foundInContext) {
-        if (isMounted) {
-          setExpense(foundInContext);
-          setLoading(false);
-        }
-        return;
+      if (foundInContext && isMounted) {
+        setExpense(foundInContext);
+        setLoading(false);
       }
 
       try {
-        if (isMounted) setLoading(true);
+        if (!foundInContext && isMounted) setLoading(true);
         const res = await fetch(`/api/expenses/${id}`);
-        if (!res.ok) {
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setExpense(data);
+          }
+        } else if (!foundInContext) {
           throw new Error('Gasto no encontrado');
         }
-        const data = await res.json();
-        if (isMounted) {
-          setExpense(data);
-        }
       } catch (err: unknown) {
-        if (isMounted) {
+        if (isMounted && !foundInContext) {
           setError(err instanceof Error ? err.message : 'Error al cargar el gasto');
         }
       } finally {
