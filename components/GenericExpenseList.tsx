@@ -114,8 +114,20 @@ export function GenericExpenseList({
   showGroupBadge = true,
 }: GenericExpenseListProps) {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Set<string>>(new Set());
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+
+  const toggleExpenseExpanded = (id: string) => {
+    setExpandedExpenseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Combine and sort chronologically (most recent first)
   const transactions: UnifiedTransaction[] = [
@@ -166,7 +178,7 @@ export function GenericExpenseList({
             <div className="h-px bg-zinc-200/70 flex-1" />
           </div>
 
-          <div className="bg-white rounded-2xl ring-1 ring-zinc-200/80 shadow-2xs divide-y divide-zinc-100 overflow-hidden">
+          <div className="space-y-2.5">
             {group.items.map((tx) => {
               const parsed = parseTxDate(tx.date);
 
@@ -200,27 +212,26 @@ export function GenericExpenseList({
                   statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
                 }
 
-                const isExpanded = expandedExpenseId === exp.id;
+                const isExpanded = expandedExpenseIds.has(exp.id);
 
                 return (
                   <div
                     key={`exp-${exp.id}`}
-                    className={`flex flex-col relative transition-colors ${
-                      isExpanded ? 'bg-zinc-50/40' : ''
+                    className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+                      isExpanded
+                        ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
+                        : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
                     }`}
                   >
-                    {isExpanded && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-l" />
-                    )}
                     <div
-                      className={`px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
+                      className={`px-3.5 py-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
                         isExpanded
-                          ? 'bg-zinc-100/70 hover:bg-zinc-200/50'
+                          ? 'bg-zinc-50/80 border-b border-zinc-200/70'
                           : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
                       }`}
-                      onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
+                      onClick={() => toggleExpenseExpanded(exp.id)}
                     >
-                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                      <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                         {/* Date Block */}
                         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs">
                           <span className="text-[8px] font-black uppercase tracking-wider text-zinc-500 leading-none">
@@ -240,7 +251,7 @@ export function GenericExpenseList({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
                             <h3 className={`font-semibold text-zinc-900 text-xs sm:text-sm transition-colors truncate ${
-                              !isExpanded ? 'group-hover:text-emerald-700' : ''
+                              !isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
                             }`}>
                               {exp.description}
                             </h3>
@@ -262,6 +273,9 @@ export function GenericExpenseList({
                             )}
                             <span className="truncate">
                               Pagó <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
+                              {isPayer && (
+                                <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
+                              )}
                             </span>
                             {exp.notes && (
                               <span className="inline-flex items-center text-zinc-400 hover:text-zinc-600" title="Contiene notas">
@@ -288,64 +302,59 @@ export function GenericExpenseList({
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-0.5 text-zinc-400" onClick={(e) => e.stopPropagation()}>
-                          {!isExpanded && (
-                            <div className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors">
-                              <ChevronDown className="w-4 h-4" />
-                            </div>
+                        {/* Expand / Collapse Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpenseExpanded(exp.id);
+                          }}
+                          aria-label={isExpanded ? 'Contraer detalle de gasto' : 'Expandir detalle de gasto'}
+                          className={`p-1.5 rounded-xl border transition-all ${
+                            isExpanded
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800'
+                          }`}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
                           )}
-                          {isExpanded && (
-                            <div className="p-1 text-zinc-400 hover:text-zinc-600 transition-colors">
-                              <ChevronUp className="w-4 h-4" />
-                            </div>
-                          )}
-                          {!isExpanded && onDeleteExpense && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpenseToDelete(exp.id);
-                              }}
-                              className="p-1 hover:bg-rose-50 hover:text-rose-600 rounded-md text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 hidden sm:block"
-                              title="Eliminar gasto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        </button>
                       </div>
                     </div>
 
                     {/* EXPANDED CONTENT */}
                     {isExpanded && (
-                      <div className="border-t border-zinc-200/70 bg-zinc-50/50 p-4 sm:p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-                        {/* Top Context Summary Bar */}
-                        <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-white rounded-xl border border-zinc-200/80 shadow-2xs">
-                          <div className="flex items-center space-x-2.5 min-w-0">
-                            <div className="w-7 h-7 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
-                              {paidBy?.avatar_url ? (
-                                <Image src={paidBy.avatar_url} alt={paidBy.full_name} width={28} height={28} className="w-full h-full object-cover" unoptimized />
-                              ) : (
-                                <User className="w-4 h-4 m-[6px] text-zinc-400" />
-                              )}
-                            </div>
-                            <div className="text-xs text-zinc-600 truncate">
-                              Pagado por <strong className="font-semibold text-zinc-900">{paidBy ? paidBy.full_name : 'Usuario'}</strong>
-                              {isPayer && (
-                                <span className="ml-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                  Tú
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${catConfig.bgClass} ${catConfig.textClass} border-current/10`}>
-                              <CategoryIcon className="w-3 h-3" />
-                              <span>{exp.category || 'General'}</span>
-                            </div>
-                            <span className="text-xs font-bold text-zinc-900">
-                              Total: {formatCurrency(exp.total_amount, currency)}
-                            </span>
+                      <div className="bg-zinc-50/40 p-4 sm:p-5 space-y-4">
+                        {/* Top Action Bar (Prominent Edit & Delete Buttons) */}
+                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-200/60">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                            Detalles del gasto
+                          </span>
+                          <div className="flex items-center space-x-2">
+                            {onEditExpense && (
+                              <button
+                                type="button"
+                                onClick={() => onEditExpense(exp)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-100 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                              >
+                                <Pencil className="w-3.5 h-3.5 text-zinc-600" />
+                                <span>Editar</span>
+                              </button>
+                            )}
+                            
+                            {onDeleteExpense && (
+                              <button
+                                type="button"
+                                onClick={() => setExpenseToDelete(exp.id)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Eliminar</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -369,10 +378,9 @@ export function GenericExpenseList({
                                       </h4>
                                       <span className="text-[11px] font-medium text-zinc-400">Cuota individual</span>
                                     </div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-1.5">
                                       {exp.splits?.map((split) => {
                                         const profile = profiles.find((p) => p.id === split.user_id);
-                                        const isPayer = split.user_id === exp.paid_by;
                                         return (
                                           <div key={split.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-50/80 transition-colors">
                                             <div className="flex items-center space-x-2.5 min-w-0">
@@ -389,11 +397,6 @@ export function GenericExpenseList({
                                                   <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
                                                 )}
                                               </span>
-                                              {isPayer && (
-                                                <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
-                                                  Pagó
-                                                </span>
-                                              )}
                                             </div>
                                             <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
                                               {formatCurrency(split.amount_owed, currency)}
@@ -431,29 +434,69 @@ export function GenericExpenseList({
                                     </div>
                                   )}
 
-                                  {(hasNotes || hasReceipt) && (
-                                    <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3">
-                                      {hasNotes && (
-                                        <div className="space-y-1.5">
+                                  {/* Notes & Receipt: horizontal side-by-side if both exist */}
+                                  {hasNotes && hasReceipt ? (
+                                    <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs">
+                                      <div className="flex flex-col sm:flex-row items-start gap-4">
+                                        {/* Receipt on left */}
+                                        <div className="shrink-0 space-y-1.5">
+                                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
+                                            <ImageIcon className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Comprobante</span>
+                                          </h4>
+                                          <div
+                                            onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
+                                            className="group/img relative w-28 h-28 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                          >
+                                            <Image
+                                              src={exp.receipt_url!}
+                                              alt="Comprobante"
+                                              fill
+                                              className="object-cover group-hover/img:scale-105 transition-transform"
+                                              unoptimized
+                                            />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                                              <ExternalLink className="w-3.5 h-3.5" />
+                                              <span>Ver</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Notes on right */}
+                                        <div className="flex-1 min-w-0 space-y-1.5 w-full">
                                           <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
                                             <FileText className="w-3.5 h-3.5 text-zinc-400" />
                                             <span>Notas</span>
                                           </h4>
-                                          <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50/80 p-2.5 rounded-lg border border-zinc-200/60">
+                                          <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50/80 p-3 rounded-xl border border-zinc-200/60 sm:min-h-[112px]">
+                                            {exp.notes}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {hasNotes && (
+                                        <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-1.5">
+                                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
+                                            <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Notas</span>
+                                          </h4>
+                                          <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed bg-zinc-50/80 p-3 rounded-xl border border-zinc-200/60">
                                             {exp.notes}
                                           </p>
                                         </div>
                                       )}
 
                                       {hasReceipt && (
-                                        <div className="space-y-2">
+                                        <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-2">
                                           <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center space-x-1.5">
                                             <ImageIcon className="w-3.5 h-3.5 text-zinc-400" />
                                             <span>Comprobante / Recibo</span>
                                           </h4>
                                           <div
                                             onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
-                                            className="group/img relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                            className="group/img relative w-28 h-28 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
                                           >
                                             <Image
                                               src={exp.receipt_url!}
@@ -469,7 +512,7 @@ export function GenericExpenseList({
                                           </div>
                                         </div>
                                       )}
-                                    </div>
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -489,7 +532,6 @@ export function GenericExpenseList({
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                                 {exp.splits?.map((split) => {
                                   const profile = profiles.find((p) => p.id === split.user_id);
-                                  const isPayer = split.user_id === exp.paid_by;
                                   return (
                                     <div
                                       key={split.id}
@@ -510,9 +552,6 @@ export function GenericExpenseList({
                                               <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
                                             )}
                                           </span>
-                                          {isPayer && (
-                                            <span className="text-[10px] font-medium text-emerald-600">Pagador del total</span>
-                                          )}
                                         </div>
                                       </div>
                                       <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
@@ -526,51 +565,19 @@ export function GenericExpenseList({
                           );
                         })()}
 
-                        {/* Streamlined Informative Footer: exact timestamp with date & hour, author & actions */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-zinc-200/60 text-xs text-zinc-500">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center space-x-1.5 flex-wrap">
-                              <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                              <span>
-                                Registrado por <strong className="font-medium text-zinc-700">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
-                              </span>
-                            </div>
-                            {exp.updated_at && exp.updated_at !== exp.created_at && (
-                              <p className="text-[11px] text-zinc-400 pl-5">
-                                Última modificación por <strong className="font-medium text-zinc-600">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
-                              </p>
-                            )}
+                        {/* Dedicated Subtle Metadata Footer */}
+                        <div className="pt-3 border-t border-zinc-200/60 text-[11px] text-zinc-400 space-y-1">
+                          <div className="flex items-center space-x-1.5 flex-wrap">
+                            <Clock className="w-3 h-3 text-zinc-400 shrink-0" />
+                            <span>
+                              Registrado por <strong className="font-medium text-zinc-600">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
+                            </span>
                           </div>
-
-                          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-                            {onEditExpense && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onEditExpense(exp);
-                                }}
-                                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition-colors shadow-2xs"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                                <span>Editar</span>
-                              </button>
-                            )}
-                            
-                            {onDeleteExpense && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpenseToDelete(exp.id);
-                                }}
-                                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Eliminar</span>
-                              </button>
-                            )}
-                          </div>
+                          {exp.updated_at && exp.updated_at !== exp.created_at && (
+                            <p className="pl-4.5 text-zinc-400">
+                              Última modificación por <strong className="font-medium text-zinc-600">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
@@ -591,10 +598,10 @@ export function GenericExpenseList({
               return (
                 <div
                   key={`pay-${payment.id}`}
-                  className="px-3.5 py-2.5 sm:px-4 sm:py-3 transition-colors cursor-pointer group hover:bg-zinc-50/60 active:bg-zinc-100/50"
+                  className="bg-white rounded-2xl border border-zinc-200/80 shadow-2xs hover:border-zinc-300 transition-all overflow-hidden px-3.5 py-3 sm:px-4 sm:py-3.5"
                 >
                   <div className="flex items-center justify-between gap-3 min-w-0">
-                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                    <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                       {/* Date Block */}
                       <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs">
                         <span className="text-[8px] font-black uppercase tracking-wider text-zinc-500 leading-none">
@@ -612,7 +619,7 @@ export function GenericExpenseList({
 
                       {/* Payment Description & Details */}
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm group-hover:text-emerald-700 transition-colors flex items-center space-x-1 flex-wrap truncate">
+                        <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm flex items-center space-x-1 flex-wrap truncate">
                           <span className={isIpaid ? 'text-emerald-700 font-bold' : ''}>
                             {payer ? payer.full_name : 'Usuario'}
                           </span>
@@ -667,12 +674,12 @@ export function GenericExpenseList({
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-0.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                         {onEditPayment && (
                           <button
                             type="button"
                             onClick={() => onEditPayment(payment)}
-                            className="p-1 hover:bg-zinc-200 hover:text-zinc-900 rounded-md text-zinc-400 transition-colors"
+                            className="p-1.5 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 rounded-lg transition-colors border border-transparent hover:border-zinc-200 cursor-pointer"
                             title="Editar pago"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -683,7 +690,7 @@ export function GenericExpenseList({
                           <button
                             type="button"
                             onClick={() => onDeletePayment(payment.id)}
-                            className="p-1 hover:bg-rose-50 hover:text-rose-600 rounded-md text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 hidden sm:block"
+                            className="p-1.5 hover:bg-rose-50 text-zinc-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-100 cursor-pointer"
                             title="Eliminar pago"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
