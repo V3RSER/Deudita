@@ -103,7 +103,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         const isItemized = Boolean(expenseToEdit.items && expenseToEdit.items.length > 0);
         setMode(isItemized ? 'itemized' : 'quick');
         setAmount(expenseToEdit.total_amount ? String(expenseToEdit.total_amount) : '');
-        setDescription(expenseToEdit.description || '');
+        setDescription(expenseToEdit.description ?? '');
 
         let foundSub = DEFAULT_EXPENSE_CATEGORY;
         if (expenseToEdit.category) {
@@ -119,12 +119,12 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         }
         setSubCategory(foundSub);
 
-        setDate(expenseToEdit.expense_date || new Date().toISOString().split('T')[0]);
-        setPaidById(expenseToEdit.paid_by || (currentProfile?.id ?? ''));
-        const expGroupId = expenseToEdit.group_id || 'none';
+        setDate(expenseToEdit.expense_date ?? new Date().toISOString().split('T')[0]);
+        setPaidById(expenseToEdit.paid_by ?? (currentProfile?.id ?? ''));
+        const expGroupId = expenseToEdit.group_id ?? 'none';
         setGroupId(expGroupId);
-        setReceiptUrl(expenseToEdit.receipt_url || '');
-        setNotes(expenseToEdit.notes || '');
+        setReceiptUrl(expenseToEdit.receipt_url ?? '');
+        setNotes(expenseToEdit.notes ?? '');
         setShowNoteInput(Boolean(expenseToEdit.notes));
         setShowAdditional(Boolean(expenseToEdit.notes || expenseToEdit.receipt_url));
 
@@ -132,8 +132,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           setItems(expenseToEdit.items.map((i, idx) => ({
             id: idx + 1,
             desc: i.description ? i.description.replace(/^\d+x\s*/, '') : '',
-            quantity: i.description?.match(/^(\d+)x\s*/)?.[1] || '1',
-            amount: String(i.amount || ''),
+            quantity: i.description?.match(/^(\d+)x\s*/)?.[1] ?? '1',
+            amount: String(i.amount ?? ''),
             amountType: 'total',
             assignedTo: []
           })));
@@ -145,15 +145,34 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           const selected = expenseToEdit.splits.map(s => s.user_id);
           setSelectedMembers(selected);
           const newSplits: Record<string, { exact: string; pct: string; shares: string }> = {};
-          let isExact = false;
-          const expected = (expenseToEdit.total_amount || 0) / (selected.length || 1);
+          
+          const splitAmounts = expenseToEdit.splits.map(s => {
+            const val = typeof s.amount_owed === 'number'
+              ? s.amount_owed
+              : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
+            return isNaN(val) ? 0 : val;
+          });
+
+          const minAmt = Math.min(...splitAmounts);
+          const maxAmt = Math.max(...splitAmounts);
+          // Split is considered equal if difference between highest and lowest share is negligible
+          const isSplitEqual = splitAmounts.length <= 1 || (maxAmt - minAmt <= 1);
+
           expenseToEdit.splits.forEach(s => {
-            newSplits[s.user_id] = { exact: String(s.amount_owed || ''), pct: '', shares: '1' };
-            if (Math.abs(s.amount_owed - expected) > 0.05) isExact = true;
+            const val = typeof s.amount_owed === 'number'
+              ? s.amount_owed
+              : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
+            newSplits[s.user_id] = {
+              exact: !isNaN(val) && val > 0 ? String(val) : '',
+              pct: '',
+              shares: '1'
+            };
           });
           setSplits(newSplits);
-          setSplitType(isItemized ? 'itemized' : (isExact ? 'exact' : 'equal'));
+          setSplitType(isItemized ? 'itemized' : (isSplitEqual ? 'equal' : 'exact'));
         } else {
+          const defaultMemberIds = activeProfiles.length > 0 ? activeProfiles.map(p => p.id) : (currentProfile ? [currentProfile.id] : []);
+          setSelectedMembers(defaultMemberIds);
           setSplits({});
           setSplitType(isItemized ? 'itemized' : 'equal');
         }
@@ -167,7 +186,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
         const initialGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
           ? defaultGroupId
-          : (userGroups[0]?.id || 'none');
+          : (userGroups[0]?.id ?? 'none');
         setGroupId(initialGroupId);
 
         setReceiptUrl('');
@@ -179,11 +198,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setSplits({});
       }
     }
-  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile]);
+  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, activeProfiles]);
 
-  // Sync paidById and selectedMembers when changing group in new expense mode
+  // Sync paidById and selectedMembers when changing group
   useEffect(() => {
-    if (!isOpen || expenseToEdit) return;
+    if (!isOpen) return;
     if (activeProfiles.length > 0) {
       if (!activeProfiles.some(p => p.id === paidById)) {
         const defaultPayer = currentProfile && activeProfiles.some(p => p.id === currentProfile.id)
@@ -191,13 +210,18 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           : activeProfiles[0].id;
         setPaidById(defaultPayer);
       }
-      setSelectedMembers(activeProfiles.map(p => p.id));
+      const stillValidMembers = selectedMembers.filter(id => activeProfiles.some(p => p.id === id));
+      if (stillValidMembers.length === 0) {
+        setSelectedMembers(activeProfiles.map(p => p.id));
+      } else if (stillValidMembers.length !== selectedMembers.length) {
+        setSelectedMembers(stillValidMembers);
+      }
     } else {
       if (currentProfile) setPaidById(currentProfile.id);
       setSelectedMembers(currentProfile ? [currentProfile.id] : []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, activeProfiles.length, isOpen, expenseToEdit]);
+  }, [groupId, activeProfiles.length, isOpen]);
 
   const toFraction = (decimal: number) => {
     if (Number.isInteger(decimal)) return decimal.toString();
@@ -283,22 +307,40 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: share }));
     } else if (splitType === 'exact') {
       let sum = 0;
-      selectedMembers.forEach(id => sum += parseFloat(splits[id]?.exact || '0'));
+      selectedMembers.forEach(id => {
+        const val = parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0;
+        sum += val;
+      });
       if (Math.abs(sum - totalAmount) > 0.05) return setError('La suma exacta no coincide con el total.');
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: parseFloat(splits[id]?.exact || '0') }));
+      finalSplits = selectedMembers.map(id => ({
+        user_id: id,
+        amount_owed: parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0
+      }));
     } else if (splitType === 'percentage') {
       let sum = 0;
-      selectedMembers.forEach(id => sum += parseFloat(splits[id]?.pct || '0'));
+      selectedMembers.forEach(id => {
+        const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
+        sum += val;
+      });
       if (Math.abs(sum - 100) > 0.05) return setError('La suma de porcentajes debe ser 100%.');
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: totalAmount * (parseFloat(splits[id]?.pct || '0') / 100) }));
+      finalSplits = selectedMembers.map(id => {
+        const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
+        return { user_id: id, amount_owed: totalAmount * (val / 100) };
+      });
     } else if (splitType === 'shares') {
       let sum = 0;
-      selectedMembers.forEach(id => sum += parseFloat(splits[id]?.shares || '1'));
+      selectedMembers.forEach(id => {
+        const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
+        sum += val;
+      });
       if (sum <= 0) return setError('La suma de cuotas debe ser mayor a 0.');
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: totalAmount * (parseFloat(splits[id]?.shares || '1') / sum) }));
+      finalSplits = selectedMembers.map(id => {
+        const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
+        return { user_id: id, amount_owed: totalAmount * (val / sum) };
+      });
     } else if (splitType === 'itemized') {
       const shares = calculateItemizedShares();
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] || 0 }));
+      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
     }
 
     setIsSubmitting(true);
@@ -761,7 +803,22 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
                       <button
                         key={type}
-                        onClick={() => setSplitType(type as any)}
+                        onClick={() => {
+                          if (type === 'exact' && splitType !== 'exact') {
+                            const equalShare = totalAmount > 0 && selectedMembers.length > 0 ? (totalAmount / selectedMembers.length) : 0;
+                            const roundedShare = Math.round(equalShare * 100) / 100;
+                            const updatedSplits = { ...splits };
+                            selectedMembers.forEach(id => {
+                              updatedSplits[id] = {
+                                exact: roundedShare > 0 ? String(roundedShare) : '',
+                                pct: updatedSplits[id]?.pct ?? '',
+                                shares: updatedSplits[id]?.shares ?? '1'
+                              };
+                            });
+                            setSplits(updatedSplits);
+                          }
+                          setSplitType(type as any);
+                        }}
                         className={`flex-1 pb-2 text-xs font-bold border-b-2 transition-all ${splitType === type ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-zinc-500 hover:text-zinc-900 hover:border-zinc-300'}`}
                       >
                         {type === 'equal' ? 'Iguales' : type === 'exact' ? 'Exacto' : type === 'shares' ? 'Cuotas' : 'Por artículo'}
@@ -816,7 +873,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               {splitType === 'exact' && (
                                 <div className="flex items-center justify-end h-8">
                                   <FormattedCurrencyInput
-                                    value={splits[p.id]?.exact || ''}
+                                    value={splits[p.id]?.exact ?? ''}
                                     onChange={val => setSplits({ ...splits, [p.id]: { ...splits[p.id], exact: val } })}
                                     currency={currency}
                                     hideSymbol={false}
@@ -835,6 +892,38 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           </div>
                         );
                       })}
+
+                      {splitType === 'exact' && (
+                        (() => {
+                          const exactSum = selectedMembers.reduce((acc, memId) => {
+                            const val = parseFloat(String(splits[memId]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0;
+                            return acc + val;
+                          }, 0);
+                          const diff = totalAmount - exactSum;
+                          const isBalanced = Math.abs(diff) <= 0.05;
+
+                          return (
+                            <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between text-xs px-1">
+                              <span className="text-zinc-500">
+                                Asignado: <strong className="text-zinc-900 font-bold">{formatCurrency(exactSum, currency)}</strong> de {formatCurrency(totalAmount, currency)}
+                              </span>
+                              {isBalanced ? (
+                                <span className="text-emerald-600 font-bold flex items-center">
+                                  <Check className="w-3.5 h-3.5 mr-1" /> Cuadrado
+                                </span>
+                              ) : diff > 0 ? (
+                                <span className="text-amber-600 font-bold">
+                                  Faltan {formatCurrency(diff, currency)}
+                                </span>
+                              ) : (
+                                <span className="text-rose-600 font-bold">
+                                  Sobran {formatCurrency(Math.abs(diff), currency)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
                   {splitType === 'itemized' && mode === 'itemized' && (
