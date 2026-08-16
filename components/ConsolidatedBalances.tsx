@@ -97,11 +97,11 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
           </div>
 
           {/* Segmented Switcher */}
-          <div className="inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0 self-start sm:self-center">
+          <div className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0">
             <button
               type="button"
               onClick={() => setIsSimplified(true)}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isSimplified
                   ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
                   : 'text-zinc-500 hover:text-zinc-800'
@@ -115,7 +115,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
             <button
               type="button"
               onClick={() => setIsSimplified(false)}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 !isSimplified
                   ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
                   : 'text-zinc-500 hover:text-zinc-800'

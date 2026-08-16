@@ -396,7 +396,8 @@ export function GroupDetail({
 
   return (
     <div className="space-y-4">
-      <div className="relative w-full h-32 sm:h-40 rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group flex items-end">
+      {/* Group Hero Header Banner (Mobile & Desktop Optimized) */}
+      <div className="relative w-full min-h-[160px] sm:min-h-[180px] rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group p-4 sm:p-5 flex flex-col justify-between">
         {groupImageUrl ? (
           <Image
             src={groupImageUrl}
@@ -411,26 +412,21 @@ export function GroupDetail({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/60 to-transparent" />
         
-        {/* Top actions */}
-        <div className="absolute top-3 left-3 right-3 flex justify-between items-start">
-          <button
-            onClick={onBack}
-            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white text-xs font-semibold transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
-          >
-            Volver
-          </button>
+        {/* Top actions (Settings only - Volver button removed to eliminate UI overlap on mobile) */}
+        <div className="relative z-10 flex justify-end items-start w-full">
           <button
             onClick={() => setIsSettingsModalOpen(true)}
-            className="p-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95"
+            className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
             title="Configuración del grupo"
+            aria-label="Configuración del grupo"
           >
             <Settings className="w-4 h-4" />
           </button>
         </div>
 
         {/* Bottom info & actions */}
-        <div className="relative z-10 w-full p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div className="space-y-1">
+        <div className="relative z-10 w-full flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 sm:pt-0">
+          <div className="space-y-1.5 min-w-0 flex-1">
             <div className="flex items-center space-x-2">
               {(() => {
                 const catConfig = getGroupCategoryConfig(group.category);
@@ -443,28 +439,28 @@ export function GroupDetail({
                 );
               })()}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight drop-shadow-md">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight drop-shadow-md truncate">
               {group.name}
             </h1>
             {getCleanGroupDescription(group.description) && (
-              <p className="text-white/80 text-xs max-w-xl line-clamp-1">
+              <p className="text-white/80 text-xs sm:text-sm max-w-xl line-clamp-2 leading-relaxed">
                 {getCleanGroupDescription(group.description)}
               </p>
             )}
           </div>
           
           {/* Actions: Settle and New Expense */}
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
             <button
               onClick={() => onOpenSettleModal(group.id)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-3 py-2 rounded-xl text-xs transition-all active:scale-95 shadow-sm ring-1 ring-white/20"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all active:scale-95 shadow-sm ring-1 ring-white/20 min-h-[40px] cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>Saldar</span>
             </button>
             <button
               onClick={() => onOpenNewExpense(group.id)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-3 py-2 rounded-xl text-xs transition-all active:scale-95 shadow-sm"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all active:scale-95 shadow-sm min-h-[40px] cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo gasto</span>
@@ -509,10 +505,10 @@ export function GroupDetail({
       )}
 
       {/* Pestañas de Gastos, Balances y Miembros */}
-      <div className="flex border-b border-zinc-200 overflow-x-auto">
+      <div className="flex border-b border-zinc-200 overflow-x-auto no-scrollbar scroll-smooth gap-1 sm:gap-2">
         <button
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'expenses'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -524,7 +520,7 @@ export function GroupDetail({
 
         <button
           onClick={() => setActiveTab('balances')}
-          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'balances'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -536,7 +532,7 @@ export function GroupDetail({
 
         <button
           onClick={() => setActiveTab('members')}
-          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'members'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -548,7 +544,7 @@ export function GroupDetail({
 
         <button
           onClick={() => setActiveTab('activity')}
-          className={`flex items-center space-x-1.5 py-2.5 px-4 font-semibold text-xs border-b-2 whitespace-nowrap transition-all ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'activity'
               ? 'border-zinc-900 text-zinc-900'
               : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -632,11 +628,11 @@ export function GroupDetail({
               </div>
 
               {/* Segmented Switcher */}
-              <div className="inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0 self-start sm:self-center">
+              <div className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsSimplifiedBalances(true)}
-                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     isSimplifiedBalances
                       ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
                       : 'text-zinc-500 hover:text-zinc-800'
@@ -650,7 +646,7 @@ export function GroupDetail({
                 <button
                   type="button"
                   onClick={() => setIsSimplifiedBalances(false)}
-                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     !isSimplifiedBalances
                       ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
                       : 'text-zinc-500 hover:text-zinc-800'
