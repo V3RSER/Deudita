@@ -23,6 +23,9 @@ import {
   AlertCircle,
   ExternalLink,
   History,
+  ListChecks,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function ExpenseDetailPage({
@@ -40,6 +43,7 @@ export default function ExpenseDetailPage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [expandedParticipants, setExpandedParticipants] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,6 +51,7 @@ export default function ExpenseDetailPage({
       const foundInContext = expenses.find((e) => e.id === id);
       if (foundInContext && isMounted) {
         setExpense(foundInContext);
+        setExpandedParticipants((foundInContext.splits ?? []).map((s) => s.user_id));
         setLoading(false);
       }
 
@@ -57,6 +62,7 @@ export default function ExpenseDetailPage({
           const data = await res.json();
           if (isMounted) {
             setExpense(data);
+            setExpandedParticipants((data.splits ?? []).map((s: any) => s.user_id));
           }
         } else if (!foundInContext) {
           throw new Error('Gasto no encontrado');
@@ -110,11 +116,68 @@ export default function ExpenseDetailPage({
   }
 
   const group = userGroups.find((g) => g.id === expense.group_id);
+  const currency = group?.currency ?? currentProfile?.currency ?? 'COP';
   const paidByProfile = profiles.find((p) => p.id === expense.paid_by);
   const isPaidByMe = currentProfile?.id === expense.paid_by;
 
   const splits = expense.splits ?? [];
   const items = expense.items ?? [];
+
+  const toFraction = (decimal: number) => {
+    if (Number.isInteger(decimal)) return decimal.toString();
+    const fractions = [
+      { num: 1, den: 2, char: '½' },
+      { num: 1, den: 3, char: '⅓' },
+      { num: 2, den: 3, char: '⅔' },
+      { num: 1, den: 4, char: '¼' },
+      { num: 3, den: 4, char: '¾' },
+      { num: 1, den: 5, char: '⅕' },
+      { num: 2, den: 5, char: '⅖' },
+      { num: 3, den: 5, char: '⅗' },
+      { num: 4, den: 5, char: '⅘' },
+      { num: 1, den: 6, char: '⅙' },
+      { num: 5, den: 6, char: '⅚' },
+      { num: 1, den: 8, char: '⅛' },
+      { num: 3, den: 8, char: '⅜' },
+      { num: 5, den: 8, char: '⅝' },
+      { num: 7, den: 8, char: '⅞' },
+    ];
+    const whole = Math.floor(decimal);
+    const frac = decimal - whole;
+    for (const f of fractions) {
+      if (Math.abs(frac - (f.num / f.den)) < 0.05) {
+        return (
+          <span className="inline-flex items-baseline">
+            {whole > 0 && <span className="mr-0.5">{whole}</span>}
+            <span className="text-[15px] leading-none">{f.char}</span>
+          </span>
+        );
+      }
+    }
+    return Number(decimal.toFixed(2)).toString();
+  };
+
+  const getParticipantItemBreakdown = (splitAmount: number) => {
+    if (items.length === 0) return [];
+
+    const totalExpenseAmount = expense.total_amount > 0 ? expense.total_amount : items.reduce((acc, i) => acc + i.amount, 0);
+    const ratio = totalExpenseAmount > 0 ? (splitAmount / totalExpenseAmount) : (1 / Math.max(1, splits.length));
+
+    return items.map((item) => {
+      const qtyMatch = item.description?.match(/^(\d+(?:\.\d+)?)x\s*(.*)$/);
+      const itemQty = qtyMatch ? parseFloat(qtyMatch[1]) : 1;
+      const itemDesc = qtyMatch ? qtyMatch[2] : (item.description || 'Artículo');
+
+      const shareQty = itemQty * ratio;
+      const shareCost = item.amount * ratio;
+
+      return {
+        desc: itemDesc,
+        qty: shareQty,
+        cost: shareCost,
+      };
+    });
+  };
 
   const mySplit = splits.find((s) => s.user_id === currentProfile?.id);
   const myOwedAmount = mySplit ? mySplit.amount_owed : 0;
@@ -337,59 +400,111 @@ export default function ExpenseDetailPage({
             </div>
           )}
 
-          {/* Splits Distribution */}
+          {/* Splits Distribution / Resumen por participante */}
           <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider flex items-center space-x-1.5">
-              <Users className="w-4 h-4 text-zinc-400" />
-              <span>División entre participantes ({splits.length})</span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase text-zinc-500 tracking-wider flex items-center space-x-1.5">
+                <ListChecks className="w-4 h-4 text-emerald-600" />
+                <span>Resumen por participante ({splits.length})</span>
+              </h3>
+              {items.length > 0 && splits.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (expandedParticipants.length === splits.length) {
+                      setExpandedParticipants([]);
+                    } else {
+                      setExpandedParticipants(splits.map((s) => s.user_id));
+                    }
+                  }}
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors cursor-pointer"
+                >
+                  {expandedParticipants.length === splits.length ? 'Colapsar todos' : 'Expandir todos'}
+                </button>
+              )}
+            </div>
+
+            <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xs overflow-hidden divide-y divide-zinc-100">
               {splits.map((split) => {
                 const member = profiles.find((p) => p.id === split.user_id);
                 const isMe = currentProfile?.id === split.user_id;
                 const isPayer = split.user_id === expense.paid_by;
+                const isExpanded = expandedParticipants.includes(split.user_id);
+                const breakdown = getParticipantItemBreakdown(split.amount_owed);
 
                 return (
-                  <div
-                    key={split.id || split.user_id}
-                    className="p-3.5 rounded-2xl border border-zinc-200/80 bg-zinc-50/50 flex items-center justify-between text-sm"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      {member?.avatar_url ? (
-                        <Image
-                          src={member.avatar_url}
-                          alt={member.full_name ?? 'Member'}
-                          width={28}
-                          height={28}
-                          className="w-7 h-7 rounded-full object-cover ring-1 ring-zinc-200"
-                          unoptimized
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center justify-center">
-                          {(member?.full_name ?? 'U').charAt(0).toUpperCase()}
+                  <div key={split.id || split.user_id} className="flex flex-col py-3 px-3.5 sm:px-4 transition-colors">
+                    <div
+                      className={`flex items-center justify-between ${items.length > 0 ? 'cursor-pointer select-none' : ''}`}
+                      onClick={() => {
+                        if (items.length > 0) {
+                          setExpandedParticipants(
+                            isExpanded
+                              ? expandedParticipants.filter((id) => id !== split.user_id)
+                              : [...expandedParticipants, split.user_id]
+                          );
+                        }
+                      }}
+                    >
+                      <div className="flex items-center space-x-3 text-left min-w-0">
+                        {member?.avatar_url ? (
+                          <Image
+                            src={member.avatar_url}
+                            alt={member.full_name ?? 'Member'}
+                            width={28}
+                            height={28}
+                            className="w-7 h-7 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
+                            unoptimized
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-zinc-800 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                            {(member?.full_name ?? 'U').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-zinc-900 truncate">
+                              {member?.full_name ?? (member?.email || 'Usuario')}
+                              {isMe && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
+                            </span>
+                            {isPayer && (
+                              <span className="inline-block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                                Pagó la cuenta completa
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <span className="font-semibold text-zinc-900 block">
-                          {isMe ? 'Tú' : (member?.full_name ?? 'Usuario')}
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0 pl-2">
+                        <span className="text-sm sm:text-base font-black text-zinc-900">
+                          {formatCurrency(split.amount_owed, currency)}
                         </span>
-                        {isPayer && (
-                          <span className="inline-block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            Pagó la cuenta completa
-                          </span>
+                        {items.length > 0 && (
+                          isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-zinc-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-zinc-400" />
+                          )
                         )}
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="font-bold text-zinc-900 block">
-                        {formatCurrency(split.amount_owed)}
-                      </span>
-                      <span className="text-[11px] text-zinc-400 block">
-                        Su parte
-                      </span>
-                    </div>
+                    {items.length > 0 && isExpanded && breakdown.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-zinc-100 space-y-2 px-1">
+                        {breakdown.map((b, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs py-0.5">
+                            <span className="font-medium text-zinc-700 truncate pr-2">
+                              {toFraction(b.qty)} · {b.desc}
+                            </span>
+                            <span className="font-bold text-zinc-900 shrink-0">
+                              {formatCurrency(b.cost, currency)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
