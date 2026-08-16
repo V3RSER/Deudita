@@ -1,10 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Payment } from '@/lib/types';
-import { formatCurrency, calculatePairwiseBalances } from '@/lib/balance-utils';
+import {
+  formatCurrency,
+  calculateSimplifiedBalances,
+  calculateDirectBalances,
+} from '@/lib/balance-utils';
 import {
   Wallet,
   TrendingUp,
@@ -14,7 +18,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
-  DollarSign
+  Split,
+  Layers,
+  Info,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -32,18 +38,22 @@ function getInitials(name?: string): string {
 
 export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
   const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
+  const [isSimplified, setIsSimplified] = useState(true);
 
   const userGroupIds = new Set(userGroups.map((g) => g.id));
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
   const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
 
-  // Pairwise Balances across user's groups
-  const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);
+  // Compute both simplified and direct pairwise balances
+  const simplifiedPairwise = calculateSimplifiedBalances(userExpenses, userPayments, profiles);
+  const directPairwise = calculateDirectBalances(userExpenses, userPayments, profiles);
+
+  const activePairwise = isSimplified ? simplifiedPairwise : directPairwise;
 
   // Filter pairwise balances
-  const myOwedToMe = consolidatedPairwise.filter((p) => p.creditor.id === currentProfile?.id);
-  const myIOwe = consolidatedPairwise.filter((p) => p.debtor.id === currentProfile?.id);
-  const otherPairwise = consolidatedPairwise.filter(
+  const myOwedToMe = activePairwise.filter((p) => p.creditor.id === currentProfile?.id);
+  const myIOwe = activePairwise.filter((p) => p.debtor.id === currentProfile?.id);
+  const otherPairwise = activePairwise.filter(
     (p) => p.creditor.id !== currentProfile?.id && p.debtor.id !== currentProfile?.id
   );
 
@@ -51,13 +61,73 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
   const totalIOwe = myIOwe.reduce((acc, curr) => acc + curr.amount, 0);
   const netConsolidated = totalOwedToMe - totalIOwe;
 
+  const totalTransactionsCount = activePairwise.length;
+  const directTransactionsCount = directPairwise.length;
+  const simplifiedTransactionsCount = simplifiedPairwise.length;
+  const savedTransactions = Math.max(0, directTransactionsCount - simplifiedTransactionsCount);
+
   return (
     <div className="space-y-6">
-      <PageHeader 
+      <PageHeader
         title="Balances & Pagos"
         subtitle="Resumen de deudas pendientes, cobros por recibir y liquidaciones de cuentas entre integrantes."
         icon={<Wallet className="w-5 h-5" />}
       />
+
+      {/* Simplification Mode Toggle & Info Banner */}
+      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-black uppercase tracking-wider text-zinc-500">
+                Modo de cálculo
+              </span>
+              {isSimplified && savedTransactions > 0 && (
+                <span className="inline-flex items-center space-x-1 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Ahorra {savedTransactions} {savedTransactions === 1 ? 'pago' : 'pagos'}</span>
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-600 font-medium mt-0.5">
+              {isSimplified
+                ? 'Las deudas se simplifican para resolver las cuentas con la menor cantidad de pagos.'
+                : 'Muestra las deudas directas calculadas exactamente entre cada par de personas.'}
+            </p>
+          </div>
+
+          {/* Segmented Switcher */}
+          <div className="inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0 self-start sm:self-center">
+            <button
+              type="button"
+              onClick={() => setIsSimplified(true)}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                isSimplified
+                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
+                  : 'text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isSimplified ? 'text-emerald-600' : 'text-zinc-400'}`} />
+              <span>Simplificado</span>
+              <span className="text-[10px] opacity-70">({simplifiedTransactionsCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSimplified(false)}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                !isSimplified
+                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
+                  : 'text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              <Layers className={`w-3.5 h-3.5 ${!isSimplified ? 'text-zinc-900' : 'text-zinc-400'}`} />
+              <span>Sin simplificar</span>
+              <span className="text-[10px] opacity-70">({directTransactionsCount})</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -194,9 +264,9 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
 
                 <button
                   onClick={() =>
-                    onOpenSettleModal(undefined, p.debtor.id, currentProfile?.id ? currentProfile.id : '', p.amount)
+                    onOpenSettleModal(undefined, p.debtor.id, currentProfile?.id ? currentProfile.id : undefined, p.amount)
                   }
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2.5 rounded-2xl text-xs transition-all shadow-xs active:scale-95 shrink-0"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2.5 rounded-2xl text-xs transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
                 >
                   Registrar pago
                 </button>
@@ -261,9 +331,9 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
 
                 <button
                   onClick={() =>
-                    onOpenSettleModal(undefined, currentProfile?.id ? currentProfile.id : '', p.creditor.id, p.amount)
+                    onOpenSettleModal(undefined, currentProfile?.id ? currentProfile.id : undefined, p.creditor.id, p.amount)
                   }
-                  className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all shadow-xs active:scale-95 shrink-0"
+                  className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
                 >
                   Pagar
                 </button>
@@ -346,7 +416,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                   onClick={() =>
                     onOpenSettleModal(undefined, p.debtor.id, p.creditor.id, p.amount)
                   }
-                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold px-4 py-2 rounded-xl text-xs transition-all active:scale-95 shrink-0 self-end sm:self-center"
+                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold px-4 py-2 rounded-xl text-xs transition-all active:scale-95 shrink-0 self-end sm:self-center cursor-pointer"
                 >
                   Saldar
                 </button>

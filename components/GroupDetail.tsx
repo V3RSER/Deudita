@@ -4,11 +4,18 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Group, Expense, Payment, Profile } from '@/lib/types';
-import { formatCurrency, calculatePairwiseBalances, calculateUserSummaries } from '@/lib/balance-utils';
+import {
+  formatCurrency,
+  calculatePairwiseBalances,
+  calculateSimplifiedBalances,
+  calculateDirectBalances,
+  calculateUserSummaries,
+} from '@/lib/balance-utils';
 import {
   Receipt,
   Wallet,
-  Users, User,
+  Users,
+  User,
   Plus,
   UserPlus,
   Trash2,
@@ -16,9 +23,11 @@ import {
   Share2,
   Check,
   Sparkles,
+  Layers,
   Pencil,
   FileText,
-  Settings, Activity,
+  Settings,
+  Activity,
   Folder,
   ArrowRight,
   Clock,
@@ -124,6 +133,7 @@ export function GroupDetail({
   const { currentProfile, expenses, auditLogs, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment, deleteGroup } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
+  const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
 
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
@@ -152,8 +162,11 @@ export function GroupDetail({
     .map((m) => profiles.find((p) => p.id === m.user_id))
     .filter((p): p is NonNullable<typeof p> => p !== undefined);
 
-  // Pairwise debts in this group
-  const groupPairwise = calculatePairwiseBalances(expenses, payments, profiles, group.id);
+  // Simplified and direct pairwise debts in this group
+  const simplifiedGroupPairwise = calculateSimplifiedBalances(expenses, payments, profiles, group.id);
+  const directGroupPairwise = calculateDirectBalances(expenses, payments, profiles, group.id);
+  const groupPairwise = isSimplifiedBalances ? simplifiedGroupPairwise : directGroupPairwise;
+  const savedGroupTransactions = Math.max(0, directGroupPairwise.length - simplifiedGroupPairwise.length);
 
   const isSoloMember = memberProfiles.length <= 1;
 
@@ -604,6 +617,61 @@ export function GroupDetail({
       {/* TAB CONTENT: Balances */}
       {activeTab === 'balances' && (
         <div className="space-y-6">
+          {/* Mode Switcher & Explanation Banner */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-zinc-500">
+                    Modo de cálculo
+                  </span>
+                  {isSimplifiedBalances && savedGroupTransactions > 0 && (
+                    <span className="inline-flex items-center space-x-1 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-600 font-medium mt-0.5">
+                  {isSimplifiedBalances
+                    ? 'Simplificación activada: Se agrupan los saldos para que el grupo salde cuentas en el menor número de pagos.'
+                    : 'Vista sin simplificar: Muestra los saldos directos calculados gasto por gasto entre cada integrante.'}
+                </p>
+              </div>
+
+              {/* Segmented Switcher */}
+              <div className="inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0 self-start sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => setIsSimplifiedBalances(true)}
+                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    isSimplifiedBalances
+                      ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                  <span>Simplificado</span>
+                  <span className="text-[10px] opacity-70">({simplifiedGroupPairwise.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSimplifiedBalances(false)}
+                  className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    !isSimplifiedBalances
+                      ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <Layers className={`w-3.5 h-3.5 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
+                  <span>Sin simplificar</span>
+                  <span className="text-[10px] opacity-70">({directGroupPairwise.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {groupPairwise.length === 0 ? (
             <div className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
@@ -620,6 +688,11 @@ export function GroupDetail({
                 const isMyDebt = p.debtor.id === currentProfile?.id;
                 const isOwedToMe = p.creditor.id === currentProfile?.id;
 
+                const debtorInitial = p.debtor.full_name?.trim() ? p.debtor.full_name.trim().charAt(0).toUpperCase() : 'U';
+                const creditorInitial = p.creditor.full_name?.trim() ? p.creditor.full_name.trim().charAt(0).toUpperCase() : 'U';
+                const debtorDisplayName = p.debtor.full_name?.trim() ? p.debtor.full_name.split(' ')[0] : 'Integrante';
+                const creditorDisplayName = p.creditor.full_name?.trim() ? p.creditor.full_name.split(' ')[0] : 'Integrante';
+
                 return (
                   <div
                     key={idx}
@@ -630,29 +703,31 @@ export function GroupDetail({
                         {p.debtor.avatar_url ? (
                           <Image
                             src={p.debtor.avatar_url}
-                            alt="Debtor"
+                            alt={p.debtor.full_name ? p.debtor.full_name : 'Deudor'}
                             width={40}
                             height={40}
                             className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
                             unoptimized
+                            referrerPolicy="no-referrer"
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                            {p.debtor.full_name?.charAt(0).toUpperCase() || 'U'}
+                            {debtorInitial}
                           </div>
                         )}
                         {p.creditor.avatar_url ? (
                           <Image
                             src={p.creditor.avatar_url}
-                            alt="Creditor"
+                            alt={p.creditor.full_name ? p.creditor.full_name : 'Acreedor'}
                             width={40}
                             height={40}
                             className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
                             unoptimized
+                            referrerPolicy="no-referrer"
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                            {p.creditor.full_name?.charAt(0).toUpperCase() || 'U'}
+                            {creditorInitial}
                           </div>
                         )}
                       </div>
@@ -660,11 +735,11 @@ export function GroupDetail({
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
                           <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
-                            {p.debtor.full_name?.split(' ')[0] || 'Integrante'}
+                            {debtorDisplayName}
                           </span>
                           <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
-                            {p.creditor.full_name?.split(' ')[0] || 'Integrante'}
+                            {creditorDisplayName}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -675,7 +750,7 @@ export function GroupDetail({
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
                               : 'bg-zinc-100 text-zinc-700'
                           }`}>
-                            {formatCurrency(p.amount, group.currency || 'COP')}
+                            {formatCurrency(p.amount, group.currency ?? 'COP')}
                           </span>
                         </div>
                       </div>
@@ -683,7 +758,7 @@ export function GroupDetail({
 
                     <button
                       onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
-                      className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center"
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
                     >
                       Saldar
                     </button>
