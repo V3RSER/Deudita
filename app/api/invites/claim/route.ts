@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Token de invitación no proporcionado' }, { status: 400 });
     }
 
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    const db = supabase;
 
     // Find pending invite by token or by id
     let invite: any = null;
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       await db.from('notifications').update({ user_id: user.id }).eq('user_id', tempProfileId);
 
       // Ensure user profile is properly upserted as non-temp
-      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario';
+      const fullName = user.user_metadata?.full_name ?? user.user_metadata?.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
       const avatarUrl = user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null;
 
       await db.from('profiles').upsert({

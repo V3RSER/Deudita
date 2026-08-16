@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const returnTo = searchParams.get('returnTo');
-  const token = searchParams.get('token') || searchParams.get('invite_token');
+  const token = searchParams.get('token') ?? searchParams.get('invite_token');
 
   if (code) {
     const supabase = await createClient();
@@ -15,10 +15,10 @@ export async function GET(request: Request) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        const inviteTokenToUse = token || user.user_metadata?.invite_token;
+        const inviteTokenToUse = token ?? user.user_metadata?.invite_token;
         if (inviteTokenToUse) {
           try {
-            const db = createAdminClient();
+            const db = supabase;
             const { data: invite } = await db
               .from('group_invites')
               .select('id, group_id, invitee_profile_id')

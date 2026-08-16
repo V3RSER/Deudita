@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(
   req: Request,
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const supabase = await createClient();
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    const db = supabase;
 
     // Try finding invite by token first, then by id
     let invite: any = null;

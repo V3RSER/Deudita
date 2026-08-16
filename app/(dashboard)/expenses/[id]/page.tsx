@@ -113,8 +113,8 @@ export default function ExpenseDetailPage({
   const paidByProfile = profiles.find((p) => p.id === expense.paid_by);
   const isPaidByMe = currentProfile?.id === expense.paid_by;
 
-  const splits = expense.splits || [];
-  const items = expense.items || [];
+  const splits = expense.splits ?? [];
+  const items = expense.items ?? [];
 
   const mySplit = splits.find((s) => s.user_id === currentProfile?.id);
   const myOwedAmount = mySplit ? mySplit.amount_owed : 0;

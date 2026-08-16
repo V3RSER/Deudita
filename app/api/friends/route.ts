@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    const db = supabase;
     const body = await req.json().catch(() => null);
 
     if (!body || !body.fullName || typeof body.fullName !== 'string' || !body.fullName.trim()) {
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     if (error || !newProfile) {
       console.error('[API POST /api/friends] Error creating profile:', error);
-      return NextResponse.json({ error: error?.message || 'Error al agregar el amigo' }, { status: 500 });
+      return NextResponse.json({ error: error?.message ?? 'Error al agregar el amigo' }, { status: 500 });
     }
 
     return NextResponse.json({ profile: newProfile });

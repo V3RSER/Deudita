@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { sendGroupInviteEmail } from '@/lib/email';
 
 async function ensureGroupMember(db: any, groupId: string, userId: string, invitedBy: string) {
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    const db = supabase;
 
     const body = await req.json().catch(() => null);
     if (!body || !body.groupId) {

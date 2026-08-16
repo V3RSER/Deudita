@@ -291,7 +291,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo eliminar al amigo');
+        throw new Error(errData.error ?? 'No se pudo eliminar al amigo');
       }
 
       await reloadFromSupabase();
@@ -306,7 +306,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo aceptar la invitación');
+        throw new Error(errData.error ?? 'No se pudo aceptar la invitación');
       }
 
       const data = await res.json();
@@ -323,7 +323,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo rechazar la invitación');
+        throw new Error(errData.error ?? 'No se pudo rechazar la invitación');
       }
 
       await reloadFromSupabase();

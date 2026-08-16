@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function DELETE(
   req: Request,
@@ -20,7 +20,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Falta el ID del amigo' }, { status: 400 });
     }
 
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    const db = supabase;
 
     // 1. Get all group IDs where current user is a member or owner
     const { data: userMemberships } = await db
