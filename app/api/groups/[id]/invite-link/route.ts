@@ -42,24 +42,24 @@ export async function GET(
       }
     }
 
-    // Look for an existing, non-expired open invite link for this group (email is null, invitee_profile_id is null)
+    // Look for an existing, non-expired open invite link for this group
     const { data: existingInvites } = await db
       .from('group_invites')
-      .select('id, token, created_at, expires_at, status')
+      .select('id, token, created_at, status, email, invitee_profile_id')
       .eq('group_id', groupId)
-      .is('invitee_profile_id', null)
-      .is('email', null)
       .order('created_at', { ascending: false })
-      .limit(5);
+      .limit(10);
 
     let activeInvite: any = null;
     const now = Date.now();
 
     if (existingInvites && existingInvites.length > 0) {
       for (const inv of existingInvites) {
-        const expiresAtMs = inv.expires_at
-          ? new Date(inv.expires_at).getTime()
-          : (inv.created_at ? new Date(inv.created_at).getTime() + 7 * 24 * 60 * 60 * 1000 : 0);
+        const isGeneral = !inv.invitee_profile_id && (!inv.email || inv.email === 'invite@link.deudita.app');
+        if (!isGeneral) continue;
+
+        const createdAtMs = inv.created_at ? new Date(inv.created_at).getTime() : now;
+        const expiresAtMs = createdAtMs + 7 * 24 * 60 * 60 * 1000;
 
         if (expiresAtMs > now && inv.status !== 'rejected') {
           activeInvite = {
@@ -89,48 +89,21 @@ export async function GET(
     const newExpiresAt = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
     const token = crypto.randomUUID();
 
-    // Attempt insert with expires_at
+    // Use email 'invite@link.deudita.app' to safely satisfy any 'email_or_profile_check' database constraints
     const insertPayload: any = {
       group_id: groupId,
       invited_by: user.id,
-      email: null,
+      email: 'invite@link.deudita.app',
       invitee_profile_id: null,
       status: 'pending',
       token,
-      expires_at: newExpiresAt,
     };
 
-    let newInvite: { id: string; token: string; created_at: string; expires_at?: string } | null = null;
-    let insertErr: any = null;
-
-    const initialInsert = await db
+    const { data: newInvite, error: insertErr } = await db
       .from('group_invites')
       .insert(insertPayload)
-      .select('id, token, created_at, expires_at')
+      .select('id, token, created_at')
       .single();
-
-    newInvite = initialInsert.data;
-    insertErr = initialInsert.error;
-
-    if (insertErr) {
-      console.warn('[API /api/groups/[id]/invite-link] Retrying insert without expires_at column in case of schema discrepancy:', insertErr);
-      const fallbackPayload = {
-        group_id: groupId,
-        invited_by: user.id,
-        email: null,
-        invitee_profile_id: null,
-        status: 'pending',
-        token,
-      };
-      const retryResult = await db
-        .from('group_invites')
-        .insert(fallbackPayload)
-        .select('id, token, created_at')
-        .single();
-
-      newInvite = retryResult.data;
-      insertErr = retryResult.error;
-    }
 
     if (insertErr || !newInvite) {
       console.error('[API /api/groups/[id]/invite-link] Error creating invite link:', insertErr);
@@ -203,44 +176,17 @@ export async function POST(
     const insertPayload: any = {
       group_id: groupId,
       invited_by: user.id,
-      email: null,
+      email: 'invite@link.deudita.app',
       invitee_profile_id: null,
       status: 'pending',
       token,
-      expires_at: newExpiresAt,
     };
 
-    let newInvite: { id: string; token: string; created_at: string; expires_at?: string } | null = null;
-    let insertErr: any = null;
-
-    const initialInsert = await db
+    const { data: newInvite, error: insertErr } = await db
       .from('group_invites')
       .insert(insertPayload)
-      .select('id, token, created_at, expires_at')
+      .select('id, token, created_at')
       .single();
-
-    newInvite = initialInsert.data;
-    insertErr = initialInsert.error;
-
-    if (insertErr) {
-      console.warn('[API /api/groups/[id]/invite-link POST] Retrying insert without expires_at column:', insertErr);
-      const fallbackPayload = {
-        group_id: groupId,
-        invited_by: user.id,
-        email: null,
-        invitee_profile_id: null,
-        status: 'pending',
-        token,
-      };
-      const retryResult = await db
-        .from('group_invites')
-        .insert(fallbackPayload)
-        .select('id, token, created_at')
-        .single();
-
-      newInvite = retryResult.data;
-      insertErr = retryResult.error;
-    }
 
     if (insertErr || !newInvite) {
       console.error('[API /api/groups/[id]/invite-link POST] Error creating invite link:', insertErr);

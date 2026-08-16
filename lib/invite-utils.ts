@@ -205,7 +205,7 @@ export async function claimAndJoinGroupInvite(
   // By token
   const { data: inviteByToken } = await db
     .from('group_invites')
-    .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
+    .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
     .eq('token', cleanToken)
     .maybeSingle();
 
@@ -215,7 +215,7 @@ export async function claimAndJoinGroupInvite(
     // By id
     const { data: inviteById } = await db
       .from('group_invites')
-      .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
+      .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
       .eq('id', cleanToken)
       .maybeSingle();
 
@@ -225,7 +225,7 @@ export async function claimAndJoinGroupInvite(
       // By email match
       const { data: inviteByEmail } = await db
         .from('group_invites')
-        .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
+        .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
         .ilike('email', userEmailLower)
         .eq('status', 'pending')
         .maybeSingle();
@@ -238,9 +238,8 @@ export async function claimAndJoinGroupInvite(
 
   // Check expiration if invite record was found
   if (invite) {
-    const isExpired =
-      (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) ||
-      (!invite.expires_at && invite.created_at && new Date(invite.created_at).getTime() + 7 * 24 * 60 * 60 * 1000 < Date.now());
+    const createdAtMs = invite.created_at ? new Date(invite.created_at).getTime() : Date.now();
+    const isExpired = createdAtMs + 7 * 24 * 60 * 60 * 1000 < Date.now();
 
     if (isExpired) {
       throw new Error('El enlace de invitación ha caducado. Los enlaces tienen una validez de 7 días.');

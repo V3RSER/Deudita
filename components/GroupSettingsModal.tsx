@@ -69,8 +69,8 @@ export function GroupSettingsModal({
               <LinkIcon className="w-5 h-5" />
             </div>
             <div>
-              <div className="font-semibold text-zinc-900 text-sm">Invitar mediante enlace</div>
-              <div className="text-xs text-zinc-500 font-medium">Enlace directo con validez de 7 días</div>
+              <div className="font-semibold text-zinc-900 text-sm">Enlace de invitación</div>
+              <div className="text-xs text-zinc-500 font-medium">Copiar o compartir enlace del grupo</div>
             </div>
           </button>
         </div>

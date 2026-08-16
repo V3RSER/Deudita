@@ -21,7 +21,7 @@ export async function GET(
 
     const { data: inviteByToken } = await db
       .from('group_invites')
-      .select('id, group_id, email, status, token, created_at, expires_at, invited_by, invitee_profile_id')
+      .select('id, group_id, email, status, token, created_at, invited_by, invitee_profile_id')
       .eq('token', inviteId)
       .maybeSingle();
 
@@ -30,7 +30,7 @@ export async function GET(
     } else {
       const { data: inviteById } = await db
         .from('group_invites')
-        .select('id, group_id, email, status, token, created_at, expires_at, invited_by, invitee_profile_id')
+        .select('id, group_id, email, status, token, created_at, invited_by, invitee_profile_id')
         .eq('id', inviteId)
         .maybeSingle();
       invite = inviteById;
@@ -40,11 +40,9 @@ export async function GET(
       return NextResponse.json({ error: 'Invitación no encontrada o no válida' }, { status: 404 });
     }
 
-    // Calculate expiration (7 days from creation or explicit expires_at)
+    // Calculate expiration (7 days from creation)
     const createdAtMs = invite.created_at ? new Date(invite.created_at).getTime() : Date.now();
-    const computedExpiresAt = invite.expires_at
-      ? new Date(invite.expires_at).toISOString()
-      : new Date(createdAtMs + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const computedExpiresAt = new Date(createdAtMs + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const isExpired = new Date(computedExpiresAt).getTime() < Date.now();
 
@@ -84,7 +82,7 @@ export async function GET(
       inviteeProfile = invitee;
     }
 
-    const isGeneralLink = !invite.invitee_profile_id && !invite.email;
+    const isGeneralLink = !invite.invitee_profile_id && (!invite.email || invite.email === 'invite@link.deudita.app');
 
     return NextResponse.json({
       invite: {

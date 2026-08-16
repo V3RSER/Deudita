@@ -53,7 +53,8 @@ interface GroupDetailProps {
   onEditPayment?: (payment: Payment) => void;
   onDeletePayment?: (paymentId: string) => void;
   onOpenSettleModal: (groupId: string, debtorId?: string, creditorId?: string, amount?: number) => void;
-  onOpenAddMember: (groupId: string, tab?: 'link' | 'new' | 'friends') => void;
+  onOpenAddMember: (groupId: string) => void;
+  onOpenInviteLink: (groupId: string) => void;
 }
 
 const MONTH_NAMES_ES = [
@@ -130,6 +131,7 @@ export function GroupDetail({
   onDeletePayment,
   onOpenSettleModal,
   onOpenAddMember,
+  onOpenInviteLink,
 }: GroupDetailProps) {
   const { currentProfile, expenses, auditLogs, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment, deleteGroup } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
@@ -485,7 +487,7 @@ export function GroupDetail({
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <button
-                onClick={() => onOpenAddMember(group.id, 'new')}
+                onClick={() => onOpenAddMember(group.id)}
                 className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 shadow-sm min-h-[40px] cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
@@ -493,11 +495,11 @@ export function GroupDetail({
               </button>
 
               <button
-                onClick={() => onOpenAddMember(group.id, 'link')}
+                onClick={() => onOpenInviteLink(group.id)}
                 className="flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 text-zinc-900 font-medium px-4 py-2.5 rounded-xl text-sm ring-1 ring-zinc-200 shadow-sm transition-all active:scale-95 min-h-[40px] cursor-pointer"
               >
                 <LinkIcon className="w-4 h-4 text-emerald-600" />
-                <span>Invitar con enlace</span>
+                <span>Enlace de invitación</span>
               </button>
             </div>
           </div>
@@ -761,17 +763,26 @@ export function GroupDetail({
       {/* TAB CONTENT: Members */}
       {activeTab === 'members' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="font-semibold text-zinc-900 text-lg sm:text-xl">
               Integrantes ({memberProfiles.length})
             </h3>
-            <button
-              onClick={() => onOpenAddMember(group.id)}
-              className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-2.5 rounded-full text-xs font-medium transition-all active:scale-95 min-h-[40px]"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Añadir Integrante</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onOpenInviteLink(group.id)}
+                className="flex items-center space-x-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-800 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-95 min-h-[38px] cursor-pointer"
+              >
+                <LinkIcon className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Enlace de invitación</span>
+              </button>
+              <button
+                onClick={() => onOpenAddMember(group.id)}
+                className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-95 min-h-[38px] cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Añadir Integrante</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -945,11 +956,11 @@ export function GroupDetail({
         }}
         onAddMembers={() => {
           setIsSettingsModalOpen(false);
-          onOpenAddMember(group.id, 'new');
+          onOpenAddMember(group.id);
         }}
         onInviteLink={() => {
           setIsSettingsModalOpen(false);
-          onOpenAddMember(group.id, 'link');
+          onOpenInviteLink(group.id);
         }}
         onDeleteGroup={() => {
           setIsSettingsModalOpen(false);

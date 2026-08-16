@@ -27,10 +27,10 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
   const { updateGroup, deleteGroup, isMutating } = useExpense();
 
   const [name, setName] = useState(group.name);
-  const [category, setCategory] = useState<GroupCategory>(group.category || 'home');
+  const [category, setCategory] = useState<GroupCategory>(group.category ?? 'home');
   const [description, setDescription] = useState(getCleanGroupDescription(group.description));
-  const [selectedCurrency, setSelectedCurrency] = useState<string>(group.currency || 'COP');
-  const [groupImageUrl, setGroupImageUrl] = useState<string>(getGroupImage(group) || '');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(group.currency ?? 'COP');
+  const [groupImageUrl, setGroupImageUrl] = useState<string>(getGroupImage(group) ?? '');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -40,10 +40,10 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
   useEffect(() => {
     if (isOpen) {
       setName(group.name);
-      setCategory(group.category || 'home');
+      setCategory(group.category ?? 'home');
       setDescription(getCleanGroupDescription(group.description));
-      setSelectedCurrency(group.currency || 'COP');
-      setGroupImageUrl(getGroupImage(group) || '');
+      setSelectedCurrency(group.currency ?? 'COP');
+      setGroupImageUrl(getGroupImage(group) ?? '');
       setErrorMessage(null);
       setIsSubmitting(false);
       setIsUploading(false);

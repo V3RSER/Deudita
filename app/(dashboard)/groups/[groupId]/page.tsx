@@ -8,6 +8,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
 import { AddMemberModal } from '@/components/AddMemberModal';
+import { InviteLinkModal } from '@/components/InviteLinkModal';
 
 export default function GroupDetailPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function GroupDetailPage() {
   }>({});
 
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-  const [addMemberTab, setAddMemberTab] = useState<'link' | 'new' | 'friends'>('link');
+  const [isInviteLinkOpen, setIsInviteLinkOpen] = useState(false);
 
   const group = groups.find((g) => g.id === groupId);
 
@@ -61,9 +62,12 @@ export default function GroupDetailPage() {
     setIsSettleOpen(true);
   };
 
-  const handleOpenAddMember = (_gId?: string, tab: 'link' | 'new' | 'friends' = 'link') => {
-    setAddMemberTab(tab);
+  const handleOpenAddMember = () => {
     setIsAddMemberOpen(true);
+  };
+
+  const handleOpenInviteLink = () => {
+    setIsInviteLinkOpen(true);
   };
 
   return (
@@ -77,6 +81,7 @@ export default function GroupDetailPage() {
         onDeletePayment={(payId) => deletePayment(payId)}
         onOpenSettleModal={handleOpenSettleModal}
         onOpenAddMember={handleOpenAddMember}
+        onOpenInviteLink={handleOpenInviteLink}
       />
 
       <NewExpenseModal
@@ -107,7 +112,12 @@ export default function GroupDetailPage() {
         isOpen={isAddMemberOpen}
         onClose={() => setIsAddMemberOpen(false)}
         groupId={groupId}
-        initialTab={addMemberTab}
+      />
+
+      <InviteLinkModal
+        isOpen={isInviteLinkOpen}
+        onClose={() => setIsInviteLinkOpen(false)}
+        groupId={groupId}
       />
     </>
   );
