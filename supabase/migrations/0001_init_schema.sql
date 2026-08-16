@@ -559,6 +559,24 @@ create policy "insert_expense_items" on public.expense_items
     )
   );
 
+drop policy if exists "update_expense_items" on public.expense_items;
+create policy "update_expense_items" on public.expense_items
+  for update using (
+    expense_id in (
+      select e.id from public.expenses e
+      where public.is_group_member(e.group_id, auth.uid())
+    )
+  );
+
+drop policy if exists "delete_expense_items" on public.expense_items;
+create policy "delete_expense_items" on public.expense_items
+  for delete using (
+    expense_id in (
+      select e.id from public.expenses e
+      where public.is_group_member(e.group_id, auth.uid())
+    )
+  );
+
 -- ---- expense_splits ----
 drop policy if exists "select_expense_splits" on public.expense_splits;
 create policy "select_expense_splits" on public.expense_splits
@@ -572,6 +590,24 @@ create policy "select_expense_splits" on public.expense_splits
 drop policy if exists "insert_expense_splits" on public.expense_splits;
 create policy "insert_expense_splits" on public.expense_splits
   for insert with check (
+    expense_id in (
+      select e.id from public.expenses e
+      where public.is_group_member(e.group_id, auth.uid())
+    )
+  );
+
+drop policy if exists "update_expense_splits" on public.expense_splits;
+create policy "update_expense_splits" on public.expense_splits
+  for update using (
+    expense_id in (
+      select e.id from public.expenses e
+      where public.is_group_member(e.group_id, auth.uid())
+    )
+  );
+
+drop policy if exists "delete_expense_splits" on public.expense_splits;
+create policy "delete_expense_splits" on public.expense_splits
+  for delete using (
     expense_id in (
       select e.id from public.expenses e
       where public.is_group_member(e.group_id, auth.uid())

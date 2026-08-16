@@ -57,6 +57,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage' | 'shares' | 'itemized'>('equal');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
+  const [showExactMismatchModal, setShowExactMismatchModal] = useState(false);
+  const [mismatchData, setMismatchData] = useState<{ exactSum: number; currentTotal: number; finalSplits: any[] } | null>(null);
 
   const [step, setStep] = useState(1);
   const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(false);
@@ -65,7 +67,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
   // Computed
   const activeGroup = userGroups.find(g => g.id === groupId);
-  const currency = activeGroup?.currency || currentProfile?.currency || 'COP';
+  const currency = activeGroup?.currency ?? currentProfile?.currency ?? 'COP';
 
   const activeProfiles = useMemo(() => {
     if (!groupId || groupId === 'none') return currentProfile ? [currentProfile] : [];
@@ -290,19 +292,60 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     return res;
   };
 
+  const executeSave = async (amountToSave: number, splitsToSave: any[]) => {
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        group_id: (groupId === 'none' ? null : groupId) as any,
+        paid_by: paidById,
+        total_amount: amountToSave,
+        description: description.trim(),
+        category: subCategory,
+        expense_date: date,
+        source: 'manual' as const,
+        receipt_url: receiptUrl ? receiptUrl : undefined,
+        notes: notes.trim() ? notes.trim() : undefined,
+        created_by: currentProfile?.id ?? paidById,
+      };
+
+      const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
+        id: "tmp_" + idx,
+        expense_id: expenseToEdit?.id ?? '',
+        description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity}x ${i.desc.trim()}` : i.desc.trim(),
+        amount: getItemTotal(i),
+        created_at: new Date().toISOString()
+      })) : [];
+
+      if (expenseToEdit) {
+        await updateExpense(expenseToEdit.id, payload, finalItems, splitsToSave);
+      } else {
+        await addExpense(payload, finalItems, splitsToSave);
+      }
+      onClose();
+    } catch (err: any) {
+      setError(err.message ?? 'Error al guardar el gasto.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setError(null);
 
     if (!description.trim()) return setError('Ingresa una descripción.');
-    if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
     if (!paidById) return setError('Selecciona quién pagó.');
-    if (mode === 'itemized' && items.some(i => !i.desc.trim() || !(parseFloat(i.amount) > 0))) {
-      return setError('Completa la descripción y monto de todos los artículos.');
-    }
     if (selectedMembers.length === 0) return setError('Selecciona al menos un participante.');
+
+    if (mode === 'itemized') {
+      if (items.some(i => !i.desc.trim() || !(parseFloat(i.amount) > 0))) {
+        return setError('Completa la descripción y monto de todos los artículos.');
+      }
+      if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
+    }
 
     let finalSplits: any[] = [];
     if (splitType === 'equal') {
+      if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
       const share = totalAmount / selectedMembers.length;
       finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: share }));
     } else if (splitType === 'exact') {
@@ -311,12 +354,33 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         const val = parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0;
         sum += val;
       });
-      if (Math.abs(sum - totalAmount) > 0.05) return setError('La suma exacta no coincide con el total.');
-      finalSplits = selectedMembers.map(id => ({
+
+      const calculatedSplits = selectedMembers.map(id => ({
         user_id: id,
         amount_owed: parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0
       }));
+
+      // In simple mode (mode === 'quick'), if exact sum doesn't match total, offer shortcut modal to overwrite total
+      if (mode === 'quick' && Math.abs(sum - totalAmount) > 0.05) {
+        if (sum > 0) {
+          setMismatchData({
+            exactSum: sum,
+            currentTotal: totalAmount,
+            finalSplits: calculatedSplits
+          });
+          setShowExactMismatchModal(true);
+          return;
+        } else {
+          return setError('Ingresa los montos individuales de cada participante.');
+        }
+      }
+
+      if (Math.abs(sum - totalAmount) > 0.05) {
+        return setError('La suma exacta no coincide con el total.');
+      }
+      finalSplits = calculatedSplits;
     } else if (splitType === 'percentage') {
+      if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
       let sum = 0;
       selectedMembers.forEach(id => {
         const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
@@ -328,6 +392,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         return { user_id: id, amount_owed: totalAmount * (val / 100) };
       });
     } else if (splitType === 'shares') {
+      if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
       let sum = 0;
       selectedMembers.forEach(id => {
         const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
@@ -343,40 +408,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
     }
 
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        group_id: (groupId === 'none' ? null : groupId) as any,
-        paid_by: paidById,
-        total_amount: totalAmount,
-        description: description.trim(),
-        category: subCategory,
-        expense_date: date,
-        source: 'manual' as const,
-        receipt_url: receiptUrl || undefined,
-        notes: notes.trim() || undefined,
-        created_by: currentProfile?.id || paidById,
-      };
-
-      const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
-        id: "tmp_" + idx,
-        expense_id: expenseToEdit?.id || '',
-        description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity}x ${i.desc.trim()}` : i.desc.trim(),
-        amount: getItemTotal(i),
-        created_at: new Date().toISOString()
-      })) : [];
-
-      if (expenseToEdit) {
-        await updateExpense(expenseToEdit.id, payload, finalItems, finalSplits);
-      } else {
-        await addExpense(payload, finalItems, finalSplits);
-      }
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Error al guardar el gasto.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    await executeSave(totalAmount, finalSplits);
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -892,38 +924,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           </div>
                         );
                       })}
-
-                      {splitType === 'exact' && (
-                        (() => {
-                          const exactSum = selectedMembers.reduce((acc, memId) => {
-                            const val = parseFloat(String(splits[memId]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0;
-                            return acc + val;
-                          }, 0);
-                          const diff = totalAmount - exactSum;
-                          const isBalanced = Math.abs(diff) <= 0.05;
-
-                          return (
-                            <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between text-xs px-1">
-                              <span className="text-zinc-500">
-                                Asignado: <strong className="text-zinc-900 font-bold">{formatCurrency(exactSum, currency)}</strong> de {formatCurrency(totalAmount, currency)}
-                              </span>
-                              {isBalanced ? (
-                                <span className="text-emerald-600 font-bold flex items-center">
-                                  <Check className="w-3.5 h-3.5 mr-1" /> Cuadrado
-                                </span>
-                              ) : diff > 0 ? (
-                                <span className="text-amber-600 font-bold">
-                                  Faltan {formatCurrency(diff, currency)}
-                                </span>
-                              ) : (
-                                <span className="text-rose-600 font-bold">
-                                  Sobran {formatCurrency(Math.abs(diff), currency)}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()
-                      )}
                     </div>
                   )}
                   {splitType === 'itemized' && mode === 'itemized' && (
@@ -1222,6 +1222,45 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             )}
           </div>
         </div>
+
+        {/* Modal de confirmación para ajustar total según suma exacta (Solo modo Simple) */}
+        {showExactMismatchModal && mismatchData && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-zinc-950/50 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-2xl max-w-sm w-full border border-zinc-100 flex flex-col gap-4 animate-in zoom-in-95 duration-150">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900">¿Actualizar el total del gasto?</h3>
+                <p className="text-xs text-zinc-600 mt-1.5 leading-relaxed">
+                  La suma de los montos ingresados (<strong className="text-zinc-900 font-bold">{formatCurrency(mismatchData.exactSum, currency)}</strong>) no coincide con el total inicial (<strong className="text-zinc-900 font-bold">{formatCurrency(mismatchData.currentTotal, currency)}</strong>).
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const updatedSum = mismatchData.exactSum;
+                    const splitsToSave = mismatchData.finalSplits;
+                    setShowExactMismatchModal(false);
+                    setAmount(String(updatedSum));
+                    await executeSave(updatedSum, splitsToSave);
+                  }}
+                  disabled={isSubmitting || isMutating}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-98 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                >
+                  {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Actualizar total a {formatCurrency(mismatchData.exactSum, currency)} y guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowExactMismatchModal(false)}
+                  className="w-full py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Volver a editar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
