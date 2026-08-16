@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { sendGroupInviteEmail } from '@/lib/email';
 
 export async function PATCH(
   req: Request,
@@ -61,23 +62,95 @@ export async function PATCH(
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
-    // If email was updated and groupId is provided, update or insert invite
-    if (updates.email && groupId && !updates.email.startsWith('temp_')) {
-      await supabase.from('group_invites').upsert({
-        group_id: groupId,
-        email: updates.email,
-        invited_by: user.id,
-        status: 'pending',
-      }, { onConflict: 'group_id,email' });
+    let inviteSent = false;
+    let inviteUrl = '';
+
+    // If email is provided and groupId is provided, create/update invite and send email
+    if (updates.email && groupId && !updates.email.startsWith('temp_') && updates.email.includes('@')) {
+      const { data: group } = await supabase
+        .from('groups')
+        .select('name')
+        .eq('id', groupId)
+        .maybeSingle();
+
+      const groupName = group?.name ?? 'Grupo';
+
+      const { data: inviterProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const inviterName = inviterProfile?.full_name ?? user.user_metadata?.full_name ?? 'Un integrante';
+
+      // Check for existing invite for this member in this group
+      const { data: existingInvite } = await supabase
+        .from('group_invites')
+        .select('id, token')
+        .eq('group_id', groupId)
+        .eq('invitee_profile_id', memberId)
+        .maybeSingle();
+
+      let token = existingInvite?.token;
+
+      if (existingInvite) {
+        await supabase
+          .from('group_invites')
+          .update({
+            email: updates.email,
+            status: 'pending',
+            invited_by: user.id,
+          })
+          .eq('id', existingInvite.id);
+      } else {
+        const { data: newInvite } = await supabase
+          .from('group_invites')
+          .insert({
+            group_id: groupId,
+            invitee_profile_id: memberId,
+            invited_by: user.id,
+            email: updates.email,
+            status: 'pending',
+          })
+          .select('id, token')
+          .single();
+
+        token = newInvite?.token;
+      }
+
+      const origin = req.headers.get('origin') ?? 'https://deudita.app';
+      inviteUrl = token ? `${origin}/join?token=${token}` : `${origin}/join?group=${groupId}`;
+
+      try {
+        await sendGroupInviteEmail({
+          to: updates.email,
+          groupName,
+          inviterName,
+          inviterEmail: user.email ?? 'soporte@deudita.app',
+          inviteUrl,
+        });
+        inviteSent = true;
+      } catch (e) {
+        console.error('[API PATCH /api/members/[id]] Error enviando correo:', e);
+      }
     }
 
-    return NextResponse.json({ success: true, profile: updatedProfile });
+    return NextResponse.json({
+      success: true,
+      profile: updatedProfile,
+      inviteSent,
+      inviteUrl,
+      message: inviteSent
+        ? `Invitación enviada por correo a ${updates.email}`
+        : 'Perfil actualizado correctamente',
+    });
   } catch (err: unknown) {
     console.error('[API PATCH /api/members/[id]] Error:', err);
     const message = err instanceof Error ? err.message : 'Error al actualizar integrante';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 export async function DELETE(
   req: Request,

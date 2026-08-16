@@ -102,6 +102,7 @@ export async function GET() {
     }
 
     // Ensure current profile is present or created
+    const isNewUser = !userProfile;
     let profile = userProfile;
     if (!profile) {
       const meta = user.user_metadata ?? {};
@@ -113,6 +114,9 @@ export async function GET() {
         email: user.email ?? null,
         full_name: fullName,
         avatar_url: avatarUrl,
+        timezone: 'America/Bogota',
+        currency: 'COP',
+        currency_symbol: '$',
         is_temp: false,
       };
 
@@ -222,6 +226,7 @@ export async function GET() {
       notifications: notificationsData || [],
       pendingInvites,
       auditLogs,
+      isNewUser,
     });
   } catch (error: any) {
     console.error('[API /api/sync] Error:', error);

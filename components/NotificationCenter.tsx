@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useExpense } from '@/lib/expense-context';
 import { Bell, Users, Check, X, CheckCheck, Sparkles, Inbox } from 'lucide-react';
 
 export function NotificationCenter() {
+  const router = useRouter();
   const { pendingInvites, notifications, acceptGroupInvite, rejectGroupInvite, markNotificationAsRead } = useExpense();
   const [isOpen, setIsOpen] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -26,7 +28,11 @@ export function NotificationCenter() {
   const handleAccept = async (inviteId: string) => {
     try {
       setProcessingId(inviteId);
-      await acceptGroupInvite(inviteId);
+      const groupId = await acceptGroupInvite(inviteId);
+      setIsOpen(false);
+      if (groupId) {
+        router.push(`/groups/${groupId}`);
+      }
     } catch (err) {
       console.error('Error al aceptar invitación:', err);
     } finally {

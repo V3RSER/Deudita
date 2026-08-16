@@ -5,7 +5,21 @@ import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
 import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
-import { X, UserPlus, Mail, Link as LinkIcon, Share2, Check, Send, AlertCircle, ArrowRight, Plus, Loader2 } from 'lucide-react';
+import {
+  X,
+  UserPlus,
+  Mail,
+  Link as LinkIcon,
+  Share2,
+  Check,
+  Send,
+  AlertCircle,
+  ArrowRight,
+  Plus,
+  Loader2,
+  Users,
+  CheckCircle2,
+} from 'lucide-react';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -15,19 +29,27 @@ interface AddMemberModalProps {
 
 export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps) {
   const { currentProfile, profiles, members, userGroups, addGroupInvite } = useExpense();
-  
-  // Step 1 = Add Name, Step 2 = How to Invite
-  const [step, setStep] = useState<1 | 2>(1);
+
+  const [activeTab, setActiveTab] = useState<'new' | 'friends'>('new');
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groupId ?? userGroups[0]?.id ?? '');
-  const [name, setName] = useState('');
-  const [addedMemberName, setAddedMemberName] = useState('');
-  const [addedMemberId, setAddedMemberId] = useState<string | null>(null);
   
+  // New member inputs
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+
+  // Friend search
+  const [friendSearch, setFriendSearch] = useState('');
+
+  // Submission state & Success result
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [addedMember, setAddedMember] = useState<{
+    name: string;
+    email?: string;
+    id?: string;
+    inviteUrl?: string;
+  } | null>(null);
+
   const [copied, setCopied] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const prevIsOpenRef = useRef(false);
@@ -44,21 +66,19 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     if (isOpening || isGroupChanged) {
       prevIsOpenRef.current = true;
       prevGroupIdRef.current = groupId;
-      setStep(1);
+      setActiveTab('new');
       setSelectedGroupId(groupId ?? userGroups[0]?.id ?? '');
       setName('');
-      setAddedMemberName('');
-      setAddedMemberId(null);
       setEmail('');
-      setGeneratedLink(null);
+      setFriendSearch('');
+      setAddedMember(null);
       setCopied(false);
-      setSuccessMsg(null);
       setErrorMsg(null);
       setIsSubmitting(false);
     }
   }, [isOpen, groupId, userGroups]);
 
-  const activeGroupId = groupId || selectedGroupId || (userGroups[0] ? userGroups[0].id : '');
+  const activeGroupId = groupId ?? selectedGroupId ?? (userGroups[0] ? userGroups[0].id : '');
 
   if (!isOpen) return null;
 
@@ -76,29 +96,47 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     return true;
   });
 
-  const query = name.trim().toLowerCase();
-  const suggestedFriends = availableFriends.filter((p) => {
+  const query = friendSearch.trim().toLowerCase();
+  const filteredFriends = availableFriends.filter((p) => {
     if (!query) return true;
     const nameMatch = p.full_name ? p.full_name.toLowerCase().includes(query) : false;
     const emailMatch = !isTempEmail(p.email) && p.email ? p.email.toLowerCase().includes(query) : false;
     return nameMatch || emailMatch;
   });
 
-  // Step 1 Submit: Create Temporary Member immediately
-  const handleAddMember = async (e: React.FormEvent) => {
+  // Handle smart name input (if user types/pastes an email into the name field)
+  const handleNameChange = (val: string) => {
+    if (val.includes('@') && !email) {
+      // User entered an email in the name field
+      const parts = val.trim().split('@');
+      const cleanName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : '';
+      setName(cleanName);
+      setEmail(val.trim().toLowerCase());
+    } else {
+      setName(val);
+    }
+  };
+
+  // Submit new member form
+  const handleAddNewMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting || !name.trim() || !activeGroupId) return;
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
-      setSuccessMsg(null);
 
-      const result = await addGroupInvite(activeGroupId, undefined, name.trim());
-      setAddedMemberName(name.trim());
-      setAddedMemberId(result.memberId || null);
-      setGeneratedLink(result.inviteUrl);
-      setStep(2);
+      const cleanName = name.trim();
+      const cleanEmail = email.trim() ? email.trim().toLowerCase() : undefined;
+
+      const result = await addGroupInvite(activeGroupId, cleanEmail, cleanName);
+
+      setAddedMember({
+        name: cleanName,
+        email: cleanEmail,
+        id: result.memberId,
+        inviteUrl: result.inviteUrl,
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al añadir al integrante';
       setErrorMsg(message);
@@ -107,50 +145,26 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
     }
   };
 
-  // Add friend directly from suggestions
+  // Add friend directly from existing contacts list
   const handleSelectFriend = async (friend: Profile) => {
     if (isSubmitting || !activeGroupId) return;
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
-      setSuccessMsg(null);
 
-      const friendName = friend.full_name || 'Amigo';
+      const friendName = friend.full_name ?? 'Amigo';
       const friendEmail = isTempEmail(friend.email) || !friend.email ? undefined : friend.email;
 
       const result = await addGroupInvite(activeGroupId, friendEmail, friendName, friend.id);
-      
-      setAddedMemberName(friendName);
-      setAddedMemberId(result.memberId || friend.id);
-      if (result.inviteUrl) setGeneratedLink(result.inviteUrl);
-      
-      setSuccessMsg(`"${friendName}" ha sido añadido al grupo`);
-      setStep(2);
+
+      setAddedMember({
+        name: friendName,
+        email: friendEmail,
+        id: result.memberId ?? friend.id,
+        inviteUrl: result.inviteUrl,
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al añadir al integrante';
-      setErrorMsg(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Step 2: Send Email Invite
-  const handleSendEmailInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting || !email.trim() || !activeGroupId) return;
-
-    try {
-      setIsSubmitting(true);
-      setErrorMsg(null);
-      setSuccessMsg(null);
-
-      const result = await addGroupInvite(activeGroupId, email.trim(), addedMemberName, addedMemberId || undefined);
-      setSuccessMsg(`Invitación enviada por correo a ${email.trim()}`);
-      if (result.inviteUrl) setGeneratedLink(result.inviteUrl);
-      if (result.memberId) setAddedMemberId(result.memberId);
-      setEmail('');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error al enviar invitación por correo';
       setErrorMsg(message);
     } finally {
       setIsSubmitting(false);
@@ -158,72 +172,43 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
   };
 
   const handleCopyLink = async () => {
-    let link = generatedLink;
-    if (!link && activeGroupId) {
-      try {
-        setIsSubmitting(true);
-        const result = await addGroupInvite(activeGroupId, undefined, addedMemberName || name, addedMemberId || undefined);
-        link = result.inviteUrl;
-        if (result.memberId) setAddedMemberId(result.memberId);
-        setGeneratedLink(link);
-      } catch {
-        return;
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
-
-    if (link && navigator.clipboard) {
-      await navigator.clipboard.writeText(link);
+    if (addedMember?.inviteUrl && typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(addedMember.inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
   };
 
   const handleNativeShare = async () => {
-    let link = generatedLink;
-    if (!link && activeGroupId) {
-      try {
-        setIsSubmitting(true);
-        const result = await addGroupInvite(activeGroupId, undefined, addedMemberName || name, addedMemberId || undefined);
-        link = result.inviteUrl;
-        if (result.memberId) setAddedMemberId(result.memberId);
-        setGeneratedLink(link);
-      } catch {
-        return;
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
+    if (!addedMember?.inviteUrl) return;
 
-    if (link) {
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: `Unirse al grupo ${groupName}`,
-            text: `¡Hola! Te agregué al grupo ${groupName} en Deudita para dividir gastos. Haz clic aquí para unirte:`,
-            url: link,
-          });
-        } catch {
-          // Share cancelled
-        }
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(link);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      try {
+        await (navigator as any).share({
+          title: `Unirse a ${groupName}`,
+          text: `¡Hola! Te agregué al grupo "${groupName}" en Deudita para compartir gastos. Únete aquí:`,
+          url: addedMember.inviteUrl,
+        });
+        return;
+      } catch {
+        // Share dismissed
+        return;
       }
     }
+    await handleCopyLink();
   };
 
-  const handleResetAndClose = () => {
-    setStep(1);
+  const handleResetForNext = () => {
     setName('');
-    setAddedMemberName('');
-    setAddedMemberId(null);
     setEmail('');
-    setSuccessMsg(null);
+    setFriendSearch('');
+    setAddedMember(null);
+    setCopied(false);
     setErrorMsg(null);
-    setGeneratedLink(null);
+  };
+
+  const handleCloseModal = () => {
+    handleResetForNext();
     onClose();
   };
 
@@ -238,7 +223,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
             </div>
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-zinc-50">
-                {step === 1 ? 'Añadir Integrante' : 'Invitación al Grupo'}
+                {addedMember ? '¡Integrante Añadido!' : 'Añadir Integrante'}
               </h2>
               <p className="text-xs text-zinc-400">
                 Grupo <span className="font-medium text-white">{groupName}</span>
@@ -247,7 +232,7 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
           </div>
 
           <button
-            onClick={handleResetAndClose}
+            onClick={handleCloseModal}
             className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
@@ -263,79 +248,232 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
             </div>
           )}
 
-          {/* STEP 1: Add Name First */}
-          {step === 1 ? (
-            <form onSubmit={handleAddMember} className="space-y-4">
-              {!groupId && userGroups.length > 1 && (
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                    Grupo de Destino *
-                  </label>
-                  <select
-                    value={activeGroupId}
-                    onChange={(e) => setSelectedGroupId(e.target.value)}
-                    className="w-full px-3.5 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
+          {/* Group Selector if modal opened without specific groupId */}
+          {!groupId && userGroups.length > 1 && !addedMember && (
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
+                Grupo de Destino *
+              </label>
+              <select
+                value={activeGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="w-full px-3.5 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
+              >
+                {userGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* SUCCESS STATE */}
+          {addedMember ? (
+            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              {/* Member Card */}
+              <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-11 h-11 bg-zinc-900 text-white rounded-2xl flex items-center justify-center font-bold text-base shadow-sm shrink-0">
+                    {addedMember.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-zinc-900 text-sm truncate">{addedMember.name}</h3>
+                    {addedMember.email ? (
+                      <div className="flex items-center space-x-1 text-xs text-emerald-700 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="truncate">Invitación enviada a {addedMember.email}</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500">
+                        Integrante añadido (sin correo electrónico)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Share & Copy Link Section */}
+              <div className="space-y-3">
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                  Enlace de Invitación para Compartir
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="w-full flex items-center justify-center space-x-2 bg-zinc-900 hover:bg-zinc-800 text-white py-3 px-4 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-300 font-bold">¡Enlace Copiado al Portapapeles!</span>
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="w-4 h-4 text-zinc-400" />
+                      <span>Copiar Enlace de Invitación</span>
+                    </>
+                  )}
+                </button>
+
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
+                  <button
+                    type="button"
+                    onClick={handleNativeShare}
+                    className="w-full flex items-center justify-center space-x-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
                   >
-                    {userGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
+                    <Share2 className="w-4 h-4 text-zinc-600" />
+                    <span>Compartir por WhatsApp u otras apps</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="pt-3 border-t border-zinc-100 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetForNext}
+                  className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold transition-all active:scale-95"
+                >
+                  Añadir Otro
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all active:scale-95"
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* FORM STATE */
+            <div className="space-y-4">
+              {/* Tab Selector if available friends exist */}
+              {availableFriends.length > 0 && (
+                <div className="flex bg-zinc-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('new')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                      activeTab === 'new'
+                        ? 'bg-white text-zinc-900 shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Nuevo Integrante</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('friends')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                      activeTab === 'friends'
+                        ? 'bg-white text-zinc-900 shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Tus Amigos ({availableFriends.length})</span>
+                  </button>
                 </div>
               )}
 
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                  1. Nombre o Búsqueda de Amigo *
-                </label>
-                <div className="relative">
-                  <UserPlus className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Escribe un nombre o correo..."
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
-                  />
-                </div>
-                <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
-                  Busca entre tus amigos existentes por nombre o correo, o escribe un nombre nuevo.
-                </p>
-              </div>
-
-              {/* Friends Suggestions */}
-              {availableFriends.length > 0 && (
-                <div className="space-y-2 pt-1 border-t border-zinc-100">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                      Amigos Sugeridos {query ? `("${name}")` : ''}
+              {activeTab === 'new' ? (
+                <form onSubmit={handleAddNewMember} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
+                      Nombre o Apodo *
                     </label>
-                    <span className="text-[10px] text-zinc-400 font-medium">
-                      {suggestedFriends.length} {suggestedFriends.length === 1 ? 'disponible' : 'disponibles'}
-                    </span>
+                    <div className="relative">
+                      <UserPlus className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: Carlos Gómez o Mamá"
+                        value={name}
+                        onChange={(e) => handleNameChange(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
+                      />
+                    </div>
                   </div>
 
-                  {suggestedFriends.length === 0 ? (
-                    <p className="text-xs text-zinc-400 italic py-2">
-                      No se encontraron amigos que coincidan con &quot;{name}&quot;. Puedes añadirlo como nuevo integrante con el botón de abajo.
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
+                      Correo Electrónico (Opcional)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
+                      <input
+                        type="email"
+                        placeholder="carlos@ejemplo.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-1.5 leading-relaxed">
+                      {email.trim()
+                        ? 'Se le enviará un correo con el enlace de invitación para unirse al grupo.'
+                        : 'Si no pones correo, se creará como integrante para asignarle gastos de inmediato.'}
                     </p>
-                  ) : (
-                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                      {suggestedFriends.map((friend) => {
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !name.trim()}
+                    className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2 mt-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                        <span>Añadiendo...</span>
+                      </>
+                    ) : email.trim() ? (
+                      <>
+                        <Send className="w-4 h-4 text-emerald-400" />
+                        <span>Añadir y Enviar Invitación</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Añadir al Grupo</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                /* FRIENDS TAB */
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar amigo por nombre o correo..."
+                      value={friendSearch}
+                      onChange={(e) => setFriendSearch(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    />
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {filteredFriends.length === 0 ? (
+                      <p className="text-xs text-zinc-400 text-center py-6">
+                        No se encontraron amigos que coincidan con la búsqueda.
+                      </p>
+                    ) : (
+                      filteredFriends.map((friend) => {
                         const displayEmail = formatDisplayEmail(friend.email);
                         return (
                           <div
                             key={friend.id}
-                            onClick={() => !isSubmitting && handleSelectFriend(friend)}
-                            className="flex items-center justify-between p-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/80 rounded-xl transition-all cursor-pointer group active:scale-[0.98]"
+                            className="flex items-center justify-between p-3 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200/80 rounded-xl transition-all"
                           >
                             <div className="flex items-center space-x-3 overflow-hidden">
                               {friend.avatar_url ? (
                                 <Image
                                   src={friend.avatar_url}
-                                  alt={friend.full_name || 'Amigo'}
+                                  alt={friend.full_name ?? 'Amigo'}
                                   width={36}
                                   height={36}
                                   className="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
@@ -348,8 +486,8 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
                                 </div>
                               )}
                               <div className="min-w-0">
-                                <p className="text-xs font-semibold text-zinc-900 truncate group-hover:text-emerald-700 transition-colors">
-                                  {friend.full_name || 'Sin nombre'}
+                                <p className="text-xs font-semibold text-zinc-900 truncate">
+                                  {friend.full_name ?? 'Sin nombre'}
                                 </p>
                                 <p className="text-[11px] text-zinc-500 truncate">
                                   {displayEmail}
@@ -359,138 +497,20 @@ export function AddMemberModal({ isOpen, onClose, groupId }: AddMemberModalProps
 
                             <button
                               type="button"
+                              onClick={() => handleSelectFriend(friend)}
                               disabled={isSubmitting}
-                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1"
+                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1 active:scale-95 disabled:opacity-50"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Agregar</span>
+                              <span>Añadir</span>
                             </button>
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting || !name.trim()}
-                className="w-full py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                    <span>Añadiendo...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Añadir Integrante</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          ) : (
-            /* STEP 2: How to Invite Options */
-            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              {successMsg && (
-                <div className="p-3 bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl text-xs font-medium">
-                  {successMsg}
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <p className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
-                  ¿Cómo deseas invitar a {addedMemberName}?
-                </p>
-
-                {/* Option A: Send Email */}
-                <form onSubmit={handleSendEmailInvite} className="space-y-2">
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Opción A: Por correo electrónico
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
-                      <input
-                        type="email"
-                        placeholder="correo@ejemplo.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-zinc-900 focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting || !email.trim()}
-                      className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center space-x-1 shrink-0"
-                    >
-                      {isSubmitting ? (
-                        <Loader2 className="w-3 h-3 animate-spin text-white" />
-                      ) : (
-                        <Send className="w-3 h-3" />
-                      )}
-                      <span>{isSubmitting ? 'Enviando...' : 'Enviar'}</span>
-                    </button>
-                  </div>
-                </form>
-
-                <div className="relative flex items-center justify-center my-3">
-                  <div className="border-t border-zinc-200 w-full" />
-                  <span className="bg-white px-2.5 text-[10px] uppercase font-bold text-zinc-400 absolute tracking-widest">
-                    O
-                  </span>
-                </div>
-
-                {/* Option B: Copy Invite Link */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Opción B: Compartir enlace de invitación
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    disabled={isSubmitting}
-                    className="w-full flex items-center justify-center space-x-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold border border-zinc-200 transition-all active:scale-95"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span className="text-emerald-700 font-bold">¡Enlace Copiado al Portapapeles!</span>
-                      </>
-                    ) : (
-                      <>
-                        <LinkIcon className="w-4 h-4 text-zinc-600" />
-                        <span>Copiar Enlace</span>
-                      </>
+                      })
                     )}
-                  </button>
-
-                  {typeof navigator !== 'undefined' && 'share' in navigator && (
-                    <button
-                      type="button"
-                      onClick={handleNativeShare}
-                      disabled={isSubmitting}
-                      className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 py-2 px-4 rounded-xl text-xs font-medium border border-zinc-200 transition-all duration-200 active:scale-95"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Compartir</span>
-                    </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-
-              <div className="pt-3 border-t border-zinc-100 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={handleResetAndClose}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95"
-                >
-                  Finalizar
-                </button>
-              </div>
+              )}
             </div>
           )}
         </div>

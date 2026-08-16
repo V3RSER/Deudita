@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExpenseProvider, useExpense } from '@/lib/expense-context';
 import { Navbar, ActiveTab } from '@/components/Navbar';
 import { usePathname, useRouter } from 'next/navigation';
 import { CreateGroupModal } from '@/components/CreateGroupModal';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { currentProfile, loading } = useExpense();
@@ -14,6 +15,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   // Deduce active tab from pathname
   let activeTab: ActiveTab = 'dashboard';
@@ -23,11 +25,22 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   else if (pathname.includes('/my-expenses')) activeTab = 'expenses';
   else if (pathname.includes('/drafts')) activeTab = 'drafts';
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!loading && !currentProfile) {
       router.push('/login');
     }
   }, [loading, currentProfile, router]);
+
+  useEffect(() => {
+    if (!loading && currentProfile) {
+      const storageKey = `deudita_onboarding_completed_${currentProfile.id}`;
+      const completed = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
+      if (!completed) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setIsOnboardingOpen(true);
+      }
+    }
+  }, [loading, currentProfile]);
 
   if (loading) {
     return (
@@ -86,6 +99,24 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <NewExpenseModal
         isOpen={isNewExpenseOpen}
         onClose={() => setIsNewExpenseOpen(false)}
+      />
+
+      {/* First-time login onboarding profile modal */}
+      <ProfileSettingsModal
+        isOpen={isOnboardingOpen}
+        onClose={() => {
+          if (currentProfile && typeof window !== 'undefined') {
+            window.localStorage.setItem(`deudita_onboarding_completed_${currentProfile.id}`, 'true');
+          }
+          setIsOnboardingOpen(false);
+        }}
+        isOnboarding={true}
+        onCompleted={() => {
+          if (currentProfile && typeof window !== 'undefined') {
+            window.localStorage.setItem(`deudita_onboarding_completed_${currentProfile.id}`, 'true');
+          }
+          setIsOnboardingOpen(false);
+        }}
       />
     </div>
   );
