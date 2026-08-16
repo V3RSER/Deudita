@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { claimAllTempProfilesForUser } from '@/lib/invite-utils';
 
 export async function GET() {
   try {
@@ -12,6 +13,13 @@ export async function GET() {
 
     // Use the authenticated Supabase client (with request cookies and JWT) to respect RLS
     const db = supabase;
+
+    // 0. Auto-claim and unify any temporary profiles created for this user's email
+    try {
+      await claimAllTempProfilesForUser(db, user);
+    } catch (claimErr) {
+      console.warn('[API /api/sync] Warning auto-claiming temp profiles:', claimErr);
+    }
 
     // 1. Current user profile
     const { data: userProfile, error: profileErr } = await db
@@ -138,6 +146,28 @@ export async function GET() {
         p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions } : p
       );
     }
+
+    // Deduplicate profiles and remove any duplicate temporary profiles matching registered emails
+    const registeredEmails = new Set(
+      profiles
+        .filter((p) => !p.is_temp && p.email)
+        .map((p) => String(p.email).toLowerCase().trim())
+    );
+    if (user.email) {
+      registeredEmails.add(user.email.toLowerCase().trim());
+    }
+
+    const uniqueProfilesMap = new Map<string, any>();
+    for (const p of profiles) {
+      if (!p || !p.id) continue;
+      const pEmailLower = p.email ? String(p.email).toLowerCase().trim() : null;
+      // If this is a temporary profile but a real user with this email exists, skip the temp profile
+      if (p.is_temp && pEmailLower && registeredEmails.has(pEmailLower) && p.id !== user.id) {
+        continue;
+      }
+      uniqueProfilesMap.set(p.id, p);
+    }
+    profiles = Array.from(uniqueProfilesMap.values());
 
     // 6. Expenses
     let expenses: any[] = [];

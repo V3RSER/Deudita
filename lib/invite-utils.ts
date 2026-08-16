@@ -1,11 +1,174 @@
 import { SupabaseClient, User } from '@supabase/supabase-js';
 import { sendGroupInviteEmail } from './email';
 
-interface ClaimResult {
+export interface ClaimResult {
   success: boolean;
   groupId: string;
   groupName?: string;
   message?: string;
+}
+
+/**
+ * Unifies all temporary profiles associated with a user (by email, invite records, or specific ID)
+ * into the user's real registered profile, reassigns all records (group memberships, expenses, splits, payments, etc.),
+ * and permanently deletes the temporary profiles.
+ */
+export async function claimAllTempProfilesForUser(
+  db: SupabaseClient,
+  user: User,
+  specificTempId?: string | null
+): Promise<string[]> {
+  if (!user || !user.id) return [];
+
+  const userEmail = user.email ? user.email.toLowerCase().trim() : null;
+  const claimedTempIds = new Set<string>();
+
+  if (specificTempId && specificTempId !== user.id) {
+    claimedTempIds.add(specificTempId);
+  }
+
+  // 1. Find all temporary profiles matching the user's email
+  if (userEmail) {
+    try {
+      const { data: tempProfilesByEmail } = await db
+        .from('profiles')
+        .select('id, is_temp, email')
+        .ilike('email', userEmail);
+
+      if (tempProfilesByEmail) {
+        for (const p of tempProfilesByEmail) {
+          if (p.id && p.id !== user.id) {
+            claimedTempIds.add(p.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[claimAllTempProfilesForUser] Error finding temp profiles by email:', err);
+    }
+
+    // 2. Find any invites with matching email and an invitee_profile_id
+    try {
+      const { data: invitesByEmail } = await db
+        .from('group_invites')
+        .select('invitee_profile_id')
+        .ilike('email', userEmail)
+        .not('invitee_profile_id', 'is', null);
+
+      if (invitesByEmail) {
+        for (const inv of invitesByEmail) {
+          if (inv.invitee_profile_id && inv.invitee_profile_id !== user.id) {
+            claimedTempIds.add(inv.invitee_profile_id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[claimAllTempProfilesForUser] Error finding invites by email:', err);
+    }
+  }
+
+  // 3. For each temporary profile found, migrate records and delete the temporary profile
+  const claimedList = Array.from(claimedTempIds);
+  for (const tempId of claimedList) {
+    if (!tempId || tempId === user.id) continue;
+
+    // A) Try calling RPC first (runs with SECURITY DEFINER to bypass RLS)
+    try {
+      await db.rpc('claim_temp_profile', {
+        temp_id: tempId,
+        real_id: user.id,
+      });
+    } catch (rpcErr) {
+      console.warn('[claimAllTempProfilesForUser] RPC claim_temp_profile warning/error:', rpcErr);
+    }
+
+    // B) Comprehensive manual migration fallback
+    try {
+      // Group Members: reassign membership to user.id if not already member, then delete old
+      const { data: tempMemberships } = await db
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', tempId);
+
+      if (tempMemberships && tempMemberships.length > 0) {
+        for (const tm of tempMemberships) {
+          const { data: realMembership } = await db
+            .from('group_members')
+            .select('id')
+            .eq('group_id', tm.group_id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (!realMembership) {
+            await db
+              .from('group_members')
+              .update({ user_id: user.id })
+              .eq('user_id', tempId)
+              .eq('group_id', tm.group_id);
+          }
+        }
+      }
+      await db.from('group_members').delete().eq('user_id', tempId);
+
+      // Reassign group ownership, invitations, expenses, splits, payments, notifications
+      await db.from('group_members').update({ invited_by: user.id }).eq('invited_by', tempId);
+      await db.from('groups').update({ owner_id: user.id }).eq('owner_id', tempId);
+      await db.from('expenses').update({ paid_by: user.id }).eq('paid_by', tempId);
+      await db.from('expenses').update({ created_by: user.id }).eq('created_by', tempId);
+
+      // Expense splits: migrate splits to real user or remove duplicates
+      const { data: tempSplits } = await db
+        .from('expense_splits')
+        .select('id, expense_id, amount_owed')
+        .eq('user_id', tempId);
+
+      if (tempSplits && tempSplits.length > 0) {
+        for (const split of tempSplits) {
+          const { data: realSplit } = await db
+            .from('expense_splits')
+            .select('id')
+            .eq('expense_id', split.expense_id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (!realSplit) {
+            await db
+              .from('expense_splits')
+              .update({ user_id: user.id })
+              .eq('id', split.id);
+          } else {
+            await db.from('expense_splits').delete().eq('id', split.id);
+          }
+        }
+      }
+      await db.from('expense_splits').delete().eq('user_id', tempId);
+
+      await db.from('payments').update({ paid_by: user.id }).eq('paid_by', tempId);
+      await db.from('payments').update({ paid_to: user.id }).eq('paid_to', tempId);
+      await db.from('notifications').update({ user_id: user.id }).eq('user_id', tempId);
+      await db.from('group_invites').update({ invitee_profile_id: user.id }).eq('invitee_profile_id', tempId);
+      await db.from('group_invites').update({ invited_by: user.id }).eq('invited_by', tempId);
+
+      // C) Delete temporary profile from profiles table
+      await db.from('profiles').delete().eq('id', tempId);
+    } catch (migErr) {
+      console.error('[claimAllTempProfilesForUser] Error in manual fallback migration for tempId:', tempId, migErr);
+    }
+  }
+
+  // 4. Ensure any remaining temporary profiles matching user email are deleted
+  if (userEmail) {
+    try {
+      await db
+        .from('profiles')
+        .delete()
+        .eq('is_temp', true)
+        .ilike('email', userEmail);
+    } catch (delErr) {
+      console.warn('[claimAllTempProfilesForUser] Error deleting temp profiles by email:', delErr);
+    }
+  }
+
+  return claimedList;
 }
 
 export async function claimAndJoinGroupInvite(
@@ -20,7 +183,7 @@ export async function claimAndJoinGroupInvite(
   const cleanToken = String(inviteTokenOrId).trim();
   const userEmailLower = user.email ? user.email.toLowerCase().trim() : null;
 
-  // 1. Ensure user profile exists in profiles table
+  // 1. Ensure user profile exists in profiles table as a real registered profile (is_temp = false)
   const meta = user.user_metadata ?? {};
   const fullName = meta.full_name ?? meta.name ?? (userEmailLower ? userEmailLower.split('@')[0] : 'Usuario');
   const avatarUrl = meta.avatar_url ?? meta.picture ?? null;
@@ -63,7 +226,7 @@ export async function claimAndJoinGroupInvite(
       const { data: inviteByEmail } = await db
         .from('group_invites')
         .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at, expires_at')
-        .eq('email', userEmailLower)
+        .ilike('email', userEmailLower)
         .eq('status', 'pending')
         .maybeSingle();
 
@@ -99,6 +262,10 @@ export async function claimAndJoinGroupInvite(
     }
   }
 
+  // 3. Unify and claim ALL temporary profiles for this user (including invitee_profile_id and email matches)
+  const tempProfileId = invite?.invitee_profile_id;
+  await claimAllTempProfilesForUser(db, user, tempProfileId);
+
   if (!targetGroupId) {
     // Check if user is already a member of any group matching
     const { data: existingMembership } = await db
@@ -118,7 +285,7 @@ export async function claimAndJoinGroupInvite(
     throw new Error('Invitación no encontrada o expirada');
   }
 
-  // Check if user is already a member of target group
+  // 4. GUARANTEE that user is present in group_members for targetGroupId
   const { data: alreadyMember } = await db
     .from('group_members')
     .select('group_id')
@@ -126,77 +293,7 @@ export async function claimAndJoinGroupInvite(
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (alreadyMember) {
-    const { data: groupDetails } = await db
-      .from('groups')
-      .select('name')
-      .eq('id', targetGroupId)
-      .maybeSingle();
-
-    return {
-      success: true,
-      groupId: targetGroupId,
-      groupName: groupDetails?.name ?? 'Grupo',
-      message: 'Ya formas parte de este grupo',
-    };
-  }
-
-  // 3. If there is a temporary profile linked to this invite, migrate all records to real user.id
-  const tempProfileId = invite?.invitee_profile_id;
-  if (tempProfileId && tempProfileId !== user.id) {
-    // Try calling DB procedure first if available
-    try {
-      await db.rpc('claim_temp_profile', {
-        temp_id: tempProfileId,
-        real_id: user.id,
-      });
-    } catch {
-      // Manual fallback migration
-    }
-
-    // Direct database migration
-    // A) Group Members: reassign membership
-    const { data: existingRealMember } = await db
-      .from('group_members')
-      .select('group_id')
-      .eq('group_id', targetGroupId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!existingRealMember) {
-      await db
-        .from('group_members')
-        .update({ user_id: user.id })
-        .eq('user_id', tempProfileId)
-        .eq('group_id', targetGroupId);
-    }
-    await db.from('group_members').delete().eq('user_id', tempProfileId);
-
-    // B) Reassign invited_by, group owner, expenses, splits, payments, notifications
-    await db.from('group_members').update({ invited_by: user.id }).eq('invited_by', tempProfileId);
-    await db.from('groups').update({ owner_id: user.id }).eq('owner_id', tempProfileId);
-    await db.from('expenses').update({ paid_by: user.id }).eq('paid_by', tempProfileId);
-    await db.from('expenses').update({ created_by: user.id }).eq('created_by', tempProfileId);
-
-    // Expense splits: update user_id or delete duplicates
-    await db.from('expense_splits').update({ user_id: user.id }).eq('user_id', tempProfileId);
-    await db.from('payments').update({ paid_by: user.id }).eq('paid_by', tempProfileId);
-    await db.from('payments').update({ paid_to: user.id }).eq('paid_to', tempProfileId);
-    await db.from('notifications').update({ user_id: user.id }).eq('user_id', tempProfileId);
-
-    // C) Delete temporary profile
-    await db.from('profiles').delete().eq('id', tempProfileId).eq('is_temp', true);
-  }
-
-  // 4. GUARANTEE that user is present in group_members for targetGroupId
-  const { data: membershipCheck } = await db
-    .from('group_members')
-    .select('group_id')
-    .eq('group_id', targetGroupId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (!membershipCheck) {
+  if (!alreadyMember) {
     const inviterId = invite?.invited_by ?? user.id;
     await db.from('group_members').insert({
       group_id: targetGroupId,
@@ -227,11 +324,11 @@ export async function claimAndJoinGroupInvite(
         invitee_profile_id: user.id,
       })
       .eq('group_id', targetGroupId)
-      .eq('email', userEmailLower)
+      .ilike('email', userEmailLower)
       .eq('status', 'pending');
   }
 
-  // 6. Get group details for notification
+  // 6. Get group details for response and notification
   const { data: groupDetails } = await db
     .from('groups')
     .select('name')
@@ -241,13 +338,17 @@ export async function claimAndJoinGroupInvite(
   const groupName = groupDetails?.name ?? 'Grupo';
 
   // 7. Add notification to user
-  await db.from('notifications').insert({
-    user_id: user.id,
-    type: 'group_invite',
-    title: '¡Te has unido al grupo!',
-    message: `Te has unido exitosamente al grupo "${groupName}".`,
-    data: { group_id: targetGroupId, invite_id: invite?.id },
-  });
+  try {
+    await db.from('notifications').insert({
+      user_id: user.id,
+      type: 'group_invite',
+      title: '¡Te has unido al grupo!',
+      message: `Te has unido exitosamente al grupo "${groupName}".`,
+      data: { group_id: targetGroupId, invite_id: invite?.id },
+    });
+  } catch (notifErr) {
+    console.warn('[claimAndJoinGroupInvite] Could not create notification:', notifErr);
+  }
 
   return {
     success: true,

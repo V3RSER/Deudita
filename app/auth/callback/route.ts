@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { claimAndJoinGroupInvite } from '@/lib/invite-utils';
+import { claimAndJoinGroupInvite, claimAllTempProfilesForUser } from '@/lib/invite-utils';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -27,6 +27,12 @@ export async function GET(request: Request) {
             }
           } catch (err) {
             console.error('[auth/callback] Error claiming token:', err);
+          }
+        } else {
+          try {
+            await claimAllTempProfilesForUser(supabase, user);
+          } catch (claimErr) {
+            console.warn('[auth/callback] Warning claiming temp profiles:', claimErr);
           }
         }
       }

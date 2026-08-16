@@ -21,40 +21,60 @@ export async function POST(req: Request) {
     const rawEmail = body.email ? String(body.email).trim().toLowerCase() : null;
     const email = rawEmail && rawEmail.length > 0 ? rawEmail : null;
 
-    const newId = crypto.randomUUID();
+    let targetProfile: any = null;
 
-    const profilePayload: Record<string, any> = {
-      id: newId,
-      full_name: fullName,
-      email,
-      is_temp: true,
-      created_by: user.id,
-    };
+    if (email) {
+      const { data: existingProfiles } = await db
+        .from('profiles')
+        .select('*')
+        .ilike('email', email)
+        .order('is_temp', { ascending: true });
 
-    let { data: newProfile, error } = await db
-      .from('profiles')
-      .insert(profilePayload)
-      .select('*')
-      .single();
+      if (existingProfiles && existingProfiles.length > 0) {
+        targetProfile = existingProfiles[0];
+        if (targetProfile.is_temp && fullName && (!targetProfile.full_name || targetProfile.full_name === email.split('@')[0])) {
+          await db.from('profiles').update({ full_name: fullName }).eq('id', targetProfile.id);
+          targetProfile.full_name = fullName;
+        }
+      }
+    }
 
-    // Fallback if created_by column does not exist in schema
-    if (error && error.message?.includes('created_by')) {
-      delete profilePayload.created_by;
-      const retryResult = await db
+    if (!targetProfile) {
+      const newId = crypto.randomUUID();
+
+      const profilePayload: Record<string, any> = {
+        id: newId,
+        full_name: fullName,
+        email,
+        is_temp: true,
+        created_by: user.id,
+      };
+
+      let { data: newProfile, error } = await db
         .from('profiles')
         .insert(profilePayload)
         .select('*')
         .single();
-      newProfile = retryResult.data;
-      error = retryResult.error;
-    }
 
-    if (error || !newProfile) {
-      console.error('[API POST /api/friends] Error creating profile:', error);
-      return NextResponse.json({ error: error?.message ?? 'Error al agregar el amigo' }, { status: 500 });
-    }
+      // Fallback if created_by column does not exist in schema
+      if (error && error.message?.includes('created_by')) {
+        delete profilePayload.created_by;
+        const retryResult = await db
+          .from('profiles')
+          .insert(profilePayload)
+          .select('*')
+          .single();
+        newProfile = retryResult.data;
+        error = retryResult.error;
+      }
 
-    let targetProfile = newProfile;
+      if (error || !newProfile) {
+        console.error('[API POST /api/friends] Error creating profile:', error);
+        return NextResponse.json({ error: error?.message ?? 'Error al agregar el amigo' }, { status: 500 });
+      }
+
+      targetProfile = newProfile;
+    }
 
     // If targetProfile was previously hidden, unhide it from user_metadata
     const currentHidden: string[] = user.user_metadata?.hidden_friend_ids || [];

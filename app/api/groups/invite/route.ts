@@ -93,16 +93,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. If targetUserId not set, but email is provided, check if a real profile exists
+    // 2. If targetUserId not set, but email is provided, check if a profile already exists
     if (!targetUserId && targetEmail) {
-      const { data: existingProfile } = await db
+      const { data: existingProfiles } = await db
         .from('profiles')
         .select('*')
-        .eq('email', targetEmail)
-        .maybeSingle();
+        .ilike('email', targetEmail)
+        .order('is_temp', { ascending: true });
 
-      if (existingProfile) {
+      if (existingProfiles && existingProfiles.length > 0) {
+        const existingProfile = existingProfiles[0];
         targetUserId = existingProfile.id;
+        if (memberName && existingProfile.is_temp && (!existingProfile.full_name || existingProfile.full_name === targetEmail.split('@')[0])) {
+          await db.from('profiles').update({ full_name: memberName }).eq('id', targetUserId);
+        }
         await ensureGroupMember(db, groupId, targetUserId!, user.id);
       }
     }
