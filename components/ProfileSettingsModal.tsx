@@ -8,11 +8,11 @@ import {
   Camera,
   Loader2,
   AlertCircle,
-  FileText,
-  ListChecks,
+  User,
+  Sliders,
   ChevronDown,
   Check,
-  Sparkles,
+  UserCheck,
 } from 'lucide-react';
 
 interface ProfileSettingsModalProps {
@@ -99,7 +99,8 @@ export function ProfileSettingsModal({
       formData.append('file', file);
       formData.append('type', 'user_avatar');
 
-      const numericId = currentProfile.id.replace(/\D/g, '').substring(0, 9) || `${Math.floor(100000000 + Math.random() * 900000000)}`;
+      const digitsOnly = currentProfile.id.replace(/\D/g, '');
+      const numericId = digitsOnly.length > 0 ? digitsOnly.substring(0, 9) : `${Math.floor(100000000 + Math.random() * 900000000)}`;
       formData.append('entityId', numericId);
 
       const res = await fetch('/api/upload', {
@@ -148,9 +149,10 @@ export function ProfileSettingsModal({
         currency_symbol: currObj.symbol,
         payment_instructions: paymentInstructions.trim(),
         avatar_url: avatarUrl,
+        onboarding_completed: true,
       });
 
-      setSuccessMessage(isOnboarding ? '¡Perfil configurado con éxito!' : 'Perfil actualizado correctamente');
+      setSuccessMessage(isOnboarding ? '¡Registro completado!' : '¡Perfil actualizado!');
       
       setTimeout(() => {
         setSuccessMessage(null);
@@ -159,9 +161,9 @@ export function ProfileSettingsModal({
         } else {
           onClose();
         }
-      }, 700);
+      }, 600);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      const msg = err instanceof Error ? err.message : 'Error al guardar los datos';
       setErrorMessage(msg);
     } finally {
       setIsSaving(false);
@@ -173,27 +175,31 @@ export function ProfileSettingsModal({
       <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md flex flex-col my-auto max-h-[95vh] overflow-hidden transition-all duration-300">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
-          <div className="flex items-center space-x-2.5">
-            {isOnboarding && (
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
-                <Sparkles className="w-4 h-4" />
+          <div className="flex items-center space-x-3">
+            {isOnboarding ? (
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-700">
+                <UserCheck className="w-5 h-5" />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-700">
+                <User className="w-5 h-5" />
               </div>
             )}
             <div>
               <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
-                {isOnboarding ? '¡Bienvenido a Deudita!' : 'Editar perfil'}
+                {isOnboarding ? 'Completa tu registro' : 'Editar perfil'}
               </h2>
-              {isOnboarding && (
-                <p className="text-xs text-zinc-500 font-medium">
-                  Configura tus datos para comenzar
-                </p>
-              )}
+              <p className="text-xs text-zinc-500 font-medium">
+                {isOnboarding
+                  ? 'Configura tu nombre y preferencias para comenzar'
+                  : 'Actualiza tus datos y preferencias de cuenta'}
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition"
-            title={isOnboarding ? 'Continuar más tarde' : 'Cerrar'}
+            title="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -217,12 +223,12 @@ export function ProfileSettingsModal({
 
         {/* Form Body */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
-          {/* General Info */}
+          {/* Personal Info */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                <FileText className="w-4 h-4 mr-2 text-emerald-600" />
-                Información general
+                <User className="w-4 h-4 mr-2 text-emerald-600" />
+                Información personal
               </h3>
             </div>
             <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
@@ -247,7 +253,7 @@ export function ProfileSettingsModal({
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Tu nombre completo"
+                  placeholder="Tu nombre o apodo"
                   className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors font-bold"
                   autoFocus
                 />
@@ -259,8 +265,8 @@ export function ProfileSettingsModal({
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                <ListChecks className="w-4 h-4 mr-2 text-emerald-600" />
-                Detalles y preferencias
+                <Sliders className="w-4 h-4 mr-2 text-emerald-600" />
+                Preferencias y moneda
               </h3>
             </div>
             <div className="bg-white border border-zinc-200 rounded-2xl p-3 space-y-2 shadow-sm overflow-hidden">
@@ -335,16 +341,16 @@ export function ProfileSettingsModal({
 
               <div className="space-y-1 pt-2 border-t border-zinc-100 mt-2">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">
-                  Instrucciones de cobro / pago (opcional)
+                  Métodos de pago para tus amigos (opcional)
                 </label>
                 <p className="text-[11px] text-zinc-500 pl-0.5 leading-snug">
-                  Escribe tus cuentas bancarias, Nequi, Daviplata o enlaces para recibir dinero cuando tus amigos te paguen.
+                  Indica tus cuentas o números (Nequi, Daviplata, transferencia) para que tus amigos sepan dónde transferirte al saldar cuentas.
                 </p>
                 <textarea
                   rows={3}
                   value={paymentInstructions}
                   onChange={(e) => setPaymentInstructions(e.target.value)}
-                  placeholder="Ej: Nequi / Daviplata 3001234567, Bancolombia Ahorros # 12345678901..."
+                  placeholder="Ej: Nequi / Daviplata 3001234567, cuenta bancaria..."
                   className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors resize-none placeholder:text-zinc-400"
                 />
               </div>
@@ -360,7 +366,7 @@ export function ProfileSettingsModal({
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
           >
             {isSaving || isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            <span>{isSaving ? 'Guardando perfil...' : isOnboarding ? 'Comenzar en Deudita' : 'Guardar cambios'}</span>
+            <span>{isSaving ? 'Guardando...' : isOnboarding ? 'Completar registro' : 'Guardar cambios'}</span>
           </button>
         </div>
       </div>

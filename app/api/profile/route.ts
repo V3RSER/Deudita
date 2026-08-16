@@ -18,6 +18,7 @@ export async function PATCH(req: Request) {
       currency,
       currency_symbol,
       payment_instructions,
+      onboarding_completed,
     } = body;
 
     const updates: Record<string, any> = {};
@@ -61,11 +62,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    // 2. Also update user_metadata in auth so custom data is safely preserved
+    // 2. Also update user_metadata in auth so custom data and onboarding status are safely preserved
     if (
       payment_instructions !== undefined ||
       full_name !== undefined ||
-      avatar_url !== undefined
+      avatar_url !== undefined ||
+      onboarding_completed !== undefined
     ) {
       try {
         await supabase.auth.updateUser({
@@ -73,6 +75,7 @@ export async function PATCH(req: Request) {
             ...(full_name !== undefined ? { full_name } : {}),
             ...(avatar_url !== undefined ? { avatar_url } : {}),
             ...(payment_instructions !== undefined ? { payment_instructions } : {}),
+            ...(onboarding_completed !== undefined ? { onboarding_completed: Boolean(onboarding_completed) } : {}),
           },
         });
       } catch (authMetaErr) {
@@ -92,7 +95,11 @@ export async function PATCH(req: Request) {
       payment_instructions:
         payment_instructions !== undefined
           ? payment_instructions
-          : updatedProfile?.payment_instructions ?? user.user_metadata?.payment_instructions ?? '',
+          : (updatedProfile?.payment_instructions ?? user.user_metadata?.payment_instructions ?? ''),
+      onboarding_completed:
+        onboarding_completed !== undefined
+          ? Boolean(onboarding_completed)
+          : Boolean(user.user_metadata?.onboarding_completed ?? true),
     };
 
     return NextResponse.json({

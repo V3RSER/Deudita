@@ -22,6 +22,7 @@ export interface Profile {
   currency?: string;
   currency_symbol?: string;
   payment_instructions?: string;
+  onboarding_completed?: boolean;
   created_at: string;
 }
 

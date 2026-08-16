@@ -33,6 +33,7 @@ interface ExpenseContextType {
   pendingInvites: GroupInvite[];
   notifications: Notification[];
   hiddenFriendIds: string[];
+  completeOnboarding: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
   createGroup: (name: string, category: GroupCategory, description?: string, emails?: string[], imageUrl?: string, memberIds?: string[], currency?: string) => Promise<Group>;
@@ -138,6 +139,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     setCurrentProfile(null);
+  };
+
+  const completeOnboarding = async (): Promise<void> => {
+    if (!currentProfile) return;
+    setCurrentProfile((prev) => (prev ? { ...prev, onboarding_completed: true } : null));
+    try {
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboarding_completed: true }),
+      });
+    } catch (err) {
+      console.warn('[ExpenseContext] Could not persist onboarding status:', err);
+    }
   };
 
   const updateProfile = async (updates: Partial<Profile>): Promise<void> => {
@@ -547,6 +562,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         pendingInvites,
         notifications,
         hiddenFriendIds,
+        completeOnboarding,
         updateProfile,
         addFriend,
         createGroup,

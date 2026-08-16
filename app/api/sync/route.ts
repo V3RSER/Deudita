@@ -135,15 +135,20 @@ export async function GET() {
       }
     }
 
-    // Attach payment_instructions from user_metadata if missing in DB record
+    // Attach payment_instructions and onboarding_completed from user_metadata and database state
     if (profile) {
+      const isOnboardingCompleted = Boolean(
+        user.user_metadata?.onboarding_completed ?? (!isNewUser)
+      );
+
       profile = {
         ...profile,
         payment_instructions:
           profile.payment_instructions ?? user.user_metadata?.payment_instructions ?? '',
+        onboarding_completed: isOnboardingCompleted,
       };
       profiles = profiles.map((p) =>
-        p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions } : p
+        p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions, onboarding_completed: isOnboardingCompleted } : p
       );
     }
 

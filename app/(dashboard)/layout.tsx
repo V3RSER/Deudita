@@ -9,13 +9,15 @@ import { NewExpenseModal } from '@/components/NewExpenseModal';
 import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
-  const { currentProfile, loading } = useExpense();
+  const { currentProfile, loading, completeOnboarding } = useExpense();
   const pathname = usePathname();
   const router = useRouter();
 
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [hasDismissedOnboarding, setHasDismissedOnboarding] = useState(false);
+
+  const isOnboardingOpen = !loading && currentProfile?.onboarding_completed === false && !hasDismissedOnboarding;
 
   // Deduce active tab from pathname
   let activeTab: ActiveTab = 'dashboard';
@@ -30,17 +32,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       router.push('/login');
     }
   }, [loading, currentProfile, router]);
-
-  useEffect(() => {
-    if (!loading && currentProfile) {
-      const storageKey = `deudita_onboarding_completed_${currentProfile.id}`;
-      const completed = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
-      if (!completed) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setIsOnboardingOpen(true);
-      }
-    }
-  }, [loading, currentProfile]);
 
   if (loading) {
     return (
@@ -105,17 +96,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <ProfileSettingsModal
         isOpen={isOnboardingOpen}
         onClose={() => {
-          if (currentProfile && typeof window !== 'undefined') {
-            window.localStorage.setItem(`deudita_onboarding_completed_${currentProfile.id}`, 'true');
-          }
-          setIsOnboardingOpen(false);
+          setHasDismissedOnboarding(true);
+          void completeOnboarding();
         }}
         isOnboarding={true}
         onCompleted={() => {
-          if (currentProfile && typeof window !== 'undefined') {
-            window.localStorage.setItem(`deudita_onboarding_completed_${currentProfile.id}`, 'true');
-          }
-          setIsOnboardingOpen(false);
+          setHasDismissedOnboarding(true);
+          void completeOnboarding();
         }}
       />
     </div>
