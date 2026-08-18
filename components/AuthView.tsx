@@ -98,6 +98,17 @@ export function AuthView({ error }: { error?: string }) {
           )}
           <span>{isLoggingIn ? 'Conectando...' : 'Continuar con Google'}</span>
         </button>
+
+        {/* --- [TEMPORARY DEV BYPASS BUTTON - EASY TO REMOVE] --- */}
+        <div className="mt-6 pt-6 border-t border-zinc-100">
+          <a
+            href="/auth/bypass"
+            className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-semibold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900 rounded-xl transition-colors"
+          >
+            <span>🔑 Acceso directo (Restaurar sesión activa)</span>
+          </a>
+        </div>
+        {/* ----------------------------------------------------- */}
       </div>
     </div>
   );
