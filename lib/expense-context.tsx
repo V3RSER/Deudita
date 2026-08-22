@@ -214,7 +214,6 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     }
 
     const groupIdsSet = new Set(userGroupIds);
-    const filterExpression = `group_id=in.(${userGroupIds.join(',')})`;
     const channelName = `realtime-group-sync-${currentUserId}-${userGroupIdsKey.slice(0, 32)}`;
 
     const channel = supabase
@@ -225,7 +224,6 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           event: '*',
           schema: 'public',
           table: 'expenses',
-          filter: filterExpression,
         },
         async (payload) => {
           const eventType = payload.eventType;
