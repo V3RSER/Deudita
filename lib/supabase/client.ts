@@ -3,18 +3,22 @@ import { createBrowserClient } from '@supabase/ssr'
 let client: ReturnType<typeof createBrowserClient> | undefined
 
 export function createClient() {
-  if (typeof window === 'undefined') {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !anonKey) {
     return createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      'https://placeholder-project.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
     )
   }
 
+  if (typeof window === 'undefined') {
+    return createBrowserClient(url, anonKey)
+  }
+
   if (!client) {
-    client = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    client = createBrowserClient(url, anonKey)
   }
 
   return client

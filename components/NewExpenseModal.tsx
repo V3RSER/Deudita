@@ -14,6 +14,7 @@ import {
   List, Table, ChevronRight, ChevronUp
 } from 'lucide-react';
 import { getCategoryConfig, EXPENSE_CATEGORY_GROUPS, DEFAULT_EXPENSE_CATEGORY } from '@/lib/expense-category-utils';
+import { ExpenseParticipantSummary, ParticipantSummaryData } from '@/components/ExpenseParticipantSummary';
 
 interface NewExpenseModalProps {
   isOpen: boolean;
@@ -131,14 +132,18 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setShowAdditional(Boolean(expenseToEdit.notes || expenseToEdit.receipt_url));
 
         if (isItemized && expenseToEdit.items && expenseToEdit.items.length > 0) {
-          setItems(expenseToEdit.items.map((i, idx) => ({
-            id: idx + 1,
-            desc: i.description ? i.description.replace(/^\d+x\s*/, '') : '',
-            quantity: i.description?.match(/^(\d+)x\s*/)?.[1] ?? '1',
-            amount: String(i.amount ?? ''),
-            amountType: 'total',
-            assignedTo: []
-          })));
+          setItems(expenseToEdit.items.map((i, idx) => {
+            const desc = i.description || '';
+            const match = desc.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
+            return {
+              id: idx + 1,
+              desc: match ? match[2] : desc,
+              quantity: match ? match[1] : '1',
+              amount: String(i.amount ?? ''),
+              amountType: 'total',
+              assignedTo: []
+            };
+          }));
         } else {
           setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
         }
@@ -268,7 +273,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const itemsTotal = items.reduce((acc, i) => acc + getItemTotal(i), 0);
   const totalAmount = mode === 'quick' ? (parseFloat(amount) || 0) : itemsTotal;
 
-  const calculateItemizedShares = () => {
+  const calculateItemizedShares = React.useCallback(() => {
     const res: Record<string, number> = {};
     activeProfiles.forEach(p => res[p.id] = 0);
 
@@ -290,7 +295,43 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       }
     });
     return res;
-  };
+  }, [activeProfiles, items, selectedMembers]);
+
+  const participantSummaryList: ParticipantSummaryData[] = useMemo(() => {
+    const sharesMap = calculateItemizedShares();
+    return selectedMembers.map(mId => {
+      const p = activeProfiles.find(x => x.id === mId);
+      const amt = sharesMap[mId] || 0;
+      const breakdown: { desc: string; qty: number; cost: number }[] = [];
+
+      items.forEach((item, idx) => {
+        const itemAmt = getItemTotal(item);
+        const val = item.shares?.[mId] !== undefined ? parseFloat(item.shares[mId] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
+        if (val > 0) {
+          let sumShares = 0;
+          selectedMembers.forEach(id => {
+            sumShares += item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+          });
+          if (sumShares > 0) {
+            const itemTotalQty = parseFloat(item.quantity) || 1;
+            const userItemQty = itemTotalQty * (val / sumShares);
+            breakdown.push({
+              desc: item.desc || `Artículo ${idx + 1}`,
+              qty: userItemQty,
+              cost: itemAmt * (val / sumShares)
+            });
+          }
+        }
+      });
+
+      return {
+        userId: mId,
+        profile: p,
+        amount: amt,
+        breakdown
+      };
+    });
+  }, [selectedMembers, activeProfiles, items, calculateItemizedShares]);
 
   const executeSave = async (amountToSave: number, splitsToSave: any[]) => {
     setIsSubmitting(true);
@@ -311,7 +352,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
         id: "tmp_" + idx,
         expense_id: expenseToEdit?.id ?? '',
-        description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity}x ${i.desc.trim()}` : i.desc.trim(),
+        description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity} · ${i.desc.trim()}` : i.desc.trim(),
         amount: getItemTotal(i),
         created_at: new Date().toISOString()
       })) : [];
@@ -679,55 +720,46 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       <ShoppingCart className="w-4 h-4 text-emerald-600 shrink-0" />
                       <h3 className="text-xs sm:text-sm font-bold text-zinc-900">Ítems del gasto</h3>
                     </div>
-                    <span className="text-[11px] font-bold text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200/60">
-                      {items.length} {items.length === 1 ? 'artículo' : 'artículos'} · {formatCurrency(itemsTotal, currency)}
-                    </span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {items.map((item, idx) => {
-                      const itemSubtotal = getItemTotal(item);
-                      const isEach = item.amountType === 'each';
-                      const qtyNum = parseFloat(item.quantity) || 1;
+                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xs overflow-hidden">
+                    {/* Desktop Table Header */}
+                    <div className="hidden sm:grid sm:grid-cols-[1fr_75px_135px_110px_38px] gap-2 px-3.5 py-2.5 bg-zinc-50/80 border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                      <div>Descripción</div>
+                      <div className="text-center">Cant.</div>
+                      <div className="text-right">Monto</div>
+                      <div className="text-center">Tipo</div>
+                      <div></div>
+                    </div>
 
-                      return (
-                        <div
-                          key={item.id}
-                          className="bg-white border border-zinc-200/90 hover:border-zinc-300 rounded-2xl p-3 sm:p-3.5 shadow-2xs transition-all space-y-2.5"
-                        >
-                          {/* Top row: Index badge + Description input + Delete button */}
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg bg-zinc-100 text-zinc-600 text-[11px] font-bold flex items-center justify-center shrink-0 border border-zinc-200/70">
-                              {idx + 1}
-                            </span>
-                            <input
-                              type="text"
-                              placeholder="Nombre del artículo (ej. Pizza, Taxi...)"
-                              value={item.desc}
-                              onChange={e => {
-                                const newItems = [...items];
-                                newItems[idx].desc = e.target.value;
-                                setItems(newItems);
-                              }}
-                              className="flex-1 min-w-0 px-3 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setItems(items.filter(i => i.id !== item.id))}
-                              disabled={items.length <= 1}
-                              aria-label="Eliminar artículo"
-                              className={`p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 ${items.length > 1 ? 'opacity-100 cursor-pointer' : 'opacity-0 pointer-events-none'
-                                }`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                    {/* Table Rows */}
+                    <div className="divide-y divide-zinc-100">
+                      {items.map((item, idx) => {
+                        const itemSubtotal = getItemTotal(item);
+                        const isEach = item.amountType === 'each';
+                        const qtyNum = parseFloat(item.quantity) || 1;
 
-                          {/* Bottom row: Cantidad, Monto, Tipo toggle, and Subtotal */}
-                          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-0.5">
-                            {/* Quantity */}
-                            <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-xl px-2 py-1.5 shrink-0">
-                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Cant:</span>
+                        return (
+                          <div
+                            key={item.id}
+                            className="p-3 sm:px-3.5 sm:py-2.5 transition-colors hover:bg-zinc-50/50 space-y-2 sm:space-y-0"
+                          >
+                            {/* Desktop Row */}
+                            <div className="hidden sm:grid sm:grid-cols-[1fr_75px_135px_110px_38px] gap-2 items-center">
+                              {/* Description */}
+                              <input
+                                type="text"
+                                placeholder="Descripción del artículo..."
+                                value={item.desc}
+                                onChange={e => {
+                                  const newItems = [...items];
+                                  newItems[idx].desc = e.target.value;
+                                  setItems(newItems);
+                                }}
+                                className="w-full px-2.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
+                              />
+
+                              {/* Cantidad */}
                               <input
                                 type="number"
                                 min="1"
@@ -738,90 +770,203 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   newItems[idx].quantity = e.target.value;
                                   setItems(newItems);
                                 }}
-                                className="w-10 text-center bg-transparent text-xs font-bold text-zinc-900 focus:outline-none"
+                                className="w-full px-1.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
                               />
-                            </div>
 
-                            {/* Amount input */}
-                            <div className="relative flex-1 min-w-[120px]">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">
-                                {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
-                              </span>
-                              <FormattedCurrencyInput
-                                value={item.amount}
-                                onChange={val => {
-                                  const newItems = [...items];
-                                  newItems[idx].amount = val;
-                                  setItems(newItems);
-                                }}
-                                currency={currency}
-                                hideSymbol
-                                placeholder="0"
-                                className="w-full pl-6 pr-2.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-right"
-                              />
-                            </div>
+                              {/* Monto */}
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">
+                                  {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
+                                </span>
+                                <FormattedCurrencyInput
+                                  value={item.amount}
+                                  onChange={val => {
+                                    const newItems = [...items];
+                                    newItems[idx].amount = val;
+                                    setItems(newItems);
+                                  }}
+                                  currency={currency}
+                                  hideSymbol
+                                  placeholder="0"
+                                  className="w-full pl-6 pr-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-right"
+                                />
+                              </div>
 
-                            {/* Type pill toggle: c/u vs Total */}
-                            <div className="flex bg-zinc-100 p-0.5 rounded-xl shrink-0 border border-zinc-200/60">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newItems = [...items];
-                                  newItems[idx].amountType = 'each';
-                                  setItems(newItems);
-                                }}
-                                className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${item.amountType === 'each'
-                                    ? 'bg-white text-zinc-900 shadow-2xs'
-                                    : 'text-zinc-500 hover:text-zinc-800'
+                              {/* Tipo Toggle (c/u vs Total) */}
+                              <div className="flex bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/60 justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newItems = [...items];
+                                    newItems[idx].amountType = 'each';
+                                    setItems(newItems);
+                                  }}
+                                  className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                    item.amountType === 'each'
+                                      ? 'bg-white text-zinc-900 shadow-2xs'
+                                      : 'text-zinc-500 hover:text-zinc-800'
                                   }`}
-                                title="Precio por unidad"
-                              >
-                                c/u
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newItems = [...items];
-                                  newItems[idx].amountType = 'total';
-                                  setItems(newItems);
-                                }}
-                                className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${item.amountType === 'total'
-                                    ? 'bg-white text-zinc-900 shadow-2xs'
-                                    : 'text-zinc-500 hover:text-zinc-800'
+                                  title="Precio por unidad"
+                                >
+                                  c/u
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newItems = [...items];
+                                    newItems[idx].amountType = 'total';
+                                    setItems(newItems);
+                                  }}
+                                  className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                    item.amountType === 'total'
+                                      ? 'bg-white text-zinc-900 shadow-2xs'
+                                      : 'text-zinc-500 hover:text-zinc-800'
                                   }`}
-                                title="Monto total del artículo"
-                              >
-                                Total
-                              </button>
+                                  title="Monto total"
+                                >
+                                  Total
+                                </button>
+                              </div>
+
+                              {/* Delete button */}
+                              <div className="flex justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setItems(items.filter(i => i.id !== item.id))}
+                                  disabled={items.length <= 1}
+                                  aria-label="Eliminar artículo"
+                                  className={`p-1.5 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ${
+                                    items.length > 1 ? 'opacity-100 cursor-pointer' : 'opacity-0 pointer-events-none'
+                                  }`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
 
-                            {/* Live calculated subtotal if qty > 1 & each */}
+                            {/* Mobile Layout (No # badge) */}
+                            <div className="sm:hidden space-y-2">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Descripción (ej. Panes, Jugo...)"
+                                  value={item.desc}
+                                  onChange={e => {
+                                    const newItems = [...items];
+                                    newItems[idx].desc = e.target.value;
+                                    setItems(newItems);
+                                  }}
+                                  className="flex-1 min-w-0 px-3 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setItems(items.filter(i => i.id !== item.id))}
+                                  disabled={items.length <= 1}
+                                  aria-label="Eliminar artículo"
+                                  className={`p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 ${
+                                    items.length > 1 ? 'opacity-100 cursor-pointer' : 'opacity-0 pointer-events-none'
+                                  }`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-xl px-2 py-1.5 shrink-0">
+                                  <span className="text-[10px] font-bold text-zinc-400 uppercase">Cant:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="1"
+                                    value={item.quantity}
+                                    onChange={e => {
+                                      const newItems = [...items];
+                                      newItems[idx].quantity = e.target.value;
+                                      setItems(newItems);
+                                    }}
+                                    className="w-10 text-center bg-transparent text-xs font-bold text-zinc-900 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div className="relative flex-1">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">
+                                    {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
+                                  </span>
+                                  <FormattedCurrencyInput
+                                    value={item.amount}
+                                    onChange={val => {
+                                      const newItems = [...items];
+                                      newItems[idx].amount = val;
+                                      setItems(newItems);
+                                    }}
+                                    currency={currency}
+                                    hideSymbol
+                                    placeholder="0"
+                                    className="w-full pl-6 pr-2.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 focus:outline-none text-right"
+                                  />
+                                </div>
+
+                                <div className="flex bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/60 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...items];
+                                      newItems[idx].amountType = 'each';
+                                      setItems(newItems);
+                                    }}
+                                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                      item.amountType === 'each' ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500'
+                                    }`}
+                                  >
+                                    c/u
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...items];
+                                      newItems[idx].amountType = 'total';
+                                      setItems(newItems);
+                                    }}
+                                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                      item.amountType === 'total' ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500'
+                                    }`}
+                                  >
+                                    Total
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Live calculated subtotal if qty > 1 and each */}
                             {isEach && qtyNum > 1 && itemSubtotal > 0 && (
-                              <div className="w-full sm:w-auto flex items-center justify-end sm:justify-start gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200/60 shrink-0">
-                                <span className="text-[10px] text-emerald-600/80">Total:</span>
-                                <span className="font-bold">{formatCurrency(itemSubtotal, currency)}</span>
+                              <div className="flex justify-end pt-1">
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                                  Subtotal: {formatCurrency(itemSubtotal, currency)}
+                                </span>
                               </div>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
 
-                    {/* Add another item button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextId = items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1;
-                        setItems([
-                          ...items,
-                          { id: nextId, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }
-                        ]);
-                      }}
-                      className="w-full py-2.5 sm:py-3 border-2 border-dashed border-zinc-200 hover:border-emerald-400 bg-zinc-50/70 hover:bg-emerald-50/40 rounded-2xl text-xs font-bold text-zinc-600 hover:text-emerald-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.99]"
-                    >
-                      <Plus className="w-4 h-4 text-emerald-600" />
-                      <span>Añadir otro artículo</span>
-                    </button>
+                    {/* Add another item button inside table footer */}
+                    <div className="p-2.5 bg-zinc-50/50 border-t border-zinc-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextId = items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1;
+                          setItems([
+                            ...items,
+                            { id: nextId, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }
+                          ]);
+                        }}
+                        className="w-full py-2 border border-dashed border-zinc-300 hover:border-emerald-400 bg-white hover:bg-emerald-50/30 rounded-xl text-xs font-bold text-zinc-600 hover:text-emerald-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.99]"
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                        <span>Añadir otro artículo</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1071,7 +1216,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors group">
                                     <td className="sticky left-0 z-10 px-3 py-2 text-xs font-bold text-zinc-900 border-r border-zinc-200 whitespace-nowrap bg-white group-hover:bg-zinc-50/90 shadow-2xs">
                                       <div className="flex flex-col">
-                                        <span>{`${itemQty}x ${item.desc || 'Artículo'}`}</span>
+                                        <span>{`${itemQty} · ${item.desc || 'Artículo'}`}</span>
                                         <span className="text-[10px] font-semibold text-emerald-700">{formatCurrency(amt, currency)}</span>
                                       </div>
                                     </td>
@@ -1090,7 +1235,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                               newItems[idx].shares![mId] = e.target.value;
                                               setItems(newItems);
                                             }}
-                                            className="w-11 mx-auto px-1 py-1 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-xs font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition-colors"
+                                            className="w-11 mx-auto px-1 py-1 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-xs font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-200 shadow-2xs transition-colors"
                                           />
                                         </td>
                                       );
@@ -1134,24 +1279,19 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                     }
                                   }}
                                 >
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0">
-                                      {idx + 1}
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                          {itemQty}x {item.desc || 'Sin nombre'}
-                                        </span>
-                                      </div>
-                                      <span className="text-[10px] font-semibold text-zinc-500 block">
-                                        {assignedCount === selectedMembers.length
-                                          ? 'Dividido entre todos'
-                                          : assignedCount === 0
-                                            ? 'Sin asignar'
-                                            : `Dividido entre ${assignedCount} persona${assignedCount === 1 ? '' : 's'}`}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
+                                        {itemQty} · {item.desc || 'Sin nombre'}
                                       </span>
                                     </div>
+                                    <span className="text-[10px] font-semibold text-zinc-500 block">
+                                      {assignedCount === selectedMembers.length
+                                        ? 'Dividido entre todos'
+                                        : assignedCount === 0
+                                          ? 'Sin asignar'
+                                          : `Dividido entre ${assignedCount} persona${assignedCount === 1 ? '' : 's'}`}
+                                    </span>
                                   </div>
 
                                   <div className="flex items-center gap-2 shrink-0">
@@ -1243,7 +1383,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                               </span>
                                             </div>
 
-                                            {/* Stepper + Input */}
+                                            {/* Stepper + Input (Neutral colors, no green) */}
                                             <div className="flex items-center gap-1 shrink-0">
                                               <button
                                                 type="button"
@@ -1271,7 +1411,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                   setItems(newItems);
                                                 }}
                                                 className={`w-9 h-6 text-center text-xs font-bold rounded-lg border focus:outline-none transition-colors ${valNum > 0
-                                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900 focus:ring-2 focus:ring-emerald-500/20'
+                                                    ? 'bg-zinc-50 border-zinc-300 text-zinc-900 focus:bg-white focus:ring-2 focus:ring-zinc-200'
                                                     : 'bg-zinc-50 border-zinc-200 text-zinc-400'
                                                   }`}
                                               />
@@ -1315,97 +1455,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
               {/* Resumen por participante Section */}
               {splitType === 'itemized' && mode === 'itemized' && (
-                <div className="space-y-2.5 sm:space-y-3 pt-1">
-                  <div className="flex items-center justify-between px-1">
-                    <h3 className="text-xs sm:text-sm font-bold text-zinc-900 flex items-center">
-                      <ListChecks className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 text-emerald-600" />
-                      Resumen por participante
-                    </h3>
-                  </div>
-                  <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xs overflow-hidden divide-y divide-zinc-100">
-                    {selectedMembers.map(mId => {
-                      const p = activeProfiles.find(x => x.id === mId);
-                      if (!p) return null;
-                      const sharesMap = calculateItemizedShares();
-                      const amt = sharesMap[mId] || 0;
-
-                      const breakdown: { desc: string; qty: number; cost: number; shareQty: number; totalShares: number }[] = [];
-                      items.forEach((item, idx) => {
-                        const itemAmt = getItemTotal(item);
-                        const val = item.shares?.[mId] !== undefined ? parseFloat(item.shares[mId] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
-                        if (val > 0) {
-                          let sumShares = 0;
-                          selectedMembers.forEach(id => {
-                            sumShares += item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
-                          });
-                          if (sumShares > 0) {
-                            breakdown.push({
-                              desc: item.desc || `Artículo ${idx + 1}`,
-                              qty: parseFloat(item.quantity) || 1,
-                              shareQty: val,
-                              totalShares: sumShares,
-                              cost: itemAmt * (val / sumShares)
-                            });
-                          }
-                        }
-                      });
-
-                      const isExpanded = expandedParticipants.includes(mId);
-
-                      return (
-                        <div key={p.id} className="flex flex-col py-2.5 px-3 sm:py-3 sm:px-3.5 transition-colors">
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            className="flex items-center justify-between cursor-pointer select-none"
-                            onClick={() => setExpandedParticipants(isExpanded ? expandedParticipants.filter(id => id !== mId) : [...expandedParticipants, mId])}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                setExpandedParticipants(isExpanded ? expandedParticipants.filter(id => id !== mId) : [...expandedParticipants, mId]);
-                              }
-                            }}
-                          >
-                            <div className="flex items-center space-x-2.5 text-left min-w-0 flex-1 pr-2">
-                              {p.avatar_url ? (
-                                <Image src={p.avatar_url} alt="avatar" width={24} height={24} className="rounded-full w-6 h-6 object-cover border border-zinc-200 shrink-0" unoptimized />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0">
-                                  {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                {p.full_name?.split(' ')[0] || p.email}
-                                {p.id === currentProfile?.id && <span className="text-emerald-600 font-semibold ml-1">(Tú)</span>}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-zinc-900 shrink-0">
-                              {formatCurrency(amt, currency)}
-                              <div className="w-5 h-5 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
-                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                              </div>
-                            </div>
-                          </div>
-
-                          {isExpanded && breakdown.length > 0 && (
-                            <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-1.5 px-0.5">
-                              {breakdown.map((b, i) => {
-                                const myQty = b.qty * (b.shareQty / b.totalShares);
-                                return (
-                                  <div key={i} className="flex items-center justify-between text-xs gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                      <span className="text-zinc-500 font-semibold shrink-0">{toFraction(myQty)}</span>
-                                      <span className="text-zinc-800 truncate">{b.desc}</span>
-                                    </div>
-                                    <span className="font-bold text-zinc-900 shrink-0">{formatCurrency(b.cost, currency)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="pt-1">
+                  <ExpenseParticipantSummary
+                    participants={participantSummaryList}
+                    currency={currency}
+                    currentUserId={currentProfile?.id}
+                    title="Resumen por participante"
+                  />
                 </div>
               )}
             </div>

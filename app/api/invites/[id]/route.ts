@@ -37,6 +37,38 @@ export async function GET(
     }
 
     if (!invite) {
+      // Check if the id is a direct group id
+      const { data: directGroup } = await db
+        .from('groups')
+        .select('id, name, category, description, image_url, owner_id')
+        .eq('id', inviteId)
+        .maybeSingle();
+
+      if (directGroup) {
+        let inviterProfile = null;
+        if (directGroup.owner_id) {
+          const { data: inviter } = await db
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .eq('id', directGroup.owner_id)
+            .maybeSingle();
+          inviterProfile = inviter;
+        }
+
+        return NextResponse.json({
+          invite: {
+            id: directGroup.id,
+            token: directGroup.id,
+            status: 'pending',
+            isExpired: false,
+            isGeneralLink: true,
+          },
+          group: directGroup,
+          inviter: inviterProfile ?? { full_name: 'Administrador' },
+          invitee: null,
+        });
+      }
+
       return NextResponse.json({ error: 'Invitación no encontrada o no válida' }, { status: 404 });
     }
 

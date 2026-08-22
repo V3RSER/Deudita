@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendGroupInviteEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/utils';
 
 async function ensureGroupMember(db: any, groupId: string, userId: string, invitedBy: string) {
   const { data: existing } = await db
@@ -176,7 +177,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const origin = req.headers.get('origin') || 'https://deudita.app';
+    const origin = getBaseUrl(req);
     const inviteUrl = inviteToken
       ? `${origin}/join?token=${inviteToken}`
       : `${origin}/join?group=${groupId}`;
@@ -188,7 +189,7 @@ export async function POST(req: Request) {
           to: targetEmail,
           groupName: group.name,
           inviterName,
-          inviterEmail: user.email ?? 'soporte@deudita.app',
+          inviterEmail: user.email || '',
           inviteUrl,
         });
       } catch (e) {

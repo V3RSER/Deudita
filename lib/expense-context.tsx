@@ -313,31 +313,27 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const getGroupInviteLink = async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean }> => {
-    return await runOperation('Obteniendo enlace de invitación...', async () => {
-      const res = await fetch(`/api/groups/${groupId}/invite-link`);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo obtener el enlace de invitación';
-        throw new Error(message);
-      }
-      return await res.json();
-    });
-  };
+  const getGroupInviteLink = useCallback(async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean }> => {
+    const res = await fetch(`/api/groups/${groupId}/invite-link`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo obtener el enlace de invitación';
+      throw new Error(message);
+    }
+    return await res.json();
+  }, []);
 
-  const regenerateGroupInviteLink = async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean; message: string }> => {
-    return await runOperation('Generando nuevo enlace...', async () => {
-      const res = await fetch(`/api/groups/${groupId}/invite-link`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo generar el enlace';
-        throw new Error(message);
-      }
-      return await res.json();
+  const regenerateGroupInviteLink = useCallback(async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean; message: string }> => {
+    const res = await fetch(`/api/groups/${groupId}/invite-link`, {
+      method: 'POST',
     });
-  };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const message = errData.error ? String(errData.error) : 'No se pudo generar el enlace';
+      throw new Error(message);
+    }
+    return await res.json();
+  }, []);
 
   const deleteFriend = async (friendId: string): Promise<void> => {
     await runOperation('Eliminando amigo...', async () => {

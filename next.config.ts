@@ -8,6 +8,13 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  allowedDevOrigins: [
+    'ais-dev-a5n627k2pa3bqyowz4rurd-535048014345.us-east1.run.app',
+    'ais-pre-a5n627k2pa3bqyowz4rurd-535048014345.us-east1.run.app',
+    '*.us-east1.run.app',
+    '*.run.app',
+    'localhost:3000',
+  ],
   // Allow access to remote image placeholder.
   images: {
     remotePatterns: [
@@ -24,8 +31,12 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
+    // Suppress non-critical webpack cache serialization warnings
+    config.infrastructureLogging = {
+      level: 'error',
+    };
+
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
-    // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
     if (dev && process.env.DISABLE_HMR === 'true') {
       config.watchOptions = {
         ignored: /.*/,

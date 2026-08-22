@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendGroupInviteEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/utils';
 
 export async function PATCH(
   req: Request,
@@ -118,7 +119,7 @@ export async function PATCH(
         token = newInvite?.token;
       }
 
-      const origin = req.headers.get('origin') ?? 'https://deudita.app';
+      const origin = getBaseUrl(req);
       inviteUrl = token ? `${origin}/join?token=${token}` : `${origin}/join?group=${groupId}`;
 
       try {
@@ -126,7 +127,7 @@ export async function PATCH(
           to: updates.email,
           groupName,
           inviterName,
-          inviterEmail: user.email ?? 'soporte@deudita.app',
+          inviterEmail: user.email || '',
           inviteUrl,
         });
         inviteSent = true;

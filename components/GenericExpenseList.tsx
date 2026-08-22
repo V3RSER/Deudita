@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Expense, Payment, Profile, Group } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
+import { ExpenseParticipantSummary, ParticipantSummaryData, ParticipantItemBreakdown } from '@/components/ExpenseParticipantSummary';
 import {
   Receipt,
   HandCoins,
@@ -365,48 +366,46 @@ export function GenericExpenseList({
                           const hasReceipt = Boolean(exp.receipt_url);
                           const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
 
+                          const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
+                            const profile = profiles.find((p) => p.id === split.user_id);
+                            const userAmt = split.amount_owed;
+                            const breakdown: ParticipantItemBreakdown[] = [];
+
+                            if (exp.items && exp.items.length > 0 && exp.total_amount > 0) {
+                              exp.items.forEach((item) => {
+                                const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
+                                const totalQty = match ? parseFloat(match[1]) || 1 : 1;
+                                const cleanDesc = match ? match[2].trim() : item.description;
+                                const ratio = exp.total_amount > 0 ? (userAmt / exp.total_amount) : 0;
+                                const userItemQty = totalQty * ratio;
+                                const userItemCost = item.amount * ratio;
+
+                                breakdown.push({
+                                  desc: cleanDesc,
+                                  qty: userItemQty,
+                                  cost: userItemCost,
+                                });
+                              });
+                            }
+
+                            return {
+                              userId: split.user_id,
+                              profile,
+                              amount: userAmt,
+                              breakdown: breakdown.length > 0 ? breakdown : undefined,
+                            };
+                          });
+
                           if (hasSecondaryDetails) {
                             return (
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-                                {/* Participation list (left col) */}
-                                <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3 flex flex-col justify-between">
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-100">
-                                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                                        <Users className="w-3.5 h-3.5 text-zinc-400" />
-                                        <span>División del gasto ({exp.splits?.length || 0})</span>
-                                      </h4>
-                                      <span className="text-[11px] font-medium text-zinc-400">Cuota individual</span>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      {exp.splits?.map((split) => {
-                                        const profile = profiles.find((p) => p.id === split.user_id);
-                                        return (
-                                          <div key={split.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-50/80 transition-colors">
-                                            <div className="flex items-center space-x-2.5 min-w-0">
-                                              <div className="w-6 h-6 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
-                                                {profile?.avatar_url ? (
-                                                  <Image src={profile.avatar_url} alt={profile.full_name} width={24} height={24} className="w-full h-full object-cover" unoptimized />
-                                                ) : (
-                                                  <User className="w-3.5 h-3.5 m-[5px] text-zinc-400" />
-                                                )}
-                                              </div>
-                                              <span className="text-xs sm:text-sm font-medium text-zinc-800 truncate">
-                                                {profile ? profile.full_name : 'Usuario'}
-                                                {split.user_id === currentProfile?.id && (
-                                                  <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
-                                                )}
-                                              </span>
-                                            </div>
-                                            <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
-                                              {formatCurrency(split.amount_owed, currency)}
-                                            </span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 items-start">
+                                {/* Participation list (ExpenseParticipantSummary) */}
+                                <ExpenseParticipantSummary
+                                  participants={participantSummaryList}
+                                  currency={currency}
+                                  currentUserId={currentProfile?.id}
+                                  title="Resumen por participante"
+                                />
 
                                 {/* Items, Notes and Receipt (right col) */}
                                 <div className="space-y-3.5">
@@ -521,47 +520,12 @@ export function GenericExpenseList({
 
                           // Full-width balanced splits card when there are no extra notes/items
                           return (
-                            <div className="bg-white p-4 rounded-xl border border-zinc-200/80 shadow-2xs space-y-3">
-                              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                                <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                                  <Users className="w-3.5 h-3.5 text-zinc-400" />
-                                  <span>División del gasto ({exp.splits?.length || 0} participantes)</span>
-                                </h4>
-                                <span className="text-[11px] font-medium text-zinc-400">Distribución de saldos</span>
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                {exp.splits?.map((split) => {
-                                  const profile = profiles.find((p) => p.id === split.user_id);
-                                  return (
-                                    <div
-                                      key={split.id}
-                                      className="flex items-center justify-between p-2.5 bg-zinc-50/60 hover:bg-zinc-100/60 rounded-xl border border-zinc-200/60 transition-colors"
-                                    >
-                                      <div className="flex items-center space-x-2.5 min-w-0">
-                                        <div className="w-7 h-7 rounded-full bg-zinc-200 overflow-hidden shrink-0 border border-zinc-200">
-                                          {profile?.avatar_url ? (
-                                            <Image src={profile.avatar_url} alt={profile.full_name} width={28} height={28} className="w-full h-full object-cover" unoptimized />
-                                          ) : (
-                                            <User className="w-4 h-4 m-[6px] text-zinc-400" />
-                                          )}
-                                        </div>
-                                        <div className="min-w-0">
-                                          <span className="text-xs font-semibold text-zinc-900 truncate block">
-                                            {profile ? profile.full_name : 'Usuario'}
-                                            {split.user_id === currentProfile?.id && (
-                                              <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <span className="text-xs sm:text-sm font-bold text-zinc-900 shrink-0 ml-2">
-                                        {formatCurrency(split.amount_owed, currency)}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                            <ExpenseParticipantSummary
+                              participants={participantSummaryList}
+                              currency={currency}
+                              currentUserId={currentProfile?.id}
+                              title="Resumen por participante"
+                            />
                           );
                         })()}
 
