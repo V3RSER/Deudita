@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Wallet,
   Plus,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface FriendsViewProps {
@@ -28,7 +29,18 @@ interface FriendsViewProps {
 import { PageHeader } from '@/components/PageHeader';
 
 export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
-  const { currentProfile, profiles, members, expenses, payments, userGroups, pendingInvites, hiddenFriendIds } = useExpense();
+  const {
+    currentProfile,
+    profiles,
+    members,
+    expenses,
+    payments,
+    userGroups,
+    pendingInvites,
+    hiddenFriendIds,
+    managedUserIds,
+    sponsorshipMap,
+  } = useExpense();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -172,10 +184,21 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                   )}
 
                   <div className="space-y-0.5 overflow-hidden">
-                    <div className="flex items-center space-x-1.5 flex-wrap">
+                    <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                       <h3 className="font-semibold text-zinc-900 text-base group-hover:text-emerald-600 transition-colors truncate">
                         {friend.full_name}
                       </h3>
+                      {managedUserIds.includes(friend.id) && (
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md inline-flex items-center space-x-1">
+                          <ShieldCheck className="w-2.5 h-2.5" />
+                          <span>A tu cargo</span>
+                        </span>
+                      )}
+                      {sponsorshipMap.has(friend.id) && sponsorshipMap.get(friend.id) !== currentProfile?.id && (
+                        <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                          A cargo de {profiles.find(pr => pr.id === sponsorshipMap.get(friend.id))?.full_name?.split(' ')[0] || 'otro'}
+                        </span>
+                      )}
                       {isTempProfile(friend) && (
                         <span className="bg-sky-100 text-sky-800 border border-sky-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
                           Pendiente de registro

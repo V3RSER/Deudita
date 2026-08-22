@@ -114,26 +114,31 @@ export function calculatePairwiseBalance(
   userBId: string,
   expenses: Expense[],
   payments: Payment[],
-  groupId?: string
+  groupId?: string,
+  sponsorshipMap?: Map<string, string>
 ): number {
   if (!userAId || !userBId || userAId === userBId) return 0;
+
+  const getEffectiveId = (id: string) => (sponsorshipMap ? sponsorshipMap.get(id) || id : id);
+  const effA = getEffectiveId(userAId);
+  const effB = getEffectiveId(userBId);
+
+  if (effA === effB) return 0;
 
   let balance = 0; // Positive = userB owes userA. Negative = userA owes userB.
 
   for (const exp of expenses) {
     if (groupId && exp.group_id !== groupId) continue;
 
-    if (exp.paid_by === userAId && exp.splits) {
-      const splitB = exp.splits.find((s) => s.user_id === userBId);
-      if (splitB) {
-        balance += Number(splitB.amount_owed || 0);
-      }
-    }
+    const effPayer = getEffectiveId(exp.paid_by);
+    if (!exp.splits) continue;
 
-    if (exp.paid_by === userBId && exp.splits) {
-      const splitA = exp.splits.find((s) => s.user_id === userAId);
-      if (splitA) {
-        balance -= Number(splitA.amount_owed || 0);
+    for (const split of exp.splits) {
+      const effDebtor = getEffectiveId(split.user_id);
+      if (effPayer === effA && effDebtor === effB) {
+        balance += Number(split.amount_owed || 0);
+      } else if (effPayer === effB && effDebtor === effA) {
+        balance -= Number(split.amount_owed || 0);
       }
     }
   }
@@ -141,11 +146,12 @@ export function calculatePairwiseBalance(
   for (const p of payments) {
     if (groupId && p.group_id !== groupId) continue;
 
-    if (p.paid_by === userAId && p.paid_to === userBId) {
-      balance += Number(p.amount || 0);
-    }
+    const effPayer = getEffectiveId(p.paid_by);
+    const effReceiver = getEffectiveId(p.paid_to);
 
-    if (p.paid_by === userBId && p.paid_to === userAId) {
+    if (effPayer === effA && effReceiver === effB) {
+      balance += Number(p.amount || 0);
+    } else if (effPayer === effB && effReceiver === effA) {
       balance -= Number(p.amount || 0);
     }
   }

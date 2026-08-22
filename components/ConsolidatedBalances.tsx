@@ -37,14 +37,14 @@ function getInitials(name?: string): string {
 }
 
 export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
-  const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
+  const { currentProfile, expenses, payments, profiles, userGroups, sponsorshipMap } = useExpense();
   const [isSimplified, setIsSimplified] = useState(true);
 
   const userGroupIds = new Set(userGroups.map((g) => g.id));
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
   const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
 
-  // Compute both simplified and direct pairwise balances
+  // Compute both simplified and direct pairwise balances with sponsorship support
   const simplifiedPairwise = calculateSimplifiedBalances(userExpenses, userPayments, profiles);
   const directPairwise = calculateDirectBalances(userExpenses, userPayments, profiles);
 
@@ -61,7 +61,6 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
   const totalIOwe = myIOwe.reduce((acc, curr) => acc + curr.amount, 0);
   const netConsolidated = totalOwedToMe - totalIOwe;
 
-  const totalTransactionsCount = activePairwise.length;
   const directTransactionsCount = directPairwise.length;
   const simplifiedTransactionsCount = simplifiedPairwise.length;
   const savedTransactions = Math.max(0, directTransactionsCount - simplifiedTransactionsCount);
@@ -72,62 +71,46 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
         title="Balances & Pagos"
         subtitle="Resumen de deudas pendientes, cobros por recibir y liquidaciones de cuentas entre integrantes."
         icon={<Wallet className="w-5 h-5" />}
-      />
-
-      {/* Simplification Mode Toggle & Info Banner */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-black uppercase tracking-wider text-zinc-500">
-                Modo de cálculo
+        actions={
+          <div className="flex items-center gap-2">
+            {isSimplified && savedTransactions > 0 && (
+              <span className="hidden sm:inline-flex items-center space-x-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                <Sparkles className="w-3 h-3" />
+                <span>Ahorra {savedTransactions} {savedTransactions === 1 ? 'pago' : 'pagos'}</span>
               </span>
-              {isSimplified && savedTransactions > 0 && (
-                <span className="inline-flex items-center space-x-1 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Ahorra {savedTransactions} {savedTransactions === 1 ? 'pago' : 'pagos'}</span>
-                </span>
-              )}
+            )}
+            <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsSimplified(true)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  isSimplified
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Sparkles className={`w-3 h-3 ${isSimplified ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                <span>Simplificado</span>
+                <span className="text-[10px] opacity-60">({simplifiedTransactionsCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSimplified(false)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  !isSimplified
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Layers className={`w-3 h-3 ${!isSimplified ? 'text-zinc-900' : 'text-zinc-400'}`} />
+                <span>Directo</span>
+                <span className="text-[10px] opacity-60">({directTransactionsCount})</span>
+              </button>
             </div>
-            <p className="text-xs text-zinc-600 font-medium mt-0.5">
-              {isSimplified
-                ? 'Las deudas se simplifican para resolver las cuentas con la menor cantidad de pagos.'
-                : 'Muestra las deudas directas calculadas exactamente entre cada par de personas.'}
-            </p>
           </div>
-
-          {/* Segmented Switcher */}
-          <div className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsSimplified(true)}
-              className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isSimplified
-                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
-                  : 'text-zinc-500 hover:text-zinc-800'
-              }`}
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isSimplified ? 'text-emerald-600' : 'text-zinc-400'}`} />
-              <span>Simplificado</span>
-              <span className="text-[10px] opacity-70">({simplifiedTransactionsCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsSimplified(false)}
-              className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                !isSimplified
-                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
-                  : 'text-zinc-500 hover:text-zinc-800'
-              }`}
-            >
-              <Layers className={`w-3.5 h-3.5 ${!isSimplified ? 'text-zinc-900' : 'text-zinc-400'}`} />
-              <span>Sin simplificar</span>
-              <span className="text-[10px] opacity-70">({directTransactionsCount})</span>
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

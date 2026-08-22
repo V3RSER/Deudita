@@ -34,6 +34,7 @@ import {
   HandCoins,
   PlusCircle,
   Link as LinkIcon,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription, getGroupCategoryConfig, getGroupCategoryLabel } from '@/lib/group-utils';
@@ -133,7 +134,21 @@ export function GroupDetail({
   onOpenAddMember,
   onOpenInviteLink,
 }: GroupDetailProps) {
-  const { currentProfile, expenses, auditLogs, payments, members, profiles, userGroups, pendingInvites, deleteExpense, deletePayment, deleteGroup } = useExpense();
+  const {
+    currentProfile,
+    expenses,
+    auditLogs,
+    payments,
+    members,
+    profiles,
+    userGroups,
+    pendingInvites,
+    managedUserIds,
+    sponsorshipMap,
+    deleteExpense,
+    deletePayment,
+    deleteGroup,
+  } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
@@ -144,6 +159,8 @@ export function GroupDetail({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  const isOwner = Boolean(currentProfile?.id && group.owner_id === currentProfile.id);
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
   const groupPayments = payments.filter((p) => p.group_id === group.id);
@@ -414,17 +431,19 @@ export function GroupDetail({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/60 to-transparent" />
         
-        {/* Top actions (Settings only - Volver button removed to eliminate UI overlap on mobile) */}
-        <div className="relative z-10 flex justify-end items-start w-full">
-          <button
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
-            title="Configuración del grupo"
-            aria-label="Configuración del grupo"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Top actions (Settings only visible if user has owner/edit permissions) */}
+        {isOwner && (
+          <div className="relative z-10 flex justify-end items-start w-full">
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
+              title="Configuración del grupo"
+              aria-label="Configuración del grupo"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Bottom info & actions */}
         <div className="relative z-10 w-full flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 sm:pt-0">
@@ -606,59 +625,49 @@ export function GroupDetail({
 
       {/* TAB CONTENT: Balances */}
       {activeTab === 'balances' && (
-        <div className="space-y-6">
-          {/* Mode Switcher & Explanation Banner */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-black uppercase tracking-wider text-zinc-500">
-                    Modo de cálculo
-                  </span>
-                  {isSimplifiedBalances && savedGroupTransactions > 0 && (
-                    <span className="inline-flex items-center space-x-1 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200/80">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-600 font-medium mt-0.5">
-                  {isSimplifiedBalances
-                    ? 'Simplificación activada: Se agrupan los saldos para que el grupo salde cuentas en el menor número de pagos.'
-                    : 'Vista sin simplificar: Muestra los saldos directos calculados gasto por gasto entre cada integrante.'}
-                </p>
-              </div>
+        <div className="space-y-4">
+          {/* Non-invasive, coupled mode switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 py-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
+              </span>
+              {isSimplifiedBalances && savedGroupTransactions > 0 && (
+                <span className="inline-flex items-center space-x-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
+                </span>
+              )}
+            </div>
 
-              {/* Segmented Switcher */}
-              <div className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex items-center p-1 bg-zinc-100/90 rounded-2xl border border-zinc-200/80 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsSimplifiedBalances(true)}
-                  className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isSimplifiedBalances
-                      ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
-                  <span>Simplificado</span>
-                  <span className="text-[10px] opacity-70">({simplifiedGroupPairwise.length})</span>
-                </button>
+            <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setIsSimplifiedBalances(true)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  isSimplifiedBalances
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Sparkles className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                <span>Simplificado</span>
+                <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsSimplifiedBalances(false)}
-                  className={`flex items-center justify-center space-x-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    !isSimplifiedBalances
-                      ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200/80'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
-                >
-                  <Layers className={`w-3.5 h-3.5 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
-                  <span>Sin simplificar</span>
-                  <span className="text-[10px] opacity-70">({directGroupPairwise.length})</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsSimplifiedBalances(false)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  !isSimplifiedBalances
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Layers className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
+                <span>Directo</span>
+                <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
+              </button>
             </div>
           </div>
 
@@ -820,6 +829,17 @@ export function GroupDetail({
                         {isOwner && (
                           <span className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
                             Admin
+                          </span>
+                        )}
+                        {managedUserIds.includes(p.id) && (
+                          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md inline-flex items-center space-x-1">
+                            <ShieldCheck className="w-2.5 h-2.5" />
+                            <span>A tu cargo</span>
+                          </span>
+                        )}
+                        {sponsorshipMap.has(p.id) && sponsorshipMap.get(p.id) !== currentProfile?.id && (
+                          <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                            A cargo de {profiles.find(pr => pr.id === sponsorshipMap.get(p.id))?.full_name?.split(' ')[0] || 'otro'}
                           </span>
                         )}
                         {isTempProfile(p) && (

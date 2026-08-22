@@ -19,6 +19,7 @@ export async function PATCH(req: Request) {
       currency_symbol,
       payment_instructions,
       onboarding_completed,
+      managed_user_ids,
     } = body;
 
     const updates: Record<string, any> = {};
@@ -29,6 +30,7 @@ export async function PATCH(req: Request) {
     if (currency_symbol !== undefined) updates.currency_symbol = currency_symbol;
     if (payment_instructions !== undefined) updates.payment_instructions = payment_instructions;
     if (onboarding_completed !== undefined) updates.onboarding_completed = Boolean(onboarding_completed);
+    if (managed_user_ids !== undefined) updates.managed_user_ids = Array.isArray(managed_user_ids) ? managed_user_ids : [];
 
     // 1. Try to update in profiles table
     let updateError: any = null;
@@ -38,14 +40,15 @@ export async function PATCH(req: Request) {
       .eq('id', user.id);
 
     if (err1) {
-      // If error is about payment_instructions or onboarding_completed column not existing in schema cache, retry without them
+      // If error is about custom column not existing in schema cache, retry without non-standard columns
       if (
         err1.message?.includes('payment_instructions') ||
         err1.message?.includes('onboarding_completed') ||
+        err1.message?.includes('managed_user_ids') ||
         err1.message?.includes('schema cache') ||
         err1.message?.includes('column')
       ) {
-        const { payment_instructions: _, onboarding_completed: __, ...safeUpdates } = updates;
+        const { payment_instructions: _, onboarding_completed: __, managed_user_ids: ___, ...safeUpdates } = updates;
         if (Object.keys(safeUpdates).length > 0) {
           const { error: err2 } = await supabase
             .from('profiles')
@@ -70,7 +73,8 @@ export async function PATCH(req: Request) {
       payment_instructions !== undefined ||
       full_name !== undefined ||
       avatar_url !== undefined ||
-      onboarding_completed !== undefined
+      onboarding_completed !== undefined ||
+      managed_user_ids !== undefined
     ) {
       try {
         await supabase.auth.updateUser({
@@ -79,6 +83,7 @@ export async function PATCH(req: Request) {
             ...(avatar_url !== undefined ? { avatar_url } : {}),
             ...(payment_instructions !== undefined ? { payment_instructions } : {}),
             ...(onboarding_completed !== undefined ? { onboarding_completed: Boolean(onboarding_completed) } : {}),
+            ...(managed_user_ids !== undefined ? { managed_user_ids } : {}),
           },
         });
       } catch (authMetaErr) {
@@ -105,6 +110,10 @@ export async function PATCH(req: Request) {
           : (typeof user.user_metadata?.onboarding_completed === 'boolean'
               ? user.user_metadata.onboarding_completed
               : Boolean(updatedProfile?.onboarding_completed ?? false)),
+      managed_user_ids:
+        managed_user_ids !== undefined
+          ? managed_user_ids
+          : (updatedProfile?.managed_user_ids ?? user.user_metadata?.managed_user_ids ?? []),
     };
 
     return NextResponse.json({

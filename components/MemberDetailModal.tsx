@@ -24,6 +24,7 @@ import {
   Eye,
   Loader2,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 import { calculatePairwiseBalance } from '@/lib/group-utils';
@@ -50,6 +51,10 @@ export function MemberDetailModal({
     expenses,
     payments,
     pendingInvites,
+    managedUserIds,
+    sponsorshipMap,
+    toggleManagedUser,
+    profiles,
     addGroupInvite,
     deleteFriend,
     refreshData,
@@ -58,6 +63,7 @@ export function MemberDetailModal({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTogglingManagement, setIsTogglingManagement] = useState(false);
   const [copied, setCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -109,17 +115,43 @@ export function MemberDetailModal({
         (Boolean(i.email) && Boolean(memberProfile.email) && i.email?.toLowerCase() === memberProfile.email?.toLowerCase()))
   );
 
+  const isCurrentlyManagedByMe = Boolean(memberProfile && managedUserIds.includes(memberProfile.id));
+  const sponsorId = memberProfile ? sponsorshipMap.get(memberProfile.id) : undefined;
+  const isManagedByOther = Boolean(sponsorId && sponsorId !== currentProfile?.id);
+  const sponsorProfile = sponsorId ? profiles.find((p) => p.id === sponsorId) : undefined;
+  const sponsorName = sponsorProfile?.full_name?.split(' ')[0] || 'otro integrante';
+
   const balance = currentProfile && memberProfile
     ? calculatePairwiseBalance(
         currentProfile.id,
         memberProfile.id,
         expenses,
         payments,
-        context === 'group' ? groupId : undefined
+        context === 'group' ? groupId : undefined,
+        sponsorshipMap
       )
     : 0;
 
   const hasValidEmailEntered = Boolean(email.trim() && email.includes('@'));
+
+  const handleToggleManagement = async () => {
+    if (!memberProfile) return;
+    try {
+      setIsTogglingManagement(true);
+      setErrorMsg(null);
+      await toggleManagedUser(memberProfile.id, !isCurrentlyManagedByMe);
+      setSuccessMsg(
+        !isCurrentlyManagedByMe
+          ? `Ahora te haces cargo de las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'}.`
+          : `Dejaste de hacerte cargo de las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'}.`
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar asignación';
+      setErrorMsg(message);
+    } finally {
+      setIsTogglingManagement(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,7 +355,9 @@ export function MemberDetailModal({
                 ? 'bg-rose-50 text-rose-900'
                 : 'bg-zinc-50 text-zinc-600'
             }`}>
-              <span className="text-zinc-500 font-medium">Saldo</span>
+              <span className="text-zinc-500 font-medium">
+                {isCurrentlyManagedByMe ? 'Saldo (a tu cargo)' : 'Saldo directo'}
+              </span>
               <span className="font-bold">
                 {balance > 0
                   ? `Te debe $${balance.toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
@@ -331,6 +365,66 @@ export function MemberDetailModal({
                   ? `Le debes $${Math.abs(balance).toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
                   : 'Al día'}
               </span>
+            </div>
+          )}
+
+          {/* Hacerme cargo de este integrante */}
+          {!isSelf && (
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                isCurrentlyManagedByMe
+                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                  : isManagedByOther
+                  ? 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                  : 'bg-zinc-50/80 hover:bg-zinc-100/60 border-zinc-200 text-zinc-900'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center space-x-1.5">
+                    <ShieldCheck
+                      className={`w-4 h-4 shrink-0 ${
+                        isCurrentlyManagedByMe ? 'text-emerald-600' : isManagedByOther ? 'text-zinc-500' : 'text-zinc-700'
+                      }`}
+                    />
+                    <span className="text-xs font-bold truncate">
+                      {isCurrentlyManagedByMe
+                        ? 'Te haces cargo de sus cuentas'
+                        : isManagedByOther
+                        ? `A cargo de ${sponsorName}`
+                        : 'Hacerme cargo de este usuario'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-tight">
+                    {isCurrentlyManagedByMe
+                      ? 'Sus deudas y cobros en balances se transfieren y liquidan automáticamente a tu nombre.'
+                      : isManagedByOther
+                      ? `Las cuentas de este integrante están asignadas a ${sponsorName}.`
+                      : 'Las cuentas y pagos de esta persona se asignarán a tu nombre.'}
+                  </p>
+                </div>
+
+                {!isManagedByOther && (
+                  <button
+                    type="button"
+                    onClick={handleToggleManagement}
+                    disabled={isTogglingManagement || isSubmitting}
+                    className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
+                      isCurrentlyManagedByMe
+                        ? 'bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-2xs'
+                        : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-2xs'
+                    }`}
+                  >
+                    {isTogglingManagement ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : isCurrentlyManagedByMe ? (
+                      'Dejar de cubrir'
+                    ) : (
+                      'Hacerme cargo'
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

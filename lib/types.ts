@@ -23,6 +23,8 @@ export interface Profile {
   currency_symbol?: string;
   payment_instructions?: string;
   onboarding_completed?: boolean;
+  managed_user_ids?: string[];
+  managed_by?: string;
   created_at: string;
 }
 
@@ -157,6 +159,8 @@ export interface PairwiseBalance {
   amount: number;
   group_id?: string;
   group_name?: string;
+  includedDebtors?: Profile[];
+  includedCreditors?: Profile[];
 }
 
 export interface UserSummaryBalance {
@@ -164,4 +168,6 @@ export interface UserSummaryBalance {
   totalPaid: number;
   totalOwedShare: number;
   netBalance: number; // positive = others owe me, negative = I owe others
+  managedUsers?: Profile[];
+  managedBy?: Profile;
 }

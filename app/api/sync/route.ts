@@ -185,14 +185,21 @@ export async function GET() {
         isOnboardingCompleted = false;
       }
 
+      const managedUserIds = Array.isArray(profile.managed_user_ids)
+        ? profile.managed_user_ids
+        : Array.isArray(user.user_metadata?.managed_user_ids)
+        ? user.user_metadata.managed_user_ids
+        : [];
+
       profile = {
         ...profile,
         payment_instructions:
           profile.payment_instructions ?? user.user_metadata?.payment_instructions ?? '',
         onboarding_completed: isOnboardingCompleted,
+        managed_user_ids: managedUserIds,
       };
       profiles = profiles.map((p) =>
-        p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions, onboarding_completed: isOnboardingCompleted } : p
+        p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions, onboarding_completed: isOnboardingCompleted, managed_user_ids: managedUserIds } : p
       );
     }
 

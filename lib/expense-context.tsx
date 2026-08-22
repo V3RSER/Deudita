@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Profile,
   Group,
@@ -16,6 +16,7 @@ import {
   GroupCategory,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
+import { buildSponsorshipMap } from './balance-utils';
 
 interface ExpenseContextType {
   currentProfile: Profile | null;
@@ -33,6 +34,9 @@ interface ExpenseContextType {
   pendingInvites: GroupInvite[];
   notifications: Notification[];
   hiddenFriendIds: string[];
+  managedUserIds: string[];
+  sponsorshipMap: Map<string, string>;
+  toggleManagedUser: (targetUserId: string, shouldManage: boolean) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   addFriend: (fullName: string, email?: string) => Promise<Profile>;
@@ -226,6 +230,38 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       await reloadFromSupabase();
     });
+  };
+
+  const managedUserIds = useMemo(() => {
+    return Array.isArray(currentProfile?.managed_user_ids) ? currentProfile.managed_user_ids : [];
+  }, [currentProfile]);
+
+  const sponsorshipMap = useMemo(() => {
+    return buildSponsorshipMap(profiles);
+  }, [profiles]);
+
+  const toggleManagedUser = async (targetUserId: string, shouldManage: boolean): Promise<void> => {
+    if (!currentProfile || !targetUserId || targetUserId === currentProfile.id) return;
+    
+    const currentList = Array.isArray(currentProfile.managed_user_ids) ? currentProfile.managed_user_ids : [];
+    let updatedList: string[];
+    
+    if (shouldManage) {
+      updatedList = Array.from(new Set([...currentList, targetUserId]));
+    } else {
+      updatedList = currentList.filter((id) => id !== targetUserId);
+    }
+
+    const optimisticProfile = {
+      ...currentProfile,
+      managed_user_ids: updatedList,
+    };
+    setCurrentProfile(optimisticProfile);
+    setProfiles((prev) =>
+      prev.map((p) => (p.id === currentProfile.id ? optimisticProfile : p))
+    );
+
+    await updateProfile({ managed_user_ids: updatedList });
   };
 
   const addFriend = async (fullName: string, email?: string): Promise<Profile> => {
@@ -604,6 +640,9 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         pendingInvites,
         notifications,
         hiddenFriendIds,
+        managedUserIds,
+        sponsorshipMap,
+        toggleManagedUser,
         completeOnboarding,
         updateProfile,
         addFriend,
