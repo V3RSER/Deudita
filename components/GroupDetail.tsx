@@ -10,6 +10,7 @@ import {
   calculateSimplifiedBalances,
   calculateDirectBalances,
   calculateUserSummaries,
+  calculateManagedSummary,
 } from '@/lib/balance-utils';
 import {
   Receipt,
@@ -35,6 +36,9 @@ import {
   PlusCircle,
   Link as LinkIcon,
   ShieldCheck,
+  Shield,
+  UserCheck,
+  Info,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription, getGroupCategoryConfig, getGroupCategoryLabel } from '@/lib/group-utils';
@@ -431,19 +435,17 @@ export function GroupDetail({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/60 to-transparent" />
         
-        {/* Top actions (Settings only visible if user has owner/edit permissions) */}
-        {isOwner && (
-          <div className="relative z-10 flex justify-end items-start w-full">
-            <button
-              onClick={() => setIsSettingsModalOpen(true)}
-              className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
-              title="Configuración del grupo"
-              aria-label="Configuración del grupo"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* Top actions (Settings modal accessible to all members, with options scoped by permissions) */}
+        <div className="relative z-10 flex justify-end items-start w-full">
+          <button
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
+            title="Configuración del grupo"
+            aria-label="Configuración del grupo"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Bottom info & actions */}
         <div className="relative z-10 w-full flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 sm:pt-0">
@@ -624,150 +626,251 @@ export function GroupDetail({
       )}
 
       {/* TAB CONTENT: Balances */}
-      {activeTab === 'balances' && (
-        <div className="space-y-4">
-          {/* Non-invasive, coupled mode switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 py-1">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
-              </span>
-              {isSimplifiedBalances && savedGroupTransactions > 0 && (
-                <span className="inline-flex items-center space-x-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
+      {activeTab === 'balances' && (() => {
+        const groupManagedSummary = calculateManagedSummary(profiles, groupExpenses, groupPayments, group.id);
+
+        return (
+          <div className="space-y-4">
+            {/* Non-invasive, coupled mode switcher */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 py-1">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
                 </span>
-              )}
-            </div>
-
-            <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setIsSimplifiedBalances(true)}
-                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  isSimplifiedBalances
-                    ? 'bg-white text-zinc-900 shadow-2xs'
-                    : 'text-zinc-500 hover:text-zinc-800'
-                }`}
-              >
-                <Sparkles className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
-                <span>Simplificado</span>
-                <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsSimplifiedBalances(false)}
-                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  !isSimplifiedBalances
-                    ? 'bg-white text-zinc-900 shadow-2xs'
-                    : 'text-zinc-500 hover:text-zinc-800'
-                }`}
-              >
-                <Layers className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
-                <span>Directo</span>
-                <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
-              </button>
-            </div>
-          </div>
-
-          {groupPairwise.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
-                <CheckCircle2 className="w-6 h-6" />
+                {isSimplifiedBalances && savedGroupTransactions > 0 && (
+                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                    <Sparkles className="w-3 h-3" />
+                    <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
+                  </span>
+                )}
               </div>
-              <h4 className="font-extrabold text-zinc-900 text-base">¡Todas las cuentas están al día!</h4>
-              <p className="text-zinc-500 text-xs max-w-sm mx-auto">
-                No hay deudas pendientes entre los integrantes de este grupo.
-              </p>
+
+              <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsSimplifiedBalances(true)}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    isSimplifiedBalances
+                      ? 'bg-white text-zinc-900 shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <Sparkles className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                  <span>Simplificado</span>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60">Por defecto</span>
+                  <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSimplifiedBalances(false)}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    !isSimplifiedBalances
+                      ? 'bg-white text-zinc-900 shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <Layers className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
+                  <span>Directo</span>
+                  <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
+                </button>
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {groupPairwise.map((p, idx) => {
-                const isMyDebt = p.debtor.id === currentProfile?.id;
-                const isOwedToMe = p.creditor.id === currentProfile?.id;
 
-                const debtorInitial = p.debtor.full_name?.trim() ? p.debtor.full_name.trim().charAt(0).toUpperCase() : 'U';
-                const creditorInitial = p.creditor.full_name?.trim() ? p.creditor.full_name.trim().charAt(0).toUpperCase() : 'U';
-                const debtorDisplayName = p.debtor.full_name?.trim() ? p.debtor.full_name.split(' ')[0] : 'Integrante';
-                const creditorDisplayName = p.creditor.full_name?.trim() ? p.creditor.full_name.split(' ')[0] : 'Integrante';
-
-                return (
-                  <div
-                    key={idx}
-                    className="bg-white rounded-3xl p-5 border border-zinc-200/80 shadow-2xs hover:shadow-md hover:border-zinc-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                  >
-                    <div className="flex items-center space-x-3.5 min-w-0">
-                      <div className="flex items-center -space-x-2 shrink-0">
-                        {p.debtor.avatar_url ? (
-                          <Image
-                            src={p.debtor.avatar_url}
-                            alt={p.debtor.full_name ? p.debtor.full_name : 'Deudor'}
-                            width={40}
-                            height={40}
-                            className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
-                            unoptimized
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                            {debtorInitial}
-                          </div>
-                        )}
-                        {p.creditor.avatar_url ? (
-                          <Image
-                            src={p.creditor.avatar_url}
-                            alt={p.creditor.full_name ? p.creditor.full_name : 'Acreedor'}
-                            width={40}
-                            height={40}
-                            className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
-                            unoptimized
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                            {creditorInitial}
-                          </div>
-                        )}
+            {/* Info on Personas a cargo in this group if present */}
+            {groupManagedSummary.length > 0 && (
+              <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center space-x-2 text-xs font-bold text-indigo-900">
+                  <Shield className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>Personas a cargo en este grupo ({groupManagedSummary.length})</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {groupManagedSummary.map((item, idx) => (
+                    <div key={idx} className="bg-white/90 p-2.5 rounded-xl border border-indigo-100 flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-zinc-900">{item.user.full_name}</p>
+                        <p className="text-[10px] text-zinc-500">
+                          Responsable: <strong className="text-zinc-700">{item.sponsor.id === currentProfile?.id ? 'Tú' : item.sponsor.full_name}</strong>
+                        </p>
                       </div>
-
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
-                          <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
-                            {debtorDisplayName}
-                          </span>
-                          <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
-                            {creditorDisplayName}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isMyDebt
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                              : isOwedToMe
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
-                              : 'bg-zinc-100 text-zinc-700'
-                          }`}>
-                            {formatCurrency(p.amount, group.currency ?? 'COP')}
-                          </span>
-                        </div>
+                      <div className="text-right">
+                        <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
+                          item.individualNet > 0
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : item.individualNet < 0
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-zinc-100 text-zinc-600'
+                        }`}>
+                          {item.individualNet > 0
+                            ? `+${formatCurrency(item.individualNet, group.currency ?? 'COP')}`
+                            : item.individualNet < 0
+                            ? `-${formatCurrency(Math.abs(item.individualNet), group.currency ?? 'COP')}`
+                            : 'Al día'}
+                        </span>
                       </div>
                     </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-indigo-800/80">
+                  {isSimplifiedBalances
+                    ? '💡 En la vista simplificada, los saldos de los dependientes se liquidan a través de su responsable.'
+                    : '💡 En la vista directa, se muestran los consumos individuales exactos de cada dependiente.'}
+                </p>
+              </div>
+            )}
 
-                    <button
-                      onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
-                      className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
+            {groupPairwise.length === 0 ? (
+              <div className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="font-extrabold text-zinc-900 text-base">¡Todas las cuentas están al día!</h4>
+                <p className="text-zinc-500 text-xs max-w-sm mx-auto">
+                  No hay deudas pendientes entre los integrantes de este grupo.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {groupPairwise.map((p, idx) => {
+                  const isMyDebt = p.debtor.id === currentProfile?.id || (!isSimplifiedBalances && p.debtorSponsor?.id === currentProfile?.id);
+                  const isOwedToMe = p.creditor.id === currentProfile?.id || (!isSimplifiedBalances && p.creditorSponsor?.id === currentProfile?.id);
+
+                  const debtorInitial = p.debtor.full_name?.trim() ? p.debtor.full_name.trim().charAt(0).toUpperCase() : 'U';
+                  const creditorInitial = p.creditor.full_name?.trim() ? p.creditor.full_name.trim().charAt(0).toUpperCase() : 'U';
+                  const debtorDisplayName = p.debtor.full_name?.trim() ? p.debtor.full_name : 'Integrante';
+                  const creditorDisplayName = p.creditor.full_name?.trim() ? p.creditor.full_name : 'Integrante';
+
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-white rounded-3xl p-5 border border-zinc-200/80 shadow-2xs hover:shadow-md hover:border-zinc-300 transition-all flex flex-col justify-between gap-3.5"
                     >
-                      Saldar
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center space-x-3.5 min-w-0">
+                          <div className="flex items-center -space-x-2 shrink-0">
+                            {p.debtor.avatar_url ? (
+                              <Image
+                                src={p.debtor.avatar_url}
+                                alt={p.debtor.full_name ? p.debtor.full_name : 'Deudor'}
+                                width={40}
+                                height={40}
+                                className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                                unoptimized
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                                {debtorInitial}
+                              </div>
+                            )}
+                            {p.creditor.avatar_url ? (
+                              <Image
+                                src={p.creditor.avatar_url}
+                                alt={p.creditor.full_name ? p.creditor.full_name : 'Acreedor'}
+                                width={40}
+                                height={40}
+                                className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                                unoptimized
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                                {creditorInitial}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
+                              <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
+                                {debtorDisplayName}
+                              </span>
+                              <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                              <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
+                                {creditorDisplayName}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                isMyDebt
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                  : isOwedToMe
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+                                  : 'bg-zinc-100 text-zinc-700'
+                              }`}>
+                                {formatCurrency(p.amount, group.currency ?? 'COP')}
+                              </span>
+
+                              {/* Direct view sponsor tags */}
+                              {!isSimplifiedBalances && (p.debtorSponsor || p.creditorSponsor) && (
+                                <div className="flex items-center space-x-1 text-[10px] font-semibold text-indigo-700">
+                                  <Shield className="w-3 h-3" />
+                                  <span>
+                                    {p.debtorSponsor && `Deudor a cargo de ${p.debtorSponsor.full_name}`}
+                                    {p.debtorSponsor && p.creditorSponsor && ' • '}
+                                    {p.creditorSponsor && `Acreedor a cargo de ${p.creditorSponsor.full_name}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
+                          className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
+                        >
+                          Saldar
+                        </button>
+                      </div>
+
+                      {/* Simplified view breakdown */}
+                      {isSimplifiedBalances && (p.includedDebtors || p.debtorBreakdown || p.includedCreditors || p.creditorBreakdown) && (
+                        <div className="pt-2 border-t border-zinc-100 text-[11px] text-zinc-500 space-y-1 bg-zinc-50/60 -mx-5 -mb-5 p-3 rounded-b-3xl">
+                          {p.debtorBreakdown && p.debtorBreakdown.length > 1 ? (
+                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                              <span className="font-semibold text-zinc-700 flex items-center space-x-1">
+                                <UserCheck className="w-3 h-3 text-indigo-600" />
+                                <span>Desglose por personas:</span>
+                              </span>
+                              {p.debtorBreakdown.map((b, bIdx) => (
+                                <span
+                                  key={bIdx}
+                                  className="inline-flex items-center space-x-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium"
+                                >
+                                  <span>{b.isSelf ? 'Titular' : b.profile.full_name}:</span>
+                                  <strong className="text-zinc-900">{formatCurrency(b.amount, group.currency ?? 'COP')}</strong>
+                                </span>
+                              ))}
+                            </div>
+                          ) : p.includedDebtors && p.includedDebtors.length > 0 ? (
+                            <div className="flex items-center space-x-1.5 text-zinc-600">
+                              <Shield className="w-3 h-3 text-indigo-600 shrink-0" />
+                              <span>
+                                Incluye consumo de personas a cargo: <strong>{p.includedDebtors.map((d) => d.full_name).join(', ')}</strong>
+                              </span>
+                            </div>
+                          ) : null}
+
+                          {p.includedCreditors && p.includedCreditors.length > 0 && (
+                            <div className="flex items-center space-x-1.5 text-zinc-600">
+                              <Shield className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span>
+                                A favor de consumos cubiertos para: <strong>{p.includedCreditors.map((c) => c.full_name).join(', ')}</strong>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB CONTENT: Members */}
       {activeTab === 'members' && (
@@ -969,6 +1072,7 @@ export function GroupDetail({
       {/* Group Settings Menu */}
       <GroupSettingsModal
         isOpen={isSettingsModalOpen}
+        canEdit={isOwner}
         onClose={() => setIsSettingsModalOpen(false)}
         onEditGroup={() => {
           setIsSettingsModalOpen(false);

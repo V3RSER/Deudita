@@ -1,4 +1,4 @@
-import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance } from './types';
+import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance, ManagedContribution } from './types';
 
 export function formatCurrency(amount: number, currencyCode?: string): string {
   const num = isNaN(amount) ? 0 : amount;
@@ -54,6 +54,74 @@ export function buildSponsorshipMap(profiles: Profile[]): Map<string, string> {
   return map;
 }
 
+export interface ManagedUserDetail {
+  user: Profile;
+  sponsor: Profile;
+  totalSpent: number;
+  totalPaid: number;
+  individualNet: number;
+}
+
+export function calculateManagedSummary(
+  profiles: Profile[],
+  expenses: Expense[],
+  payments: Payment[],
+  groupId?: string
+): ManagedUserDetail[] {
+  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+
+  const profileMap = new Map<string, Profile>();
+  profiles.forEach((p) => profileMap.set(p.id, p));
+
+  const sponsorshipMap = buildSponsorshipMap(profiles);
+  const details: ManagedUserDetail[] = [];
+
+  profiles.forEach((p) => {
+    const sponsorId = sponsorshipMap.get(p.id);
+    if (!sponsorId) return;
+    const sponsor = profileMap.get(sponsorId);
+    if (!sponsor) return;
+
+    let totalSpent = 0;
+    let totalPaid = 0;
+
+    filteredExpenses.forEach((exp) => {
+      if (exp.paid_by === p.id) {
+        totalPaid += exp.total_amount;
+      }
+      if (exp.splits) {
+        exp.splits.forEach((s) => {
+          if (s.user_id === p.id) {
+            totalSpent += s.amount_owed;
+          }
+        });
+      }
+    });
+
+    filteredPayments.forEach((pay) => {
+      if (pay.paid_by === p.id) {
+        totalPaid += pay.amount;
+      }
+      if (pay.paid_to === p.id) {
+        totalSpent += pay.amount;
+      }
+    });
+
+    const individualNet = totalPaid - totalSpent; // positive = spent less than paid, negative = owes
+
+    details.push({
+      user: p,
+      sponsor,
+      totalSpent,
+      totalPaid,
+      individualNet,
+    });
+  });
+
+  return details;
+}
+
 export function calculateDirectBalances(
   expenses: Expense[],
   payments: Payment[],
@@ -67,64 +135,46 @@ export function calculateDirectBalances(
   profiles.forEach((p) => profileMap.set(p.id, p));
 
   const sponsorshipMap = buildSponsorshipMap(profiles);
-  const getEffectiveId = (id: string) => sponsorshipMap.get(id) || id;
 
-  // Track which original members are represented in each effective debt
-  const debtorContributors = new Map<string, Set<string>>();
-  const creditorContributors = new Map<string, Set<string>>();
-
-  // Debt map: key = `${effective_debtor_id}->${effective_creditor_id}`
+  // In direct view: calculate direct pairwise debts between ALL individual persons,
+  // preserving the debts to/from people under charge, with their sponsor metadata attached.
   const debtMap = new Map<string, number>();
   const getPairKey = (debtorId: string, creditorId: string) => `${debtorId}->${creditorId}`;
 
-  // Process expenses
+  // Process individual expense splits
   filteredExpenses.forEach((exp) => {
     const rawPayer = exp.paid_by;
-    const effPayer = getEffectiveId(rawPayer);
     if (!exp.splits) return;
 
     exp.splits.forEach((split) => {
       const rawDebtor = split.user_id;
-      const effDebtor = getEffectiveId(rawDebtor);
 
-      if (effDebtor !== effPayer && split.amount_owed > 0) {
-        const key = getPairKey(effDebtor, effPayer);
+      if (rawDebtor !== rawPayer && split.amount_owed > 0) {
+        const key = getPairKey(rawDebtor, rawPayer);
         const current = debtMap.get(key) ?? 0;
         debtMap.set(key, current + split.amount_owed);
-
-        if (rawDebtor !== effDebtor) {
-          if (!debtorContributors.has(key)) debtorContributors.set(key, new Set());
-          debtorContributors.get(key)!.add(rawDebtor);
-        }
-        if (rawPayer !== effPayer) {
-          if (!creditorContributors.has(key)) creditorContributors.set(key, new Set());
-          creditorContributors.get(key)!.add(rawPayer);
-        }
       }
     });
   });
 
-  // Process payments
+  // Process individual payments
   filteredPayments.forEach((payment) => {
-    const effPayer = getEffectiveId(payment.paid_by);
-    const effReceiver = getEffectiveId(payment.paid_to);
+    const rawPayer = payment.paid_by;
+    const rawReceiver = payment.paid_to;
 
-    if (effPayer !== effReceiver && payment.amount > 0) {
-      const key = getPairKey(effPayer, effReceiver);
+    if (rawPayer !== rawReceiver && payment.amount > 0) {
+      const key = getPairKey(rawPayer, rawReceiver);
       const current = debtMap.get(key) ?? 0;
       debtMap.set(key, current - payment.amount);
     }
   });
 
-  // Effective profiles (only those who are not managed by someone else)
-  const effectiveProfiles = profiles.filter((p) => !sponsorshipMap.has(p.id));
-
-  // Net direct pairs (A->B and B->A)
+  // Net direct pairs between all individual profiles
   const pairwiseResults: PairwiseBalance[] = [];
   const processedPairs = new Set<string>();
 
-  effectiveProfiles.forEach((p1) => {
-    effectiveProfiles.forEach((p2) => {
+  profiles.forEach((p1) => {
+    profiles.forEach((p2) => {
       if (p1.id === p2.id) return;
       const pairId = [p1.id, p2.id].sort().join(':');
       if (processedPairs.has(pairId)) return;
@@ -143,30 +193,30 @@ export function calculateDirectBalances(
           const creditor = profileMap.get(p2.id);
           const debtor = profileMap.get(p1.id);
           if (creditor && debtor) {
-            const incDebtorIds = debtorContributors.get(k1To2);
-            const incCreditorIds = creditorContributors.get(k1To2);
+            const debtorSponsorId = sponsorshipMap.get(debtor.id);
+            const creditorSponsorId = sponsorshipMap.get(creditor.id);
             pairwiseResults.push({
               creditor,
               debtor,
               amount: Math.round(net * 100) / 100,
               group_id: groupId,
-              includedDebtors: incDebtorIds ? Array.from(incDebtorIds).map((id) => profileMap.get(id)!).filter(Boolean) : undefined,
-              includedCreditors: incCreditorIds ? Array.from(incCreditorIds).map((id) => profileMap.get(id)!).filter(Boolean) : undefined,
+              debtorSponsor: debtorSponsorId ? profileMap.get(debtorSponsorId) : undefined,
+              creditorSponsor: creditorSponsorId ? profileMap.get(creditorSponsorId) : undefined,
             });
           }
         } else {
           const creditor = profileMap.get(p1.id);
           const debtor = profileMap.get(p2.id);
           if (creditor && debtor) {
-            const incDebtorIds = debtorContributors.get(k2To1);
-            const incCreditorIds = creditorContributors.get(k2To1);
+            const debtorSponsorId = sponsorshipMap.get(debtor.id);
+            const creditorSponsorId = sponsorshipMap.get(creditor.id);
             pairwiseResults.push({
               creditor,
               debtor,
               amount: Math.round(Math.abs(net) * 100) / 100,
               group_id: groupId,
-              includedDebtors: incDebtorIds ? Array.from(incDebtorIds).map((id) => profileMap.get(id)!).filter(Boolean) : undefined,
-              includedCreditors: incCreditorIds ? Array.from(incCreditorIds).map((id) => profileMap.get(id)!).filter(Boolean) : undefined,
+              debtorSponsor: debtorSponsorId ? profileMap.get(debtorSponsorId) : undefined,
+              creditorSponsor: creditorSponsorId ? profileMap.get(creditorSponsorId) : undefined,
             });
           }
         }
@@ -190,6 +240,7 @@ function simplifySingleScopeBalances(
   const getEffectiveId = (id: string) => sponsorshipMap.get(id) || id;
 
   const netMap = new Map<string, number>();
+  const individualNetMap = new Map<string, number>();
 
   expenses.forEach((exp) => {
     const rawPayer = exp.paid_by;
@@ -203,21 +254,32 @@ function simplifySingleScopeBalances(
 
         totalSplits += split.amount_owed;
         if (split.amount_owed > 0) {
-          const currentDebtor = netMap.get(effDebtor) ?? 0;
-          netMap.set(effDebtor, currentDebtor - split.amount_owed);
+          const currentEffDebtor = netMap.get(effDebtor) ?? 0;
+          netMap.set(effDebtor, currentEffDebtor - split.amount_owed);
+
+          const currentRawDebtor = individualNetMap.get(rawDebtor) ?? 0;
+          individualNetMap.set(rawDebtor, currentRawDebtor - split.amount_owed);
         }
       });
-      const currentPayer = netMap.get(effPayer) ?? 0;
-      netMap.set(effPayer, currentPayer + totalSplits);
+      const currentEffPayer = netMap.get(effPayer) ?? 0;
+      netMap.set(effPayer, currentEffPayer + totalSplits);
+
+      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
+      individualNetMap.set(rawPayer, currentRawPayer + totalSplits);
     } else {
-      const currentPayer = netMap.get(effPayer) ?? 0;
-      netMap.set(effPayer, currentPayer + exp.total_amount);
+      const currentEffPayer = netMap.get(effPayer) ?? 0;
+      netMap.set(effPayer, currentEffPayer + exp.total_amount);
+
+      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
+      individualNetMap.set(rawPayer, currentRawPayer + exp.total_amount);
     }
   });
 
   payments.forEach((p) => {
-    const effPayer = getEffectiveId(p.paid_by);
-    const effReceiver = getEffectiveId(p.paid_to);
+    const rawPayer = p.paid_by;
+    const rawReceiver = p.paid_to;
+    const effPayer = getEffectiveId(rawPayer);
+    const effReceiver = getEffectiveId(rawReceiver);
 
     if (effPayer !== effReceiver) {
       const currentPayer = netMap.get(effPayer) ?? 0;
@@ -225,6 +287,14 @@ function simplifySingleScopeBalances(
 
       const currentReceiver = netMap.get(effReceiver) ?? 0;
       netMap.set(effReceiver, currentReceiver - p.amount);
+    }
+
+    if (rawPayer !== rawReceiver) {
+      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
+      individualNetMap.set(rawPayer, currentRawPayer + p.amount);
+
+      const currentRawReceiver = individualNetMap.get(rawReceiver) ?? 0;
+      individualNetMap.set(rawReceiver, currentRawReceiver - p.amount);
     }
   });
 
@@ -264,13 +334,39 @@ function simplifySingleScopeBalances(
       const debtorProfile = profileMap.get(debtor.id);
 
       if (creditorProfile && debtorProfile) {
-        // Collect managed profiles if any
-        const debtorManagedProfiles = debtorProfile.managed_user_ids
-          ? debtorProfile.managed_user_ids.map((id) => profileMap.get(id)!).filter(Boolean)
-          : undefined;
-        const creditorManagedProfiles = creditorProfile.managed_user_ids
-          ? creditorProfile.managed_user_ids.map((id) => profileMap.get(id)!).filter(Boolean)
-          : undefined;
+        // Collect managed profiles and breakdown for debtor
+        const debtorManagedIds = debtorProfile.managed_user_ids?.filter((id) => id !== debtorProfile.id) || [];
+        const debtorManagedProfiles = debtorManagedIds.map((id) => profileMap.get(id)!).filter(Boolean);
+
+        const debtorBreakdown = [
+          {
+            profile: debtorProfile,
+            amount: Math.abs(Math.min(0, individualNetMap.get(debtorProfile.id) ?? 0)),
+            isSelf: true,
+          },
+          ...debtorManagedProfiles.map((dep) => ({
+            profile: dep,
+            amount: Math.abs(Math.min(0, individualNetMap.get(dep.id) ?? 0)),
+            isSelf: false,
+          })),
+        ].filter((b) => b.amount > 0);
+
+        // Collect managed profiles and breakdown for creditor
+        const creditorManagedIds = creditorProfile.managed_user_ids?.filter((id) => id !== creditorProfile.id) || [];
+        const creditorManagedProfiles = creditorManagedIds.map((id) => profileMap.get(id)!).filter(Boolean);
+
+        const creditorBreakdown = [
+          {
+            profile: creditorProfile,
+            amount: Math.max(0, individualNetMap.get(creditorProfile.id) ?? 0),
+            isSelf: true,
+          },
+          ...creditorManagedProfiles.map((dep) => ({
+            profile: dep,
+            amount: Math.max(0, individualNetMap.get(dep.id) ?? 0),
+            isSelf: false,
+          })),
+        ].filter((b) => b.amount > 0);
 
         simplified.push({
           creditor: creditorProfile,
@@ -279,6 +375,8 @@ function simplifySingleScopeBalances(
           group_id: groupId,
           includedDebtors: debtorManagedProfiles && debtorManagedProfiles.length > 0 ? debtorManagedProfiles : undefined,
           includedCreditors: creditorManagedProfiles && creditorManagedProfiles.length > 0 ? creditorManagedProfiles : undefined,
+          debtorBreakdown: debtorBreakdown.length > 1 ? debtorBreakdown : undefined,
+          creditorBreakdown: creditorBreakdown.length > 1 ? creditorBreakdown : undefined,
         });
       }
     }
@@ -320,6 +418,11 @@ export function calculateSimplifiedBalances(
   profiles.forEach((p) => profileMap.set(p.id, p));
 
   const combinedDebtMap = new Map<string, number>();
+  const debtorBreakdownMap = new Map<string, ManagedContribution[]>();
+  const creditorBreakdownMap = new Map<string, ManagedContribution[]>();
+  const includedDebtorsMap = new Map<string, Profile[]>();
+  const includedCreditorsMap = new Map<string, Profile[]>();
+
   const getPairKey = (debtorId: string, creditorId: string) => `${debtorId}->${creditorId}`;
 
   groupIds.forEach((gid) => {
@@ -331,6 +434,19 @@ export function calculateSimplifiedBalances(
       const key = getPairKey(item.debtor.id, item.creditor.id);
       const current = combinedDebtMap.get(key) ?? 0;
       combinedDebtMap.set(key, current + item.amount);
+
+      if (item.debtorBreakdown) {
+        debtorBreakdownMap.set(key, item.debtorBreakdown);
+      }
+      if (item.creditorBreakdown) {
+        creditorBreakdownMap.set(key, item.creditorBreakdown);
+      }
+      if (item.includedDebtors) {
+        includedDebtorsMap.set(key, item.includedDebtors);
+      }
+      if (item.includedCreditors) {
+        includedCreditorsMap.set(key, item.includedCreditors);
+      }
     });
   });
 
@@ -345,8 +461,11 @@ export function calculateSimplifiedBalances(
       if (processedPairs.has(pairId)) return;
       processedPairs.add(pairId);
 
-      const d1To2 = combinedDebtMap.get(getPairKey(p1.id, p2.id)) ?? 0;
-      const d2To1 = combinedDebtMap.get(getPairKey(p2.id, p1.id)) ?? 0;
+      const k1To2 = getPairKey(p1.id, p2.id);
+      const k2To1 = getPairKey(p2.id, p1.id);
+
+      const d1To2 = combinedDebtMap.get(k1To2) ?? 0;
+      const d2To1 = combinedDebtMap.get(k2To1) ?? 0;
       const net = d1To2 - d2To1;
 
       if (Math.abs(net) > 0.01) {
@@ -358,6 +477,10 @@ export function calculateSimplifiedBalances(
               creditor,
               debtor,
               amount: Math.round(net * 100) / 100,
+              debtorBreakdown: debtorBreakdownMap.get(k1To2),
+              creditorBreakdown: creditorBreakdownMap.get(k1To2),
+              includedDebtors: includedDebtorsMap.get(k1To2),
+              includedCreditors: includedCreditorsMap.get(k1To2),
             });
           }
         } else {
@@ -368,6 +491,10 @@ export function calculateSimplifiedBalances(
               creditor,
               debtor,
               amount: Math.round(Math.abs(net) * 100) / 100,
+              debtorBreakdown: debtorBreakdownMap.get(k2To1),
+              creditorBreakdown: creditorBreakdownMap.get(k2To1),
+              includedDebtors: includedDebtorsMap.get(k2To1),
+              includedCreditors: includedCreditorsMap.get(k2To1),
             });
           }
         }

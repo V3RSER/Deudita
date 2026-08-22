@@ -10,6 +10,7 @@ interface GroupSettingsModalProps {
   onAddMembers: () => void;
   onInviteLink: () => void;
   onDeleteGroup: () => void;
+  canEdit?: boolean;
 }
 
 export function GroupSettingsModal({
@@ -18,7 +19,8 @@ export function GroupSettingsModal({
   onEditGroup,
   onAddMembers,
   onInviteLink,
-  onDeleteGroup
+  onDeleteGroup,
+  canEdit = true,
 }: GroupSettingsModalProps) {
   if (!isOpen) return null;
 
@@ -35,22 +37,24 @@ export function GroupSettingsModal({
         </div>
 
         <div className="p-2 space-y-1">
-          <button
-            onClick={onEditGroup}
-            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors"
-          >
-            <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mr-4 shrink-0">
-              <Pencil className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="font-semibold text-zinc-900 text-sm">Editar grupo</div>
-              <div className="text-xs text-zinc-500 font-medium">Cambiar nombre, foto, moneda...</div>
-            </div>
-          </button>
+          {canEdit && (
+            <button
+              onClick={onEditGroup}
+              className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors cursor-pointer"
+            >
+              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mr-4 shrink-0">
+                <Pencil className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-semibold text-zinc-900 text-sm">Editar grupo</div>
+                <div className="text-xs text-zinc-500 font-medium">Cambiar nombre, foto, moneda...</div>
+              </div>
+            </button>
+          )}
           
           <button
             onClick={onAddMembers}
-            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors"
+            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors cursor-pointer"
           >
             <div className="w-10 h-10 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center mr-4 shrink-0">
               <UserPlus className="w-5 h-5" />
@@ -63,7 +67,7 @@ export function GroupSettingsModal({
 
           <button
             onClick={onInviteLink}
-            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors"
+            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors cursor-pointer"
           >
             <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mr-4 shrink-0">
               <LinkIcon className="w-5 h-5" />
@@ -75,20 +79,22 @@ export function GroupSettingsModal({
           </button>
         </div>
 
-        <div className="p-2 border-t border-zinc-100 mt-2 bg-zinc-50/50">
-          <button
-            onClick={onDeleteGroup}
-            className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-rose-50 hover:text-rose-700 text-rose-600 text-left transition-colors"
-          >
-            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center mr-4 shrink-0">
-              <Trash2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="font-bold text-sm">Eliminar grupo</div>
-              <div className="text-xs opacity-80 font-medium">Esta acción no se puede deshacer</div>
-            </div>
-          </button>
-        </div>
+        {canEdit && (
+          <div className="p-2 border-t border-zinc-100 mt-2 bg-zinc-50/50">
+            <button
+              onClick={onDeleteGroup}
+              className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-rose-50 hover:text-rose-700 text-rose-600 text-left transition-colors cursor-pointer"
+            >
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center mr-4 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-bold text-sm">Eliminar grupo</div>
+                <div className="text-xs opacity-80 font-medium">Esta acción no se puede deshacer</div>
+              </div>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

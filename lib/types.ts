@@ -153,6 +153,12 @@ export interface Payment {
   created_at: string;
 }
 
+export interface ManagedContribution {
+  profile: Profile;
+  amount: number;
+  isSelf?: boolean;
+}
+
 export interface PairwiseBalance {
   creditor: Profile;
   debtor: Profile;
@@ -161,6 +167,10 @@ export interface PairwiseBalance {
   group_name?: string;
   includedDebtors?: Profile[];
   includedCreditors?: Profile[];
+  debtorBreakdown?: ManagedContribution[];
+  creditorBreakdown?: ManagedContribution[];
+  debtorSponsor?: Profile;
+  creditorSponsor?: Profile;
 }
 
 export interface UserSummaryBalance {
