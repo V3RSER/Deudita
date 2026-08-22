@@ -26,11 +26,11 @@ export function AuthView({ error }: { error?: string }) {
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
     const pendingToken = typeof window !== 'undefined' 
-      ? (window.sessionStorage.getItem('deudita_invite_token') || window.localStorage.getItem('deudita_pending_invite'))
+      ? (window.sessionStorage.getItem('deudita_invite_token') ?? window.localStorage.getItem('deudita_pending_invite'))
       : null;
 
     const callbackUrl = pendingToken
-      ? `${window.location.origin}/auth/callback?token=${pendingToken}&returnTo=/join/${pendingToken}`
+      ? `${window.location.origin}/auth/callback?token=${pendingToken}`
       : `${window.location.origin}/auth/callback`;
 
     await supabase.auth.signInWithOAuth({

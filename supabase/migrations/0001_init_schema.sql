@@ -29,6 +29,7 @@ alter table public.profiles drop constraint if exists profiles_id_fkey;
 alter table public.profiles add column if not exists is_temp boolean not null default false;
 alter table public.profiles add column if not exists created_by uuid references public.profiles(id);
 alter table public.profiles add column if not exists payment_instructions text;
+alter table public.profiles add column if not exists onboarding_completed boolean not null default false;
 
 -- ----------------------------------------------------------------------------
 -- 2) GRUPOS Y MEMBRESÍA

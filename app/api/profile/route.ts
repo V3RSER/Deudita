@@ -28,6 +28,7 @@ export async function PATCH(req: Request) {
     if (currency !== undefined) updates.currency = currency;
     if (currency_symbol !== undefined) updates.currency_symbol = currency_symbol;
     if (payment_instructions !== undefined) updates.payment_instructions = payment_instructions;
+    if (onboarding_completed !== undefined) updates.onboarding_completed = Boolean(onboarding_completed);
 
     // 1. Try to update in profiles table
     let updateError: any = null;
@@ -37,12 +38,14 @@ export async function PATCH(req: Request) {
       .eq('id', user.id);
 
     if (err1) {
-      // If error is about payment_instructions column not existing in schema cache, retry without it
+      // If error is about payment_instructions or onboarding_completed column not existing in schema cache, retry without them
       if (
         err1.message?.includes('payment_instructions') ||
-        err1.message?.includes('schema cache')
+        err1.message?.includes('onboarding_completed') ||
+        err1.message?.includes('schema cache') ||
+        err1.message?.includes('column')
       ) {
-        const { payment_instructions: _, ...safeUpdates } = updates;
+        const { payment_instructions: _, onboarding_completed: __, ...safeUpdates } = updates;
         if (Object.keys(safeUpdates).length > 0) {
           const { error: err2 } = await supabase
             .from('profiles')
@@ -91,7 +94,7 @@ export async function PATCH(req: Request) {
       .maybeSingle();
 
     const mergedProfile = {
-      ...(updatedProfile || {}),
+      ...(updatedProfile ?? {}),
       payment_instructions:
         payment_instructions !== undefined
           ? payment_instructions
@@ -99,7 +102,9 @@ export async function PATCH(req: Request) {
       onboarding_completed:
         onboarding_completed !== undefined
           ? Boolean(onboarding_completed)
-          : Boolean(user.user_metadata?.onboarding_completed ?? true),
+          : (typeof user.user_metadata?.onboarding_completed === 'boolean'
+              ? user.user_metadata.onboarding_completed
+              : Boolean(updatedProfile?.onboarding_completed ?? false)),
     };
 
     return NextResponse.json({

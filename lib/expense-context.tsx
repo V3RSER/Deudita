@@ -114,6 +114,34 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       if (data.pendingInvites) setPendingInvites(data.pendingInvites as GroupInvite[]);
       if (data.auditLogs) setAuditLogs(data.auditLogs as ExpenseAuditLog[]);
       if (data.hiddenFriendIds) setHiddenFriendIds(data.hiddenFriendIds as string[]);
+
+      if (data.profile && typeof window !== 'undefined') {
+        const pendingInvite =
+          window.sessionStorage.getItem('deudita_invite_token') ??
+          window.localStorage.getItem('deudita_pending_invite');
+
+        if (pendingInvite) {
+          try {
+            const claimRes = await fetch('/api/invites/claim', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: pendingInvite }),
+            });
+            if (claimRes.ok) {
+              const claimData = await claimRes.json();
+              window.sessionStorage.removeItem('deudita_invite_token');
+              window.localStorage.removeItem('deudita_pending_invite');
+              if (claimData?.groupId) {
+                if (window.location.pathname.startsWith('/login') || window.location.pathname.startsWith('/join')) {
+                  window.location.href = `/groups/${claimData.groupId}`;
+                }
+              }
+            }
+          } catch (claimErr) {
+            console.warn('Could not auto-claim pending invite:', claimErr);
+          }
+        }
+      }
     } catch (err) {
       console.error('Error al sincronizar datos:', err);
     } finally {

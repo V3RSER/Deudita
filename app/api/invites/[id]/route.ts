@@ -15,6 +15,7 @@ export async function GET(
 
     const supabase = await createClient();
     const db = supabase;
+    const { data: { user } } = await supabase.auth.getUser();
 
     // Try finding invite by token first, then by id
     let invite: any = null;
@@ -55,6 +56,19 @@ export async function GET(
           inviterProfile = inviter;
         }
 
+        let isAlreadyMember = false;
+        if (user && directGroup.id) {
+          const { data: memberRecord } = await db
+            .from('group_members')
+            .select('group_id')
+            .eq('group_id', directGroup.id)
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (memberRecord) {
+            isAlreadyMember = true;
+          }
+        }
+
         return NextResponse.json({
           invite: {
             id: directGroup.id,
@@ -66,6 +80,7 @@ export async function GET(
           group: directGroup,
           inviter: inviterProfile ?? { full_name: 'Administrador' },
           invitee: null,
+          isAlreadyMember,
         });
       }
 
@@ -114,6 +129,22 @@ export async function GET(
       inviteeProfile = invitee;
     }
 
+    // Check if requesting user is already a member of the group
+    let isAlreadyMember = false;
+    const targetGroupId = invite.group_id;
+    if (user && targetGroupId) {
+      const { data: memberRecord } = await db
+        .from('group_members')
+        .select('group_id')
+        .eq('group_id', targetGroupId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (memberRecord) {
+        isAlreadyMember = true;
+      }
+    }
+
     const isGeneralLink = !invite.invitee_profile_id && (!invite.email || invite.email === 'invite@link.deudita.app');
 
     return NextResponse.json({
@@ -131,6 +162,7 @@ export async function GET(
       group: group ?? { name: 'Grupo' },
       inviter: inviter ?? { full_name: 'Un integrante' },
       invitee: inviteeProfile,
+      isAlreadyMember,
     });
   } catch (err: unknown) {
     console.error('[API GET /api/invites/[id]] Error:', err);

@@ -137,9 +137,18 @@ export async function GET() {
 
     // Attach payment_instructions and onboarding_completed from user_metadata and database state
     if (profile) {
-      const isOnboardingCompleted = Boolean(
-        user.user_metadata?.onboarding_completed ?? (!isNewUser)
-      );
+      const metadataOnboarding = user.user_metadata?.onboarding_completed;
+      const profileOnboarding = profile.onboarding_completed;
+
+      let isOnboardingCompleted = false;
+      if (typeof metadataOnboarding === 'boolean') {
+        isOnboardingCompleted = metadataOnboarding;
+      } else if (typeof profileOnboarding === 'boolean') {
+        isOnboardingCompleted = profileOnboarding;
+      } else {
+        // If not explicitly completed in metadata or profile, require onboarding
+        isOnboardingCompleted = false;
+      }
 
       profile = {
         ...profile,

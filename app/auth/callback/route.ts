@@ -37,12 +37,13 @@ export async function GET(request: Request) {
         }
       }
 
-      if (returnTo && returnTo.startsWith('/')) {
-        return NextResponse.redirect(`${origin}${returnTo}`);
-      }
-
+      // If user joined a group from an invite link, direct them straight to their new group
       if (joinedGroupId) {
         return NextResponse.redirect(`${origin}/groups/${joinedGroupId}`);
+      }
+
+      if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('/join')) {
+        return NextResponse.redirect(`${origin}${returnTo}`);
       }
 
       return NextResponse.redirect(`${origin}/groups`);

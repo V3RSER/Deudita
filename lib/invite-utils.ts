@@ -302,8 +302,8 @@ export async function claimAndJoinGroupInvite(
     });
   }
 
-  // 5. Update group_invites record if it was an individual invite (with email or designated profile)
-  const isDedicatedInvite = Boolean(invite?.invitee_profile_id || invite?.email);
+  // 5. Update group_invites record if it was an individual invite (with specific email or designated profile)
+  const isDedicatedInvite = Boolean(invite?.invitee_profile_id || (invite?.email && invite.email !== 'invite@link.deudita.app'));
   if (invite?.id && isDedicatedInvite) {
     await db
       .from('group_invites')

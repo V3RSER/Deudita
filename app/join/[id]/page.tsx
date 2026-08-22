@@ -27,6 +27,7 @@ interface InviteData {
     email?: string;
     avatar_url?: string;
   };
+  isAlreadyMember?: boolean;
 }
 
 export default function JoinInvitePage({ params }: { params: Promise<{ id: string }> }) {
@@ -96,7 +97,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?returnTo=/join/${inviteId}&token=${inviteId}`,
+        redirectTo: `${window.location.origin}/auth/callback?token=${inviteId}`,
       },
     });
   };
@@ -216,7 +217,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
   }
 
   const { group, inviter, invite } = inviteData;
-  const isAccepted = invite.status === 'accepted';
+  const isAccepted = invite.status === 'accepted' || Boolean(inviteData.isAlreadyMember);
 
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 selection:bg-zinc-900 selection:text-white">
