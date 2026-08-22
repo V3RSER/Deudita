@@ -724,28 +724,23 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                   <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xs overflow-hidden">
                     {/* Desktop Table Header */}
-                    <div className="hidden sm:grid sm:grid-cols-[1fr_75px_135px_110px_38px] gap-2 px-3.5 py-2.5 bg-zinc-50/80 border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="hidden sm:grid sm:grid-cols-[1fr_75px_220px_38px] gap-2 px-3.5 py-2.5 bg-zinc-50/80 border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
                       <div>Descripción</div>
                       <div className="text-center">Cant.</div>
                       <div className="text-right">Monto</div>
-                      <div className="text-center">Tipo</div>
                       <div></div>
                     </div>
 
                     {/* Table Rows */}
                     <div className="divide-y divide-zinc-100">
                       {items.map((item, idx) => {
-                        const itemSubtotal = getItemTotal(item);
-                        const isEach = item.amountType === 'each';
-                        const qtyNum = parseFloat(item.quantity) || 1;
-
                         return (
                           <div
                             key={item.id}
                             className="p-3 sm:px-3.5 sm:py-2.5 transition-colors hover:bg-zinc-50/50 space-y-2 sm:space-y-0"
                           >
                             {/* Desktop Row */}
-                            <div className="hidden sm:grid sm:grid-cols-[1fr_75px_135px_110px_38px] gap-2 items-center">
+                            <div className="hidden sm:grid sm:grid-cols-[1fr_75px_220px_38px] gap-2 items-center">
                               {/* Description */}
                               <input
                                 type="text"
@@ -773,9 +768,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                 className="w-full px-1.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
                               />
 
-                              {/* Monto */}
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">
+                              {/* Monto & Tipo Integrados */}
+                              <div className="flex items-center bg-zinc-50 focus-within:bg-white border border-zinc-200 focus-within:border-emerald-500 rounded-xl p-1 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+                                <span className="pl-1.5 text-zinc-400 font-bold text-xs shrink-0 select-none">
                                   {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
                                 </span>
                                 <FormattedCurrencyInput
@@ -788,44 +783,42 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   currency={currency}
                                   hideSymbol
                                   placeholder="0"
-                                  className="w-full pl-6 pr-2 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors text-right"
+                                  className="w-full min-w-0 px-1.5 py-0.5 bg-transparent border-none text-xs sm:text-sm font-bold text-zinc-900 focus:outline-none text-right"
                                 />
-                              </div>
-
-                              {/* Tipo Toggle (c/u vs Total) */}
-                              <div className="flex bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/60 justify-center">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newItems = [...items];
-                                    newItems[idx].amountType = 'each';
-                                    setItems(newItems);
-                                  }}
-                                  className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                    item.amountType === 'each'
-                                      ? 'bg-white text-zinc-900 shadow-2xs'
-                                      : 'text-zinc-500 hover:text-zinc-800'
-                                  }`}
-                                  title="Precio por unidad"
-                                >
-                                  c/u
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newItems = [...items];
-                                    newItems[idx].amountType = 'total';
-                                    setItems(newItems);
-                                  }}
-                                  className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                    item.amountType === 'total'
-                                      ? 'bg-white text-zinc-900 shadow-2xs'
-                                      : 'text-zinc-500 hover:text-zinc-800'
-                                  }`}
-                                  title="Monto total"
-                                >
-                                  Total
-                                </button>
+                                <div className="flex bg-zinc-200/70 p-0.5 rounded-lg shrink-0 ml-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...items];
+                                      newItems[idx].amountType = 'each';
+                                      setItems(newItems);
+                                    }}
+                                    className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                                      item.amountType === 'each'
+                                        ? 'bg-white text-zinc-900 shadow-2xs'
+                                        : 'text-zinc-500 hover:text-zinc-800'
+                                    }`}
+                                    title="Precio por unidad (c/u)"
+                                  >
+                                    c/u
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...items];
+                                      newItems[idx].amountType = 'total';
+                                      setItems(newItems);
+                                    }}
+                                    className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                                      item.amountType === 'total'
+                                        ? 'bg-white text-zinc-900 shadow-2xs'
+                                        : 'text-zinc-500 hover:text-zinc-800'
+                                    }`}
+                                    title="Monto total del ítem"
+                                  >
+                                    total
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Delete button */}
@@ -888,8 +881,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                   />
                                 </div>
 
-                                <div className="relative flex-1">
-                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">
+                                {/* Integrated Monto & Tipo on Mobile */}
+                                <div className="flex-1 flex items-center bg-zinc-50 focus-within:bg-white border border-zinc-200 focus-within:border-emerald-500 rounded-xl p-1 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+                                  <span className="pl-1.5 text-zinc-400 font-bold text-xs shrink-0 select-none">
                                     {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
                                   </span>
                                   <FormattedCurrencyInput
@@ -902,49 +896,43 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                     currency={currency}
                                     hideSymbol
                                     placeholder="0"
-                                    className="w-full pl-6 pr-2.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 focus:outline-none text-right"
+                                    className="w-full min-w-0 px-1 py-0.5 bg-transparent border-none text-xs font-bold text-zinc-900 focus:outline-none text-right"
                                   />
-                                </div>
-
-                                <div className="flex bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/60 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newItems = [...items];
-                                      newItems[idx].amountType = 'each';
-                                      setItems(newItems);
-                                    }}
-                                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                      item.amountType === 'each' ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500'
-                                    }`}
-                                  >
-                                    c/u
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newItems = [...items];
-                                      newItems[idx].amountType = 'total';
-                                      setItems(newItems);
-                                    }}
-                                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                      item.amountType === 'total' ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500'
-                                    }`}
-                                  >
-                                    Total
-                                  </button>
+                                  <div className="flex bg-zinc-200/70 p-0.5 rounded-lg shrink-0 ml-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newItems = [...items];
+                                        newItems[idx].amountType = 'each';
+                                        setItems(newItems);
+                                      }}
+                                      className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                                        item.amountType === 'each'
+                                          ? 'bg-white text-zinc-900 shadow-2xs'
+                                          : 'text-zinc-500'
+                                      }`}
+                                    >
+                                      c/u
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newItems = [...items];
+                                        newItems[idx].amountType = 'total';
+                                        setItems(newItems);
+                                      }}
+                                      className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                                        item.amountType === 'total'
+                                          ? 'bg-white text-zinc-900 shadow-2xs'
+                                          : 'text-zinc-500'
+                                      }`}
+                                    >
+                                      Total
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-
-                            {/* Live calculated subtotal if qty > 1 and each */}
-                            {isEach && qtyNum > 1 && itemSubtotal > 0 && (
-                              <div className="flex justify-end pt-1">
-                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                                  Subtotal: {formatCurrency(itemSubtotal, currency)}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
