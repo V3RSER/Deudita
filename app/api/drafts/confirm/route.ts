@@ -64,7 +64,16 @@ export async function POST(req: Request) {
       console.error('[API /api/drafts/confirm] Update draft status error:', updateErr);
     }
 
-    return NextResponse.json(newExpense);
+    const { data: fullExpense } = await supabase
+      .from('expenses')
+      .select('*, items:expense_items(*), splits:expense_splits(*)')
+      .eq('id', newExpense.id)
+      .single();
+
+    return NextResponse.json({
+      expense: fullExpense ?? newExpense,
+      draftId,
+    });
   } catch (err: unknown) {
     console.error('[API /api/drafts/confirm] Unhandled error:', err);
     const message = err instanceof Error ? err.message : 'Error interno al confirmar borrador';

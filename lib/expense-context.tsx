@@ -50,15 +50,15 @@ interface ExpenseContextType {
   acceptGroupInvite: (inviteId: string) => Promise<string>;
   rejectGroupInvite: (inviteId: string) => Promise<void>;
   markNotificationAsRead: (notificationId?: string) => Promise<void>;
-  addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
-  updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<void>;
+  addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<Expense>;
+  updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<Expense>;
   deleteExpense: (id: string) => Promise<void>;
-  addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
-  updatePayment: (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => Promise<void>;
+  addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
+  updatePayment: (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
   deletePayment: (id: string) => Promise<void>;
-  confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<void>;
+  confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<{ expense: Expense; draftId: string }>;
   discardDraft: (draftId: string) => Promise<void>;
-  addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<void>;
+  addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<ExpenseDraft>;
   reloadFromSupabase: (fullSync?: boolean) => Promise<void>;
   refreshData: (fullSync?: boolean) => Promise<void>;
   logout: () => Promise<void>;
@@ -186,6 +186,176 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, [reloadFromSupabase, supabase]);
+
+  // Compute the current user's group IDs for Realtime filtering
+  const currentUserId = currentProfile?.id;
+  const userGroupIds = useMemo(() => {
+    if (!currentUserId) return [];
+    const set = new Set<string>();
+    members.forEach((m) => {
+      if (m.user_id === currentUserId) {
+        set.add(m.group_id);
+      }
+    });
+    groups.forEach((g) => {
+      if (g.owner_id === currentUserId) {
+        set.add(g.id);
+      }
+    });
+    return Array.from(set);
+  }, [currentUserId, members, groups]);
+
+  const userGroupIdsKey = useMemo(() => [...userGroupIds].sort().join(','), [userGroupIds]);
+
+  // Realtime subscription for expenses and payments across user's groups
+  useEffect(() => {
+    if (!currentUserId || userGroupIds.length === 0) {
+      return;
+    }
+
+    const groupIdsSet = new Set(userGroupIds);
+    const filterExpression = `group_id=in.(${userGroupIds.join(',')})`;
+    const channelName = `realtime-group-sync-${currentUserId}-${userGroupIdsKey.slice(0, 32)}`;
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+          filter: filterExpression,
+        },
+        async (payload) => {
+          const eventType = payload.eventType;
+
+          if (eventType === 'INSERT') {
+            const newRecord = payload.new as Expense;
+            if (!newRecord?.id) return;
+            if (newRecord.group_id && !groupIdsSet.has(newRecord.group_id)) return;
+
+            // 1. Evitar duplicados por id (por ejemplo si ya fue insertado optimistamente)
+            setExpenses((prev) => {
+              if (prev.some((e) => e.id === newRecord.id)) {
+                return prev;
+              }
+              return [newRecord, ...prev];
+            });
+
+            // 2. Si el gasto fue creado por otro usuario, hidratar items y splits asociados
+            try {
+              const { data: fullExp } = await supabase
+                .from('expenses')
+                .select('*, items:expense_items(*), splits:expense_splits(*)')
+                .eq('id', newRecord.id)
+                .maybeSingle();
+
+              if (fullExp) {
+                setExpenses((prev) => {
+                  const exists = prev.some((e) => e.id === fullExp.id);
+                  if (exists) {
+                    return prev.map((e) => (e.id === fullExp.id ? (fullExp as Expense) : e));
+                  }
+                  return [fullExp as Expense, ...prev];
+                });
+              }
+            } catch (fetchErr) {
+              console.warn('[Realtime] Error al hidratar gasto nuevo:', fetchErr);
+            }
+          } else if (eventType === 'UPDATE') {
+            const updatedRecord = payload.new as Expense;
+            if (!updatedRecord?.id) return;
+            if (updatedRecord.group_id && !groupIdsSet.has(updatedRecord.group_id)) return;
+
+            // Reemplazar por id manteniendo splits/items existentes
+            setExpenses((prev) => {
+              const exists = prev.some((e) => e.id === updatedRecord.id);
+              if (!exists) {
+                return [updatedRecord, ...prev];
+              }
+              return prev.map((e) => {
+                if (e.id === updatedRecord.id) {
+                  return {
+                    ...e,
+                    ...updatedRecord,
+                    items: e.items,
+                    splits: e.splits,
+                  };
+                }
+                return e;
+              });
+            });
+
+            // Hidratar posibles cambios en splits o items
+            try {
+              const { data: fullExp } = await supabase
+                .from('expenses')
+                .select('*, items:expense_items(*), splits:expense_splits(*)')
+                .eq('id', updatedRecord.id)
+                .maybeSingle();
+
+              if (fullExp) {
+                setExpenses((prev) =>
+                  prev.map((e) => (e.id === fullExp.id ? (fullExp as Expense) : e))
+                );
+              }
+            } catch (fetchErr) {
+              console.warn('[Realtime] Error al actualizar hidratación del gasto:', fetchErr);
+            }
+          } else if (eventType === 'DELETE') {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setExpenses((prev) => prev.filter((e) => e.id !== deletedId));
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payments',
+        },
+        (payload) => {
+          const eventType = payload.eventType;
+
+          if (eventType === 'INSERT') {
+            const newRecord = payload.new as Payment;
+            if (!newRecord?.id) return;
+            if (newRecord.group_id && !groupIdsSet.has(newRecord.group_id)) return;
+
+            // Evitar duplicados por id
+            setPayments((prev) => {
+              if (prev.some((p) => p.id === newRecord.id)) {
+                return prev;
+              }
+              return [newRecord, ...prev];
+            });
+          } else if (eventType === 'UPDATE') {
+            const updatedRecord = payload.new as Payment;
+            if (!updatedRecord?.id) return;
+            if (updatedRecord.group_id && !groupIdsSet.has(updatedRecord.group_id)) return;
+
+            // Reemplazar por id
+            setPayments((prev) =>
+              prev.map((p) => (p.id === updatedRecord.id ? { ...p, ...updatedRecord } : p))
+            );
+          } else if (eventType === 'DELETE') {
+            const deletedId = payload.old?.id;
+            if (deletedId) {
+              setPayments((prev) => prev.filter((p) => p.id !== deletedId));
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, userGroupIdsKey, userGroupIds, supabase]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -333,14 +503,25 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo crear el grupo';
+        let message = 'No se pudo crear el grupo';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in createGroup:', message);
         throw new Error(message);
       }
 
-      const createdGroup: Group = await res.json();
-      await reloadFromSupabase();
+      let createdGroup: Group;
+      try {
+        createdGroup = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al crear el grupo');
+      }
+
+      await reloadFromSupabase(false);
       return createdGroup;
     });
   };
@@ -361,14 +542,25 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el grupo';
+        let message = 'No se pudo actualizar el grupo';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in updateGroup:', message);
         throw new Error(message);
       }
 
-      const updatedGroup: Group = await res.json();
-      await reloadFromSupabase();
+      let updatedGroup: Group;
+      try {
+        updatedGroup = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al actualizar el grupo');
+      }
+
+      await reloadFromSupabase(false);
       return updatedGroup;
     });
   };
@@ -380,13 +572,24 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el grupo';
+        let message = 'No se pudo eliminar el grupo';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in deleteGroup:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al eliminar el grupo');
+      }
+
+      await reloadFromSupabase(false);
     });
   };
 
@@ -399,14 +602,25 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo enviar la invitación';
+        let message = 'No se pudo enviar la invitación';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in addGroupInvite:', message);
         throw new Error(message);
       }
 
-      const data = await res.json();
-      await reloadFromSupabase();
+      let data: { inviteUrl: string; message: string; memberId?: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al enviar la invitación');
+      }
+
+      await reloadFromSupabase(false);
       return {
         inviteUrl: data.inviteUrl,
         message: data.message,
@@ -418,11 +632,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const getGroupInviteLink = useCallback(async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean }> => {
     const res = await fetch(`/api/groups/${groupId}/invite-link`);
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo obtener el enlace de invitación';
+      let message = 'No se pudo obtener el enlace de invitación';
+      try {
+        const errData = await res.json();
+        if (errData?.error) message = String(errData.error);
+      } catch {
+        // fallback
+      }
       throw new Error(message);
     }
-    return await res.json();
+    try {
+      return await res.json();
+    } catch {
+      throw new Error('Respuesta inválida del servidor al obtener el enlace');
+    }
   }, []);
 
   const regenerateGroupInviteLink = useCallback(async (groupId: string): Promise<{ inviteUrl: string; expiresAt: string; token: string; inviteId: string; isNew: boolean; message: string }> => {
@@ -430,11 +653,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
     });
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const message = errData.error ? String(errData.error) : 'No se pudo generar el enlace';
+      let message = 'No se pudo generar el enlace';
+      try {
+        const errData = await res.json();
+        if (errData?.error) message = String(errData.error);
+      } catch {
+        // fallback
+      }
       throw new Error(message);
     }
-    return await res.json();
+    try {
+      return await res.json();
+    } catch {
+      throw new Error('Respuesta inválida del servidor al generar el enlace');
+    }
   }, []);
 
   const deleteFriend = async (friendId: string): Promise<void> => {
@@ -444,11 +676,23 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error ?? 'No se pudo eliminar al amigo');
+        let message = 'No se pudo eliminar al amigo';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al eliminar al amigo');
+      }
+
+      await reloadFromSupabase(false);
     });
   };
 
@@ -459,12 +703,24 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error ?? 'No se pudo aceptar la invitación');
+        let message = 'No se pudo aceptar la invitación';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        throw new Error(message);
       }
 
-      const data = await res.json();
-      await reloadFromSupabase();
+      let data: { groupId: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al aceptar la invitación');
+      }
+
+      await reloadFromSupabase(false);
       return data.groupId;
     });
   };
@@ -476,16 +732,28 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error ?? 'No se pudo rechazar la invitación');
+        let message = 'No se pudo rechazar la invitación';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al rechazar la invitación');
+      }
+
+      await reloadFromSupabase(false);
     });
   };
 
   const markNotificationAsRead = async (notificationId?: string): Promise<void> => {
-    await fetch('/api/notifications', {
+    const res = await fetch('/api/notifications', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -493,11 +761,41 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         markAll: !notificationId,
       }),
     });
-    await reloadFromSupabase();
+
+    if (!res.ok) {
+      let message = 'Error al actualizar notificaciones';
+      try {
+        const errData = await res.json();
+        if (errData?.error) message = String(errData.error);
+      } catch {
+        // fallback
+      }
+      console.error('[ExpenseContext] Error in markNotificationAsRead:', message);
+      throw new Error(message);
+    }
+
+    try {
+      await res.json();
+    } catch {
+      throw new Error('Respuesta inválida del servidor al actualizar notificaciones');
+    }
+
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (!notificationId || n.id === notificationId) {
+          return { ...n, is_read: true };
+        }
+        return n;
+      })
+    );
   };
 
-  const addExpense = async (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
-    await runOperation('Guardando gasto...', async () => {
+  const addExpense = async (
+    expense: Omit<Expense, 'id' | 'created_at'>,
+    items?: any[],
+    splits?: any[]
+  ): Promise<Expense> => {
+    return await runOperation('Guardando gasto...', async () => {
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,18 +803,36 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo registrar el gasto';
+        let message = 'No se pudo registrar el gasto';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in addExpense:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      let createdExpense: Expense;
+      try {
+        createdExpense = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al crear el gasto');
+      }
+
+      setExpenses((prev) => [createdExpense, ...prev.filter((e) => e.id !== createdExpense.id)]);
+      return createdExpense;
     });
   };
 
-  const updateExpense = async (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => {
-    await runOperation('Actualizando gasto y participantes...', async () => {
+  const updateExpense = async (
+    id: string,
+    expense: Omit<Expense, 'id' | 'created_at'>,
+    items?: any[],
+    splits?: any[]
+  ): Promise<Expense> => {
+    return await runOperation('Actualizando gasto y participantes...', async () => {
       const res = await fetch(`/api/expenses/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -524,33 +840,59 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el gasto';
+        let message = 'No se pudo actualizar el gasto';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in updateExpense:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      let updatedExpense: Expense;
+      try {
+        updatedExpense = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al actualizar el gasto');
+      }
+
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === updatedExpense.id ? updatedExpense : e))
+      );
+      return updatedExpense;
     });
   };
 
-  const deleteExpense = async (id: string) => {
+  const deleteExpense = async (id: string): Promise<void> => {
     await runOperation('Eliminando gasto...', async () => {
       const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el gasto';
+        let message = 'No se pudo eliminar el gasto';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in deleteExpense:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al eliminar el gasto');
+      }
+
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
     });
   };
 
-  const addPayment = async (payment: Omit<Payment, 'id' | 'created_at'>) => {
-    await runOperation('Registrando pago...', async () => {
+  const addPayment = async (payment: Omit<Payment, 'id' | 'created_at'>): Promise<Payment> => {
+    return await runOperation('Registrando pago...', async () => {
       const res = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -558,18 +900,31 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo registrar el pago';
+        let message = 'No se pudo registrar el pago';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in addPayment:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      let createdPayment: Payment;
+      try {
+        createdPayment = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al registrar el pago');
+      }
+
+      setPayments((prev) => [createdPayment, ...prev.filter((p) => p.id !== createdPayment.id)]);
+      return createdPayment;
     });
   };
 
-  const updatePayment = async (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => {
-    await runOperation('Actualizando pago...', async () => {
+  const updatePayment = async (id: string, payment: Omit<Payment, 'id' | 'created_at'>): Promise<Payment> => {
+    return await runOperation('Actualizando pago...', async () => {
       const res = await fetch(`/api/payments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -577,66 +932,160 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo actualizar el pago';
+        let message = 'No se pudo actualizar el pago';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in updatePayment:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      let updatedPayment: Payment;
+      try {
+        updatedPayment = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al actualizar el pago');
+      }
+
+      setPayments((prev) =>
+        prev.map((p) => (p.id === updatedPayment.id ? updatedPayment : p))
+      );
+      return updatedPayment;
     });
   };
 
-  const deletePayment = async (id: string) => {
+  const deletePayment = async (id: string): Promise<void> => {
     await runOperation('Eliminando pago...', async () => {
       const res = await fetch(`/api/payments/${id}`, {
         method: 'DELETE',
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        const message = errData.error ? String(errData.error) : 'No se pudo eliminar el pago';
+        let message = 'No se pudo eliminar el pago';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
         console.error('[ExpenseContext] Error in deletePayment:', message);
         throw new Error(message);
       }
 
-      await reloadFromSupabase();
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al eliminar el pago');
+      }
+
+      setPayments((prev) => prev.filter((p) => p.id !== id));
     });
   };
 
-  const confirmDraft = async (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => {
-    await runOperation('Confirmando borrador...', async () => {
-      await fetch('/api/drafts/confirm', {
+  const confirmDraft = async (
+    draftId: string,
+    groupId: string,
+    paidBy: string,
+    splits: ExpenseSplit[]
+  ): Promise<{ expense: Expense; draftId: string }> => {
+    return await runOperation('Confirmando borrador...', async () => {
+      const res = await fetch('/api/drafts/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftId, groupId, paidBy, splits }),
       });
-      await reloadFromSupabase();
+
+      if (!res.ok) {
+        let message = 'No se pudo confirmar el borrador';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        console.error('[ExpenseContext] Error in confirmDraft:', message);
+        throw new Error(message);
+      }
+
+      let data: { expense: Expense; draftId: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al confirmar el borrador');
+      }
+
+      const { expense, draftId: confirmedDraftId } = data;
+      const targetDraftId = confirmedDraftId || draftId;
+
+      if (expense) {
+        setExpenses((prev) => [expense, ...prev.filter((e) => e.id !== expense.id)]);
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== targetDraftId));
+
+      return data;
     });
   };
 
-  const discardDraft = async (draftId: string) => {
+  const discardDraft = async (draftId: string): Promise<void> => {
     await runOperation('Descartando borrador...', async () => {
-      await fetch(`/api/drafts/${draftId}`, {
+      const res = await fetch(`/api/drafts/${draftId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'discarded' }),
       });
-      await reloadFromSupabase();
+
+      if (!res.ok) {
+        let message = 'No se pudo descartar el borrador';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        console.error('[ExpenseContext] Error in discardDraft:', message);
+        throw new Error(message);
+      }
+
+      try {
+        await res.json();
+      } catch {
+        throw new Error('Respuesta inválida del servidor al descartar el borrador');
+      }
+
+      setDrafts((prev) => prev.filter((d) => d.id !== draftId));
     });
   };
 
-  const addDraft = async (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => {
-    await runOperation('Agregando borrador...', async () => {
+  const addDraft = async (
+    draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>
+  ): Promise<ExpenseDraft> => {
+    return await runOperation('Agregando borrador...', async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      await supabase.from('expense_drafts').insert({
-        ...draft,
-        user_id: user.id,
-        status: 'pending'
-      });
-      await reloadFromSupabase();
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      const { data, error } = await supabase
+        .from('expense_drafts')
+        .insert({
+          ...draft,
+          user_id: user.id,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[ExpenseContext] Error in addDraft:', error.message);
+        throw new Error(error.message);
+      }
+
+      const newDraft = data as ExpenseDraft;
+      setDrafts((prev) => [newDraft, ...prev.filter((d) => d.id !== newDraft.id)]);
+      return newDraft;
     });
   };
 
