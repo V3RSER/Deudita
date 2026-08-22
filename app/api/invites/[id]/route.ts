@@ -17,7 +17,7 @@ export async function GET(
     const db = supabase;
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Try finding invite by token first, then by id
+    // 1. Try finding invite by token or id
     let invite: any = null;
 
     const { data: inviteByToken } = await db
@@ -112,21 +112,25 @@ export async function GET(
       .maybeSingle();
 
     // Fetch inviter profile
-    const { data: inviter } = await db
-      .from('profiles')
-      .select('id, full_name, email, avatar_url')
-      .eq('id', invite.invited_by)
-      .maybeSingle();
+    let inviter = null;
+    if (invite.invited_by) {
+      const { data: inviterData } = await db
+        .from('profiles')
+        .select('id, full_name, email, avatar_url')
+        .eq('id', invite.invited_by)
+        .maybeSingle();
+      inviter = inviterData;
+    }
 
     // Fetch invitee profile if present
     let inviteeProfile = null;
     if (invite.invitee_profile_id) {
-      const { data: invitee } = await db
+      const { data: inviteeData } = await db
         .from('profiles')
         .select('id, full_name, email')
         .eq('id', invite.invitee_profile_id)
         .maybeSingle();
-      inviteeProfile = invitee;
+      inviteeProfile = inviteeData;
     }
 
     // Check if requesting user is already a member of the group
@@ -159,7 +163,7 @@ export async function GET(
         isExpired: false,
         isGeneralLink,
       },
-      group: group ?? { name: 'Grupo' },
+      group: group ?? { id: invite.group_id, name: 'Grupo' },
       inviter: inviter ?? { full_name: 'Un integrante' },
       invitee: inviteeProfile,
       isAlreadyMember,

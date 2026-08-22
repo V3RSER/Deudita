@@ -13,6 +13,15 @@ import {
   ChevronDown,
   Check,
   UserCheck,
+  CreditCard,
+  Trash2,
+  Sparkles,
+  Globe,
+  Coins,
+  Copy,
+  Info,
+  Building2,
+  Smartphone,
 } from 'lucide-react';
 
 interface ProfileSettingsModalProps {
@@ -44,6 +53,34 @@ export const CURRENCY_OPTIONS = [
   { currency: 'PEN', symbol: 'S/', label: 'PEN - Sol Peruano (S/)' },
 ];
 
+const PAYMENT_METHOD_PRESETS = [
+  {
+    name: 'Nequi',
+    icon: Smartphone,
+    template: 'Nequi: [Tu Número de celular]',
+  },
+  {
+    name: 'Daviplata',
+    icon: Smartphone,
+    template: 'Daviplata: [Tu Número de celular]',
+  },
+  {
+    name: 'Cuenta Bancaria',
+    icon: Building2,
+    template: 'Banco: [Nombre del banco] - Ahorros: [Número de cuenta]',
+  },
+  {
+    name: 'Bizum / Zelle',
+    icon: Sparkles,
+    template: 'Bizum/Zelle: [Teléfono o Correo]',
+  },
+  {
+    name: 'CLABE / CBU',
+    icon: CreditCard,
+    template: 'CLABE/CBU/CVU: [Número de 18 o 22 dígitos]',
+  },
+];
+
 export function ProfileSettingsModal({
   isOpen,
   onClose,
@@ -62,8 +99,10 @@ export function ProfileSettingsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
@@ -80,10 +119,22 @@ export function ProfileSettingsModal({
       setAvatarUrl(currentProfile.avatar_url ?? '');
       setErrorMessage(null);
       setSuccessMessage(null);
+      setShowPreview(false);
       setIsSaving(false);
       setIsUploading(false);
     }
   }, [isOpen, currentProfile]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isSaving && !isUploading) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSaving, isUploading, onClose]);
 
   if (!isOpen || !currentProfile) return null;
 
@@ -122,7 +173,24 @@ export function ProfileSettingsModal({
       setErrorMessage(msg);
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarUrl('');
+  };
+
+  const handleAddPreset = (template: string) => {
+    setPaymentInstructions((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) {
+        return template;
+      }
+      return `${trimmed}\n${template}`;
+    });
   };
 
   const handleSave = async (e?: React.FormEvent) => {
@@ -152,7 +220,7 @@ export function ProfileSettingsModal({
         onboarding_completed: true,
       });
 
-      setSuccessMessage(isOnboarding ? '¡Registro completado!' : '¡Perfil actualizado!');
+      setSuccessMessage(isOnboarding ? '¡Registro completado con éxito!' : '¡Perfil actualizado correctamente!');
       
       setTimeout(() => {
         setSuccessMessage(null);
@@ -161,7 +229,7 @@ export function ProfileSettingsModal({
         } else {
           onClose();
         }
-      }, 600);
+      }, 500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al guardar los datos';
       setErrorMessage(msg);
@@ -171,35 +239,50 @@ export function ProfileSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
-      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md flex flex-col my-auto max-h-[95vh] overflow-hidden transition-all duration-300">
+    <div
+      id="profile-settings-backdrop"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSaving && !isUploading) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        id="profile-settings-modal"
+        ref={modalRef}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col my-auto max-h-[92vh] overflow-hidden border border-zinc-200 transition-all duration-300"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0 bg-white">
           <div className="flex items-center space-x-3">
             {isOnboarding ? (
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-700">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-700 shadow-xs">
                 <UserCheck className="w-5 h-5" />
               </div>
             ) : (
-              <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-700">
+              <div className="w-10 h-10 rounded-xl bg-zinc-100 border border-zinc-200/60 flex items-center justify-center text-zinc-800 shadow-xs">
                 <User className="w-5 h-5" />
               </div>
             )}
             <div>
-              <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+              <h2 id="profile-modal-title" className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">
                 {isOnboarding ? 'Completa tu registro' : 'Editar perfil'}
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
                 {isOnboarding
                   ? 'Configura tu nombre y preferencias para comenzar'
-                  : 'Actualiza tus datos y preferencias de cuenta'}
+                  : 'Actualiza tus datos y opciones de cobro'}
               </p>
             </div>
           </div>
           <button
+            id="profile-close-btn"
             onClick={onClose}
-            className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition"
+            disabled={isSaving || isUploading}
+            className="p-2 -mr-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition cursor-pointer disabled:opacity-50"
             title="Cerrar"
+            type="button"
           >
             <X className="w-5 h-5" />
           </button>
@@ -207,7 +290,7 @@ export function ProfileSettingsModal({
 
         {/* Error Banner */}
         {errorMessage && (
-          <div className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700 shrink-0">
+          <div id="profile-error-banner" className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-xs font-semibold text-rose-700 shrink-0">
             <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
             <span>{errorMessage}</span>
           </div>
@@ -215,122 +298,78 @@ export function ProfileSettingsModal({
 
         {/* Success Banner */}
         {successMessage && (
-          <div className="bg-emerald-50 px-6 py-3 border-b border-emerald-100 flex items-center text-sm font-medium text-emerald-800 shrink-0">
+          <div id="profile-success-banner" className="bg-emerald-50 px-6 py-3 border-b border-emerald-100 flex items-center text-xs font-semibold text-emerald-800 shrink-0">
             <Check className="w-4 h-4 mr-2 text-emerald-600 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
         {/* Form Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
-          {/* Personal Info */}
+        <form onSubmit={handleSave} className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-6">
+          {/* Section 1: Personal Info & Avatar */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                <User className="w-4 h-4 mr-2 text-emerald-600" />
-                Información personal
+            <div className="flex items-center justify-between px-0.5">
+              <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Información personal</span>
               </h3>
+              {currentProfile.email && (
+                <span className="text-[11px] text-zinc-500 font-medium truncate max-w-[200px]" title={currentProfile.email}>
+                  {currentProfile.email}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-              <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 border border-black/5 overflow-hidden relative group">
-                {avatarUrl ? (
-                  <Image
-                    src={avatarUrl}
-                    alt="Foto de perfil"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="text-base font-bold text-zinc-600 uppercase">
-                    {fullName.trim() ? fullName.trim().charAt(0).toUpperCase() : 'U'}
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Tu nombre o apodo"
-                  className="w-full text-left text-lg text-zinc-800 bg-transparent border-b border-dashed border-zinc-300 pb-1 focus:outline-none focus:ring-0 placeholder:text-zinc-400 focus:border-zinc-500 transition-colors font-bold"
-                  autoFocus
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Details / Preferences */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                <Sliders className="w-4 h-4 mr-2 text-emerald-600" />
-                Preferencias y moneda
-              </h3>
-            </div>
-            <div className="bg-white border border-zinc-200 rounded-2xl p-3 space-y-2 shadow-sm overflow-hidden">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">
-                    Zona horaria
-                  </label>
-                  <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                    <select
-                      value={timezone}
-                      onChange={(e) => setTimezone(e.target.value)}
-                      className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg cursor-pointer"
-                    >
-                      {COMMON_TIMEZONES.map((tz) => (
-                        <option key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="bg-zinc-50/70 border border-zinc-200/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-4 sm:gap-5 shadow-2xs">
+              {/* Avatar Uploader */}
+              <div className="relative group shrink-0">
+                <div
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  className={`w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-white flex items-center justify-center border-2 shadow-sm relative overflow-hidden transition-all cursor-pointer ${
+                    avatarUrl ? 'border-emerald-500/40' : 'border-zinc-200 hover:border-emerald-400'
+                  }`}
+                  title="Haz clic para subir o cambiar foto"
+                >
+                  {avatarUrl ? (
+                    <Image
+                      src={avatarUrl}
+                      alt="Foto de perfil"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="text-2xl font-bold text-zinc-700 uppercase">
+                      {fullName.trim() ? fullName.trim().charAt(0).toUpperCase() : 'U'}
+                    </span>
+                  )}
+
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-zinc-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                    <Camera className="w-5 h-5" />
                   </div>
+
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-white/80 backdrop-blur-xs flex items-center justify-center text-emerald-600">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">
-                    Moneda principal
-                  </label>
-                  <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                    <select
-                      value={selectedCurrency}
-                      onChange={(e) => setSelectedCurrency(e.target.value)}
-                      className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg cursor-pointer"
-                    >
-                      {CURRENCY_OPTIONS.map((c) => (
-                        <option key={c.currency} value={c.currency}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2 border-t border-zinc-100 mt-2">
+                {/* Badges / Triggers */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
-                  className={`w-full flex items-center justify-center space-x-1.5 py-2 text-xs font-bold transition-all ${
-                    avatarUrl
-                      ? 'border border-solid bg-emerald-50 border-emerald-200 text-emerald-700 rounded-xl shadow-sm'
-                      : 'border border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 bg-zinc-50/50 hover:bg-emerald-50/50'
-                  }`}
+                  className="absolute -bottom-1 -right-1 p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md border-2 border-white transition cursor-pointer active:scale-95 disabled:opacity-50"
+                  title="Subir foto de perfil"
                 >
-                  {isUploading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Camera className="w-3.5 h-3.5" />
-                  )}
-                  <span>{avatarUrl ? 'Cambiar foto de perfil' : 'Añadir foto de perfil (opcional)'}</span>
+                  <Camera className="w-3.5 h-3.5" />
                 </button>
+
                 <input
+                  id="profile-avatar-file-input"
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
@@ -339,33 +378,216 @@ export function ProfileSettingsModal({
                 />
               </div>
 
-              <div className="space-y-1 pt-2 border-t border-zinc-100 mt-2">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">
-                  Métodos de pago para tus amigos (opcional)
-                </label>
-                <p className="text-[11px] text-zinc-500 pl-0.5 leading-snug">
-                  Indica tus cuentas o números (Nequi, Daviplata, transferencia) para que tus amigos sepan dónde transferirte al saldar cuentas.
-                </p>
-                <textarea
-                  rows={3}
-                  value={paymentInstructions}
-                  onChange={(e) => setPaymentInstructions(e.target.value)}
-                  placeholder="Ej: Nequi / Daviplata 3001234567, cuenta bancaria..."
-                  className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 focus:bg-white rounded-lg text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors resize-none placeholder:text-zinc-400"
-                />
+              {/* Name & Photo Actions */}
+              <div className="flex-1 w-full space-y-2 text-center sm:text-left">
+                <div className="space-y-1">
+                  <label htmlFor="profile-full-name-input" className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider block">
+                    Nombre o Apodo <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="profile-full-name-input"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ej: Laura Gómez"
+                    className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition shadow-2xs placeholder:text-zinc-400 placeholder:font-normal"
+                    autoFocus={isOnboarding}
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-center sm:justify-start gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition cursor-pointer"
+                  >
+                    {avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+                  </button>
+                  {avatarUrl && (
+                    <>
+                      <span className="text-zinc-300">•</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveAvatar}
+                        className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Quitar foto</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Section 2: Regional Preferences */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-0.5">
+              <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Preferencias regionales</span>
+              </h3>
+            </div>
+
+            <div className="bg-zinc-50/70 border border-zinc-200/90 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label htmlFor="profile-timezone-select" className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-zinc-400" />
+                    <span>Zona horaria</span>
+                  </label>
+                  <div className="relative rounded-xl bg-white border border-zinc-200 shadow-2xs">
+                    <select
+                      id="profile-timezone-select"
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      className="w-full pl-3 pr-8 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl cursor-pointer"
+                    >
+                      {COMMON_TIMEZONES.map((tz) => (
+                        <option key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="profile-currency-select" className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-zinc-400" />
+                    <span>Moneda principal</span>
+                  </label>
+                  <div className="relative rounded-xl bg-white border border-zinc-200 shadow-2xs">
+                    <select
+                      id="profile-currency-select"
+                      value={selectedCurrency}
+                      onChange={(e) => setSelectedCurrency(e.target.value)}
+                      className="w-full pl-3 pr-8 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl cursor-pointer"
+                    >
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <option key={c.currency} value={c.currency}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Payment Instructions */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-0.5">
+              <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Métodos de pago para tus amigos</span>
+                <span className="text-[10px] lowercase font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-md">
+                  opcional
+                </span>
+              </h3>
+            </div>
+
+            <div className="bg-zinc-50/70 border border-zinc-200/90 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+              <p className="text-xs text-zinc-600 leading-relaxed">
+                Escribe tus cuentas o números para que tus amigos sepan dónde transferirte al saldar deudas.
+                <span className="font-semibold text-zinc-800"> Los números y enlaces se convertirán en botones copiables automáticamente.</span>
+              </p>
+
+              {/* Quick Template Chips */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                  Plantillas rápidas:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {PAYMENT_METHOD_PRESETS.map((preset) => {
+                    const IconComp = preset.icon;
+                    return (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        onClick={() => handleAddPreset(preset.template)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-emerald-50 text-zinc-700 hover:text-emerald-700 border border-zinc-200 hover:border-emerald-300 transition shadow-2xs cursor-pointer active:scale-95"
+                      >
+                        <IconComp className="w-3 h-3 text-emerald-600" />
+                        <span>+ {preset.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Textarea */}
+              <div className="space-y-1">
+                <textarea
+                  id="profile-payment-instructions-textarea"
+                  rows={3}
+                  value={paymentInstructions}
+                  onChange={(e) => setPaymentInstructions(e.target.value)}
+                  placeholder="Ej: Nequi / Daviplata: 3001234567&#10;Bancolombia Ahorros: 12345678901"
+                  className="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition resize-none placeholder:text-zinc-400 placeholder:font-normal shadow-2xs font-mono"
+                />
+              </div>
+
+              {paymentInstructions.trim() && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    <span>{showPreview ? 'Ocultar vista previa de amigos' : 'Ver cómo lo verán tus amigos'}</span>
+                  </button>
+
+                  {showPreview && (
+                    <div className="mt-2 p-3 bg-white rounded-xl border border-emerald-200/80 text-xs text-zinc-800 space-y-1.5 shadow-2xs animate-fadeIn">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 pb-1 border-b border-emerald-100">
+                        <span className="flex items-center gap-1">
+                          <Copy className="w-3 h-3" />
+                          Vista previa de cobro
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-normal">Tus amigos verán esto</span>
+                      </div>
+                      <div className="font-mono text-[11px] text-zinc-700 whitespace-pre-wrap">
+                        {paymentInstructions}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
+        </form>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-zinc-100 bg-zinc-50/80 shrink-0 rounded-b-[24px]">
+        <div className="p-4 sm:px-6 border-t border-zinc-100 bg-zinc-50/80 shrink-0 flex items-center justify-end gap-2.5">
+          {!isOnboarding && (
+            <button
+              id="profile-cancel-btn"
+              type="button"
+              onClick={onClose}
+              disabled={isSaving || isUploading}
+              className="px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 text-xs sm:text-sm font-semibold transition cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          )}
           <button
+            id="profile-save-btn"
+            type="button"
             onClick={() => handleSave()}
             disabled={isSaving || isUploading || !fullName.trim()}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
+            className="flex-1 sm:flex-initial px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            {isSaving || isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {isSaving || isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             <span>{isSaving ? 'Guardando...' : isOnboarding ? 'Completar registro' : 'Guardar cambios'}</span>
           </button>
         </div>
@@ -373,4 +595,5 @@ export function ProfileSettingsModal({
     </div>
   );
 }
+
 

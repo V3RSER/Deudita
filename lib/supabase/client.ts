@@ -7,10 +7,7 @@ export function createClient() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url || !anonKey) {
-    return createBrowserClient(
-      'https://placeholder-project.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
-    )
+    throw new Error('Supabase credentials (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY) are required.')
   }
 
   if (typeof window === 'undefined') {
@@ -23,4 +20,5 @@ export function createClient() {
 
   return client
 }
+
 

@@ -6,9 +6,13 @@ export async function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase server credentials (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY) are required.')
+  }
+
   return createServerClient(
-    supabaseUrl || 'https://placeholder-project.supabase.co',
-    supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder',
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
