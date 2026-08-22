@@ -369,37 +369,37 @@ export function SettleDebtModal({
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
           
-          {/* Transfer Flow Card: Payer ➔ Receiver */}
-          <div className="bg-zinc-50/90 border border-zinc-200/90 rounded-3xl p-4 sm:p-5 relative shadow-xs">
-            <div className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-3">
+          {/* Transfer Flow Card: Single-line Payer ⇄ Receiver */}
+          <div className="bg-zinc-50/90 border border-zinc-200/90 rounded-2xl p-3 sm:p-3.5 relative shadow-xs">
+            <div className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-2.5">
               Flujo del dinero
             </div>
 
-            <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-2 sm:gap-3">
+            <div className="flex items-center justify-between gap-1.5 sm:gap-2">
               
-              {/* Payer Card */}
-              <div className="relative bg-white rounded-2xl p-3 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all flex flex-col items-center text-center group cursor-pointer">
-                <div className="relative">
+              {/* Payer Horizontal Card */}
+              <div className="relative flex-1 flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all min-w-0 group cursor-pointer">
+                <div className="relative shrink-0">
                   {payerProfile?.avatar_url ? (
                     <Image
                       src={payerProfile.avatar_url}
                       alt="Payer"
-                      width={44}
-                      height={44}
-                      className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
+                      width={36}
+                      height={36}
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-rose-200 transition-all"
                       unoptimized
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-zinc-900 text-white flex items-center justify-center text-sm font-bold shadow-xs">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
                       {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
-                  <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ring-2 ring-white">
+                  <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
                     PAGA
                   </span>
                 </div>
 
-                <div className="mt-2 w-full">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-extrabold text-zinc-900 truncate">
                     {payerProfile?.full_name?.split(' ')[0] || 'Pagador'}
                   </div>
@@ -412,6 +412,7 @@ export function SettleDebtModal({
                   value={payerId}
                   onChange={(e) => setPayerId(e.target.value)}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  aria-label="Seleccionar pagador"
                 >
                   {profiles.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -422,40 +423,41 @@ export function SettleDebtModal({
               </div>
 
               {/* Swap Button */}
-              <div className="flex flex-col items-center justify-center">
+              <div className="shrink-0">
                 <button
                   type="button"
                   onClick={handleSwapPayerReceiver}
-                  className="p-2.5 rounded-full bg-white border border-zinc-200/90 text-zinc-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all shadow-xs active:scale-90"
+                  className="p-2 sm:p-2.5 rounded-full bg-white border border-zinc-200 text-zinc-600 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all shadow-2xs active:scale-90 cursor-pointer"
                   title="Invertir pagador y receptor"
+                  aria-label="Invertir pagador y receptor"
                 >
-                  <ArrowLeftRight className="w-4 h-4" />
+                  <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
 
-              {/* Receiver Card */}
-              <div className="relative bg-white rounded-2xl p-3 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all flex flex-col items-center text-center group cursor-pointer">
-                <div className="relative">
+              {/* Receiver Horizontal Card */}
+              <div className="relative flex-1 flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all min-w-0 group cursor-pointer">
+                <div className="relative shrink-0">
                   {receiverProfile?.avatar_url ? (
                     <Image
                       src={receiverProfile.avatar_url}
                       alt="Receiver"
-                      width={44}
-                      height={44}
-                      className="w-11 h-11 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
+                      width={36}
+                      height={36}
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
                       unoptimized
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold shadow-xs">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
                       {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
-                  <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full ring-2 ring-white">
+                  <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
                     RECIBE
                   </span>
                 </div>
 
-                <div className="mt-2 w-full">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-extrabold text-zinc-900 truncate">
                     {receiverProfile?.full_name?.split(' ')[0] || 'Receptor'}
                   </div>
@@ -468,6 +470,7 @@ export function SettleDebtModal({
                   value={receiverId}
                   onChange={(e) => setReceiverId(e.target.value)}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  aria-label="Seleccionar receptor"
                 >
                   {profiles.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -480,14 +483,14 @@ export function SettleDebtModal({
 
             {/* Pending Debt Pill */}
             {totalOwed > 0 ? (
-              <div className="mt-3 flex items-center justify-center">
-                <div className="inline-flex items-center space-x-1.5 bg-emerald-100/70 border border-emerald-200/80 px-3 py-1 rounded-full text-xs font-bold text-emerald-800 shadow-2xs">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <div className="mt-2.5 flex items-center justify-center">
+                <div className="inline-flex items-center space-x-1.5 bg-emerald-100/70 border border-emerald-200/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-emerald-800 shadow-2xs">
+                  <Sparkles className="w-3 h-3 text-emerald-600" />
                   <span>Deuda pendiente: {formatCurrency(totalOwed, currency)}</span>
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-center text-[11px] text-zinc-400 font-medium">
+              <div className="mt-2 text-center text-[10px] text-zinc-400 font-medium">
                 Sin deudas calculadas previas
               </div>
             )}

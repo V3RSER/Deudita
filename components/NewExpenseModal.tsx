@@ -196,6 +196,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           : (userGroups[0]?.id ?? 'none');
         setGroupId(initialGroupId);
 
+        const groupMemberIds = (initialGroupId && initialGroupId !== 'none')
+          ? members.filter(m => m.group_id === initialGroupId).map(m => m.user_id)
+          : (currentProfile ? [currentProfile.id] : []);
+        setSelectedMembers(groupMemberIds.length > 0 ? groupMemberIds : (currentProfile ? [currentProfile.id] : []));
+
         setReceiptUrl('');
         setNotes('');
         setShowAdditional(false);
@@ -205,7 +210,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setSplits({});
       }
     }
-  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, activeProfiles]);
+  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, activeProfiles, members]);
 
   // Sync paidById and selectedMembers when changing group
   useEffect(() => {
@@ -217,18 +222,24 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           : activeProfiles[0].id;
         setPaidById(defaultPayer);
       }
-      const stillValidMembers = selectedMembers.filter(id => activeProfiles.some(p => p.id === id));
-      if (stillValidMembers.length === 0) {
+
+      // En nuevo gasto, por defecto siempre se seleccionan todos los miembros del grupo
+      if (!expenseToEdit) {
         setSelectedMembers(activeProfiles.map(p => p.id));
-      } else if (stillValidMembers.length !== selectedMembers.length) {
-        setSelectedMembers(stillValidMembers);
+      } else {
+        const stillValidMembers = selectedMembers.filter(id => activeProfiles.some(p => p.id === id));
+        if (stillValidMembers.length === 0) {
+          setSelectedMembers(activeProfiles.map(p => p.id));
+        } else if (stillValidMembers.length !== selectedMembers.length) {
+          setSelectedMembers(stillValidMembers);
+        }
       }
     } else {
       if (currentProfile) setPaidById(currentProfile.id);
       setSelectedMembers(currentProfile ? [currentProfile.id] : []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, activeProfiles.length, isOpen]);
+  }, [groupId, activeProfiles.length, isOpen, expenseToEdit]);
 
   const toFraction = (decimal: number) => {
     if (Number.isInteger(decimal)) return decimal.toString();
@@ -698,6 +709,58 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     </button>
                     <input type="file" ref={fileRef} onChange={handleUpload} accept="image/*" className="hidden" />
                   </div>
+
+                  {/* Photo Preview Card */}
+                  {receiptUrl && (
+                    <div className="flex items-center justify-between p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl animate-in fade-in duration-200">
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <a
+                          href={receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-emerald-200 shadow-2xs block bg-white hover:opacity-90 transition-opacity"
+                          title="Ver foto en tamaño completo"
+                        >
+                          <Image
+                            src={receiptUrl}
+                            alt="Foto del comprobante"
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </a>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-emerald-950 flex items-center space-x-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">Foto adjuntada</span>
+                          </div>
+                          <p className="text-[10px] text-emerald-700/80 truncate">
+                            Comprobante / recibo cargado
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          disabled={isUploading}
+                          className="px-2.5 py-1 bg-white text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100/50 transition cursor-pointer shadow-2xs"
+                        >
+                          Cambiar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReceiptUrl('')}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                          title="Quitar foto"
+                          aria-label="Quitar foto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {(showNoteInput || notes) && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-200 pb-1">
