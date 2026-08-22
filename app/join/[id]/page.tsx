@@ -9,8 +9,10 @@ import Link from 'next/link';
 interface InviteData {
   invite: {
     id: string;
+    token?: string;
     status: string;
     email?: string | null;
+    inviteeProfileId?: string | null;
     expiresAt?: string;
     isExpired?: boolean;
     isGeneralLink?: boolean;
@@ -27,6 +29,11 @@ interface InviteData {
     email?: string;
     avatar_url?: string;
   };
+  invitee?: {
+    id: string;
+    full_name: string;
+    email?: string;
+  } | null;
   isAlreadyMember?: boolean;
 }
 
@@ -45,10 +52,11 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Save pending invite ID / token in sessionStorage & localStorage for auth callbacks
+    // Save pending invite ID / token in sessionStorage, localStorage, and cookie for auth callbacks
     if (inviteId && typeof window !== 'undefined') {
       window.sessionStorage.setItem('deudita_invite_token', inviteId);
       window.localStorage.setItem('deudita_pending_invite', inviteId);
+      document.cookie = `deudita_invite_token=${inviteId}; path=/; max-age=86400; SameSite=Lax`;
     }
 
     async function loadData() {
@@ -68,7 +76,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
         if (!res.ok) {
           if (res.status === 410 || data.isExpired) {
             setIsExpired(true);
-            throw new Error(data.error || 'Este enlace de invitación ha caducado (duración: 1 día).');
+            throw new Error(data.error || 'Este enlace de invitación ha caducado (duración: 7 días).');
           }
           throw new Error(data.error || 'La invitación no fue encontrada');
         }
@@ -93,6 +101,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
     if (inviteId && typeof window !== 'undefined') {
       window.sessionStorage.setItem('deudita_invite_token', inviteId);
       window.localStorage.setItem('deudita_pending_invite', inviteId);
+      document.cookie = `deudita_invite_token=${inviteId}; path=/; max-age=86400; SameSite=Lax`;
     }
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -119,12 +128,13 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
       if (typeof window !== 'undefined') {
         window.sessionStorage.removeItem('deudita_invite_token');
         window.localStorage.removeItem('deudita_pending_invite');
+        document.cookie = 'deudita_invite_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       }
 
-      setSuccessMessage('¡Te has unido al grupo exitosamente!');
+      setSuccessMessage(result.message || '¡Te has unido al grupo exitosamente!');
       setTimeout(() => {
         router.push(`/groups/${result.groupId}`);
-      }, 1000);
+      }, 800);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al procesar la invitación';
       setError(message);
@@ -270,6 +280,13 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
               <span>Invitado por:</span>
               <span className="font-semibold text-zinc-900">{inviter.full_name}</span>
             </div>
+
+            {inviteData?.invitee && (
+              <div className="border-t border-zinc-200/60 pt-3 flex items-center justify-between text-xs text-indigo-700 bg-indigo-50/50 p-2.5 rounded-xl">
+                <span>Perfil que reclamarás:</span>
+                <span className="font-bold text-indigo-950">{inviteData.invitee.full_name}</span>
+              </div>
+            )}
           </div>
 
           {/* Messages & Actions */}

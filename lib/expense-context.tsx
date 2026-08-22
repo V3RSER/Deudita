@@ -131,10 +131,21 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
               const claimData = await claimRes.json();
               window.sessionStorage.removeItem('deudita_invite_token');
               window.localStorage.removeItem('deudita_pending_invite');
+              document.cookie = 'deudita_invite_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
               if (claimData?.groupId) {
                 if (window.location.pathname.startsWith('/login') || window.location.pathname.startsWith('/join')) {
                   window.location.href = `/groups/${claimData.groupId}`;
+                  return;
                 }
+              }
+              // Fetch latest data to include the newly joined group
+              const refreshRes = await fetch('/api/sync');
+              if (refreshRes.ok) {
+                const refreshed = await refreshRes.json();
+                if (refreshed.groups) setGroups(refreshed.groups as Group[]);
+                if (refreshed.members) setMembers(refreshed.members as GroupMember[]);
+                if (refreshed.profiles) setProfiles(refreshed.profiles as Profile[]);
+                if (refreshed.expenses) setExpenses(refreshed.expenses as unknown as Expense[]);
               }
             }
           } catch (claimErr) {

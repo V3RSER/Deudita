@@ -188,18 +188,48 @@ export async function claimAndJoinGroupInvite(
   const fullName = meta.full_name ?? meta.name ?? (userEmailLower ? userEmailLower.split('@')[0] : 'Usuario');
   const avatarUrl = meta.avatar_url ?? meta.picture ?? null;
 
-  await db.from('profiles').upsert(
-    {
-      id: user.id,
-      email: user.email ?? null,
-      full_name: fullName,
-      avatar_url: avatarUrl,
-      is_temp: false,
-    },
-    { onConflict: 'id' }
-  );
+  try {
+    await db.from('profiles').upsert(
+      {
+        id: user.id,
+        email: user.email ?? null,
+        full_name: fullName,
+        avatar_url: avatarUrl,
+        is_temp: false,
+      },
+      { onConflict: 'id' }
+    );
+  } catch (profErr) {
+    console.warn('[claimAndJoinGroupInvite] Warning upserting profile:', profErr);
+  }
 
-  // 2. Look up the invite by token, by id, or by email
+  // 2. Try atomic database RPC first (runs with SECURITY DEFINER to bypass RLS)
+  try {
+    const { data: rpcData, error: rpcErr } = await db.rpc('claim_and_join_group', {
+      p_token: cleanToken,
+      p_user_id: user.id,
+    });
+
+    if (!rpcErr && rpcData && typeof rpcData === 'object' && rpcData.success) {
+      // Also run cleanup for any other temporary profiles by email
+      try {
+        await claimAllTempProfilesForUser(db, user);
+      } catch (cleanErr) {
+        console.warn('[claimAndJoinGroupInvite] Cleanup warning after RPC:', cleanErr);
+      }
+
+      return {
+        success: true,
+        groupId: rpcData.group_id,
+        groupName: rpcData.group_name,
+        message: rpcData.message ?? 'Te has unido exitosamente al grupo',
+      };
+    }
+  } catch (rpcCallErr) {
+    console.warn('[claimAndJoinGroupInvite] RPC claim_and_join_group not available or errored:', rpcCallErr);
+  }
+
+  // 3. Look up the invite by token, by id, or by email
   let invite: any = null;
 
   // By token
@@ -261,7 +291,7 @@ export async function claimAndJoinGroupInvite(
     }
   }
 
-  // 3. Unify and claim ALL temporary profiles for this user (including invitee_profile_id and email matches)
+  // 4. Unify and claim ALL temporary profiles for this user (including invitee_profile_id and email matches)
   const tempProfileId = invite?.invitee_profile_id;
   await claimAllTempProfilesForUser(db, user, tempProfileId);
 
@@ -284,7 +314,7 @@ export async function claimAndJoinGroupInvite(
     throw new Error('Invitación no encontrada o expirada');
   }
 
-  // 4. GUARANTEE that user is present in group_members for targetGroupId
+  // 5. GUARANTEE that user is present in group_members for targetGroupId
   const { data: alreadyMember } = await db
     .from('group_members')
     .select('group_id')
@@ -302,7 +332,7 @@ export async function claimAndJoinGroupInvite(
     });
   }
 
-  // 5. Update group_invites record if it was an individual invite (with specific email or designated profile)
+  // 6. Update group_invites record if it was an individual invite (with specific email or designated profile)
   const isDedicatedInvite = Boolean(invite?.invitee_profile_id || (invite?.email && invite.email !== 'invite@link.deudita.app'));
   if (invite?.id && isDedicatedInvite) {
     await db
@@ -327,7 +357,7 @@ export async function claimAndJoinGroupInvite(
       .eq('status', 'pending');
   }
 
-  // 6. Get group details for response and notification
+  // 7. Get group details for response and notification
   const { data: groupDetails } = await db
     .from('groups')
     .select('name')
@@ -336,7 +366,7 @@ export async function claimAndJoinGroupInvite(
 
   const groupName = groupDetails?.name ?? 'Grupo';
 
-  // 7. Add notification to user
+  // 8. Add notification to user
   try {
     await db.from('notifications').insert({
       user_id: user.id,

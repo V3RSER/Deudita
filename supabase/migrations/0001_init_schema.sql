@@ -16,7 +16,7 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   avatar_url text,
-  timezone text default 'America/Mexico_City',
+  timezone text default 'America/Bogota',
   currency text default 'COP',
   currency_symbol text default '$',
   payment_instructions text,
@@ -25,6 +25,7 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles alter column email drop not null;
+alter table public.profiles alter column timezone set default 'America/Bogota';
 alter table public.profiles drop constraint if exists profiles_id_fkey;
 alter table public.profiles add column if not exists is_temp boolean not null default false;
 alter table public.profiles add column if not exists created_by uuid references public.profiles(id);
@@ -315,6 +316,112 @@ begin
 end;
 $$;
 
+create or replace function public.claim_and_join_group(p_token text, p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite record;
+  v_group record;
+  v_target_group_id uuid;
+  v_user_email text;
+  v_temp record;
+begin
+  if p_user_id is null then
+    return jsonb_build_object('success', false, 'error', 'ID de usuario requerido');
+  end if;
+
+  -- 1. Obtener email del usuario real
+  select email into v_user_email from public.profiles where id = p_user_id;
+  if v_user_email is null then
+    select email into v_user_email from auth.users where id = p_user_id;
+  end if;
+
+  -- 2. Buscar invitación por token o por id
+  select * into v_invite from public.group_invites
+  where token::text = p_token or id::text = p_token
+  limit 1;
+
+  if v_invite.id is not null then
+    v_target_group_id := v_invite.group_id;
+
+    -- Si la invitación tenía un perfil temporal asignado, reclamarlo de inmediato
+    if v_invite.invitee_profile_id is not null and v_invite.invitee_profile_id <> p_user_id then
+      perform public.claim_temp_profile(v_invite.invitee_profile_id, p_user_id);
+    end if;
+
+    -- Si era una invitación individual, marcar como aceptada
+    if v_invite.invitee_profile_id is not null or (v_invite.email is not null and v_invite.email <> 'invite@link.deudita.app') then
+      update public.group_invites
+      set status = 'accepted', invitee_profile_id = p_user_id
+      where id = v_invite.id;
+    end if;
+  else
+    -- Si p_token es el id directo de un grupo
+    begin
+      select * into v_group from public.groups where id = p_token::uuid;
+      if v_group.id is not null then
+        v_target_group_id := v_group.id;
+      end if;
+    exception when others then
+      v_target_group_id := null;
+    end;
+  end if;
+
+  -- 3. Reclamar cualquier otro perfil temporal con el mismo email
+  if v_user_email is not null and length(trim(v_user_email)) > 3 then
+    for v_temp in
+      select id from public.profiles
+      where is_temp = true and lower(trim(email)) = lower(trim(v_user_email)) and id <> p_user_id
+    loop
+      perform public.claim_temp_profile(v_temp.id, p_user_id);
+    end loop;
+  end if;
+
+  -- 4. Si encontramos el grupo objetivo, asegurar membresía
+  if v_target_group_id is not null then
+    insert into public.group_members (group_id, user_id, invited_by, role)
+    values (v_target_group_id, p_user_id, coalesce(v_invite.invited_by, p_user_id), 'member')
+    on conflict (group_id, user_id) do nothing;
+
+    select name into v_group from public.groups where id = v_target_group_id;
+
+    -- Crear notificación
+    insert into public.notifications (user_id, type, title, message, data)
+    values (
+      p_user_id,
+      'group_invite',
+      '¡Te has unido al grupo!',
+      'Te has unido exitosamente al grupo ' || coalesce(v_group.name, 'Grupo') || '.',
+      jsonb_build_object('group_id', v_target_group_id, 'invite_id', v_invite.id)
+    );
+
+    return jsonb_build_object(
+      'success', true,
+      'group_id', v_target_group_id,
+      'group_name', coalesce(v_group.name, 'Grupo'),
+      'message', 'Te has unido exitosamente al grupo'
+    );
+  end if;
+
+  -- 5. Si no se especificó un token válido, pero el usuario ya tenía membresías
+  select group_id into v_target_group_id from public.group_members where user_id = p_user_id limit 1;
+  if v_target_group_id is not null then
+    select name into v_group from public.groups where id = v_target_group_id;
+    return jsonb_build_object(
+      'success', true,
+      'group_id', v_target_group_id,
+      'group_name', coalesce(v_group.name, 'Grupo'),
+      'message', 'Ya formas parte del grupo'
+    );
+  end if;
+
+  return jsonb_build_object('success', false, 'error', 'No se encontró la invitación o grupo');
+end;
+$$;
+
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -447,7 +554,9 @@ create policy "delete_profiles" on public.profiles
 drop policy if exists "select_own_groups" on public.groups;
 create policy "select_own_groups" on public.groups
   for select using (
-    public.is_group_member(id, auth.uid()) or owner_id = auth.uid()
+    public.is_group_member(id, auth.uid())
+    or owner_id = auth.uid()
+    or exists (select 1 from public.group_invites gi where gi.group_id = groups.id and gi.status = 'pending')
   );
 
 drop policy if exists "insert_own_groups" on public.groups;
@@ -468,14 +577,15 @@ create policy "select_group_members" on public.group_members
   for select using (
     public.is_group_member(group_id, auth.uid())
     or group_id in (select id from public.groups where owner_id = auth.uid())
+    or user_id = auth.uid()
   );
 
 drop policy if exists "insert_group_members" on public.group_members;
 create policy "insert_group_members" on public.group_members
   for insert with check (
-    group_id in (select id from public.groups where owner_id = auth.uid())
+    user_id = auth.uid()
+    or group_id in (select id from public.groups where owner_id = auth.uid())
     or public.is_group_member(group_id, auth.uid())
-    or user_id = auth.uid()
   );
 
 drop policy if exists "update_group_members" on public.group_members;
@@ -497,11 +607,7 @@ create policy "delete_group_members" on public.group_members
 -- ---- group_invites ----
 drop policy if exists "select_group_invites" on public.group_invites;
 create policy "select_group_invites" on public.group_invites
-  for select using (
-    invited_by = auth.uid()
-    or group_id in (select id from public.groups where owner_id = auth.uid())
-    or email = (select email from public.profiles where id = auth.uid())
-  );
+  for select using (true);
 
 drop policy if exists "insert_group_invites" on public.group_invites;
 create policy "insert_group_invites" on public.group_invites
@@ -516,7 +622,8 @@ create policy "insert_group_invites" on public.group_invites
 drop policy if exists "update_group_invites" on public.group_invites;
 create policy "update_group_invites" on public.group_invites
   for update using (
-    email = (select email from public.profiles where id = auth.uid())
+    auth.role() = 'authenticated'
+    or email = (select email from public.profiles where id = auth.uid())
     or group_id in (select id from public.groups where owner_id = auth.uid())
   );
 

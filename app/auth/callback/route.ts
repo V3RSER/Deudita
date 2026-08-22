@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { claimAndJoinGroupInvite, claimAllTempProfilesForUser } from '@/lib/invite-utils';
 
@@ -6,7 +7,9 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const returnTo = searchParams.get('returnTo');
-  const token = searchParams.get('token') ?? searchParams.get('invite_token');
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get('deudita_invite_token')?.value;
+  const token = searchParams.get('token') ?? searchParams.get('invite_token') ?? cookieToken;
 
   if (code) {
     const supabase = await createClient();
@@ -39,14 +42,20 @@ export async function GET(request: Request) {
 
       // If user joined a group from an invite link, direct them straight to their new group
       if (joinedGroupId) {
-        return NextResponse.redirect(`${origin}/groups/${joinedGroupId}`);
+        const response = NextResponse.redirect(`${origin}/groups/${joinedGroupId}`);
+        response.cookies.delete('deudita_invite_token');
+        return response;
       }
 
       if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('/join')) {
-        return NextResponse.redirect(`${origin}${returnTo}`);
+        const response = NextResponse.redirect(`${origin}${returnTo}`);
+        response.cookies.delete('deudita_invite_token');
+        return response;
       }
 
-      return NextResponse.redirect(`${origin}/groups`);
+      const response = NextResponse.redirect(`${origin}/groups`);
+      response.cookies.delete('deudita_invite_token');
+      return response;
     }
   }
 
