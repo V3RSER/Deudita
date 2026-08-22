@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const isFullSync = searchParams.get('full') === 'true';
+
     const supabase = await createClient();
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
@@ -15,45 +18,48 @@ export async function GET() {
     // Use the authenticated Supabase client (with request cookies and JWT) to respect RLS
     const db = supabase;
 
-    // 0. Auto-claim from cookie token if present
-    try {
-      const cookieStore = await cookies();
-      const cookieInviteToken = cookieStore.get('deudita_invite_token')?.value;
-      if (cookieInviteToken) {
-        await claimAndJoinGroupInvite(db, cookieInviteToken, user);
-      }
-    } catch (cookieClaimErr) {
-      console.warn('[API /api/sync] Warning auto-claiming from cookie token:', cookieClaimErr);
-    }
-
-    // 0.1 Auto-claim and join any pending invites matching user email
-    if (user.email) {
+    // 0, 0.1, 0.2 Auto-claims are only run on full sync
+    if (isFullSync) {
+      // 0. Auto-claim from cookie token if present
       try {
-        const userEmailLower = user.email.toLowerCase().trim();
-        const { data: pendingInvites } = await db
-          .from('group_invites')
-          .select('token, id, group_id')
-          .ilike('email', userEmailLower)
-          .eq('status', 'pending');
+        const cookieStore = await cookies();
+        const cookieInviteToken = cookieStore.get('deudita_invite_token')?.value;
+        if (cookieInviteToken) {
+          await claimAndJoinGroupInvite(db, cookieInviteToken, user);
+        }
+      } catch (cookieClaimErr) {
+        console.warn('[API /api/sync] Warning auto-claiming from cookie token:', cookieClaimErr);
+      }
 
-        if (pendingInvites && pendingInvites.length > 0) {
-          for (const inv of pendingInvites) {
-            const tokenToUse = inv.token || inv.id || inv.group_id;
-            if (tokenToUse) {
-              await claimAndJoinGroupInvite(db, tokenToUse, user);
+      // 0.1 Auto-claim and join any pending invites matching user email
+      if (user.email) {
+        try {
+          const userEmailLower = user.email.toLowerCase().trim();
+          const { data: pendingInvites } = await db
+            .from('group_invites')
+            .select('token, id, group_id')
+            .ilike('email', userEmailLower)
+            .eq('status', 'pending');
+
+          if (pendingInvites && pendingInvites.length > 0) {
+            for (const inv of pendingInvites) {
+              const tokenToUse = inv.token || inv.id || inv.group_id;
+              if (tokenToUse) {
+                await claimAndJoinGroupInvite(db, tokenToUse, user);
+              }
             }
           }
+        } catch (emailInvErr) {
+          console.warn('[API /api/sync] Warning joining pending invites by email:', emailInvErr);
         }
-      } catch (emailInvErr) {
-        console.warn('[API /api/sync] Warning joining pending invites by email:', emailInvErr);
       }
-    }
 
-    // 0.2 Auto-claim and unify any temporary profiles created for this user's email
-    try {
-      await claimAllTempProfilesForUser(db, user);
-    } catch (claimErr) {
-      console.warn('[API /api/sync] Warning auto-claiming temp profiles:', claimErr);
+      // 0.2 Auto-claim and unify any temporary profiles created for this user's email
+      try {
+        await claimAllTempProfilesForUser(db, user);
+      } catch (claimErr) {
+        console.warn('[API /api/sync] Warning auto-claiming temp profiles:', claimErr);
+      }
     }
 
     // 1. Current user profile
@@ -218,17 +224,21 @@ export async function GET() {
       );
     }
 
-    // 5.1 Query full managed_users table to populate relationships for all loaded profiles
+    // 5.1 Query managed_users table to populate relationships for loaded profiles
     let allManagedUserRows: any[] = [];
-    try {
-      const { data: allManaged } = await db
-        .from('managed_users')
-        .select('*');
-      if (allManaged) {
-        allManagedUserRows = allManaged;
+    if (finalProfileIds.length > 0) {
+      try {
+        const idList = finalProfileIds.join(',');
+        const { data: allManaged } = await db
+          .from('managed_users')
+          .select('*')
+          .or(`sponsor_id.in.(${idList}),managed_user_id.in.(${idList})`);
+        if (allManaged) {
+          allManagedUserRows = allManaged;
+        }
+      } catch (mAllErr) {
+        console.warn('[API /api/sync] Warning fetching managed_users:', mAllErr);
       }
-    } catch (mAllErr) {
-      console.warn('[API /api/sync] Warning fetching all managed_users:', mAllErr);
     }
 
     // Merge database sponsorships into all loaded profiles
@@ -270,9 +280,47 @@ export async function GET() {
     }
     profiles = Array.from(uniqueProfilesMap.values());
 
-    // 6. Expenses
+    // 6. Expenses & Parallel Queries (payments, drafts, notifications, audit logs, personal expenses)
     let expenses: any[] = [];
     const expenseIdsSeen = new Set<string>();
+
+    const [
+      { data: paymentData },
+      { data: draftsData },
+      { data: notificationsData },
+      { data: auditLogsData },
+      { data: personalExpenses },
+    ] = await Promise.all([
+      userGroupIds.length > 0
+        ? db
+            .from('payments')
+            .select('*')
+            .in('group_id', userGroupIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      db
+        .from('expense_drafts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      db
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      userGroupIds.length > 0
+        ? db
+            .from('expense_audit_logs')
+            .select('*')
+            .in('group_id', userGroupIds)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      db
+        .from('expenses')
+        .select('*, items:expense_items(*), splits:expense_splits(*)')
+        .or(`created_by.eq.${user.id},paid_by.eq.${user.id}`)
+        .order('created_at', { ascending: false }),
+    ]);
 
     if (userGroupIds.length > 0) {
       const { data: expenseData } = await db
@@ -287,13 +335,6 @@ export async function GET() {
       });
     }
 
-    // Also fetch personal/unassigned expenses created or paid by user
-    const { data: personalExpenses } = await db
-      .from('expenses')
-      .select('*, items:expense_items(*), splits:expense_splits(*)')
-      .or(`created_by.eq.${user.id},paid_by.eq.${user.id}`)
-      .order('created_at', { ascending: false });
-
     if (personalExpenses) {
       personalExpenses.forEach((e) => {
         if (!expenseIdsSeen.has(e.id)) {
@@ -306,29 +347,11 @@ export async function GET() {
     expenses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // 7. Payments
-    let payments: any[] = [];
-    if (userGroupIds.length > 0) {
-      const { data: paymentData } = await db
-        .from('payments')
-        .select('*')
-        .in('group_id', userGroupIds)
-        .order('created_at', { ascending: false });
-      payments = paymentData || [];
-    }
+    const payments = paymentData || [];
 
-    // 8. Expense Drafts
-    const { data: draftsData } = await db
-      .from('expense_drafts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // 8. Expense Drafts (draftsData)
 
-    // 9. Notifications
-    const { data: notificationsData } = await db
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // 9. Notifications (notificationsData)
 
     // 10. Pending invites for user (by profile id or email)
     const userEmailLower = user.email ? user.email.toLowerCase() : null;
@@ -348,15 +371,7 @@ export async function GET() {
     }));
 
     // 11. Expense Audit Logs
-    let auditLogs: any[] = [];
-    if (userGroupIds.length > 0) {
-      const { data: auditLogsData } = await db
-        .from('expense_audit_logs')
-        .select('*')
-        .in('group_id', userGroupIds)
-        .order('created_at', { ascending: false });
-      auditLogs = auditLogsData || [];
-    }
+    const auditLogs = auditLogsData || [];
 
     const hiddenFriendIds: string[] = user.user_metadata?.hidden_friend_ids || [];
 

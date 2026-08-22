@@ -59,8 +59,8 @@ interface ExpenseContextType {
   confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<void>;
   discardDraft: (draftId: string) => Promise<void>;
   addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<void>;
-  reloadFromSupabase: () => Promise<void>;
-  refreshData: () => Promise<void>;
+  reloadFromSupabase: (fullSync?: boolean) => Promise<void>;
+  refreshData: (fullSync?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -95,9 +95,10 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const reloadFromSupabase = useCallback(async () => {
+  const reloadFromSupabase = useCallback(async (fullSync: boolean = false) => {
     try {
-      const res = await fetch('/api/sync');
+      const url = fullSync ? '/api/sync?full=true' : '/api/sync';
+      const res = await fetch(url);
       if (!res.ok) {
         if (res.status === 401) {
           setCurrentProfile(null);
@@ -173,11 +174,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void reloadFromSupabase();
+    void reloadFromSupabase(true);
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
       if (event !== 'INITIAL_SESSION') {
-        void reloadFromSupabase();
+        void reloadFromSupabase(true);
       }
     });
     
