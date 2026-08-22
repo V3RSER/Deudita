@@ -11,7 +11,7 @@ import {
   calculateSimplifiedBalances,
   calculateDirectBalances,
   calculateUserSummaries,
-  calculateManagedSummary,
+  calculatePairwiseDebtDetail,
 } from '@/lib/balance-utils';
 import {
   Receipt,
@@ -40,13 +40,24 @@ import {
   Shield,
   UserCheck,
   Info,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpRight,
+  Calendar,
 } from 'lucide-react';
 
 import { getGroupImage, getCleanGroupDescription, getGroupCategoryConfig, getGroupCategoryLabel } from '@/lib/group-utils';
+import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
+import {
+  getEffectiveTransactionDate,
+  isDateMatchingFilter,
+  getAvailableTransactionMonths,
+} from '@/lib/transaction-date-utils';
 import { EditGroupModal } from '@/components/EditGroupModal';
 import { GroupSettingsModal } from '@/components/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -159,8 +170,23 @@ export function GroupDetail({
     deleteGroup,
   } = useExpense();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
-  const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
+  const [filters, setFilters] = useState<TransactionFilterState>({
+    scope: 'all',
+    dateMode: 'expense_date',
+    datePreset: 'all',
+    customStartDate: '',
+    customEndDate: '',
+    groupId: group.id,
+    category: 'all',
+    searchTerm: '',
+  });
+
+  const handleFilterChange = (updates: Partial<TransactionFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...updates }));
+  };
+
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
+  const [expandedBalanceKey, setExpandedBalanceKey] = useState<string | null>(null);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
 
   const highlightedExpenseId = selectedExpenseId || initialExpenseId;
@@ -177,16 +203,68 @@ export function GroupDetail({
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
   const groupPayments = payments.filter((p) => p.group_id === group.id);
 
+  const groupCategories = React.useMemo(() => {
+    return Array.from(new Set(groupExpenses.map((e) => e.category || 'Varios'))).filter(Boolean);
+  }, [groupExpenses]);
+
+  const groupAvailableMonths = React.useMemo(() => {
+    return getAvailableTransactionMonths([...groupExpenses, ...groupPayments], filters.dateMode);
+  }, [groupExpenses, groupPayments, filters.dateMode]);
+
+  const myGroupCount = React.useMemo(() => {
+    const myExp = groupExpenses.filter((exp) => {
+      const isPayer = exp.paid_by === currentProfile?.id;
+      const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
+      return isPayer || isParticipant;
+    }).length;
+    const myPay = groupPayments.filter((p) => p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id).length;
+    return myExp + myPay;
+  }, [groupExpenses, groupPayments, currentProfile?.id]);
+
   const filteredExpenses = groupExpenses.filter((exp) => {
-    if (expenseFilter === 'all') return true;
-    const isPayer = exp.paid_by === currentProfile?.id;
-    const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
-    return Boolean(isPayer || isParticipant);
+    const paidBy = profiles.find((p) => p.id === exp.paid_by);
+    const matchesSearch =
+      !filters.searchTerm.trim() ||
+      (exp.description ? exp.description.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
+      (paidBy && paidBy.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+
+    if (!matchesSearch) return false;
+    if (filters.category !== 'all' && (exp.category || 'Varios') !== filters.category) return false;
+
+    if (filters.scope === 'mine') {
+      const isPayer = exp.paid_by === currentProfile?.id;
+      const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
+      if (!isPayer && !isParticipant) return false;
+    }
+
+    const { dateObj } = getEffectiveTransactionDate(exp, filters.dateMode);
+    return isDateMatchingFilter(dateObj, filters.datePreset, {
+      start: filters.customStartDate,
+      end: filters.customEndDate,
+    });
   });
 
   const filteredPayments = groupPayments.filter((p) => {
-    if (expenseFilter === 'all') return true;
-    return p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
+    const payer = profiles.find((prof) => prof.id === p.paid_by);
+    const receiver = profiles.find((prof) => prof.id === p.paid_to);
+    const matchesSearch =
+      !filters.searchTerm.trim() ||
+      (p.note ? p.note.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
+      (payer && payer.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
+      (receiver && receiver.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+
+    if (!matchesSearch) return false;
+
+    if (filters.scope === 'mine') {
+      const isInteracted = p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
+      if (!isInteracted) return false;
+    }
+
+    const { dateObj } = getEffectiveTransactionDate(p, filters.dateMode);
+    return isDateMatchingFilter(dateObj, filters.datePreset, {
+      start: filters.customStartDate,
+      end: filters.customEndDate,
+    });
   });
 
   const groupMembers = members.filter((m) => m.group_id === group.id);
@@ -454,26 +532,26 @@ export function GroupDetail({
   return (
     <div className="space-y-4">
       {/* Group Hero Header Banner (Mobile & Desktop Optimized) */}
-      <div className="relative w-full min-h-[160px] sm:min-h-[180px] rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-900 group p-4 sm:p-5 flex flex-col justify-between">
+      <div className="relative w-full min-h-[160px] sm:min-h-[180px] rounded-3xl overflow-hidden shadow-sm ring-1 ring-zinc-200/50 bg-zinc-950 group p-4 sm:p-5 flex flex-col justify-between">
         {groupImageUrl ? (
           <Image
             src={groupImageUrl}
             alt={group.name}
             fill
-            className="object-cover opacity-50"
+            className="object-cover opacity-60"
             unoptimized
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 opacity-90" />
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950 opacity-95" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-900/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/80 to-zinc-950/45" />
         
-        {/* Top actions (Settings modal accessible to all members, with options scoped by permissions) */}
+        {/* Top actions (Settings modal with dedicated semi-transparent circular backdrop) */}
         <div className="relative z-10 flex justify-end items-start w-full">
           <button
             onClick={() => setIsSettingsModalOpen(true)}
-            className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/20 active:scale-95 cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/30 active:scale-95 cursor-pointer"
             title="Configuración del grupo"
             aria-label="Configuración del grupo"
           >
@@ -507,10 +585,10 @@ export function GroupDetail({
           </div>
           
           {/* Actions: Settle and New Expense */}
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
             <button
               onClick={() => onOpenSettleModal(group.id)}
-              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all active:scale-95 shadow-sm ring-1 ring-white/20 min-h-[40px] cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition-all active:scale-95 shadow-sm border border-white/40 hover:border-white/60 min-h-[40px] cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>Saldar</span>
@@ -562,13 +640,13 @@ export function GroupDetail({
       )}
 
       {/* Pestañas de Gastos, Balances y Miembros */}
-      <div className="flex border-b border-zinc-200 overflow-x-auto no-scrollbar scroll-smooth gap-1 sm:gap-2">
+      <div className="flex border-b border-zinc-200 overflow-x-auto no-scrollbar scroll-smooth gap-1 sm:gap-2 -mb-px">
         <button
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'expenses'
-              ? 'border-zinc-900 text-zinc-900'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'border-zinc-900 text-zinc-900 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
           }`}
         >
           <Receipt className="w-3.5 h-3.5" />
@@ -577,22 +655,22 @@ export function GroupDetail({
 
         <button
           onClick={() => setActiveTab('balances')}
-          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'balances'
-              ? 'border-zinc-900 text-zinc-900'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'border-zinc-900 text-zinc-900 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
           }`}
         >
           <Wallet className="w-3.5 h-3.5" />
-          <span>Balances ({groupPairwise.length})</span>
+          <span>Balances</span>
         </button>
 
         <button
           onClick={() => setActiveTab('members')}
-          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'members'
-              ? 'border-zinc-900 text-zinc-900'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'border-zinc-900 text-zinc-900 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
           }`}
         >
           <Users className="w-3.5 h-3.5" />
@@ -601,10 +679,10 @@ export function GroupDetail({
 
         <button
           onClick={() => setActiveTab('activity')}
-          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 font-semibold text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 py-3 px-3.5 sm:px-4 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
             activeTab === 'activity'
-              ? 'border-zinc-900 text-zinc-900'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'border-zinc-900 text-zinc-900 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
           }`}
         >
           <Activity className="w-3.5 h-3.5" />
@@ -614,34 +692,18 @@ export function GroupDetail({
 
       {/* TAB CONTENT: Expenses */}
       {activeTab === 'expenses' && (
-        <div className="space-y-3">
-          {/* Expenses Filter Bar */}
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center p-0.5 bg-zinc-100 rounded-xl border border-zinc-200/60">
-              <button
-                type="button"
-                onClick={() => setExpenseFilter('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  expenseFilter === 'all'
-                    ? 'bg-white text-zinc-900 shadow-2xs'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                Todos ({groupExpenses.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setExpenseFilter('mine')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  expenseFilter === 'mine'
-                    ? 'bg-white text-zinc-900 shadow-2xs'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                Mis gastos
-              </button>
-            </div>
-          </div>
+        <div className="space-y-4">
+          <TransactionFilterBar
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            availableMonths={groupAvailableMonths}
+            categories={groupCategories}
+            showGroupFilter={false}
+            showCategoryFilter={groupCategories.length > 0}
+            showSearch={true}
+            totalCount={groupExpenses.length + groupPayments.length}
+            myCount={myGroupCount}
+          />
 
           <GenericExpenseList
             expenses={filteredExpenses}
@@ -650,6 +712,7 @@ export function GroupDetail({
             userGroups={userGroups}
             currentProfile={currentProfile}
             groupCurrency={group.currency || 'COP'}
+            dateFilterMode={filters.dateMode}
             onEditExpense={onEditExpense}
             onDeleteExpense={(expId) => deleteExpense(expId)}
             onEditPayment={onEditPayment}
@@ -661,100 +724,48 @@ export function GroupDetail({
       )}
 
       {/* TAB CONTENT: Balances */}
-      {activeTab === 'balances' && (() => {
-        const groupManagedSummary = calculateManagedSummary(profiles, groupExpenses, groupPayments, group.id);
-
-        return (
-          <div className="space-y-4">
-            {/* Non-invasive, coupled mode switcher */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 py-1">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                  {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
-                </span>
-                {isSimplifiedBalances && savedGroupTransactions > 0 && (
-                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                    <Sparkles className="w-3 h-3" />
-                    <span>Ahorra {savedGroupTransactions} {savedGroupTransactions === 1 ? 'pago' : 'pagos'}</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setIsSimplifiedBalances(true)}
-                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    isSimplifiedBalances
-                      ? 'bg-white text-zinc-900 shadow-2xs'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
-                >
-                  <Sparkles className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
-                  <span>Simplificado</span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60">Por defecto</span>
-                  <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsSimplifiedBalances(false)}
-                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    !isSimplifiedBalances
-                      ? 'bg-white text-zinc-900 shadow-2xs'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
-                >
-                  <Layers className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
-                  <span>Directo</span>
-                  <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
-                </button>
-              </div>
+      {activeTab === 'balances' && (
+        <div className="space-y-4">
+          {/* Non-invasive, coupled mode switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 py-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
+              </span>
             </div>
 
-            {/* Info on Personas a cargo in this group if present */}
-            {groupManagedSummary.length > 0 && (
-              <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center space-x-2 text-xs font-bold text-indigo-900">
-                  <Shield className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span>Personas a cargo en este grupo ({groupManagedSummary.length})</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {groupManagedSummary.map((item, idx) => (
-                    <div key={idx} className="bg-white/90 p-2.5 rounded-xl border border-indigo-100 flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-zinc-900">{item.user.full_name}</p>
-                        <p className="text-[10px] text-zinc-500">
-                          Responsable: <strong className="text-zinc-700">{item.sponsor.id === currentProfile?.id ? 'Tú' : item.sponsor.full_name}</strong>
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
-                          item.individualNet > 0
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : item.individualNet < 0
-                            ? 'bg-rose-50 text-rose-700'
-                            : 'bg-zinc-100 text-zinc-600'
-                        }`}>
-                          {item.individualNet > 0
-                            ? `+${formatCurrency(item.individualNet, group.currency ?? 'COP')}`
-                            : item.individualNet < 0
-                            ? `-${formatCurrency(Math.abs(item.individualNet), group.currency ?? 'COP')}`
-                            : 'Al día'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[11px] text-indigo-800/80">
-                  {isSimplifiedBalances
-                    ? '💡 En la vista simplificada, los saldos de los dependientes se liquidan a través de su responsable.'
-                    : '💡 En la vista directa, se muestran los consumos individuales exactos de cada dependiente.'}
-                </p>
-              </div>
-            )}
+            <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setIsSimplifiedBalances(true)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  isSimplifiedBalances
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Sparkles className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                <span>Simplificado</span>
+                <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
+              </button>
 
-            {groupPairwise.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => setIsSimplifiedBalances(false)}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  !isSimplifiedBalances
+                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                <Layers className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
+                <span>Directo</span>
+                <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
+              </button>
+            </div>
+          </div>
+
+          {groupPairwise.length === 0 ? (
               <div className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
                   <CheckCircle2 className="w-6 h-6" />
@@ -775,125 +786,247 @@ export function GroupDetail({
                   const debtorDisplayName = p.debtor.full_name?.trim() ? p.debtor.full_name : 'Integrante';
                   const creditorDisplayName = p.creditor.full_name?.trim() ? p.creditor.full_name : 'Integrante';
 
+                  const cardKey = `${p.debtor.id}->${p.creditor.id}`;
+                  const isExpanded = expandedBalanceKey === cardKey;
+
+                  // Debt breakdown for this specific relationship in this group
+                  const detail = calculatePairwiseDebtDetail(
+                    p.debtor,
+                    p.creditor,
+                    groupExpenses,
+                    groupPayments,
+                    profiles,
+                    [group],
+                    isSimplifiedBalances,
+                    group.id
+                  );
+
                   return (
                     <div
                       key={idx}
-                      className="bg-white rounded-3xl p-5 border border-zinc-200/80 shadow-2xs hover:shadow-md hover:border-zinc-300 transition-all flex flex-col justify-between gap-3.5"
+                      className={`bg-white rounded-3xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden ${
+                        isOwedToMe
+                          ? 'border-emerald-200/90 hover:border-emerald-300'
+                          : isMyDebt
+                          ? 'border-rose-200/90 hover:border-rose-300'
+                          : 'border-zinc-200/80 hover:border-zinc-300'
+                      }`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center space-x-3.5 min-w-0">
-                          <div className="flex items-center -space-x-2 shrink-0">
-                            {p.debtor.avatar_url ? (
-                              <Image
-                                src={p.debtor.avatar_url}
-                                alt={p.debtor.full_name ? p.debtor.full_name : 'Deudor'}
-                                width={40}
-                                height={40}
-                                className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
-                                unoptimized
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                                {debtorInitial}
-                              </div>
-                            )}
-                            {p.creditor.avatar_url ? (
-                              <Image
-                                src={p.creditor.avatar_url}
-                                alt={p.creditor.full_name ? p.creditor.full_name : 'Acreedor'}
-                                width={40}
-                                height={40}
-                                className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
-                                unoptimized
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                                {creditorInitial}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
-                              <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
-                                {debtorDisplayName}
-                              </span>
-                              <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                              <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
-                                {creditorDisplayName}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                isMyDebt
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                  : isOwedToMe
-                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
-                                  : 'bg-zinc-100 text-zinc-700'
-                              }`}>
-                                {formatCurrency(p.amount, group.currency ?? 'COP')}
-                              </span>
-
-                              {/* Direct view sponsor tags */}
-                              {!isSimplifiedBalances && (p.debtorSponsor || p.creditorSponsor) && (
-                                <div className="flex items-center space-x-1 text-[10px] font-semibold text-indigo-700">
-                                  <Shield className="w-3 h-3" />
-                                  <span>
-                                    {p.debtorSponsor && `Deudor a cargo de ${p.debtorSponsor.full_name}`}
-                                    {p.debtorSponsor && p.creditorSponsor && ' • '}
-                                    {p.creditorSponsor && `Acreedor a cargo de ${p.creditorSponsor.full_name}`}
-                                  </span>
+                      <div className="p-5 flex flex-col justify-between gap-3.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center space-x-3.5 min-w-0">
+                            <div className="flex items-center -space-x-2 shrink-0">
+                              {p.debtor.avatar_url ? (
+                                <Image
+                                  src={p.debtor.avatar_url}
+                                  alt={p.debtor.full_name ? p.debtor.full_name : 'Deudor'}
+                                  width={40}
+                                  height={40}
+                                  className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                                  unoptimized
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                                  {debtorInitial}
+                                </div>
+                              )}
+                              {p.creditor.avatar_url ? (
+                                <Image
+                                  src={p.creditor.avatar_url}
+                                  alt={p.creditor.full_name ? p.creditor.full_name : 'Acreedor'}
+                                  width={40}
+                                  height={40}
+                                  className="w-10 h-10 rounded-full object-cover ring-2 ring-white"
+                                  unoptimized
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
+                                  {creditorInitial}
                                 </div>
                               )}
                             </div>
+
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center space-x-1.5 text-sm font-extrabold text-zinc-900 truncate">
+                                <span className={isMyDebt ? 'text-rose-600 font-black' : ''}>
+                                  {debtorDisplayName}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                <span className={isOwedToMe ? 'text-emerald-700 font-black' : ''}>
+                                  {creditorDisplayName}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                <span
+                                  className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                                    isMyDebt
+                                      ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                      : isOwedToMe
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+                                      : 'bg-zinc-100 text-zinc-700'
+                                  }`}
+                                >
+                                  {isOwedToMe ? '+' : isMyDebt ? '-' : ''}
+                                  {formatCurrency(p.amount, group.currency ?? 'COP')}
+                                </span>
+
+                                {detail.pendingExpenses.length > 0 && (
+                                  <span className="text-[11px] font-bold text-zinc-500 bg-zinc-100/90 px-2 py-0.5 rounded-full border border-zinc-200/60">
+                                    {detail.pendingExpenses.length === 1
+                                      ? '1 gasto pendiente'
+                                      : `${detail.pendingExpenses.length} gastos pendientes`}
+                                  </span>
+                                )}
+
+                                {/* Direct view sponsor tags */}
+                                {!isSimplifiedBalances && (p.debtorSponsor || p.creditorSponsor) && (
+                                  <div className="flex items-center space-x-1 text-[10px] font-semibold text-indigo-700">
+                                    <Shield className="w-3 h-3" />
+                                    <span>
+                                      {p.debtorSponsor && `Deudor vinculado a ${p.debtorSponsor.full_name}`}
+                                      {p.debtorSponsor && p.creditorSponsor && ' • '}
+                                      {p.creditorSponsor && `Acreedor vinculado a ${p.creditorSponsor.full_name}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
+
+                          <button
+                            onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
+                            className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
+                          >
+                            Saldar
+                          </button>
                         </div>
 
-                        <button
-                          onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
-                          className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
-                        >
-                          Saldar
-                        </button>
+                        {/* Simplified view breakdown */}
+                        {isSimplifiedBalances &&
+                          (p.includedDebtors || p.debtorBreakdown || p.includedCreditors || p.creditorBreakdown) && (
+                            <div className="pt-2 border-t border-zinc-100 text-[11px] text-zinc-500 space-y-1">
+                              {p.debtorBreakdown && p.debtorBreakdown.length > 1 ? (
+                                <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                                  <span className="font-semibold text-zinc-700 flex items-center space-x-1">
+                                    <UserCheck className="w-3 h-3 text-indigo-600" />
+                                    <span>Desglose por personas:</span>
+                                  </span>
+                                  {p.debtorBreakdown.map((b, bIdx) => (
+                                    <span
+                                      key={bIdx}
+                                      className="inline-flex items-center space-x-1 bg-zinc-50 px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium"
+                                    >
+                                      <span>{b.isSelf ? 'Titular' : b.profile.full_name}:</span>
+                                      <strong className="text-zinc-900">
+                                        {formatCurrency(b.amount, group.currency ?? 'COP')}
+                                      </strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : p.includedDebtors && p.includedDebtors.length > 0 ? (
+                                <div className="flex items-center space-x-1.5 text-zinc-600">
+                                  <Shield className="w-3 h-3 text-indigo-600 shrink-0" />
+                                  <span>
+                                    Incluye consumo de personas vinculadas:{' '}
+                                    <strong>{p.includedDebtors.map((d) => d.full_name).join(', ')}</strong>
+                                  </span>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+
+                        {/* Toggle Expand Trigger Button */}
+                        <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBalanceKey(isExpanded ? null : cardKey)}
+                            className="inline-flex items-center space-x-1.5 text-xs font-bold text-zinc-700 hover:text-zinc-900 py-1 cursor-pointer transition-colors"
+                          >
+                            <Receipt className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>
+                              {isExpanded
+                                ? 'Ocultar desglose'
+                                : `Ver desglose (${detail.pendingExpenses.length} ${
+                                    detail.pendingExpenses.length === 1 ? 'pendiente' : 'pendientes'
+                                  })`}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                            )}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Simplified view breakdown */}
-                      {isSimplifiedBalances && (p.includedDebtors || p.debtorBreakdown || p.includedCreditors || p.creditorBreakdown) && (
-                        <div className="pt-2 border-t border-zinc-100 text-[11px] text-zinc-500 space-y-1 bg-zinc-50/60 -mx-5 -mb-5 p-3 rounded-b-3xl">
-                          {p.debtorBreakdown && p.debtorBreakdown.length > 1 ? (
-                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                              <span className="font-semibold text-zinc-700 flex items-center space-x-1">
-                                <UserCheck className="w-3 h-3 text-indigo-600" />
-                                <span>Desglose por personas:</span>
-                              </span>
-                              {p.debtorBreakdown.map((b, bIdx) => (
-                                <span
-                                  key={bIdx}
-                                  className="inline-flex items-center space-x-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium"
-                                >
-                                  <span>{b.isSelf ? 'Titular' : b.profile.full_name}:</span>
-                                  <strong className="text-zinc-900">{formatCurrency(b.amount, group.currency ?? 'COP')}</strong>
-                                </span>
-                              ))}
-                            </div>
-                          ) : p.includedDebtors && p.includedDebtors.length > 0 ? (
-                            <div className="flex items-center space-x-1.5 text-zinc-600">
-                              <Shield className="w-3 h-3 text-indigo-600 shrink-0" />
-                              <span>
-                                Incluye consumo de personas a cargo: <strong>{p.includedDebtors.map((d) => d.full_name).join(', ')}</strong>
-                              </span>
-                            </div>
-                          ) : null}
+                      {/* Expanded Section with Pending Expenses List */}
+                      {isExpanded && (
+                        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 space-y-3">
+                          <div className="flex items-center justify-between text-xs font-extrabold text-zinc-900">
+                            <span className="flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Gastos pendientes que componen la deuda</span>
+                            </span>
+                            <span className="text-[11px] text-zinc-400 font-normal">
+                              Clic para abrir gasto
+                            </span>
+                          </div>
 
-                          {p.includedCreditors && p.includedCreditors.length > 0 && (
-                            <div className="flex items-center space-x-1.5 text-zinc-600">
-                              <Shield className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span>
-                                A favor de consumos cubiertos para: <strong>{p.includedCreditors.map((c) => c.full_name).join(', ')}</strong>
-                              </span>
+                          {detail.pendingExpenses.length === 0 ? (
+                            <div className="p-4 bg-white rounded-2xl border border-zinc-200/80 text-center space-y-1">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto" />
+                              <p className="text-xs font-bold text-zinc-900">No hay gastos pendientes</p>
+                              <p className="text-[11px] text-zinc-500">
+                                Los abonos registrados cubren los gastos anteriores.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-zinc-200/70 rounded-2xl border border-zinc-200/90 overflow-hidden bg-white shadow-2xs">
+                              {detail.pendingExpenses.map((item, itemIdx) => {
+                                const catConfig = getCategoryConfig(item.expense.category);
+                                const IconComponent = catConfig.icon;
+                                return (
+                                  <div
+                                    key={item.expense.id + itemIdx}
+                                    onClick={() => router.push(`/expenses/${item.expense.id}`)}
+                                    className="p-3 flex items-center justify-between gap-3 hover:bg-zinc-50 transition-all cursor-pointer group"
+                                  >
+                                    <div className="flex items-center space-x-2.5 min-w-0">
+                                      <div
+                                        className={`p-2 rounded-lg ${catConfig.bgClass} ${catConfig.textClass} shrink-0 border border-zinc-200/60`}
+                                      >
+                                        <IconComponent className="w-3.5 h-3.5" />
+                                      </div>
+                                      <div className="min-w-0 space-y-0.5">
+                                        <span className="font-extrabold text-zinc-900 text-xs truncate group-hover:text-indigo-700 block transition-colors">
+                                          {item.expense.description}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-400 flex items-center gap-1 font-medium">
+                                          <Calendar className="w-2.5 h-2.5" />
+                                          <span>{item.expense.expense_date}</span>
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2 shrink-0 text-right">
+                                      <div>
+                                        <span className="text-xs font-black text-zinc-900 block">
+                                          {formatCurrency(item.pendingAmount, group.currency ?? 'COP')}
+                                        </span>
+                                        {item.isPartiallyPaid && (
+                                          <span className="text-[9px] text-zinc-400 font-medium block">
+                                            (de {formatCurrency(item.originalAmount, group.currency ?? 'COP')})
+                                          </span>
+                                        )}
+                                      </div>
+                                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-900 transition-colors" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -904,8 +1037,7 @@ export function GroupDetail({
               </div>
             )}
           </div>
-        );
-      })()}
+        )}
 
       {/* TAB CONTENT: Members */}
       {activeTab === 'members' && (
@@ -972,12 +1104,12 @@ export function GroupDetail({
                         {managedUserIds.includes(p.id) && (
                           <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md inline-flex items-center space-x-1">
                             <ShieldCheck className="w-2.5 h-2.5" />
-                            <span>A tu cargo</span>
+                            <span>Vinculada a ti</span>
                           </span>
                         )}
                         {sponsorshipMap.has(p.id) && sponsorshipMap.get(p.id) !== currentProfile?.id && (
                           <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                            A cargo de {profiles.find(pr => pr.id === sponsorshipMap.get(p.id))?.full_name?.split(' ')[0] || 'otro'}
+                            Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.get(p.id))?.full_name?.split(' ')[0] || 'otro'}
                           </span>
                         )}
                         {isTempProfile(p) && (
@@ -1040,7 +1172,7 @@ export function GroupDetail({
                 const handleActivityClick = () => {
                   if (isClickableExpense && act.expenseId) {
                     setSelectedExpenseId(act.expenseId);
-                    setExpenseFilter('all');
+                    handleFilterChange({ scope: 'all' });
                     setActiveTab('expenses');
                     router.replace(`/groups/${group.id}?expenseId=${act.expenseId}`, { scroll: false });
                   }

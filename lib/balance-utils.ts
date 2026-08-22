@@ -1,4 +1,4 @@
-import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance, ManagedContribution } from './types';
+import { Expense, Payment, Profile, PairwiseBalance, UserSummaryBalance, ManagedContribution, Group, ExpenseSplit } from './types';
 
 export function formatCurrency(amount: number, currencyCode?: string): string {
   const num = isNaN(amount) ? 0 : amount;
@@ -587,4 +587,240 @@ export function calculateUserSummaries(
       managedBy: sponsorProfile,
     };
   });
+}
+
+export interface DebtBreakdownItem {
+  expense: Expense;
+  split: ExpenseSplit;
+  originalAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  isFullyPaid: boolean;
+  isPartiallyPaid: boolean;
+  participantProfile?: Profile;
+  groupName?: string;
+  currency?: string;
+}
+
+export interface AppliedPaymentItem {
+  payment: Payment;
+  amountApplied: number;
+  payerProfile?: Profile;
+  receiverProfile?: Profile;
+  groupName?: string;
+}
+
+export interface ReverseOffsetItem {
+  expense: Expense;
+  split: ExpenseSplit;
+  amount: number;
+  payerProfile?: Profile;
+  participantProfile?: Profile;
+  groupName?: string;
+}
+
+export interface PairwiseDebtDetail {
+  debtor: Profile;
+  creditor: Profile;
+  totalOriginalDebt: number;
+  totalPaymentsApplied: number;
+  totalReverseOffsets: number;
+  netPendingAmount: number;
+  pendingExpenses: DebtBreakdownItem[];
+  allExpenses: DebtBreakdownItem[];
+  appliedPayments: AppliedPaymentItem[];
+  reverseOffsetExpenses: ReverseOffsetItem[];
+}
+
+export function calculatePairwiseDebtDetail(
+  debtor: Profile,
+  creditor: Profile,
+  expenses: Expense[],
+  payments: Payment[],
+  profiles: Profile[],
+  groups: Group[],
+  isSimplified: boolean = true,
+  groupId?: string
+): PairwiseDebtDetail {
+  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+
+  const profileMap = new Map<string, Profile>();
+  profiles.forEach((p) => profileMap.set(p.id, p));
+
+  const groupMap = new Map<string, Group>();
+  groups.forEach((g) => groupMap.set(g.id, g));
+
+  // Debtor IDs & Creditor IDs
+  const debtorManagedIds = (debtor.managed_user_ids || []).filter((id) => id !== debtor.id);
+  const creditorManagedIds = (creditor.managed_user_ids || []).filter((id) => id !== creditor.id);
+
+  const debtorIds = isSimplified ? [debtor.id, ...debtorManagedIds] : [debtor.id];
+  const creditorIds = isSimplified ? [creditor.id, ...creditorManagedIds] : [creditor.id];
+
+  // 1. Primary expense splits: Creditor paid, Debtor owes
+  interface RawDebtSplit {
+    expense: Expense;
+    split: ExpenseSplit;
+    originalAmount: number;
+    participantProfile?: Profile;
+    date: string;
+    groupName?: string;
+    currency?: string;
+  }
+
+  const primaryDebts: RawDebtSplit[] = [];
+
+  filteredExpenses.forEach((exp) => {
+    if (creditorIds.includes(exp.paid_by) && exp.splits) {
+      exp.splits.forEach((s) => {
+        if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
+          const g = groupMap.get(exp.group_id);
+          primaryDebts.push({
+            expense: exp,
+            split: s,
+            originalAmount: s.amount_owed,
+            participantProfile: profileMap.get(s.user_id),
+            date: exp.expense_date || exp.created_at || '1970-01-01',
+            groupName: g?.name,
+            currency: g?.currency || 'COP',
+          });
+        }
+      });
+    }
+  });
+
+  // Sort chronological ASC so FIFO settlement covers oldest expenses first
+  primaryDebts.sort((a, b) => {
+    const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (diff !== 0) return diff;
+    return a.originalAmount - b.originalAmount;
+  });
+
+  // 2. Reverse expense splits: Debtor paid, Creditor owes (offsets debtor's balance)
+  const reverseOffsets: ReverseOffsetItem[] = [];
+  let totalReverseOffsets = 0;
+
+  filteredExpenses.forEach((exp) => {
+    if (debtorIds.includes(exp.paid_by) && exp.splits) {
+      exp.splits.forEach((s) => {
+        if (creditorIds.includes(s.user_id) && s.amount_owed > 0) {
+          const g = groupMap.get(exp.group_id);
+          totalReverseOffsets += s.amount_owed;
+          reverseOffsets.push({
+            expense: exp,
+            split: s,
+            amount: s.amount_owed,
+            payerProfile: profileMap.get(exp.paid_by),
+            participantProfile: profileMap.get(s.user_id),
+            groupName: g?.name,
+          });
+        }
+      });
+    }
+  });
+
+  // 3. Direct Payments: Debtor paid to Creditor
+  const appliedPayments: AppliedPaymentItem[] = [];
+  let directPaymentsFromDebtor = 0;
+
+  filteredPayments.forEach((pay) => {
+    if (debtorIds.includes(pay.paid_by) && creditorIds.includes(pay.paid_to)) {
+      directPaymentsFromDebtor += pay.amount;
+      const g = groupMap.get(pay.group_id);
+      appliedPayments.push({
+        payment: pay,
+        amountApplied: pay.amount,
+        payerProfile: profileMap.get(pay.paid_by),
+        receiverProfile: profileMap.get(pay.paid_to),
+        groupName: g?.name,
+      });
+    }
+  });
+
+  // Payments from Creditor to Debtor (if any, reduce offset)
+  let reversePayments = 0;
+  filteredPayments.forEach((pay) => {
+    if (creditorIds.includes(pay.paid_by) && debtorIds.includes(pay.paid_to)) {
+      reversePayments += pay.amount;
+    }
+  });
+
+  const netPaymentsApplied = Math.max(0, directPaymentsFromDebtor - reversePayments);
+  const totalOffsetToApply = netPaymentsApplied + totalReverseOffsets;
+  let remainingOffset = totalOffsetToApply;
+
+  const totalOriginalDebt = primaryDebts.reduce((sum, item) => sum + item.originalAmount, 0);
+
+  // 4. FIFO allocation of payments & offsets to primary debts
+  const allExpenses: DebtBreakdownItem[] = primaryDebts.map((item) => {
+    const orig = Math.round(item.originalAmount * 100) / 100;
+    if (remainingOffset >= orig) {
+      remainingOffset = Math.round((remainingOffset - orig) * 100) / 100;
+      return {
+        expense: item.expense,
+        split: item.split,
+        originalAmount: orig,
+        paidAmount: orig,
+        pendingAmount: 0,
+        isFullyPaid: true,
+        isPartiallyPaid: false,
+        participantProfile: item.participantProfile,
+        groupName: item.groupName,
+        currency: item.currency,
+      };
+    } else if (remainingOffset > 0.009) {
+      const paid = remainingOffset;
+      const pending = Math.round((orig - paid) * 100) / 100;
+      remainingOffset = 0;
+      return {
+        expense: item.expense,
+        split: item.split,
+        originalAmount: orig,
+        paidAmount: paid,
+        pendingAmount: pending,
+        isFullyPaid: false,
+        isPartiallyPaid: true,
+        participantProfile: item.participantProfile,
+        groupName: item.groupName,
+        currency: item.currency,
+      };
+    } else {
+      return {
+        expense: item.expense,
+        split: item.split,
+        originalAmount: orig,
+        paidAmount: 0,
+        pendingAmount: orig,
+        isFullyPaid: false,
+        isPartiallyPaid: false,
+        participantProfile: item.participantProfile,
+        groupName: item.groupName,
+        currency: item.currency,
+      };
+    }
+  });
+
+  // Sort by date DESC for presentation (latest pending expenses first)
+  const pendingExpenses = allExpenses
+    .filter((item) => item.pendingAmount > 0.009)
+    .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
+
+  const netPendingAmount = Math.max(
+    0,
+    Math.round((totalOriginalDebt - totalOffsetToApply) * 100) / 100
+  );
+
+  return {
+    debtor,
+    creditor,
+    totalOriginalDebt: Math.round(totalOriginalDebt * 100) / 100,
+    totalPaymentsApplied: Math.round(netPaymentsApplied * 100) / 100,
+    totalReverseOffsets: Math.round(totalReverseOffsets * 100) / 100,
+    netPendingAmount,
+    pendingExpenses,
+    allExpenses: [...allExpenses].sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
+    appliedPayments: appliedPayments.sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime()),
+    reverseOffsetExpenses: reverseOffsets.sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
+  };
 }

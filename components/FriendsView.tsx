@@ -191,12 +191,12 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                       {managedUserIds.includes(friend.id) && (
                         <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md inline-flex items-center space-x-1">
                           <ShieldCheck className="w-2.5 h-2.5" />
-                          <span>A tu cargo</span>
+                          <span>Vinculada a ti</span>
                         </span>
                       )}
                       {sponsorshipMap.has(friend.id) && sponsorshipMap.get(friend.id) !== currentProfile?.id && (
                         <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                          A cargo de {profiles.find(pr => pr.id === sponsorshipMap.get(friend.id))?.full_name?.split(' ')[0] || 'otro'}
+                          Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.get(friend.id))?.full_name?.split(' ')[0] || 'otro'}
                         </span>
                       )}
                       {isTempProfile(friend) && (

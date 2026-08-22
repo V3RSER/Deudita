@@ -142,8 +142,8 @@ export function MemberDetailModal({
       await toggleManagedUser(memberProfile.id, !isCurrentlyManagedByMe);
       setSuccessMsg(
         !isCurrentlyManagedByMe
-          ? `Ahora te haces cargo de las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'}.`
-          : `Dejaste de hacerte cargo de las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'}.`
+          ? `Vinculaste las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'} a tu perfil.`
+          : `Desvinculaste las cuentas de ${memberProfile.full_name?.split(' ')[0] ?? 'este integrante'}.`
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al actualizar asignación';
@@ -356,7 +356,7 @@ export function MemberDetailModal({
                 : 'bg-zinc-50 text-zinc-600'
             }`}>
               <span className="text-zinc-500 font-medium">
-                {isCurrentlyManagedByMe ? 'Saldo (a tu cargo)' : 'Saldo directo'}
+                {isCurrentlyManagedByMe ? 'Saldo (persona vinculada)' : 'Saldo directo'}
               </span>
               <span className="font-bold">
                 {balance > 0
@@ -368,7 +368,7 @@ export function MemberDetailModal({
             </div>
           )}
 
-          {/* Hacerme cargo de este integrante */}
+          {/* Vincular integrante a mi perfil */}
           {!isSelf && (
             <div
               className={`p-3.5 rounded-2xl border transition-all ${
@@ -389,18 +389,18 @@ export function MemberDetailModal({
                     />
                     <span className="text-xs font-bold truncate">
                       {isCurrentlyManagedByMe
-                        ? 'Te haces cargo de sus cuentas'
+                        ? 'Persona vinculada a tu perfil'
                         : isManagedByOther
-                        ? `A cargo de ${sponsorName}`
-                        : 'Hacerme cargo de este usuario'}
+                        ? `Vinculada a ${sponsorName}`
+                        : 'Vincular a mi perfil'}
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-500 leading-tight">
                     {isCurrentlyManagedByMe
                       ? 'Sus deudas y cobros en balances se transfieren y liquidan automáticamente a tu nombre.'
                       : isManagedByOther
-                      ? `Las cuentas de este integrante están asignadas a ${sponsorName}.`
-                      : 'Las cuentas y pagos de esta persona se asignarán a tu nombre.'}
+                      ? `Las cuentas de este integrante están vinculadas a ${sponsorName}.`
+                      : 'Las cuentas y balances de este integrante se vincularán a tu perfil.'}
                   </p>
                 </div>
 
@@ -418,9 +418,9 @@ export function MemberDetailModal({
                     {isTogglingManagement ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : isCurrentlyManagedByMe ? (
-                      'Dejar de cubrir'
+                      'Desvincular'
                     ) : (
-                      'Hacerme cargo'
+                      'Vincular a mi perfil'
                     )}
                   </button>
                 )}

@@ -199,8 +199,8 @@ export async function notifyExpenseCreated(
         notifications.push({
           user_id: sponsorId,
           type: 'expense_assigned',
-          title: 'Gasto asignado a persona a tu cargo',
-          message: `${creatorName} asignó un gasto a ${participantName} (a tu cargo) en "${description}" por ${formattedAmount} en ${groupName}.`,
+          title: 'Gasto asignado a persona vinculada',
+          message: `${creatorName} asignó un gasto a ${participantName} (persona vinculada a ti) en "${description}" por ${formattedAmount} en ${groupName}.`,
           link,
           data: {
             expense_id: expenseId,
@@ -319,8 +319,8 @@ export async function notifyExpenseUpdated(
         notifications.push({
           user_id: sponsorId,
           type: 'expense_assigned',
-          title: 'Gasto modificado (persona a tu cargo)',
-          message: `${updaterName} actualizó el gasto "${description}" que incluye a ${participantName} (a tu cargo) con un monto de ${formattedAmount}.`,
+          title: 'Gasto modificado (persona vinculada)',
+          message: `${updaterName} actualizó el gasto "${description}" que incluye a ${participantName} (persona vinculada a ti) con un monto de ${formattedAmount}.`,
           link,
           data: {
             expense_id: expenseId,
@@ -361,7 +361,7 @@ export async function notifyExpenseUpdated(
             user_id: sponsorId,
             type: 'expense_assigned',
             title: 'Participante retirado de gasto',
-            message: `${updaterName} retiró a ${removedName} (a tu cargo) del gasto "${targetDesc}" en ${groupName}.`,
+            message: `${updaterName} retiró a ${removedName} (persona vinculada a ti) del gasto "${targetDesc}" en ${groupName}.`,
             link: groupId ? `/groups/${groupId}` : `/my-expenses`,
             data: {
               expense_id: expenseId,
@@ -459,8 +459,8 @@ export async function notifyExpenseDeleted(
         notifications.push({
           user_id: sponsorId,
           type: 'expense_deleted',
-          title: 'Gasto eliminado (persona a tu cargo)',
-          message: `${deleterName} eliminó el gasto "${description}" en ${groupName} que incluía a ${participantName} (a tu cargo).`,
+          title: 'Gasto eliminado (persona vinculada)',
+          message: `${deleterName} eliminó el gasto "${description}" en ${groupName} que incluía a ${participantName} (persona vinculada a ti).`,
           link,
           data: {
             group_id: groupId,

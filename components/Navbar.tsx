@@ -164,7 +164,7 @@ export function Navbar({
                   className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Gasto</span>
+                  <span>Nuevo gasto</span>
                 </button>
                 <button
                   onClick={onOpenNewGroup}

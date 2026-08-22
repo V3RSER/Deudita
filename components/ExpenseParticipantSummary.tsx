@@ -27,6 +27,40 @@ interface ExpenseParticipantSummaryProps {
   defaultExpanded?: boolean;
 }
 
+const AVATAR_COLOR_PALETTES = [
+  'bg-emerald-100 text-emerald-800 border-emerald-200/80',
+  'bg-sky-100 text-sky-800 border-sky-200/80',
+  'bg-indigo-100 text-indigo-800 border-indigo-200/80',
+  'bg-violet-100 text-violet-800 border-violet-200/80',
+  'bg-amber-100 text-amber-900 border-amber-200/80',
+  'bg-rose-100 text-rose-800 border-rose-200/80',
+  'bg-teal-100 text-teal-800 border-teal-200/80',
+  'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200/80',
+];
+
+function getParticipantAvatarColor(idOrName: string) {
+  let hash = 0;
+  for (let i = 0; i < idOrName.length; i++) {
+    hash = idOrName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % AVATAR_COLOR_PALETTES.length;
+  return AVATAR_COLOR_PALETTES[index];
+}
+
+function getInitials(name?: string | null, email?: string | null): string {
+  if (name && name.trim().length > 0) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim().length > 0) {
+    return email.trim().slice(0, 2).toUpperCase();
+  }
+  return 'U';
+}
+
 export function formatSimpleFraction(val: number): string {
   if (isNaN(val) || val <= 0) return '0';
 
@@ -97,7 +131,7 @@ export function ExpenseParticipantSummary({
   return (
     <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
       {title && (
-        <div className="px-3.5 py-2.5 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+        <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
             {title} ({participants.length})
           </span>
@@ -110,9 +144,11 @@ export function ExpenseParticipantSummary({
           const isCurrentUser = currentUserId ? p.userId === currentUserId : false;
           const hasBreakdown = Boolean(p.breakdown && p.breakdown.length > 0);
           const isExpanded = expandedUsers[p.userId] ?? false;
+          const avatarColorStyle = getParticipantAvatarColor(profile?.id || p.userId || profile?.full_name || 'user');
+          const initials = getInitials(profile?.full_name, profile?.email);
 
           return (
-            <div key={p.userId} className="p-3 transition-colors hover:bg-zinc-50/40">
+            <div key={p.userId} className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
               <div
                 className={`flex items-center justify-between gap-2 ${
                   hasBreakdown ? 'cursor-pointer select-none' : ''
@@ -121,25 +157,25 @@ export function ExpenseParticipantSummary({
               >
                 {/* Avatar and Name */}
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <div className="w-7 h-7 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center">
+                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center border shadow-2xs ${avatarColorStyle}`}>
                     {profile?.avatar_url ? (
                       <Image
                         src={profile.avatar_url}
                         alt={profile.full_name || 'Avatar'}
-                        width={28}
-                        height={28}
+                        width={32}
+                        height={32}
                         className="w-full h-full object-cover"
                         unoptimized
                       />
                     ) : (
-                      <span className="text-[10px] font-bold text-zinc-600">
-                        {(profile?.full_name || profile?.email || 'U').charAt(0).toUpperCase()}
+                      <span className="text-[10px] sm:text-[11px] font-extrabold tracking-tight">
+                        {initials}
                       </span>
                     )}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-zinc-900 truncate">
                         {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
                       </span>

@@ -6,6 +6,7 @@ import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
 import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Payment } from '@/lib/types';
 import {
   X,
@@ -20,9 +21,18 @@ import {
   CheckCircle2,
   Sparkles,
   Layers,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import Image from 'next/image';
+import {
+  getTodayDateString,
+  getCurrentTimeString,
+  getDefaultTimeForDate,
+  combineDateAndTimeToISO,
+  extractTimeFromISO,
+} from '@/lib/transaction-date-utils';
 
 interface SettleDebtModalProps {
   isOpen: boolean;
@@ -58,10 +68,15 @@ export function SettleDebtModal({
   const [receiverId, setReceiverId] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [notes, setNotes] = useState<string>('Transferencia');
+  const [date, setDate] = useState<string>(getTodayDateString());
+  const [time, setTime] = useState<string>(getCurrentTimeString());
+  const [isManualTime, setIsManualTime] = useState(false);
+  const [showTimeInput, setShowTimeInput] = useState(false);
   const [proofUrl, setProofUrl] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +109,14 @@ export function SettleDebtModal({
         setAmount(paymentToEdit.amount ? paymentToEdit.amount.toString() : '');
         setNotes(paymentToEdit.note ?? '');
         setProofUrl(paymentToEdit.proof_url ?? '');
+        const payDate = paymentToEdit.payment_date ?? getTodayDateString();
+        setDate(payDate);
+        const payTime = paymentToEdit.payment_time
+          ? extractTimeFromISO(paymentToEdit.payment_time)
+          : getDefaultTimeForDate(payDate);
+        setTime(payTime || '00:00');
+        setIsManualTime(Boolean(paymentToEdit.payment_time));
+        setShowTimeInput(Boolean(paymentToEdit.payment_time));
       } else {
         setProofUrl('');
         const activeGroup = defaultGroupId && userGroups.some((g) => g.id === defaultGroupId) ? defaultGroupId : '';
@@ -107,6 +130,11 @@ export function SettleDebtModal({
 
         setAmount(defaultAmount && defaultAmount > 0 ? defaultAmount.toString() : '');
         setNotes('Transferencia');
+        const today = getTodayDateString();
+        setDate(today);
+        setTime(getCurrentTimeString());
+        setIsManualTime(false);
+        setShowTimeInput(false);
       }
     }
   }, [isOpen, paymentToEdit, defaultGroupId, userGroups, defaultDebtorId, currentProfile?.id, profiles, defaultCreditorId, defaultAmount]);
@@ -246,7 +274,7 @@ export function SettleDebtModal({
 
     setIsSubmitting(true);
     try {
-      const paymentDate = isEditing && paymentToEdit ? (paymentToEdit.payment_date || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0];
+      const paymentTimeISO = combineDateAndTimeToISO(date, time);
 
       if (isEditing && paymentToEdit) {
         await updatePayment(paymentToEdit.id, {
@@ -254,7 +282,8 @@ export function SettleDebtModal({
           paid_by: payerId,
           paid_to: receiverId,
           amount: numericAmount,
-          payment_date: paymentDate,
+          payment_date: date,
+          payment_time: paymentTimeISO,
           note: notes,
           proof_url: proofUrl || undefined,
         });
@@ -264,7 +293,8 @@ export function SettleDebtModal({
           paid_by: payerId,
           paid_to: receiverId,
           amount: numericAmount,
-          payment_date: paymentDate,
+          payment_date: date,
+          payment_time: paymentTimeISO,
           note: notes,
           proof_url: proofUrl || undefined,
         });
@@ -282,7 +312,8 @@ export function SettleDebtModal({
               paid_by: payerId,
               paid_to: receiverId,
               amount: payForThisGroup,
-              payment_date: paymentDate,
+              payment_date: date,
+              payment_time: paymentTimeISO,
               note: notes ? notes : 'Abono distribuido',
               proof_url: proofUrl || undefined,
             });
@@ -298,7 +329,8 @@ export function SettleDebtModal({
             paid_by: payerId,
             paid_to: receiverId,
             amount: remainingToPay,
-            payment_date: paymentDate,
+            payment_date: date,
+            payment_time: paymentTimeISO,
             note: notes ? notes : 'Abono extra',
             proof_url: proofUrl || undefined,
           });
@@ -320,10 +352,12 @@ export function SettleDebtModal({
     setIsDeleting(true);
     try {
       await deletePayment(paymentToEdit.id);
+      setShowDeleteConfirm(false);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al eliminar el pago';
       setErrorMsg(msg);
+      setShowDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
     }
@@ -344,7 +378,7 @@ export function SettleDebtModal({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-zinc-900 tracking-tight">
-                {isEditing ? 'Editar pago' : 'Registrar transferencia / pago'}
+                {isEditing ? 'Editar pago' : 'Registrar pago'}
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
                 {targetGroup ? `En "${targetGroup.name}"` : 'Abono general de cuentas'}
@@ -591,6 +625,86 @@ export function SettleDebtModal({
             />
           </div>
 
+          {/* Date & Time Picker */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 block">
+                Fecha y hora del pago
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowTimeInput(!showTimeInput)}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>{time || 'Ajustar hora'}</span>
+              </button>
+            </div>
+
+            <div className="relative">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (!isManualTime) {
+                    setTime(getDefaultTimeForDate(newDate));
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-2xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-2xs"
+              />
+            </div>
+
+            {/* Time Adjustments (Collapsible / Advanced) */}
+            {showTimeInput && (
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-2 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    Hora del pago (zona horaria local)
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTime(getCurrentTimeString());
+                        setIsManualTime(true);
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 transition shadow-2xs"
+                    >
+                      Ahora
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTime('00:00');
+                        setIsManualTime(true);
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition shadow-2xs"
+                    >
+                      00:00
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={time}
+                    onChange={(e) => {
+                      setTime(e.target.value);
+                      setIsManualTime(true);
+                    }}
+                    className="flex-1 px-3.5 py-2 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
+                  />
+                  <span className="text-xs text-zinc-500 font-medium shrink-0">
+                    {date === getTodayDateString() ? 'Hoy' : 'Día seleccionado'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Receipt / Proof Upload Section */}
           <div className="space-y-2">
             <label className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 block">
@@ -693,9 +807,9 @@ export function SettleDebtModal({
           {isEditing ? (
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={isDeleting || isSubmitting}
-              className="p-3 rounded-2xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200"
+              className="p-3 rounded-2xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
               title="Eliminar este pago"
             >
               {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
@@ -704,7 +818,7 @@ export function SettleDebtModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 transition"
+              className="px-4 py-2.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 transition cursor-pointer"
             >
               Cancelar
             </button>
@@ -724,6 +838,19 @@ export function SettleDebtModal({
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        title="¿Eliminar pago?"
+        description="¿Estás seguro de que deseas eliminar este pago? Esta acción restaurará la deuda correspondiente en los balances y no se puede deshacer."
+        confirmText="Eliminar pago"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

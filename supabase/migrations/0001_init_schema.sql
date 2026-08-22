@@ -121,8 +121,12 @@ create table if not exists public.payments (
   paid_to uuid not null references public.profiles(id),
   amount numeric(12,2) not null,
   payment_date date not null default current_date,
+  payment_time timestamptz,
   note text,
-  created_at timestamptz not null default now()
+  proof_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles(id)
 );
 
 -- ----------------------------------------------------------------------------
@@ -756,6 +760,22 @@ create policy "select_group_payments" on public.payments
 drop policy if exists "insert_group_payments" on public.payments;
 create policy "insert_group_payments" on public.payments
   for insert with check (public.is_group_member(group_id, auth.uid()));
+
+drop policy if exists "update_group_payments" on public.payments;
+create policy "update_group_payments" on public.payments
+  for update using (
+    public.is_group_member(group_id, auth.uid())
+    or paid_by = auth.uid()
+    or paid_to = auth.uid()
+  );
+
+drop policy if exists "delete_group_payments" on public.payments;
+create policy "delete_group_payments" on public.payments
+  for delete using (
+    public.is_group_member(group_id, auth.uid())
+    or paid_by = auth.uid()
+    or paid_to = auth.uid()
+  );
 
 -- ---- expense_drafts ----
 drop policy if exists "select_own_drafts" on public.expense_drafts;

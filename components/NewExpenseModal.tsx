@@ -11,10 +11,17 @@ import {
   X, Plus, Trash2, AlertCircle, Loader2,
   Check, ChevronDown, ShoppingCart, ArrowRight, ArrowLeft,
   CheckCircle2, Camera, FileText, Users, PieChart, ListChecks,
-  List, Table, ChevronRight, ChevronUp
+  List, Table, ChevronRight, ChevronUp, Clock
 } from 'lucide-react';
 import { getCategoryConfig, EXPENSE_CATEGORY_GROUPS, DEFAULT_EXPENSE_CATEGORY } from '@/lib/expense-category-utils';
 import { ExpenseParticipantSummary, ParticipantSummaryData } from '@/components/ExpenseParticipantSummary';
+import {
+  getTodayDateString,
+  getCurrentTimeString,
+  getDefaultTimeForDate,
+  combineDateAndTimeToISO,
+  extractTimeFromISO,
+} from '@/lib/transaction-date-utils';
 
 interface NewExpenseModalProps {
   isOpen: boolean;
@@ -37,7 +44,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   // Categories - default to General
   const [subCategory, setSubCategory] = useState(DEFAULT_EXPENSE_CATEGORY);
 
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getTodayDateString());
+  const [time, setTime] = useState(getCurrentTimeString());
+  const [isManualTime, setIsManualTime] = useState(false);
+  const [showTimeInput, setShowTimeInput] = useState(false);
   const [paidById, setPaidById] = useState('');
   const [groupId, setGroupId] = useState('none');
 
@@ -71,10 +81,38 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const currency = activeGroup?.currency ?? currentProfile?.currency ?? 'COP';
 
   const activeProfiles = useMemo(() => {
-    if (!groupId || groupId === 'none') return currentProfile ? [currentProfile] : [];
+    if (!groupId || groupId === 'none') {
+      const ids = new Set<string>();
+      if (currentProfile) ids.add(currentProfile.id);
+      if (expenseToEdit) {
+        if (expenseToEdit.paid_by) ids.add(expenseToEdit.paid_by);
+        expenseToEdit.splits?.forEach(s => ids.add(s.user_id));
+      }
+      if (paidById) ids.add(paidById);
+      selectedMembers.forEach(id => ids.add(id));
+      const matched = profiles.filter(p => ids.has(p.id));
+      return matched.length > 0 ? matched : (currentProfile ? [currentProfile] : []);
+    }
     const groupMemberIds = members.filter(m => m.group_id === groupId).map(m => m.user_id);
-    return profiles.filter(p => groupMemberIds.includes(p.id));
-  }, [groupId, members, profiles, currentProfile]);
+    const matched = profiles.filter(p => groupMemberIds.includes(p.id));
+    const extraIds = new Set<string>();
+    if (expenseToEdit && expenseToEdit.group_id === groupId) {
+      if (expenseToEdit.paid_by && !groupMemberIds.includes(expenseToEdit.paid_by)) {
+        extraIds.add(expenseToEdit.paid_by);
+      }
+      expenseToEdit.splits?.forEach(s => {
+        if (!groupMemberIds.includes(s.user_id)) extraIds.add(s.user_id);
+      });
+    }
+    if (paidById && !groupMemberIds.includes(paidById)) {
+      extraIds.add(paidById);
+    }
+    if (extraIds.size > 0) {
+      const extraProfiles = profiles.filter(p => extraIds.has(p.id) && !groupMemberIds.includes(p.id));
+      return [...matched, ...extraProfiles];
+    }
+    return matched;
+  }, [groupId, members, profiles, currentProfile, expenseToEdit, paidById, selectedMembers]);
 
   const prevIsOpenRef = useRef(false);
   const prevExpenseIdRef = useRef<string | null>(null);
@@ -122,8 +160,15 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         }
         setSubCategory(foundSub);
 
-        setDate(expenseToEdit.expense_date ?? new Date().toISOString().split('T')[0]);
-        setPaidById(expenseToEdit.paid_by ?? (currentProfile?.id ?? ''));
+        const expDate = expenseToEdit.expense_date ?? getTodayDateString();
+        setDate(expDate);
+        const expTime = expenseToEdit.expense_time
+          ? extractTimeFromISO(expenseToEdit.expense_time)
+          : getDefaultTimeForDate(expDate);
+        setTime(expTime || '00:00');
+        setIsManualTime(Boolean(expenseToEdit.expense_time));
+        setShowTimeInput(Boolean(expenseToEdit.expense_time));
+        setPaidById(expenseToEdit.paid_by || (currentProfile?.id ?? ''));
         const expGroupId = expenseToEdit.group_id ?? 'none';
         setGroupId(expGroupId);
         setReceiptUrl(expenseToEdit.receipt_url ?? '');
@@ -178,8 +223,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           setSplits(newSplits);
           setSplitType(isItemized ? 'itemized' : (isSplitEqual ? 'equal' : 'exact'));
         } else {
-          const defaultMemberIds = activeProfiles.length > 0 ? activeProfiles.map(p => p.id) : (currentProfile ? [currentProfile.id] : []);
-          setSelectedMembers(defaultMemberIds);
+          const targetGroupMemberIds = (expGroupId && expGroupId !== 'none')
+            ? members.filter(m => m.group_id === expGroupId).map(m => m.user_id)
+            : (currentProfile ? [currentProfile.id] : []);
+          setSelectedMembers(targetGroupMemberIds.length > 0 ? targetGroupMemberIds : (currentProfile ? [currentProfile.id] : []));
           setSplits({});
           setSplitType(isItemized ? 'itemized' : 'equal');
         }
@@ -189,7 +236,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setAmount('');
         setDescription('');
         setSubCategory(DEFAULT_EXPENSE_CATEGORY);
-        setDate(new Date().toISOString().split('T')[0]);
+        const today = getTodayDateString();
+        setDate(today);
+        setTime(getCurrentTimeString());
+        setIsManualTime(false);
+        setShowTimeInput(false);
 
         const initialGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
           ? defaultGroupId
@@ -200,6 +251,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
           ? members.filter(m => m.group_id === initialGroupId).map(m => m.user_id)
           : (currentProfile ? [currentProfile.id] : []);
         setSelectedMembers(groupMemberIds.length > 0 ? groupMemberIds : (currentProfile ? [currentProfile.id] : []));
+        setPaidById(currentProfile?.id ?? (groupMemberIds[0] ?? ''));
 
         setReceiptUrl('');
         setNotes('');
@@ -210,27 +262,36 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setSplits({});
       }
     }
-  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, activeProfiles, members]);
+  }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, members]);
 
-  // Sync paidById and selectedMembers when changing group
-  useEffect(() => {
-    if (!isOpen) return;
-    if (activeProfiles.length > 0) {
-      if (!activeProfiles.some(p => p.id === paidById)) {
-        const defaultPayer = currentProfile && activeProfiles.some(p => p.id === currentProfile.id)
+  // Handle group change when user manually switches group dropdown
+  const handleGroupChange = (newGroupId: string) => {
+    setGroupId(newGroupId);
+
+    let newMemberIds: string[] = [];
+    if (!newGroupId || newGroupId === 'none') {
+      newMemberIds = currentProfile ? [currentProfile.id] : [];
+    } else {
+      newMemberIds = members.filter(m => m.group_id === newGroupId).map(m => m.user_id);
+    }
+
+    const newGroupProfiles = profiles.filter(p => newMemberIds.includes(p.id));
+
+    if (newGroupProfiles.length > 0) {
+      if (!newGroupProfiles.some(p => p.id === paidById)) {
+        const defaultPayer = currentProfile && newGroupProfiles.some(p => p.id === currentProfile.id)
           ? currentProfile.id
-          : activeProfiles[0].id;
+          : newGroupProfiles[0].id;
         setPaidById(defaultPayer);
       }
 
-      // En nuevo gasto, por defecto siempre se seleccionan todos los miembros del grupo
       if (!expenseToEdit) {
-        setSelectedMembers(activeProfiles.map(p => p.id));
+        setSelectedMembers(newGroupProfiles.map(p => p.id));
       } else {
-        const stillValidMembers = selectedMembers.filter(id => activeProfiles.some(p => p.id === id));
+        const stillValidMembers = selectedMembers.filter(id => newGroupProfiles.some(p => p.id === id));
         if (stillValidMembers.length === 0) {
-          setSelectedMembers(activeProfiles.map(p => p.id));
-        } else if (stillValidMembers.length !== selectedMembers.length) {
+          setSelectedMembers(newGroupProfiles.map(p => p.id));
+        } else {
           setSelectedMembers(stillValidMembers);
         }
       }
@@ -238,8 +299,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       if (currentProfile) setPaidById(currentProfile.id);
       setSelectedMembers(currentProfile ? [currentProfile.id] : []);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, activeProfiles.length, isOpen, expenseToEdit]);
+  };
 
   const toFraction = (decimal: number) => {
     if (Number.isInteger(decimal)) return decimal.toString();
@@ -347,6 +407,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const executeSave = async (amountToSave: number, splitsToSave: any[]) => {
     setIsSubmitting(true);
     try {
+      const expenseTimeISO = combineDateAndTimeToISO(date, time);
       const payload = {
         group_id: (groupId === 'none' ? null : groupId) as any,
         paid_by: paidById,
@@ -354,6 +415,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         description: description.trim(),
         category: subCategory,
         expense_date: date,
+        expense_time: expenseTimeISO,
         source: 'manual' as const,
         receipt_url: receiptUrl ? receiptUrl : undefined,
         notes: notes.trim() ? notes.trim() : undefined,
@@ -615,7 +677,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                       <div className="relative shadow-2xs rounded-xl bg-white border border-zinc-200">
                         <select
                           value={groupId}
-                          onChange={e => setGroupId(e.target.value)}
+                          onChange={e => handleGroupChange(e.target.value)}
                           className="w-full pl-2.5 pr-7 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
                         >
                           <option value="none">Sin grupo</option>
@@ -636,7 +698,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                           className="w-full pl-2.5 pr-7 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
                         >
                           {activeProfiles.map(p => (
-                            <option key={p.id} value={p.id}>{p.full_name?.split(' ')[0] || p.email}</option>
+                            <option key={p.id} value={p.id}>
+                              {p.full_name || p.email}{p.id === currentProfile?.id ? ' (Tú)' : ''}
+                            </option>
                           ))}
                         </select>
                         <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -667,15 +731,79 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowTimeInput(!showTimeInput)}
+                          className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>{time || 'Hora'}</span>
+                        </button>
+                      </div>
                       <input
                         type="date"
                         value={date}
-                        onChange={e => setDate(e.target.value)}
+                        onChange={e => {
+                          const newDate = e.target.value;
+                          setDate(newDate);
+                          if (!isManualTime) {
+                            setTime(getDefaultTimeForDate(newDate));
+                          }
+                        }}
                         className="w-full pl-2.5 pr-2 py-2 bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
                       />
                     </div>
                   </div>
+
+                  {/* Manual Time Input Section (Collapsible) */}
+                  {showTimeInput && (
+                    <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 text-emerald-600" />
+                          Hora del gasto (zona horaria local)
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTime(getCurrentTimeString());
+                              setIsManualTime(true);
+                            }}
+                            className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+                          >
+                            Ahora
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTime('00:00');
+                              setIsManualTime(true);
+                            }}
+                            className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition"
+                          >
+                            00:00
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={time}
+                          onChange={e => {
+                            setTime(e.target.value);
+                            setIsManualTime(true);
+                          }}
+                          className="flex-1 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        />
+                        <span className="text-[11px] text-zinc-500 font-medium">
+                          {date === getTodayDateString() ? 'Hoy' : 'Día anterior/futuro'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex gap-2 pt-2 border-t border-zinc-100">
                     <button

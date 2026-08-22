@@ -59,6 +59,9 @@ export async function POST(req: Request) {
       created_by: user.id
     };
 
+    if (expense.expense_time) {
+      expenseInsertPayload.expense_time = expense.expense_time;
+    }
     if (expense.category) {
       expenseInsertPayload.category = expense.category;
     }
@@ -73,11 +76,12 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    // Fallback if category or notes column is missing in schema
-    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes'))) {
-      console.warn('[API /api/expenses] Retrying insert without category/notes due to schema error:', expErr.message);
+    // Fallback if category, notes or expense_time column is missing in schema
+    if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time'))) {
+      console.warn('[API /api/expenses] Retrying insert without optional columns due to schema error:', expErr.message);
       delete expenseInsertPayload.category;
       delete expenseInsertPayload.notes;
+      delete expenseInsertPayload.expense_time;
 
       const fallbackRes = await supabase
         .from('expenses')

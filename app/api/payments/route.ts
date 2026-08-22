@@ -11,25 +11,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { group_id, paid_by, paid_to, amount, payment_date, note, proof_url } = await req.json();
+    const { group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url } = await req.json();
 
     const insertData: Record<string, any> = {
       group_id,
       paid_by,
       paid_to,
       amount,
-      payment_date,
+      payment_date: payment_date ?? new Date().toISOString().split('T')[0],
       note,
     };
+    if (payment_time) {
+      insertData.payment_time = payment_time;
+    }
     if (proof_url) {
       insertData.proof_url = proof_url;
     }
 
-    const { data: payment, error } = await supabase
+    let { data: payment, error } = await supabase
       .from('payments')
       .insert(insertData)
       .select()
       .single();
+
+    if (error && (error.code === 'PGRST204' || error.message?.includes('payment_time') || error.message?.includes('proof_url'))) {
+      delete insertData.payment_time;
+      delete insertData.proof_url;
+      const retry = await supabase
+        .from('payments')
+        .insert(insertData)
+        .select()
+        .single();
+      payment = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[API /api/payments] Supabase insert payment error:', error);

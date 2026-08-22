@@ -4,16 +4,18 @@ import React, { useState, useMemo } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
+import {
+  getEffectiveTransactionDate,
+  isDateMatchingFilter,
+  getAvailableTransactionMonths,
+} from '@/lib/transaction-date-utils';
 
 import { Expense, Payment } from '@/lib/types';
 import {
   Receipt,
-  Search,
-  Plus,
   BarChart3,
   PieChart as PieChartIcon,
-  Calendar,
-  Filter,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -23,8 +25,6 @@ import {
   YAxis,
   Tooltip,
   Cell,
-  PieChart,
-  Pie,
 } from 'recharts';
 
 interface AllExpensesViewProps {
@@ -47,71 +47,121 @@ import { PageHeader } from '@/components/PageHeader';
 
 export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment }: AllExpensesViewProps) {
   const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment } = useExpense();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
 
+  const [filters, setFilters] = useState<TransactionFilterState>({
+    scope: 'all',
+    dateMode: 'expense_date',
+    datePreset: 'all',
+    customStartDate: '',
+    customEndDate: '',
+    groupId: 'all',
+    category: 'all',
+    searchTerm: '',
+  });
+
+  const handleFilterChange = (updates: Partial<TransactionFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...updates }));
+  };
 
   const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
   const myExpenses = useMemo(() => expenses.filter((exp) => userGroupIds.has(exp.group_id)), [expenses, userGroupIds]);
   const myPayments = useMemo(() => payments.filter((p) => userGroupIds.has(p.group_id)), [payments, userGroupIds]);
 
-  // Unique categories and months available
+  // Unique categories available
   const categories = useMemo(() => {
     return Array.from(new Set(myExpenses.map((e) => e.category || 'Varios'))).filter(Boolean);
   }, [myExpenses]);
 
-  const months = useMemo(() => {
-    const monthSet = new Set<string>();
-    myExpenses.forEach((e) => {
-      if (e.expense_date) {
-        monthSet.add(e.expense_date.substring(0, 7)); // YYYY-MM
-      }
-    });
-    return Array.from(monthSet).sort().reverse();
-  }, [myExpenses]);
+  // Available months according to selected dateMode
+  const availableMonths = useMemo(() => {
+    return getAvailableTransactionMonths([...myExpenses, ...myPayments], filters.dateMode);
+  }, [myExpenses, myPayments, filters.dateMode]);
 
-  // Filtered expenses and payments
+  // Counts for scope buttons
+  const totalTransactionsCount = myExpenses.length + myPayments.length;
+  const myInteractionsCount = useMemo(() => {
+    const myExpCount = myExpenses.filter((exp) => {
+      const isPayer = exp.paid_by === currentProfile?.id;
+      const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
+      return isPayer || isParticipant;
+    }).length;
+
+    const myPayCount = myPayments.filter((p) => {
+      return p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
+    }).length;
+
+    return myExpCount + myPayCount;
+  }, [myExpenses, myPayments, currentProfile?.id]);
+
+  // Filtered expenses
   const filteredExpenses = useMemo(() => {
     return myExpenses.filter((exp) => {
       const group = userGroups.find((g) => g.id === exp.group_id);
       const paidBy = profiles.find((p) => p.id === exp.paid_by);
 
+      // Search term matching
       const matchesSearch =
-        (exp.description ? exp.description.toLowerCase() : '').includes(searchTerm.toLowerCase()) ||
-        (group && group.name ? group.name.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
-        (paidBy && paidBy.full_name ? paidBy.full_name.toLowerCase().includes(searchTerm.toLowerCase()) : false);
+        !filters.searchTerm.trim() ||
+        (exp.description ? exp.description.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
+        (group && group.name ? group.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
+        (paidBy && paidBy.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
 
-      const matchesGroup = selectedGroupId === 'all' || exp.group_id === selectedGroupId;
-      const matchesCategory = selectedCategory === 'all' || exp.category === selectedCategory;
-      const matchesMonth = selectedMonth === 'all' || (exp.expense_date && exp.expense_date.startsWith(selectedMonth));
+      if (!matchesSearch) return false;
 
-      let matchesInteraction = true;
-      if (expenseFilter === 'mine') {
+      // Group and category
+      if (filters.groupId !== 'all' && exp.group_id !== filters.groupId) return false;
+      if (filters.category !== 'all' && (exp.category || 'Varios') !== filters.category) return false;
+
+      // Scope (interaction)
+      if (filters.scope === 'mine') {
         const isPayer = exp.paid_by === currentProfile?.id;
         const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
-        matchesInteraction = Boolean(isPayer || isParticipant);
+        if (!isPayer && !isParticipant) return false;
       }
 
-      return matchesSearch && matchesGroup && matchesCategory && matchesMonth && matchesInteraction;
+      // Date filtering using effective date (event vs entry/update)
+      const { dateObj } = getEffectiveTransactionDate(exp, filters.dateMode);
+      return isDateMatchingFilter(dateObj, filters.datePreset, {
+        start: filters.customStartDate,
+        end: filters.customEndDate,
+      });
     });
-  }, [myExpenses, userGroups, profiles, searchTerm, selectedGroupId, selectedCategory, selectedMonth, expenseFilter, currentProfile]);
+  }, [myExpenses, userGroups, profiles, filters, currentProfile?.id]);
 
+  // Filtered payments
   const filteredPayments = useMemo(() => {
     return myPayments.filter((p) => {
-      const matchesGroup = selectedGroupId === 'all' || p.group_id === selectedGroupId;
-      const matchesMonth = selectedMonth === 'all' || (p.payment_date && p.payment_date.startsWith(selectedMonth));
+      const group = userGroups.find((g) => g.id === p.group_id);
+      const payer = profiles.find((prof) => prof.id === p.paid_by);
+      const receiver = profiles.find((prof) => prof.id === p.paid_to);
 
-      let matchesInteraction = true;
-      if (expenseFilter === 'mine') {
-        matchesInteraction = p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
+      // Search term matching
+      const matchesSearch =
+        !filters.searchTerm.trim() ||
+        (p.note ? p.note.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
+        (group && group.name ? group.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
+        (payer && payer.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
+        (receiver && receiver.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+
+      if (!matchesSearch) return false;
+
+      // Group
+      if (filters.groupId !== 'all' && p.group_id !== filters.groupId) return false;
+
+      // Scope (interaction)
+      if (filters.scope === 'mine') {
+        const isInteracted = p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
+        if (!isInteracted) return false;
       }
 
-      return matchesGroup && matchesMonth && matchesInteraction;
+      // Date filtering
+      const { dateObj } = getEffectiveTransactionDate(p, filters.dateMode);
+      return isDateMatchingFilter(dateObj, filters.datePreset, {
+        start: filters.customStartDate,
+        end: filters.customEndDate,
+      });
     });
-  }, [myPayments, selectedGroupId, selectedMonth, expenseFilter, currentProfile]);
+  }, [myPayments, userGroups, profiles, filters, currentProfile?.id]);
 
   // Aggregate stats for Chart
   const categoryStats = useMemo(() => {
@@ -136,14 +186,14 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
     <div className="space-y-6">
       <PageHeader 
         title="Historial de Gastos y Pagos"
-        subtitle="Revisa, filtra y analiza todos tus movimientos."
+        subtitle="Revisa, filtra por fecha de gasto o fecha de registro, y analiza todos tus movimientos."
         icon={<Receipt className="w-5 h-5" />}
       />
 
       {/* Chart & Summary Dashboard */}
       {filteredExpenses.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Summary Cards */}
+          {/* Summary Card */}
           <div className="lg:col-span-1 bg-zinc-900 text-white p-6 rounded-[2rem] shadow-sm flex flex-col justify-between space-y-6">
             <div>
               <div className="flex items-center space-x-2 text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -207,102 +257,19 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         </div>
       )}
 
-      {/* Filter Controls Bar */}
-      <div className="bg-white p-5 rounded-2xl ring-1 ring-zinc-200 shadow-2xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between border-b border-zinc-100 pb-3 gap-3">
-          <div className="flex items-center space-x-1 bg-zinc-100/80 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setExpenseFilter('all')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                expenseFilter === 'all'
-                  ? 'bg-white text-zinc-900 shadow-2xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Todos los movimientos
-            </button>
-            <button
-              type="button"
-              onClick={() => setExpenseFilter('mine')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                expenseFilter === 'mine'
-                  ? 'bg-white text-zinc-900 shadow-2xs'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Mis interacciones
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-2 text-xs font-semibold text-zinc-500">
-            <Filter className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Filtros avanzados</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Search */}
-          <div className="relative col-span-1 sm:col-span-2 md:col-span-1">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full pl-10 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all placeholder:text-zinc-400"
-            />
-          </div>
-
-          {/* Month / Date Filter */}
-          <div>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
-            >
-              <option value="all">Todos los meses / fechas</option>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Group Filter */}
-          <div>
-            <select
-              value={selectedGroupId}
-              onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
-            >
-              <option value="all">Todos los grupos</option>
-              {userGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Category Filter */}
-          <div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl px-3 py-2.5 text-xs text-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all cursor-pointer"
-            >
-              <option value="all">Todas las categorías</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+      {/* Unified Transaction Filter Bar */}
+      <TransactionFilterBar
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        availableMonths={availableMonths}
+        categories={categories}
+        userGroups={userGroups}
+        showGroupFilter={true}
+        showCategoryFilter={true}
+        showSearch={true}
+        totalCount={totalTransactionsCount}
+        myCount={myInteractionsCount}
+      />
 
       {/* Unified Reusable Transaction Feed */}
       <GenericExpenseList
@@ -311,14 +278,13 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         profiles={profiles}
         userGroups={userGroups}
         currentProfile={currentProfile}
+        dateFilterMode={filters.dateMode}
         onEditExpense={onEditExpense}
         onDeleteExpense={(expId) => deleteExpense(expId)}
         onEditPayment={onEditPayment}
         onDeletePayment={(payId) => deletePayment(payId)}
         showGroupBadge={true}
       />
-
-
     </div>
   );
 }

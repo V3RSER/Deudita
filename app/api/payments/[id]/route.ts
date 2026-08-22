@@ -14,7 +14,7 @@ export async function PUT(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { group_id, paid_by, paid_to, amount, payment_date, note, proof_url } = await req.json();
+    const { group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url } = await req.json();
 
     const updateData: Record<string, any> = {
       group_id,
@@ -24,14 +24,34 @@ export async function PUT(
       payment_date,
       note,
       proof_url: proof_url !== undefined ? proof_url : null,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
     };
+    if (payment_time !== undefined) {
+      updateData.payment_time = payment_time;
+    }
 
-    const { data: payment, error } = await supabase
+    let { data: payment, error } = await supabase
       .from('payments')
       .update(updateData)
       .eq('id', id)
       .select()
       .single();
+
+    if (error && (error.code === 'PGRST204' || error.message?.includes('payment_time') || error.message?.includes('updated_at') || error.message?.includes('updated_by') || error.message?.includes('proof_url'))) {
+      delete updateData.payment_time;
+      delete updateData.updated_at;
+      delete updateData.updated_by;
+      delete updateData.proof_url;
+      const retry = await supabase
+        .from('payments')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+      payment = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[API /api/payments/[id]] Update payment error:', error);

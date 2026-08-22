@@ -129,6 +129,7 @@ export interface Expense {
   description: string;
   category: string;
   expense_date: string;
+  expense_time?: string;
   source: 'manual' | 'gmail';
   source_draft_id?: string;
   receipt_url?: string;
@@ -175,9 +176,12 @@ export interface Payment {
   paid_to: string;
   amount: number;
   payment_date: string;
+  payment_time?: string;
   note?: string;
   proof_url?: string;
   created_at: string;
+  updated_at?: string;
+  updated_by?: string;
 }
 
 export interface ManagedContribution {

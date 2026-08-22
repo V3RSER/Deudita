@@ -82,6 +82,7 @@ export async function PUT(
       updated_by: user.id,
     };
 
+    if (expense.expense_time !== undefined) updatePayload.expense_time = expense.expense_time;
     if (expense.category !== undefined) updatePayload.category = expense.category;
     if (expense.notes !== undefined) updatePayload.notes = expense.notes;
 
@@ -93,9 +94,10 @@ export async function PUT(
       .select()
       .single();
 
-    if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('updated_at') || expErr.message?.includes('updated_by'))) {
+    if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time') || expErr.message?.includes('updated_at') || expErr.message?.includes('updated_by'))) {
       delete updatePayload.category;
       delete updatePayload.notes;
+      delete updatePayload.expense_time;
       delete updatePayload.updated_at;
       delete updatePayload.updated_by;
 

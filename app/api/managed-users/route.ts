@@ -22,7 +22,7 @@ export async function GET() {
 
     return NextResponse.json({ managedUsers: managedUsers || [] });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Error al obtener personas a cargo';
+    const message = err instanceof Error ? err.message : 'Error al obtener personas vinculadas';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -93,8 +93,8 @@ export async function POST(req: Request) {
           {
             user_id: targetUserId,
             type: 'managed_user_assigned',
-            title: 'Asignación de cuenta',
-            message: `${sponsorName} ahora se hace cargo de cubrir tus cuentas y balances en Deudita.`,
+            title: 'Vinculación de cuenta',
+            message: `${sponsorName} vinculó tus cuentas y balances en Deudita a su perfil.`,
             link: '/balances',
             data: {
               sponsor_id: user.id,
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
     }
   } catch (err: unknown) {
     console.error('[API /api/managed-users] Error:', err);
-    const message = err instanceof Error ? err.message : 'Error al actualizar persona a cargo';
+    const message = err instanceof Error ? err.message : 'Error al actualizar persona vinculada';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
