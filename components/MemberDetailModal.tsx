@@ -255,273 +255,194 @@ export function MemberDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs">
+      <div className="bg-white rounded-3xl ring-1 ring-zinc-200/80 shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="bg-zinc-900 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
+        <div className="p-5 pb-4 flex items-center justify-between border-b border-zinc-100">
+          <div className="flex items-center space-x-3 min-w-0">
             {memberProfile.avatar_url ? (
               <Image
                 src={memberProfile.avatar_url}
                 alt={memberProfile.full_name}
-                width={44}
-                height={44}
-                className="w-11 h-11 rounded-2xl object-cover ring-2 ring-zinc-700 shrink-0"
+                width={40}
+                height={40}
+                className="w-10 h-10 rounded-2xl object-cover ring-1 ring-zinc-200 shrink-0"
               />
             ) : (
-              <div className="w-11 h-11 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center font-bold text-sm shrink-0">
                 {memberProfile.full_name?.charAt(0).toUpperCase() || 'U'}
               </div>
             )}
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-zinc-50">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold tracking-tight text-zinc-900 truncate">
                 {memberProfile.full_name}
               </h2>
-              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                {isTemp && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pendiente de registro
-                  </span>
-                )}
-                {hasPendingInvite && !isTemp && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Invitación Pendiente
-                  </span>
-                )}
-              </div>
+              {isTemp ? (
+                <span className="inline-flex items-center text-[11px] font-medium text-amber-600">
+                  <Clock className="w-3 h-3 mr-1 shrink-0" />
+                  Pendiente
+                </span>
+              ) : (
+                <span className="text-[11px] text-zinc-500 truncate block">
+                  {formatDisplayEmail(memberProfile.email) || 'Miembro'}
+                </span>
+              )}
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-full transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-5">
+        <div className="p-5 space-y-4">
           {errorMsg && (
-            <div className="p-3.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-xs flex items-center space-x-2">
+            <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl text-xs flex items-center space-x-2">
+            <div className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs flex items-center space-x-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {/* Balance Card */}
+          {/* Balance pill */}
           {!isSelf && (
-            <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+            <div className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold ${
               balance > 0
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                ? 'bg-emerald-50 text-emerald-900'
                 : balance < 0
-                ? 'bg-rose-50/70 border-rose-200 text-rose-950'
-                : 'bg-zinc-50 border-zinc-200 text-zinc-800'
+                ? 'bg-rose-50 text-rose-900'
+                : 'bg-zinc-50 text-zinc-600'
             }`}>
-              <div className="flex items-center space-x-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                  balance > 0
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : balance < 0
-                    ? 'bg-rose-100 text-rose-700'
-                    : 'bg-zinc-200 text-zinc-600'
-                }`}>
-                  {balance > 0 ? (
-                    <TrendingUp className="w-5 h-5" />
-                  ) : balance < 0 ? (
-                    <TrendingDown className="w-5 h-5" />
-                  ) : (
-                    <CheckCircle className="w-5 h-5" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                    {context === 'group' ? 'Saldo en este grupo' : 'Saldo total (todos los grupos)'}
-                  </p>
-                  <p className="text-sm font-bold">
-                    {balance > 0
-                      ? `Te debe $${balance.toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
-                      : balance < 0
-                      ? `Le debes $${Math.abs(balance).toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
-                      : 'Al día (sin deudas)'}
-                  </p>
-                </div>
-              </div>
+              <span className="text-zinc-500 font-medium">Saldo</span>
+              <span className="font-bold">
+                {balance > 0
+                  ? `Te debe $${balance.toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
+                  : balance < 0
+                  ? `Le debes $${Math.abs(balance).toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
+                  : 'Al día'}
+              </span>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Nombre del Integrante *
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
+          {canEdit && (
+            <form onSubmit={handleSave} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-600 mb-1">
+                  Nombre
+                </label>
                 <input
                   type="text"
                   required
-                  readOnly={!canEdit}
-                  disabled={!canEdit}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-semibold border ${
-                    canEdit
-                      ? 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white'
-                      : 'bg-zinc-100/80 border-zinc-200 text-zinc-600 cursor-not-allowed'
-                  }`}
+                  className="w-full px-3 py-2 rounded-xl text-xs font-medium border bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
-                Correo Electrónico para Invitación
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-600 mb-1">
+                  Correo electrónico
+                </label>
                 <input
                   type="email"
-                  readOnly={!canEdit}
-                  disabled={!canEdit}
-                  placeholder="ejemplo@correo.com"
+                  placeholder="correo@ejemplo.com"
                   value={isRegistered ? formatDisplayEmail(memberProfile.email) : email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-semibold border ${
-                    canEdit
-                      ? 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white'
-                      : 'bg-zinc-100/80 border-zinc-200 text-zinc-600 cursor-not-allowed'
+                  readOnly={!canEdit || isRegistered}
+                  disabled={!canEdit || isRegistered}
+                  className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${
+                    isRegistered
+                      ? 'bg-zinc-100 border-zinc-200 text-zinc-500 cursor-not-allowed'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white'
                   }`}
                 />
               </div>
-              <p className="text-[11px] text-zinc-500 mt-1.5 leading-relaxed">
-                {isRegistered
-                  ? 'Usuario registrado en Deudita.'
-                  : isTemp && hasValidEmailEntered
-                  ? 'Al guardar, se enviará la invitación por correo automáticamente.'
-                  : 'Asigna su correo electrónico para enviarle la invitación y que pueda ver sus cuentas.'}
-              </p>
-            </div>
 
-            {canEdit && (
               <button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
-                className={`w-full py-3 text-white font-semibold text-xs rounded-xl shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2 ${
-                  hasValidEmailEntered ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-zinc-900 hover:bg-zinc-800'
-                }`}
+                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 shadow-sm"
               >
                 {isSubmitting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <span>Guardar</span>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Quick Actions */}
+          <div className="pt-2 border-t border-zinc-100 space-y-2">
+            {context === 'group' && groupId && (isTemp || hasPendingInvite) && (
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center space-x-2 py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-medium transition-colors"
+              >
+                {copied ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                    <span>Guardando...</span>
-                  </>
-                ) : hasValidEmailEntered ? (
-                  <>
-                    <Send className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Guardar y Enviar Invitación</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700 font-semibold">Enlace copiado</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Guardar Cambios</span>
+                    <LinkIcon className="w-3.5 h-3.5 text-zinc-600" />
+                    <span>Copiar enlace de invitación</span>
                   </>
                 )}
               </button>
             )}
-          </form>
 
-          {/* Invitation Actions if user is temp or pending invite */}
-          {context === 'group' && groupId && (isTemp || hasPendingInvite) && (
-            <div className="border-t border-zinc-100 pt-4 space-y-2.5">
-              <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                Enlace Directo de Invitación
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-2.5 px-3 rounded-xl text-xs font-semibold border border-zinc-200 transition-all active:scale-95"
+            {!isSelf && (
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/friends/${memberProfile.id}`}
+                  onClick={onClose}
+                  className="flex-1 flex items-center justify-center space-x-1.5 py-2 px-3 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
                 >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700 font-bold">¡Copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="w-3.5 h-3.5 text-zinc-600" />
-                      <span>Copiar Enlace</span>
-                    </>
-                  )}
-                </button>
+                  <Eye className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Ver historial</span>
+                </Link>
 
-                <button
-                  type="button"
-                  onClick={handleResendInvite}
-                  disabled={isSubmitting || !email.trim()}
-                  className="w-full flex items-center justify-center space-x-1.5 bg-zinc-800 hover:bg-zinc-700 text-white py-2.5 px-3 rounded-xl text-xs font-semibold shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Reenviar Correo</span>
-                </button>
+                {context === 'group' && isGroupOwner && (
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmDeleteMember(true)}
+                    disabled={isSubmitting}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                    title="Eliminar del grupo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+
+                {context === 'friends' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmDeleteFriend(true)}
+                    disabled={isSubmitting}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                    title="Eliminar amigo"
+                  >
+                    <UserMinus className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            </div>
-          )}
-
-          {/* View Full Profile Link */}
-          {!isSelf && (
-            <div className="border-t border-zinc-100 pt-4">
-              <Link
-                href={`/friends/${memberProfile.id}`}
-                onClick={onClose}
-                className="w-full flex items-center justify-center space-x-1.5 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900 text-zinc-800 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95"
-              >
-                <Eye className="w-3.5 h-3.5 text-zinc-600" />
-                <span>Ver Perfil Completo</span>
-              </Link>
-            </div>
-          )}
-
-          {/* Delete Action depending on context */}
-          {!isSelf && (
-            <div className="border-t border-zinc-100 pt-3">
-              {context === 'group' && isGroupOwner && (
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDeleteMember(true)}
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Eliminar del Grupo</span>
-                </button>
-              )}
-
-              {context === 'friends' && (
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDeleteFriend(true)}
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all active:scale-95"
-                >
-                  <UserMinus className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Eliminar Amigo</span>
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
