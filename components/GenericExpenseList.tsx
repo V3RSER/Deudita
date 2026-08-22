@@ -43,6 +43,7 @@ interface GenericExpenseListProps {
   onEditPayment?: (payment: Payment) => void;
   onDeletePayment?: (paymentId: string) => void;
   showGroupBadge?: boolean;
+  initialExpandedExpenseId?: string | null;
 }
 
 const MONTH_NAMES_ES = [
@@ -113,19 +114,38 @@ export function GenericExpenseList({
   onEditPayment,
   onDeletePayment,
   showGroupBadge = true,
+  initialExpandedExpenseId,
 }: GenericExpenseListProps) {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Set<string>>(new Set());
+  const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
+  // Scroll to targeted expense card if initialExpandedExpenseId provided
+  React.useEffect(() => {
+    if (initialExpandedExpenseId) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`expense-card-${initialExpandedExpenseId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+  }, [initialExpandedExpenseId]);
+
+  const isExpenseExpanded = (id: string) => {
+    if (userToggledExpenseIds.has(id)) {
+      return Boolean(userToggledExpenseIds.get(id));
+    }
+    return id === initialExpandedExpenseId;
+  };
+
   const toggleExpenseExpanded = (id: string) => {
-    setExpandedExpenseIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+    setUserToggledExpenseIds((prev) => {
+      const next = new Map(prev);
+      const currently = isExpenseExpanded(id);
+      next.set(id, !currently);
       return next;
     });
   };
@@ -213,13 +233,17 @@ export function GenericExpenseList({
                   statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
                 }
 
-                const isExpanded = expandedExpenseIds.has(exp.id);
+                const isExpanded = isExpenseExpanded(exp.id);
+                const isTargeted = initialExpandedExpenseId === exp.id;
 
                 return (
                   <div
+                    id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
                     className={`bg-white rounded-2xl border transition-all overflow-hidden ${
-                      isExpanded
+                      isTargeted
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                        : isExpanded
                         ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
                         : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
                     }`}

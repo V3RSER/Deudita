@@ -185,11 +185,26 @@ export async function GET() {
         isOnboardingCompleted = false;
       }
 
-      const managedUserIds = Array.isArray(profile.managed_user_ids)
+      let dbManagedIdsForUser: string[] = [];
+      try {
+        const { data: dbUserManaged } = await db
+          .from('managed_users')
+          .select('managed_user_id')
+          .eq('sponsor_id', user.id);
+        if (dbUserManaged) {
+          dbManagedIdsForUser = dbUserManaged.map((r: any) => r.managed_user_id);
+        }
+      } catch (mErr) {
+        console.warn('[API /api/sync] Warning fetching user managed_users:', mErr);
+      }
+
+      const initialManaged = Array.isArray(profile.managed_user_ids)
         ? profile.managed_user_ids
         : Array.isArray(user.user_metadata?.managed_user_ids)
         ? user.user_metadata.managed_user_ids
         : [];
+
+      const managedUserIds = Array.from(new Set([...initialManaged, ...dbManagedIdsForUser]));
 
       profile = {
         ...profile,
@@ -202,6 +217,36 @@ export async function GET() {
         p.id === user.id ? { ...p, payment_instructions: profile.payment_instructions, onboarding_completed: isOnboardingCompleted, managed_user_ids: managedUserIds } : p
       );
     }
+
+    // 5.1 Query full managed_users table to populate relationships for all loaded profiles
+    let allManagedUserRows: any[] = [];
+    try {
+      const { data: allManaged } = await db
+        .from('managed_users')
+        .select('*');
+      if (allManaged) {
+        allManagedUserRows = allManaged;
+      }
+    } catch (mAllErr) {
+      console.warn('[API /api/sync] Warning fetching all managed_users:', mAllErr);
+    }
+
+    // Merge database sponsorships into all loaded profiles
+    profiles = profiles.map((p) => {
+      const dbSponsoredIds = allManagedUserRows
+        .filter((r) => r.sponsor_id === p.id)
+        .map((r) => r.managed_user_id);
+      const sponsorRow = allManagedUserRows.find((r) => r.managed_user_id === p.id);
+
+      const existingManaged = Array.isArray(p.managed_user_ids) ? p.managed_user_ids : [];
+      const combinedManaged = Array.from(new Set([...existingManaged, ...dbSponsoredIds]));
+
+      return {
+        ...p,
+        managed_user_ids: combinedManaged,
+        managed_by: sponsorRow ? sponsorRow.sponsor_id : p.managed_by,
+      };
+    });
 
     // Deduplicate profiles and remove any duplicate temporary profiles matching registered emails
     const registeredEmails = new Set(

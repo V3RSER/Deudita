@@ -61,20 +61,47 @@ export interface GroupInvite {
   inviter?: Profile;
 }
 
+export type NotificationType =
+  | 'group_invite'
+  | 'expense_added'
+  | 'expense_updated'
+  | 'expense_deleted'
+  | 'expense_assigned'
+  | 'managed_user_assigned'
+  | 'member_joined'
+  | 'general';
+
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'group_invite' | 'general';
+  type: NotificationType | string;
   title: string;
   message: string;
+  link?: string | null;
   data?: {
     invite_id?: string;
     group_id?: string;
     group_name?: string;
+    expense_id?: string;
+    expense_desc?: string;
+    amount?: number;
+    currency?: string;
+    actor_id?: string;
+    actor_name?: string;
+    managed_user_id?: string;
+    managed_user_name?: string;
     invited_by_name?: string;
     invited_by_email?: string;
+    [key: string]: any;
   };
   is_read: boolean;
+  created_at: string;
+}
+
+export interface ManagedUser {
+  id: string;
+  sponsor_id: string;
+  managed_user_id: string;
   created_at: string;
 }
 

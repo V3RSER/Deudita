@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { notifyExpenseCreated } from '@/lib/notifications';
 
 export async function POST(req: Request) {
   try {
@@ -117,6 +118,26 @@ export async function POST(req: Request) {
       if (splitsErr) {
         console.error('[API /api/expenses] Supabase insert splits error:', splitsErr);
       }
+    }
+
+    // Trigger notifications for participants and sponsors
+    try {
+      if (splits && Array.isArray(splits) && splits.length > 0) {
+        void notifyExpenseCreated(supabase, {
+          creatorId: user.id,
+          expenseId: newExpense.id,
+          description: expense.description || 'Gasto',
+          totalAmount: parsedAmount,
+          groupId: rawGroupId,
+          currency: expense.currency || 'COP',
+          splits: splits.map((s: any) => ({
+            user_id: s.user_id,
+            amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
+          })),
+        });
+      }
+    } catch (notifErr) {
+      console.warn('[API /api/expenses] Warning triggering notifications:', notifErr);
     }
 
     const { data: fullExpense } = await supabase

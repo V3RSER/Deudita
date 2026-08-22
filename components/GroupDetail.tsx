@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Group, Expense, Payment, Profile } from '@/lib/types';
@@ -138,6 +139,10 @@ export function GroupDetail({
   onOpenAddMember,
   onOpenInviteLink,
 }: GroupDetailProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialExpenseId = searchParams.get('expenseId');
+
   const {
     currentProfile,
     expenses,
@@ -156,6 +161,9 @@ export function GroupDetail({
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
   const [expenseFilter, setExpenseFilter] = useState<'all' | 'mine'>('all');
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
+
+  const highlightedExpenseId = selectedExpenseId || initialExpenseId;
 
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
@@ -194,7 +202,7 @@ export function GroupDetail({
 
   const isSoloMember = memberProfiles.length <= 1;
 
-  // Group activities calculation (creates, updates, deletes, payments)
+  // Group activities calculation (creates, updates, deletes, payments, member joins)
   const effectiveCurrency = group.currency ?? currentProfile?.currency ?? 'COP';
   const groupAuditLogs = (auditLogs ?? []).filter((a) => a.group_id === group.id);
   const expenseIdsWithCreateLog = new Set(
@@ -203,7 +211,8 @@ export function GroupDetail({
 
   interface GroupActivityItem {
     id: string;
-    type: 'create' | 'update' | 'delete' | 'payment';
+    type: 'create' | 'update' | 'delete' | 'payment' | 'member_joined';
+    expenseId?: string;
     user: Profile | null;
     userName: string;
     timestamp: string;
@@ -236,6 +245,7 @@ export function GroupDetail({
       activities.push({
         id: `audit-${log.id}`,
         type: 'create',
+        expenseId: log.expense_id ?? currentExp?.id,
         user,
         userName,
         timestamp: log.created_at,
@@ -271,6 +281,7 @@ export function GroupDetail({
       activities.push({
         id: `audit-${log.id}`,
         type: 'update',
+        expenseId: log.expense_id ?? currentExp?.id,
         user,
         userName,
         timestamp: log.created_at,
@@ -315,6 +326,7 @@ export function GroupDetail({
       activities.push({
         id: `exp-init-${exp.id}`,
         type: 'create',
+        expenseId: exp.id,
         user,
         userName,
         timestamp: exp.created_at,
@@ -352,6 +364,28 @@ export function GroupDetail({
       IconComponent: HandCoins,
       iconBgClass: 'bg-sky-50',
       iconTextClass: 'text-sky-700',
+    });
+  });
+
+  // 4. Member joined / created group events
+  groupMembers.forEach((m) => {
+    const user = profiles.find((p) => p.id === m.user_id) ?? null;
+    const userName = user?.full_name ?? 'Usuario';
+    const isGroupOwner = group.owner_id === m.user_id;
+    activities.push({
+      id: `member-act-${m.group_id}-${m.user_id}`,
+      type: 'member_joined',
+      user,
+      userName,
+      timestamp: m.joined_at || group.created_at,
+      titleAction: isGroupOwner ? 'creó el grupo' : 'se unió al grupo',
+      targetTitle: group.name,
+      currency: effectiveCurrency,
+      badgeLabel: isGroupOwner ? 'Creador' : 'Nuevo miembro',
+      badgeClass: isGroupOwner ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-indigo-50 text-indigo-800 border-indigo-200',
+      IconComponent: Users,
+      iconBgClass: 'bg-indigo-50',
+      iconTextClass: 'text-indigo-700',
     });
   });
 
@@ -621,6 +655,7 @@ export function GroupDetail({
             onEditPayment={onEditPayment}
             onDeletePayment={onDeletePayment || ((payId) => deletePayment(payId))}
             showGroupBadge={false}
+            initialExpandedExpenseId={highlightedExpenseId}
           />
         </div>
       )}
@@ -996,8 +1031,29 @@ export function GroupDetail({
             <div className="bg-white rounded-2xl ring-1 ring-zinc-200/80 shadow-2xs divide-y divide-zinc-100 overflow-hidden">
               {activities.map((act) => {
                 const IconComponent = act.IconComponent;
+                const isClickableExpense = Boolean(
+                  act.expenseId &&
+                  act.type !== 'delete' &&
+                  groupExpenses.some((e) => e.id === act.expenseId)
+                );
+
+                const handleActivityClick = () => {
+                  if (isClickableExpense && act.expenseId) {
+                    setSelectedExpenseId(act.expenseId);
+                    setExpenseFilter('all');
+                    setActiveTab('expenses');
+                    router.replace(`/groups/${group.id}?expenseId=${act.expenseId}`, { scroll: false });
+                  }
+                };
+
                 return (
-                  <div key={act.id} className="p-3 sm:p-3.5 flex items-start space-x-3 hover:bg-zinc-50/70 transition-colors">
+                  <div
+                    key={act.id}
+                    onClick={handleActivityClick}
+                    className={`p-3 sm:p-3.5 flex items-start space-x-3 transition-colors ${
+                      isClickableExpense ? 'cursor-pointer hover:bg-emerald-50/50 group' : 'hover:bg-zinc-50/70'
+                    }`}
+                  >
                     {/* User Avatar with Action icon badge */}
                     <div className="relative shrink-0 mt-0.5">
                       <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/90 shadow-2xs">
@@ -1046,10 +1102,19 @@ export function GroupDetail({
                         </div>
                       )}
 
-                      {/* Exact Date & Time */}
-                      <div className="flex items-center space-x-1 text-[10px] text-zinc-400 mt-1">
-                        <Clock className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
-                        <span>{formatActivityDateTime(act.timestamp)}</span>
+                      {/* Exact Date & Time and Action Link */}
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <div className="flex items-center space-x-1 text-[10px] text-zinc-400">
+                          <Clock className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
+                          <span>{formatActivityDateTime(act.timestamp)}</span>
+                        </div>
+
+                        {isClickableExpense && (
+                          <span className="text-[10px] font-semibold text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center space-x-0.5">
+                            <span>Ver gasto</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

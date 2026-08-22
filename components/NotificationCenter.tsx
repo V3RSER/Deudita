@@ -3,7 +3,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useExpense } from '@/lib/expense-context';
-import { Bell, Users, Check, X, CheckCheck, Sparkles, Inbox } from 'lucide-react';
+import {
+  Bell,
+  Users,
+  Check,
+  X,
+  CheckCheck,
+  Sparkles,
+  Inbox,
+  Receipt,
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  ArrowRight,
+} from 'lucide-react';
 
 export function NotificationCenter() {
   const router = useRouter();
@@ -53,6 +66,41 @@ export function NotificationCenter() {
 
   const handleMarkAllRead = async () => {
     await markNotificationAsRead();
+  };
+
+  const handleNotificationClick = async (n: (typeof notifications)[0]) => {
+    if (!n.is_read) {
+      markNotificationAsRead(n.id).catch(console.error);
+    }
+    setIsOpen(false);
+
+    if (n.link) {
+      router.push(n.link);
+    } else if (n.data?.group_id) {
+      if (n.data?.expense_id && n.type !== 'expense_deleted') {
+        router.push(`/groups/${n.data.group_id}?expenseId=${n.data.expense_id}`);
+      } else {
+        router.push(`/groups/${n.data.group_id}`);
+      }
+    }
+  };
+
+  const getNotificationIcon = (type?: string) => {
+    switch (type) {
+      case 'expense_added':
+        return <Receipt className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
+      case 'expense_updated':
+        return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
+      case 'expense_deleted':
+        return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
+      case 'expense_assigned':
+      case 'managed_user_assigned':
+        return <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
+      case 'member_joined':
+        return <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
+      default:
+        return <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
+    }
   };
 
   return (
@@ -175,18 +223,25 @@ export function NotificationCenter() {
                   {notifications.map((n) => (
                     <div
                       key={n.id}
-                      className={`p-3 rounded-2xl text-xs space-y-1.5 transition-colors ${
-                        n.is_read ? 'bg-zinc-50/60 text-zinc-500' : 'bg-zinc-100/90 text-zinc-900 font-medium shadow-2xs'
+                      onClick={() => handleNotificationClick(n)}
+                      className={`p-3 rounded-2xl text-xs space-y-1.5 transition-all cursor-pointer ${
+                        n.is_read
+                          ? 'bg-zinc-50/60 text-zinc-500 hover:bg-zinc-100/60'
+                          : 'bg-zinc-100/90 text-zinc-900 font-medium shadow-2xs hover:bg-zinc-200/80 hover:shadow-xs'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2 min-w-0">
                         <span className="font-bold text-zinc-900 flex items-center space-x-1.5 min-w-0">
-                          <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          {getNotificationIcon(n.type)}
                           <span className="truncate">{n.title}</span>
                         </span>
                         {!n.is_read && (
                           <button
-                            onClick={() => markNotificationAsRead(n.id)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markNotificationAsRead(n.id);
+                            }}
                             className="text-zinc-400 hover:text-zinc-700 transition-colors active:scale-95 shrink-0 p-1 cursor-pointer"
                             title="Marcar como leída"
                             aria-label="Marcar como leída"
@@ -196,6 +251,12 @@ export function NotificationCenter() {
                         )}
                       </div>
                       <p className="text-zinc-600 leading-relaxed text-[11px] sm:text-xs break-words">{n.message}</p>
+                      {(n.link || n.data?.group_id) && (
+                        <div className="flex items-center space-x-1 text-[10px] font-semibold text-emerald-700 pt-0.5">
+                          <span>Ver detalle</span>
+                          <ArrowRight className="w-2.5 h-2.5" />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

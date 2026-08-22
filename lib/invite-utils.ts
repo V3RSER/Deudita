@@ -366,17 +366,46 @@ export async function claimAndJoinGroupInvite(
 
   const groupName = groupDetails?.name ?? 'Grupo';
 
-  // 8. Add notification to user
+  // 8. Add notification to user and existing group members
   try {
     await db.from('notifications').insert({
       user_id: user.id,
       type: 'group_invite',
       title: '¡Te has unido al grupo!',
       message: `Te has unido exitosamente al grupo "${groupName}".`,
+      link: `/groups/${targetGroupId}`,
       data: { group_id: targetGroupId, invite_id: invite?.id },
+      is_read: false,
     });
+
+    const { data: userProfile } = await db
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const joinerName = userProfile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Un nuevo integrante';
+
+    const { data: otherMembers } = await db
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', targetGroupId)
+      .neq('user_id', user.id);
+
+    if (otherMembers && otherMembers.length > 0) {
+      const memberNotifs = otherMembers.map((m) => ({
+        user_id: m.user_id,
+        type: 'member_joined',
+        title: 'Nuevo integrante en el grupo',
+        message: `${joinerName} se ha unido al grupo "${groupName}".`,
+        link: `/groups/${targetGroupId}`,
+        data: { group_id: targetGroupId, joined_user_id: user.id },
+        is_read: false,
+      }));
+      await db.from('notifications').insert(memberNotifs);
+    }
   } catch (notifErr) {
-    console.warn('[claimAndJoinGroupInvite] Could not create notification:', notifErr);
+    console.warn('[claimAndJoinGroupInvite] Could not create notifications:', notifErr);
   }
 
   return {

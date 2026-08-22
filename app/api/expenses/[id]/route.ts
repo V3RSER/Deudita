@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { notifyExpenseUpdated, notifyExpenseDeleted } from '@/lib/notifications';
 
 export async function GET(
   request: Request,
@@ -317,6 +318,23 @@ export async function PUT(
       console.warn('[API /api/expenses/[id]] Warning recording audit log:', auditErr);
     }
 
+    // Trigger update notifications
+    try {
+      void notifyExpenseUpdated(supabase, {
+        updaterId: user.id,
+        expenseId: id,
+        description: expense.description ?? previousExpense.description ?? 'Gasto',
+        totalAmount: parsedAmount,
+        groupId: rawGroupId,
+        currency: expense.currency ?? previousExpense.currency ?? 'COP',
+        newSplits: targetSplits,
+        removedUserIds,
+        previousDescription: previousExpense.description,
+      });
+    } catch (notifErr) {
+      console.warn('[API /api/expenses/[id]] Notification warning:', notifErr);
+    }
+
     // Fetch complete updated expense with items and splits to return
     const { data: fullUpdatedExpense } = await supabase
       .from('expenses')
@@ -346,6 +364,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    // Fetch expense and its splits before deletion to notify participants
+    const { data: expToDelete } = await supabase
+      .from('expenses')
+      .select('*, splits:expense_splits(*)')
+      .eq('id', id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from('expenses')
       .delete()
@@ -354,6 +379,22 @@ export async function DELETE(
     if (error) {
       console.error('[API /api/expenses/[id]] Delete error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (expToDelete) {
+      try {
+        void notifyExpenseDeleted(supabase, {
+          deleterId: user.id,
+          description: expToDelete.description ?? 'Gasto',
+          groupId: expToDelete.group_id,
+          splits: (expToDelete.splits || []).map((s: any) => ({
+            user_id: s.user_id,
+            amount_owed: s.amount_owed,
+          })),
+        });
+      } catch (delNotifErr) {
+        console.warn('[API /api/expenses/[id]] Delete notification warning:', delNotifErr);
+      }
     }
 
     return NextResponse.json({ success: true });

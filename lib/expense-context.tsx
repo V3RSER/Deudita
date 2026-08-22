@@ -258,10 +258,29 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     };
     setCurrentProfile(optimisticProfile);
     setProfiles((prev) =>
-      prev.map((p) => (p.id === currentProfile.id ? optimisticProfile : p))
+      prev.map((p) => {
+        if (p.id === currentProfile.id) return optimisticProfile;
+        if (p.id === targetUserId) {
+          return { ...p, managed_by: shouldManage ? currentProfile.id : undefined };
+        }
+        return p;
+      })
     );
 
-    await updateProfile({ managed_user_ids: updatedList });
+    try {
+      const res = await fetch('/api/managed-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserId, shouldManage }),
+      });
+      if (!res.ok) {
+        await updateProfile({ managed_user_ids: updatedList });
+      }
+    } catch {
+      await updateProfile({ managed_user_ids: updatedList });
+    }
+
+    await reloadFromSupabase();
   };
 
   const addFriend = async (fullName: string, email?: string): Promise<Profile> => {
