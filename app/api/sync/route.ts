@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { claimAllTempProfilesForUser } from '@/lib/invite-utils';
+import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
 
 export async function GET() {
   try {
@@ -14,7 +15,41 @@ export async function GET() {
     // Use the authenticated Supabase client (with request cookies and JWT) to respect RLS
     const db = supabase;
 
-    // 0. Auto-claim and unify any temporary profiles created for this user's email
+    // 0. Auto-claim from cookie token if present
+    try {
+      const cookieStore = await cookies();
+      const cookieInviteToken = cookieStore.get('deudita_invite_token')?.value;
+      if (cookieInviteToken) {
+        await claimAndJoinGroupInvite(db, cookieInviteToken, user);
+      }
+    } catch (cookieClaimErr) {
+      console.warn('[API /api/sync] Warning auto-claiming from cookie token:', cookieClaimErr);
+    }
+
+    // 0.1 Auto-claim and join any pending invites matching user email
+    if (user.email) {
+      try {
+        const userEmailLower = user.email.toLowerCase().trim();
+        const { data: pendingInvites } = await db
+          .from('group_invites')
+          .select('token, id, group_id')
+          .ilike('email', userEmailLower)
+          .eq('status', 'pending');
+
+        if (pendingInvites && pendingInvites.length > 0) {
+          for (const inv of pendingInvites) {
+            const tokenToUse = inv.token || inv.id || inv.group_id;
+            if (tokenToUse) {
+              await claimAndJoinGroupInvite(db, tokenToUse, user);
+            }
+          }
+        }
+      } catch (emailInvErr) {
+        console.warn('[API /api/sync] Warning joining pending invites by email:', emailInvErr);
+      }
+    }
+
+    // 0.2 Auto-claim and unify any temporary profiles created for this user's email
     try {
       await claimAllTempProfilesForUser(db, user);
     } catch (claimErr) {

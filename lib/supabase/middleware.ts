@@ -39,6 +39,21 @@ export async function updateSession(request: NextRequest) {
     // supabase.auth.getUser(). A simple mistake could make it very hard to debug
     // issues with users being randomly logged out.
 
+    // Capture any invite token from search params into cookie
+    const paramToken =
+      request.nextUrl.searchParams.get('token') ??
+      request.nextUrl.searchParams.get('invite') ??
+      request.nextUrl.searchParams.get('group') ??
+      request.nextUrl.searchParams.get('invite_token');
+
+    if (paramToken) {
+      supabaseResponse.cookies.set('deudita_invite_token', paramToken, {
+        path: '/',
+        maxAge: 86400 * 7,
+        sameSite: 'lax',
+      });
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -46,6 +61,7 @@ export async function updateSession(request: NextRequest) {
     if (
       !user &&
       !request.nextUrl.pathname.startsWith('/login') &&
+      !request.nextUrl.pathname.startsWith('/join') &&
       !request.nextUrl.pathname.startsWith('/api') &&
       !request.nextUrl.pathname.startsWith('/auth')
     ) {
@@ -56,7 +72,15 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (user && request.nextUrl.pathname.startsWith('/login')) {
-      // authenticated user, redirect to dashboard/groups
+      const activeToken = paramToken ?? request.cookies.get('deudita_invite_token')?.value;
+      if (activeToken) {
+        const url = request.nextUrl.clone()
+        url.pathname = `/join/${activeToken}`
+        url.search = ''
+        return NextResponse.redirect(url)
+      }
+
+      // authenticated user without invite, redirect to dashboard/groups
       const url = request.nextUrl.clone()
       url.pathname = '/groups'
       return NextResponse.redirect(url)

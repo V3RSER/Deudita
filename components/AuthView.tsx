@@ -12,11 +12,66 @@ export function AuthView({ error }: { error?: string }) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
+    // 1. Capture token from URL query string if present
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlToken =
+        searchParams.get('token') ??
+        searchParams.get('invite') ??
+        searchParams.get('group') ??
+        searchParams.get('id') ??
+        searchParams.get('invite_token');
+
+      if (urlToken) {
+        window.sessionStorage.setItem('deudita_invite_token', urlToken);
+        window.localStorage.setItem('deudita_pending_invite', urlToken);
+        document.cookie = `deudita_invite_token=${urlToken}; path=/; max-age=604800; SameSite=Lax`;
+      }
+    }
+
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        router.replace('/groups');
-      } else {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // If there's an invite token stored or in cookie, claim it and go straight to the group
+          let activeToken = typeof window !== 'undefined'
+            ? (window.sessionStorage.getItem('deudita_invite_token') ?? window.localStorage.getItem('deudita_pending_invite'))
+            : null;
+
+          if (!activeToken && typeof document !== 'undefined') {
+            const match = document.cookie.match(/(?:^|;\s*)deudita_invite_token=([^;]*)/);
+            if (match && match[1]) {
+              activeToken = decodeURIComponent(match[1]);
+            }
+          }
+
+          if (activeToken) {
+            try {
+              const claimRes = await fetch('/api/invites/claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: activeToken }),
+              });
+              const claimData = await claimRes.json();
+              if (claimData?.groupId) {
+                if (typeof window !== 'undefined') {
+                  window.sessionStorage.removeItem('deudita_invite_token');
+                  window.localStorage.removeItem('deudita_pending_invite');
+                  document.cookie = 'deudita_invite_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                }
+                router.replace(`/groups/${claimData.groupId}`);
+                return;
+              }
+            } catch (claimErr) {
+              console.warn('Error claiming token in AuthView:', claimErr);
+            }
+          }
+
+          router.replace('/groups');
+        } else {
+          setCheckingAuth(false);
+        }
+      } catch {
         setCheckingAuth(false);
       }
     };
@@ -25,12 +80,19 @@ export function AuthView({ error }: { error?: string }) {
 
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
-    const pendingToken = typeof window !== 'undefined' 
+    let pendingToken = typeof window !== 'undefined' 
       ? (window.sessionStorage.getItem('deudita_invite_token') ?? window.localStorage.getItem('deudita_pending_invite'))
       : null;
 
+    if (!pendingToken && typeof document !== 'undefined') {
+      const match = document.cookie.match(/(?:^|;\s*)deudita_invite_token=([^;]*)/);
+      if (match && match[1]) {
+        pendingToken = decodeURIComponent(match[1]);
+      }
+    }
+
     const callbackUrl = pendingToken
-      ? `${window.location.origin}/auth/callback?token=${pendingToken}`
+      ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(pendingToken)}`
       : `${window.location.origin}/auth/callback`;
 
     await supabase.auth.signInWithOAuth({

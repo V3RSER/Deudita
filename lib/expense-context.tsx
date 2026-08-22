@@ -116,9 +116,16 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       if (data.hiddenFriendIds) setHiddenFriendIds(data.hiddenFriendIds as string[]);
 
       if (data.profile && typeof window !== 'undefined') {
-        const pendingInvite =
+        let pendingInvite =
           window.sessionStorage.getItem('deudita_invite_token') ??
           window.localStorage.getItem('deudita_pending_invite');
+
+        if (!pendingInvite && typeof document !== 'undefined') {
+          const match = document.cookie.match(/(?:^|;\s*)deudita_invite_token=([^;]*)/);
+          if (match && match[1]) {
+            pendingInvite = decodeURIComponent(match[1]);
+          }
+        }
 
         if (pendingInvite) {
           try {

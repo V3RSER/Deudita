@@ -277,7 +277,40 @@ export default function AuthBypassPage() {
         
         // 3. Probar si el endpoint de sincronización (/api/sync) responde como usuario autenticado
         addLog('Paso 3: Verificando autorización en /api/sync...');
+        let joinedGroupId: string | null = null;
         try {
+          // Check for pending invite
+          let pendingToken = typeof window !== 'undefined'
+            ? (window.sessionStorage.getItem('deudita_invite_token') ?? window.localStorage.getItem('deudita_pending_invite'))
+            : null;
+
+          if (!pendingToken && typeof document !== 'undefined') {
+            const match = document.cookie.match(/(?:^|;\s*)deudita_invite_token=([^;]*)/);
+            if (match && match[1]) {
+              pendingToken = decodeURIComponent(match[1]);
+            }
+          }
+
+          if (pendingToken) {
+            try {
+              const claimRes = await fetch('/api/invites/claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: pendingToken }),
+              });
+              const claimData = await claimRes.json();
+              if (claimData?.groupId) {
+                joinedGroupId = claimData.groupId;
+                addLog(`¡Invitación reclamada exitosamente! Grupo ID: ${joinedGroupId}`);
+                window.sessionStorage.removeItem('deudita_invite_token');
+                window.localStorage.removeItem('deudita_pending_invite');
+                document.cookie = 'deudita_invite_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+              }
+            } catch (claimErr: any) {
+              addLog(`Aviso al reclamar invitación: ${claimErr?.message}`);
+            }
+          }
+
           const syncRes = await fetch('/api/sync');
           const syncData = await syncRes.json().catch(() => null);
           addLog(`Paso 3 Resultado /api/sync [HTTP ${syncRes.status}]: ${syncRes.ok ? 'AUTORIZADO (Perfil sincronizado correctamente)' : JSON.stringify(syncData ?? {})}`);
@@ -296,6 +329,12 @@ export default function AuthBypassPage() {
 
         setSuccessMessage(`Sesión iniciada correctamente para: ${userEmail}. Puedes ingresar pulsando el botón verde.`);
         setLoading(false);
+
+        if (joinedGroupId) {
+          setTimeout(() => {
+            window.location.href = `/groups/${joinedGroupId}`;
+          }, 1200);
+        }
       } else {
         addLog('ERROR: data.session es nulo tras setSession.');
         setErrorMessage('No se pudo establecer la sesión con las credenciales provistas.');

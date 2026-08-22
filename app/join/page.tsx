@@ -20,6 +20,7 @@ function JoinContent() {
       if (typeof window !== 'undefined') {
         window.sessionStorage.setItem('deudita_invite_token', inviteId);
         window.localStorage.setItem('deudita_pending_invite', inviteId);
+        document.cookie = `deudita_invite_token=${inviteId}; path=/; max-age=604800; SameSite=Lax`;
       }
       router.replace(`/join/${inviteId}`);
     } else if (typeof window !== 'undefined') {
