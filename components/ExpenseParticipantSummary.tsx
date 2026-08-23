@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
-import { ChevronDown, ChevronUp, User } from 'lucide-react';
+import { ChevronDown, ChevronUp, User, Users } from 'lucide-react';
 
 export interface ParticipantItemBreakdown {
   desc: string;
@@ -107,7 +107,7 @@ export function ExpenseParticipantSummary({
   currency,
   currentUserId,
   title = 'Resumen por participante',
-  defaultExpanded = true,
+  defaultExpanded = false,
 }: ExpenseParticipantSummaryProps) {
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -129,12 +129,15 @@ export function ExpenseParticipantSummary({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+    <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
       {title && (
         <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-            {title} ({participants.length})
-          </span>
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              {title}
+            </span>
+          </div>
         </div>
       )}
 

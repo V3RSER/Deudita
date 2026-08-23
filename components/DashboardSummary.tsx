@@ -119,7 +119,6 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Nuevo Gasto</p>
-            <p className="text-xs text-zinc-500">Añadir gasto</p>
           </div>
         </button>
 
@@ -132,7 +131,6 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Saldar Cuenta</p>
-            <p className="text-xs text-zinc-500">Registrar pago</p>
           </div>
         </button>
 
@@ -145,7 +143,6 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Escanear Ticket</p>
-            <p className="text-xs text-zinc-500">Desglosar comprobante</p>
           </div>
         </button>
 
@@ -158,7 +155,6 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Ver Balances</p>
-            <p className="text-xs text-zinc-500">Balances generales</p>
           </div>
         </Link>
 
@@ -171,7 +167,6 @@ export function DashboardSummary({
           </div>
           <div>
             <p className="font-semibold text-zinc-900 text-sm">Historial Gastos</p>
-            <p className="text-xs text-zinc-500">Todos los comprobantes</p>
           </div>
         </Link>
       </div>

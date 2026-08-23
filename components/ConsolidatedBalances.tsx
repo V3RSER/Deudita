@@ -902,7 +902,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
-              + Te deben (Suma)
+              + Te deben
             </span>
             <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
               <TrendingUp className="w-5 h-5" />
@@ -931,7 +931,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-rose-800 uppercase tracking-wider">
-              - Debes (Resta)
+              - Debes
             </span>
             <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
               <TrendingDown className="w-5 h-5" />
