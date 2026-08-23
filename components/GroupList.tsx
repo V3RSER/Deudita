@@ -6,7 +6,6 @@ import { useExpense } from '@/lib/expense-context';
 import { Group } from '@/lib/types';
 import { formatCurrency, calculateUserSummaries } from '@/lib/balance-utils';
 import {
-  Plus,
   Users,
   TrendingUp,
   TrendingDown,
@@ -15,16 +14,15 @@ import {
 } from 'lucide-react';
 
 import { getGroupImage, getGroupCategoryConfig } from '@/lib/group-utils';
+import { PageHeader } from '@/components/PageHeader';
 
 interface GroupListProps {
   onSelectGroup: (group: Group) => void;
-  onOpenNewGroup: () => void;
+  onOpenNewGroup?: () => void;
 }
 
-import { PageHeader } from '@/components/PageHeader';
-
-export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
-  const { currentProfile, userGroups, members, expenses, payments, profiles, pendingInvites, acceptGroupInvite, rejectGroupInvite } = useExpense();
+export function GroupList({ onSelectGroup }: GroupListProps) {
+  const { currentProfile, userGroups, expenses, payments, profiles, pendingInvites, acceptGroupInvite, rejectGroupInvite } = useExpense();
   const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
 
   const handleAcceptInvite = async (inviteId: string) => {
@@ -52,7 +50,7 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
   return (
     <div className="space-y-6">
       <PageHeader 
-        title={`Mis Grupos (${userGroups.length})`}
+        title="Mis Grupos"
         subtitle="Administra los grupos donde compartes gastos."
         icon={<Users className="w-5 h-5" />}
       />
@@ -85,14 +83,14 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                   <button
                     onClick={() => handleRejectInvite(invite.id)}
                     disabled={processingInviteId === invite.id}
-                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition"
+                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition cursor-pointer"
                   >
                     Rechazar
                   </button>
                   <button
                     onClick={() => handleAcceptInvite(invite.id)}
                     disabled={processingInviteId === invite.id}
-                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-semibold shadow-sm transition"
+                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
                   >
                     Aceptar e Ingresar
                   </button>
@@ -109,20 +107,13 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
           <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-4">
             <Users className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-bold text-slate-800">Aún no perteneces a ningún grupo</h3>
-          <p className="text-slate-500 text-sm max-w-md mx-auto mt-1 mb-6">
-            Crea tu primer grupo para empezar a dividir gastos con tus amigos, roomies o familiares.
+          <h3 className="text-base font-bold text-slate-800">Aún no perteneces a ningún grupo</h3>
+          <p className="text-slate-500 text-sm max-w-md mx-auto mt-1">
+            Cuando te unas a un grupo o te inviten, aparecerá aquí.
           </p>
-          <button
-            onClick={onOpenNewGroup}
-            className="inline-flex items-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl transition"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Crear un Grupo</span>
-          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {userGroups.map((group) => {
             // Calculate current user's balance in this specific group
             const userSummaries = calculateUserSummaries(expenses, payments, profiles, group.id);
@@ -137,10 +128,10 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
               <div
                 key={group.id}
                 onClick={() => onSelectGroup(group)}
-                className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-sm hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-4 relative overflow-hidden active:scale-[0.98]"
+                className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-xs hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-3.5 relative overflow-hidden active:scale-[0.98]"
               >
                 {/* Square rounded image or Icon */}
-                <div className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? catConfig.bgColor : ''}`}>
+                <div className={`relative w-14 h-14 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? catConfig.bgColor : ''}`}>
                   {groupImg ? (
                     <Image src={groupImg} alt={group.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" unoptimized referrerPolicy="no-referrer" />
                   ) : (
@@ -150,31 +141,31 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
                   )}
                 </div>
 
-                {/* Info */}
+                {/* Info: Group Name and How much they owe */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-zinc-900 truncate group-hover:text-emerald-700 transition-colors">
+                  <h3 className="text-sm sm:text-base font-bold text-zinc-900 truncate group-hover:text-emerald-700 transition-colors">
                     {group.name}
                   </h3>
                   
                   {/* Balance Status */}
-                  <div className="mt-1.5">
+                  <div className="mt-1 text-xs">
                     {Math.abs(netBalance) < 0.5 ? (
-                      <span className="text-sm font-medium text-zinc-500 flex items-center">
-                        <MinusCircle className="w-4 h-4 mr-1.5" /> Al día
+                      <span className="font-medium text-zinc-500 flex items-center">
+                        <MinusCircle className="w-3.5 h-3.5 mr-1" /> Al día
                       </span>
                     ) : netBalance > 0 ? (
-                      <span className="text-sm font-bold text-emerald-600 flex items-center">
-                        <TrendingUp className="w-4 h-4 mr-1.5" /> Te deben {formatCurrency(netBalance)}
+                      <span className="font-bold text-emerald-600 flex items-center">
+                        <TrendingUp className="w-3.5 h-3.5 mr-1" /> Te deben {formatCurrency(netBalance, group.currency)}
                       </span>
                     ) : (
-                      <span className="text-sm font-bold text-rose-600 flex items-center">
-                        <TrendingDown className="w-4 h-4 mr-1.5" /> Debes {formatCurrency(Math.abs(netBalance))}
+                      <span className="font-bold text-rose-600 flex items-center">
+                        <TrendingDown className="w-3.5 h-3.5 mr-1" /> Debes {formatCurrency(Math.abs(netBalance), group.currency)}
                       </span>
                     )}
                   </div>
                 </div>
                 
-                <ChevronRight className="w-5 h-5 text-zinc-300 group-hover:text-emerald-500 transition-colors shrink-0" />
+                <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
               </div>
             );
           })}
