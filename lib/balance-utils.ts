@@ -598,6 +598,8 @@ export interface DebtBreakdownItem {
   isFullyPaid: boolean;
   isPartiallyPaid: boolean;
   participantProfile?: Profile;
+  payerProfile?: Profile;
+  isManagedParticipant?: boolean;
   groupName?: string;
   currency?: string;
 }
@@ -616,6 +618,7 @@ export interface ReverseOffsetItem {
   amount: number;
   payerProfile?: Profile;
   participantProfile?: Profile;
+  isManagedParticipant?: boolean;
   groupName?: string;
 }
 
@@ -626,6 +629,7 @@ export interface PairwiseDebtDetail {
   totalPaymentsApplied: number;
   totalReverseOffsets: number;
   netPendingAmount: number;
+  netDirectBalance: number;
   pendingExpenses: DebtBreakdownItem[];
   allExpenses: DebtBreakdownItem[];
   appliedPayments: AppliedPaymentItem[];
@@ -664,6 +668,8 @@ export function calculatePairwiseDebtDetail(
     split: ExpenseSplit;
     originalAmount: number;
     participantProfile?: Profile;
+    payerProfile?: Profile;
+    isManagedParticipant?: boolean;
     date: string;
     groupName?: string;
     currency?: string;
@@ -681,6 +687,8 @@ export function calculatePairwiseDebtDetail(
             split: s,
             originalAmount: s.amount_owed,
             participantProfile: profileMap.get(s.user_id),
+            payerProfile: profileMap.get(exp.paid_by),
+            isManagedParticipant: s.user_id !== debtor.id,
             date: exp.expense_date || exp.created_at || '1970-01-01',
             groupName: g?.name,
             currency: g?.currency || 'COP',
@@ -713,6 +721,7 @@ export function calculatePairwiseDebtDetail(
             amount: s.amount_owed,
             payerProfile: profileMap.get(exp.paid_by),
             participantProfile: profileMap.get(s.user_id),
+            isManagedParticipant: s.user_id !== creditor.id,
             groupName: g?.name,
           });
         }
@@ -766,6 +775,8 @@ export function calculatePairwiseDebtDetail(
         isFullyPaid: true,
         isPartiallyPaid: false,
         participantProfile: item.participantProfile,
+        payerProfile: item.payerProfile,
+        isManagedParticipant: item.isManagedParticipant,
         groupName: item.groupName,
         currency: item.currency,
       };
@@ -782,6 +793,8 @@ export function calculatePairwiseDebtDetail(
         isFullyPaid: false,
         isPartiallyPaid: true,
         participantProfile: item.participantProfile,
+        payerProfile: item.payerProfile,
+        isManagedParticipant: item.isManagedParticipant,
         groupName: item.groupName,
         currency: item.currency,
       };
@@ -795,6 +808,8 @@ export function calculatePairwiseDebtDetail(
         isFullyPaid: false,
         isPartiallyPaid: false,
         participantProfile: item.participantProfile,
+        payerProfile: item.payerProfile,
+        isManagedParticipant: item.isManagedParticipant,
         groupName: item.groupName,
         currency: item.currency,
       };
@@ -811,6 +826,8 @@ export function calculatePairwiseDebtDetail(
     Math.round((totalOriginalDebt - totalOffsetToApply) * 100) / 100
   );
 
+  const netDirectBalance = Math.round((totalOriginalDebt - totalReverseOffsets - netPaymentsApplied) * 100) / 100;
+
   return {
     debtor,
     creditor,
@@ -818,6 +835,7 @@ export function calculatePairwiseDebtDetail(
     totalPaymentsApplied: Math.round(netPaymentsApplied * 100) / 100,
     totalReverseOffsets: Math.round(totalReverseOffsets * 100) / 100,
     netPendingAmount,
+    netDirectBalance,
     pendingExpenses,
     allExpenses: [...allExpenses].sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
     appliedPayments: appliedPayments.sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime()),

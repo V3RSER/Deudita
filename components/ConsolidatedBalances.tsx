@@ -116,10 +116,15 @@ function UnifiedBalanceCard({
   const pendingCount = debtDetail.pendingExpenses.length;
   const displayedExpenses = showAllMovements ? debtDetail.allExpenses : debtDetail.pendingExpenses;
 
+  const debtorName = isDebtor ? 'Tú' : pairwise.debtor.full_name || 'Usuario';
+  const creditorName = isCreditor ? 'Tú' : pairwise.creditor.full_name || 'Usuario';
+
+  // Simplified adjustment calculation
+  const directBalance = debtDetail.netDirectBalance;
+  const simplifiedDiff = pairwise.amount - directBalance;
+  const hasSimplifiedAdjustment = isSimplified && Math.abs(simplifiedDiff) > 0.01;
+
   // Determine card type styling
-  // 1. Creditor = SUMA (+) -> Green/Emerald
-  // 2. Debtor = RESTA (-) -> Red/Rose
-  // 3. Third Party = Neutral/Zinc
   const cardTheme = isCreditor
     ? {
         borderClass: 'border-emerald-200/90 hover:border-emerald-300',
@@ -155,6 +160,13 @@ function UnifiedBalanceCard({
         btnText: 'Saldar',
         ringClass: 'ring-zinc-200',
       };
+
+  const handleExpenseClick = (exp: Expense) => {
+    const targetUrl = exp.group_id
+      ? `/groups/${exp.group_id}?expenseId=${exp.id}`
+      : `/my-expenses?expenseId=${exp.id}`;
+    router.push(targetUrl);
+  };
 
   return (
     <div
@@ -239,7 +251,7 @@ function UnifiedBalanceCard({
                     <span className="text-zinc-900 font-bold">
                       {pairwise.debtor.full_name || 'Usuario'}
                     </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <span className="text-zinc-500 font-medium">le debe a</span>
                     <span className="text-zinc-900 font-bold">
                       {pairwise.creditor.full_name || 'Usuario'}
                     </span>
@@ -305,7 +317,7 @@ function UnifiedBalanceCard({
                       key={bIdx}
                       className="inline-flex items-center space-x-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium shadow-2xs"
                     >
-                      <span>{b.isSelf ? 'Titular' : b.profile.full_name}:</span>
+                      <span>{b.isSelf ? (isDebtor ? 'Tu consumo' : b.profile.full_name) : b.profile.full_name}:</span>
                       <strong className="text-zinc-900">{formatCurrency(b.amount)}</strong>
                     </span>
                   ))}
@@ -343,7 +355,7 @@ function UnifiedBalanceCard({
           </button>
 
           <span className="text-[11px] text-zinc-400 font-medium">
-            {isExpanded ? 'Clic en cualquier gasto para abrirlo' : 'Explicación auditable'}
+            {isExpanded ? 'Clic en cualquier gasto para abrirlo' : 'Cuentas claras paso a paso'}
           </span>
         </div>
       </div>
@@ -351,12 +363,12 @@ function UnifiedBalanceCard({
       {/* Expanded Auditable Detail */}
       {isExpanded && (
         <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5 space-y-4">
-          {/* Arithmetic Equation Box (Sumas y Restas / Cuentas Claras) */}
+          {/* Clear Arithmetic Equation Box */}
           <div className="bg-white rounded-2xl p-4 border border-zinc-200/80 shadow-2xs space-y-3">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
               <span className="text-xs font-extrabold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Auditoría de Cuenta (Sumas y Restas)</span>
+                <span>¿Cómo se calcula este saldo?</span>
               </span>
 
               <div className="flex items-center space-x-1 text-[11px]">
@@ -385,53 +397,87 @@ function UnifiedBalanceCard({
               </div>
             </div>
 
-            {/* Arithmetic Formula Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+            {/* Explanatory Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
               <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60">
-                <span className="text-[10px] text-zinc-500 font-bold block uppercase">Gastos generados</span>
+                <span className="text-[10px] text-zinc-500 font-bold block uppercase truncate">
+                  1. Pagado por {creditorName}
+                </span>
                 <span className="font-extrabold text-zinc-900 text-sm mt-0.5 block">
                   +{formatCurrency(debtDetail.totalOriginalDebt)}
+                </span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                  Consumos de {debtorName}
                 </span>
               </div>
 
               <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60">
-                <span className="text-[10px] text-zinc-500 font-bold block uppercase">Pagos aplicados</span>
+                <span className="text-[10px] text-zinc-500 font-bold block uppercase truncate">
+                  2. Abonos de deuda
+                </span>
                 <span className="font-extrabold text-emerald-700 text-sm mt-0.5 block">
                   -{formatCurrency(debtDetail.totalPaymentsApplied)}
+                </span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                  Transferencias directas
                 </span>
               </div>
 
               {debtDetail.totalReverseOffsets > 0 && (
                 <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60">
-                  <span className="text-[10px] text-zinc-500 font-bold block uppercase">Gastos cruzados</span>
+                  <span className="text-[10px] text-zinc-500 font-bold block uppercase truncate">
+                    3. Pagado por {debtorName}
+                  </span>
                   <span className="font-extrabold text-indigo-700 text-sm mt-0.5 block">
                     -{formatCurrency(debtDetail.totalReverseOffsets)}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">
+                    Consumos de {creditorName}
+                  </span>
+                </div>
+              )}
+
+              {hasSimplifiedAdjustment && (
+                <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200/70 text-indigo-950">
+                  <span className="text-[10px] text-indigo-700 font-bold block uppercase truncate">
+                    Ajuste simplificado
+                  </span>
+                  <span className="font-extrabold text-indigo-900 text-sm mt-0.5 block">
+                    {simplifiedDiff > 0 ? '+' : ''}{formatCurrency(simplifiedDiff)}
+                  </span>
+                  <span className="text-[10px] text-indigo-600 block mt-0.5">
+                    Optimización grupal
                   </span>
                 </div>
               )}
 
               <div className="p-2.5 rounded-xl bg-zinc-900 text-white shadow-xs">
-                <span className="text-[10px] text-zinc-400 font-bold block uppercase">Saldo adeudado</span>
+                <span className="text-[10px] text-zinc-400 font-bold block uppercase truncate">
+                  Saldo neto a saldar
+                </span>
                 <span className="font-black text-white text-sm mt-0.5 block">
                   {formatCurrency(pairwise.amount)}
+                </span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5 truncate">
+                  {debtorName} debe a {creditorName}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* List of Pending Expenses that explain the debt */}
+          {/* List of Primary Expenses */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-black text-zinc-700 uppercase tracking-wider flex items-center space-x-1.5">
                 <Receipt className="w-3.5 h-3.5 text-zinc-500" />
                 <span>
                   {showAllMovements
-                    ? `Todos los gastos involucrados (${debtDetail.allExpenses.length})`
-                    : `Gastos pendientes de pago (${debtDetail.pendingExpenses.length})`}
+                    ? `Gastos pagados por ${creditorName} (${debtDetail.allExpenses.length})`
+                    : `Gastos pendientes que debe ${debtorName} (${debtDetail.pendingExpenses.length})`}
                 </span>
               </h4>
               <span className="text-[11px] text-zinc-500 font-medium">
-                Haz clic en cualquier gasto para ver su detalle completo
+                Clic en cualquier gasto para ir al detalle
               </span>
             </div>
 
@@ -450,18 +496,19 @@ function UnifiedBalanceCard({
                   const IconComponent = catConfig.icon;
                   const isFullyPaid = item.isFullyPaid;
                   const isPartiallyPaid = item.isPartiallyPaid;
+                  const payerFullName = item.payerProfile?.full_name || creditorName;
 
                   return (
                     <div
                       key={item.expense.id + idx}
-                      onClick={() => router.push(`/expenses/${item.expense.id}`)}
+                      onClick={() => handleExpenseClick(item.expense)}
                       className="p-3 sm:p-4 flex items-center justify-between gap-3 hover:bg-zinc-50/90 transition-all cursor-pointer group"
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          router.push(`/expenses/${item.expense.id}`);
+                          handleExpenseClick(item.expense);
                         }
                       }}
                     >
@@ -485,7 +532,16 @@ function UnifiedBalanceCard({
                             )}
                           </div>
 
-                          <div className="flex items-center space-x-2 text-[11px] text-zinc-500 font-medium flex-wrap">
+                          {/* Clear Narrative: Mary pagó tanto y Luis debe tanto */}
+                          <div className="text-[11px] text-zinc-600 font-medium">
+                            <span>{payerFullName} pagó {formatCurrency(item.expense.total_amount)}</span>
+                            <span className="text-zinc-400"> • </span>
+                            <span className="font-semibold text-zinc-900">
+                              Parte de {debtorName}: {formatCurrency(item.originalAmount)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center space-x-2 text-[10px] text-zinc-400 font-medium flex-wrap">
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3 h-3 text-zinc-400" />
                               <span>{item.expense.expense_date}</span>
@@ -495,7 +551,7 @@ function UnifiedBalanceCard({
                               item.participantProfile.id !== pairwise.debtor.id && (
                                 <span className="text-indigo-700 font-bold flex items-center gap-1">
                                   <Shield className="w-2.5 h-2.5" />
-                                  <span>Por: {item.participantProfile.full_name}</span>
+                                  <span>Persona vinculada: {item.participantProfile.full_name}</span>
                                 </span>
                               )}
                           </div>
@@ -511,7 +567,7 @@ function UnifiedBalanceCard({
                                 {formatCurrency(item.originalAmount)}
                               </span>
                               <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                Saldado
+                                Cubierto
                               </span>
                             </div>
                           ) : isPartiallyPaid ? (
@@ -550,12 +606,73 @@ function UnifiedBalanceCard({
             )}
           </div>
 
+          {/* Reverse Offset Expenses Section (Gastos que pagó el deudor y descuentan) */}
+          {debtDetail.reverseOffsetExpenses.length > 0 && (
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center space-x-1.5">
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>
+                    Gastos pagados por {debtorName} a favor de {creditorName} ({debtDetail.reverseOffsetExpenses.length})
+                  </span>
+                </h4>
+                <span className="text-[11px] font-extrabold text-indigo-700">
+                  Descuentan -{formatCurrency(debtDetail.totalReverseOffsets)}
+                </span>
+              </div>
+
+              <div className="divide-y divide-indigo-100 rounded-2xl border border-indigo-200/80 bg-indigo-50/40 overflow-hidden shadow-2xs">
+                {debtDetail.reverseOffsetExpenses.map((revItem, revIdx) => {
+                  const catConfig = getCategoryConfig(revItem.expense.category);
+                  const IconComponent = catConfig.icon;
+                  const payerFullName = revItem.payerProfile?.full_name || debtorName;
+
+                  return (
+                    <div
+                      key={revItem.expense.id + revIdx}
+                      onClick={() => handleExpenseClick(revItem.expense)}
+                      className="p-3 flex items-center justify-between gap-3 hover:bg-indigo-50/80 transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <div className={`p-2 rounded-lg ${catConfig.bgClass} ${catConfig.textClass} shrink-0 border border-zinc-200/60`}>
+                          <IconComponent className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0 space-y-0.5">
+                          <span className="font-bold text-zinc-900 text-xs truncate group-hover:text-indigo-700 block transition-colors">
+                            {revItem.expense.description}
+                          </span>
+                          <div className="text-[10px] text-zinc-600 font-medium">
+                            <span>{payerFullName} pagó {formatCurrency(revItem.expense.total_amount)}</span>
+                            <span className="text-zinc-400"> • </span>
+                            <span className="font-semibold text-indigo-900">
+                              Parte de {creditorName}: {formatCurrency(revItem.amount)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 flex items-center space-x-2">
+                        <div>
+                          <span className="text-xs font-black text-indigo-700 block">
+                            -{formatCurrency(revItem.amount)}
+                          </span>
+                          <span className="text-[9px] text-zinc-500 font-medium">Descuenta</span>
+                        </div>
+                        <ArrowUpRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-900 transition-colors" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Applied Payments History Section if any */}
           {debtDetail.appliedPayments.length > 0 && (
             <div className="space-y-2 pt-2">
               <h4 className="text-xs font-bold text-zinc-600 uppercase tracking-wider flex items-center space-x-1.5">
                 <HandCoins className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Abonos y pagos registrados ({debtDetail.appliedPayments.length})</span>
+                <span>Abonos y transferencias directas registradas ({debtDetail.appliedPayments.length})</span>
               </h4>
 
               <div className="divide-y divide-zinc-200/70 rounded-2xl border border-zinc-200/80 bg-white overflow-hidden shadow-2xs">
@@ -570,7 +687,7 @@ function UnifiedBalanceCard({
                       </div>
                       <div>
                         <span className="font-bold text-zinc-900 block">
-                          Pago registrado {payItem.payment.note ? `• ${payItem.payment.note}` : ''}
+                          Transferencia {payItem.payment.note ? `• ${payItem.payment.note}` : ''}
                         </span>
                         <span className="text-[11px] text-zinc-400 font-medium">
                           {payItem.payment.payment_date}
@@ -600,7 +717,19 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
   const [isSimplified, setIsSimplified] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedCardKey, setExpandedCardKey] = useState<string | null>(null);
+  const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
+
+  const toggleCardExpand = (cardKey: string) => {
+    setExpandedCardKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardKey)) {
+        next.delete(cardKey);
+      } else {
+        next.add(cardKey);
+      }
+      return next;
+    });
+  };
 
   const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
   const userExpenses = useMemo(() => expenses.filter((e) => userGroupIds.has(e.group_id)), [expenses, userGroupIds]);
@@ -970,9 +1099,9 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredPairwiseList.map((pairwise, idx) => {
+            {filteredPairwiseList.map((pairwise) => {
               const cardKey = `${pairwise.debtor.id}->${pairwise.creditor.id}`;
-              const isExpanded = expandedCardKey === cardKey;
+              const isExpanded = expandedCardKeys.has(cardKey);
 
               return (
                 <UnifiedBalanceCard
@@ -985,9 +1114,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                   profiles={profiles}
                   groups={userGroups}
                   isExpanded={isExpanded}
-                  onToggleExpand={() => {
-                    setExpandedCardKey(isExpanded ? null : cardKey);
-                  }}
+                  onToggleExpand={() => toggleCardExpand(cardKey)}
                   onOpenSettleModal={onOpenSettleModal}
                 />
               );

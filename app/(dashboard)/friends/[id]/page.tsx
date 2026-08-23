@@ -291,7 +291,7 @@ export default function FriendDetailPage({
                   return (
                     <Link
                       key={expense.id}
-                      href={`/expenses/${expense.id}`}
+                      href={expense.group_id ? `/groups/${expense.group_id}?expenseId=${expense.id}` : `/my-expenses?expenseId=${expense.id}`}
                       className="p-4 bg-white hover:bg-zinc-50 border border-zinc-200/80 rounded-2xl transition-all flex items-center justify-between gap-4 group active:scale-98"
                     >
                       <div className="flex items-center space-x-3.5 overflow-hidden">

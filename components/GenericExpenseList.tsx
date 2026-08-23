@@ -263,14 +263,18 @@ export function GenericExpenseList({
                 const CategoryIcon = catConfig.icon;
                 const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
 
-                const isPayer = exp.paid_by === currentProfile?.id;
-                const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id)?.amount_owed ?? 0;
+                const managedIds = (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id);
+                const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
+
+                const isPayer = Boolean(currentProfile && myEffectiveIds.includes(exp.paid_by));
+                const myFamilySplits = exp.splits?.filter((s) => myEffectiveIds.includes(s.user_id)) || [];
+                const myTotalOwed = myFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
 
                 let statusText = 'No participas';
                 let statusBg = 'bg-zinc-100 text-zinc-600 border-zinc-200';
 
                 if (isPayer) {
-                  const recovers = exp.total_amount - mySplit;
+                  const recovers = exp.total_amount - myTotalOwed;
                   if (recovers > 0) {
                     statusText = `Recuperas ${formatCurrency(recovers, currency)}`;
                     statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
@@ -278,8 +282,8 @@ export function GenericExpenseList({
                     statusText = 'Pagaste todo';
                     statusBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                   }
-                } else if (mySplit > 0) {
-                  statusText = `Debes ${formatCurrency(mySplit, currency)}`;
+                } else if (myTotalOwed > 0) {
+                  statusText = `Debes ${formatCurrency(myTotalOwed, currency)}`;
                   statusBg = 'bg-rose-50 text-rose-800 border-rose-200';
                 }
 
@@ -289,13 +293,12 @@ export function GenericExpenseList({
                 // Event and Entry date infos
                 const eventInfo = getRecordEventDateInfo(exp);
                 const entryInfo = getRecordEntryDateInfo(exp);
-                const explicitTime = exp.expense_time ? extractTimeFromISO(exp.expense_time) : '';
 
                 return (
                   <div
                     id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
-                    className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+                    className={`bg-white rounded-xl border transition-all overflow-hidden ${
                       isTargeted
                         ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
                         : isExpanded
@@ -304,17 +307,17 @@ export function GenericExpenseList({
                     }`}
                   >
                     <div
-                      className={`px-3.5 py-2 sm:px-4 sm:py-2 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
+                      className={`px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between gap-2.5 min-w-0 cursor-pointer group transition-colors select-none ${
                         isExpanded
                           ? 'bg-zinc-50/80 border-b border-zinc-200/70'
                           : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
                       }`}
                       onClick={() => toggleExpenseExpanded(exp.id)}
                     >
-                      <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
-                        {/* Date Block */}
+                      <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
+                        {/* Date Block: Only Month & Day (e.g. AGO 22) */}
                         <div
-                          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
+                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
                             dateFilterMode === 'entry_date'
                               ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
                               : 'bg-zinc-100 border-zinc-200/90 text-zinc-900'
@@ -328,22 +331,11 @@ export function GenericExpenseList({
                           <span className="text-xs sm:text-sm font-black leading-none mt-0.5">
                             {parsed.dayStr}
                           </span>
-                          {/* Time display if available */}
-                          {explicitTime && dateFilterMode === 'expense_date' && (
-                            <span className="text-[7.5px] font-bold text-zinc-500 leading-none mt-0.5">
-                              {explicitTime}
-                            </span>
-                          )}
-                          {dateFilterMode === 'entry_date' && (
-                            <span className="text-[7.5px] font-bold text-indigo-700 leading-none mt-0.5">
-                              {parsed.timeStr}
-                            </span>
-                          )}
                         </div>
 
                         {/* Category Circular Badge */}
-                        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-black/5 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}>
-                          <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-black/5 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}>
+                          <CategoryIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </div>
 
                         {/* Expense Name & Details */}
@@ -355,21 +347,22 @@ export function GenericExpenseList({
                               {exp.description}
                             </h3>
                             {exp.source === 'gmail' && (
-                              <span className="bg-zinc-900 text-white text-[9px] uppercase font-semibold tracking-widest px-1.5 py-0.5 rounded shrink-0">
+                              <span className="bg-zinc-900 text-white text-[8px] uppercase font-semibold tracking-widest px-1 py-0.2 rounded shrink-0">
                                 AI
                               </span>
                             )}
                             {dateFilterMode === 'entry_date' && tx.isUpdated && (
-                              <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
+                              <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
                                 Editado
                               </span>
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5">
+                          {/* Subtitle row with inline Status Chip */}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5 leading-none">
                             {showGroupBadge && groupObj && (
                               <>
-                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded text-[10px]">
+                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[9.5px]">
                                   {groupObj.name}
                                 </span>
                                 <span>•</span>
@@ -378,8 +371,12 @@ export function GenericExpenseList({
                             <span className="truncate">
                               Pagó <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
                               {isPayer && (
-                                <span className="ml-1 text-[10px] text-emerald-700 font-bold">(Tú)</span>
+                                <span className="ml-0.5 text-[10px] text-emerald-700 font-bold">(Tú)</span>
                               )}
+                            </span>
+                            <span>•</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9.5px] sm:text-[10px] font-bold border leading-tight ${statusBg}`}>
+                              {statusText}
                             </span>
                             {exp.notes && (
                               <span className="inline-flex items-center text-zinc-400 hover:text-zinc-600" title="Contiene notas">
@@ -395,16 +392,11 @@ export function GenericExpenseList({
                         </div>
                       </div>
 
-                      {/* Right Amount & Status & Actions */}
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                        <div className="text-right flex flex-col items-end">
-                          <span className="text-base sm:text-lg font-black text-zinc-900 leading-tight tracking-tight">
-                            {formatCurrency(exp.total_amount, currency)}
-                          </span>
-                          <span className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border leading-tight ${statusBg}`}>
-                            {statusText}
-                          </span>
-                        </div>
+                      {/* Right Amount & Actions */}
+                      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                        <span className="text-xs sm:text-sm font-black text-zinc-900 leading-none tracking-tight">
+                          {formatCurrency(exp.total_amount, currency)}
+                        </span>
 
                         {/* Expand / Collapse Button */}
                         <button
@@ -414,16 +406,16 @@ export function GenericExpenseList({
                             toggleExpenseExpanded(exp.id);
                           }}
                           aria-label={isExpanded ? 'Contraer detalle de gasto' : 'Expandir detalle de gasto'}
-                          className={`p-1.5 rounded-xl border transition-all ${
+                          className={`p-1 rounded-lg border transition-all ${
                             isExpanded
                               ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                               : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800'
                           }`}
                         >
                           {isExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
+                            <ChevronUp className="w-3.5 h-3.5" />
                           ) : (
-                            <ChevronDown className="w-4 h-4" />
+                            <ChevronDown className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </div>
@@ -686,7 +678,7 @@ export function GenericExpenseList({
                 <div
                   key={`pay-${payment.id}`}
                   id={`payment-card-${payment.id}`}
-                  className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+                  className={`bg-white rounded-xl border transition-all overflow-hidden ${
                     isExpanded
                       ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
                       : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
@@ -695,16 +687,16 @@ export function GenericExpenseList({
                   {/* Collapsed / Summary Header (Click toggles expansion) */}
                   <div
                     onClick={() => togglePaymentExpanded(payment.id)}
-                    className={`p-3 sm:p-3.5 flex items-center justify-between gap-3 min-w-0 transition-colors cursor-pointer ${
+                    className={`px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between gap-2.5 min-w-0 transition-colors cursor-pointer select-none ${
                       isExpanded
                         ? 'bg-zinc-50/80 border-b border-zinc-200/70'
                         : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
                     }`}
                   >
-                    <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
-                      {/* Date Block */}
+                    <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
+                      {/* Date Block: Only Month & Day (e.g. AGO 22) */}
                       <div
-                        className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
                           dateFilterMode === 'entry_date'
                             ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
                             : 'bg-zinc-100 border-zinc-200/90 text-zinc-900'
@@ -720,22 +712,11 @@ export function GenericExpenseList({
                         <span className="text-xs sm:text-sm font-black leading-none mt-0.5">
                           {parsed.dayStr}
                         </span>
-                        {/* Time display if available */}
-                        {explicitPayTime && dateFilterMode === 'expense_date' && (
-                          <span className="text-[7.5px] font-bold text-zinc-500 leading-none mt-0.5">
-                            {explicitPayTime}
-                          </span>
-                        )}
-                        {dateFilterMode === 'entry_date' && (
-                          <span className="text-[7.5px] font-bold text-indigo-700 leading-none mt-0.5">
-                            {parsed.timeStr}
-                          </span>
-                        )}
                       </div>
 
                       {/* Payment Circular Badge */}
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                        <HandCoins className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-700" />
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                        <HandCoins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
                       </div>
 
                       {/* Payment Description & Details */}
@@ -749,25 +730,30 @@ export function GenericExpenseList({
                             {receiver ? receiver.full_name : 'Usuario'}
                           </span>
                           {dateFilterMode === 'entry_date' && tx.isUpdated && (
-                            <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
+                            <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
                               Editado
                             </span>
                           )}
                         </h3>
 
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5">
+                        {/* Subtitle row with inline Abono Chip */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5 leading-none">
                           {showGroupBadge && groupObj && (
                             <>
-                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded text-[10px]">
+                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[9.5px]">
                                 {groupObj.name}
                               </span>
                               <span>•</span>
                             </>
                           )}
+                          <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded text-[9.5px] sm:text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 leading-tight">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>Abono</span>
+                          </span>
 
                           {payment.note && (
                             <span className="text-zinc-500 truncate max-w-[120px] sm:max-w-[200px]">
-                              {payment.note}
+                              • {payment.note}
                             </span>
                           )}
 
@@ -778,7 +764,7 @@ export function GenericExpenseList({
                                 e.stopPropagation();
                                 setSelectedProofUrl(payment.proof_url ?? null);
                               }}
-                              className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center space-x-0.5"
+                              className="text-[10.5px] text-emerald-700 font-semibold hover:underline flex items-center space-x-0.5 cursor-pointer"
                             >
                               <ExternalLink className="w-2.5 h-2.5" />
                               <span>Comprobante</span>
@@ -788,17 +774,11 @@ export function GenericExpenseList({
                       </div>
                     </div>
 
-                    {/* Right Amount & Status & Action Buttons */}
-                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                      <div className="text-right flex flex-col items-end">
-                        <span className="text-base sm:text-lg font-black text-zinc-900 leading-tight tracking-tight">
-                          {formatCurrency(payment.amount, currency)}
-                        </span>
-                        <div className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 leading-tight">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                          <span>Abono</span>
-                        </div>
-                      </div>
+                    {/* Right Amount & Actions */}
+                    <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                      <span className="text-xs sm:text-sm font-black text-zinc-900 leading-none tracking-tight">
+                        {formatCurrency(payment.amount, currency)}
+                      </span>
 
                       {/* Expand / Collapse Button */}
                       <button
@@ -808,16 +788,16 @@ export function GenericExpenseList({
                           togglePaymentExpanded(payment.id);
                         }}
                         aria-label={isExpanded ? 'Contraer detalle de pago' : 'Expandir detalle de pago'}
-                        className={`p-1.5 rounded-xl border transition-all ${
+                        className={`p-1 rounded-lg border transition-all ${
                           isExpanded
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                             : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800'
                         }`}
                       >
                         {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
+                          <ChevronUp className="w-3.5 h-3.5" />
                         ) : (
-                          <ChevronDown className="w-4 h-4" />
+                          <ChevronDown className="w-3.5 h-3.5" />
                         )}
                       </button>
                     </div>

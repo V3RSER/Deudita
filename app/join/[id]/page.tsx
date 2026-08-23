@@ -64,8 +64,12 @@ export default function JoinInvitePage({ params }: { params: Promise<{ id: strin
         setError(null);
         setIsExpired(false);
 
-        const { data: { user } } = await supabase.auth.getUser();
-        setCurrentUser(user);
+        const userPromise = supabase.auth.getUser();
+        const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { user: null } }), 1500)
+        );
+        const authResult = await Promise.race([userPromise, timeoutPromise]);
+        setCurrentUser(authResult.data?.user ?? null);
 
         const res = await fetch(`/api/invites/${inviteId}`);
         const data = await res.json().catch(() => ({}));

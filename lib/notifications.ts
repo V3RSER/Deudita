@@ -166,7 +166,7 @@ export async function notifyExpenseCreated(
     });
 
     const notifications: NotificationPayload[] = [];
-    const link = groupId ? `/groups/${groupId}?expenseId=${expenseId}` : `/expenses/${expenseId}`;
+    const link = groupId ? `/groups/${groupId}?expenseId=${expenseId}` : `/my-expenses?expenseId=${expenseId}`;
 
     for (const split of splits) {
       const pId = split.user_id;
@@ -287,7 +287,7 @@ export async function notifyExpenseUpdated(
     });
 
     const notifications: NotificationPayload[] = [];
-    const link = groupId ? `/groups/${groupId}?expenseId=${expenseId}` : `/expenses/${expenseId}`;
+    const link = groupId ? `/groups/${groupId}?expenseId=${expenseId}` : `/my-expenses?expenseId=${expenseId}`;
 
     // 1. Notify current active splits
     for (const split of newSplits) {

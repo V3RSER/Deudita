@@ -16,6 +16,7 @@ import {
   GroupCategory,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { buildSponsorshipMap } from './balance-utils';
 
 interface ExpenseContextType {
@@ -232,6 +233,157 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       await reloadFromSupabase();
     });
   };
+
+  const currentUserId = currentProfile?.id;
+
+  const userGroupIds = useMemo(() => {
+    if (!currentUserId) return [];
+    const groupIdsSet = new Set<string>();
+    for (const m of members) {
+      if (m.user_id === currentUserId) {
+        groupIdsSet.add(m.group_id);
+      }
+    }
+    for (const g of groups) {
+      if (g.owner_id === currentUserId) {
+        groupIdsSet.add(g.id);
+      }
+    }
+    return Array.from(groupIdsSet).sort();
+  }, [members, groups, currentUserId]);
+
+  const userGroupIdsKey = useMemo(() => {
+    return userGroupIds.join(',');
+  }, [userGroupIds]);
+
+  useEffect(() => {
+    if (!currentUserId || !userGroupIdsKey) {
+      return;
+    }
+
+    const groupIds = userGroupIdsKey.split(',').filter(Boolean);
+    if (groupIds.length === 0) {
+      return;
+    }
+
+    const filterClause = `group_id=in.(${groupIds.join(',')})`;
+
+    const channel = supabase
+      .channel(`realtime-expenses-payments-${currentUserId}-${userGroupIdsKey}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+          filter: filterClause,
+        },
+        async (payload: RealtimePostgresChangesPayload<Record<string, any>>) => {
+          if (payload.eventType === 'INSERT') {
+            const newRecord = payload.new as { id?: string; group_id?: string };
+            if (!newRecord?.id || !newRecord.group_id) return;
+            // Client-side defense in depth
+            if (!groupIds.includes(newRecord.group_id)) return;
+
+            // Hydrate full row with items and splits relations
+            const { data, error } = await supabase
+              .from('expenses')
+              .select('*, items:expense_items(*), splits:expense_splits(*)')
+              .eq('id', newRecord.id)
+              .maybeSingle();
+
+            if (error || !data) {
+              console.warn('[Realtime] Error hydrating inserted expense:', error);
+              return;
+            }
+
+            // Single state update, avoiding duplicates (e.g. from local optimistic insert)
+            setExpenses((prev) => {
+              if (prev.some((e) => e.id === data.id)) return prev;
+              return [data as unknown as Expense, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRecord = payload.new as { id?: string; group_id?: string };
+            if (!updatedRecord?.id || !updatedRecord.group_id) return;
+            // Client-side defense in depth
+            if (!groupIds.includes(updatedRecord.group_id)) return;
+
+            // Hydrate full row with items and splits relations
+            const { data, error } = await supabase
+              .from('expenses')
+              .select('*, items:expense_items(*), splits:expense_splits(*)')
+              .eq('id', updatedRecord.id)
+              .maybeSingle();
+
+            if (error || !data) {
+              console.warn('[Realtime] Error hydrating updated expense:', error);
+              return;
+            }
+
+            // Single state update, replacing by id
+            setExpenses((prev) => {
+              if (prev.some((e) => e.id === data.id)) {
+                return prev.map((e) => (e.id === data.id ? (data as unknown as Expense) : e));
+              }
+              return [data as unknown as Expense, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const oldRecord = payload.old as { id?: string; group_id?: string };
+            if (!oldRecord?.id) return;
+            // Client-side defense in depth
+            if (oldRecord.group_id && !groupIds.includes(oldRecord.group_id)) return;
+
+            setExpenses((prev) => prev.filter((e) => e.id !== oldRecord.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payments',
+          filter: filterClause,
+        },
+        (payload: RealtimePostgresChangesPayload<Record<string, any>>) => {
+          if (payload.eventType === 'INSERT') {
+            const newRecord = payload.new as Payment;
+            if (!newRecord?.id || !newRecord.group_id) return;
+            // Client-side defense in depth
+            if (!groupIds.includes(newRecord.group_id)) return;
+
+            setPayments((prev) => {
+              if (prev.some((p) => p.id === newRecord.id)) return prev;
+              return [newRecord, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRecord = payload.new as Payment;
+            if (!updatedRecord?.id || !updatedRecord.group_id) return;
+            // Client-side defense in depth
+            if (!groupIds.includes(updatedRecord.group_id)) return;
+
+            setPayments((prev) => {
+              if (prev.some((p) => p.id === updatedRecord.id)) {
+                return prev.map((p) => (p.id === updatedRecord.id ? updatedRecord : p));
+              }
+              return [updatedRecord, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const oldRecord = payload.old as { id?: string; group_id?: string };
+            if (!oldRecord?.id) return;
+            // Client-side defense in depth
+            if (oldRecord.group_id && !groupIds.includes(oldRecord.group_id)) return;
+
+            setPayments((prev) => prev.filter((p) => p.id !== oldRecord.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userGroupIdsKey, currentUserId, supabase]);
 
   const managedUserIds = useMemo(() => {
     return Array.isArray(currentProfile?.managed_user_ids) ? currentProfile.managed_user_ids : [];
@@ -919,7 +1071,10 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const userGroups = groups.filter((g) => members.some((m) => m.group_id === g.id && m.user_id === currentProfile?.id));
+  const userGroups = useMemo(
+    () => groups.filter((g) => members.some((m) => m.group_id === g.id && m.user_id === currentProfile?.id)),
+    [groups, members, currentProfile?.id]
+  );
 
   return (
     <ExpenseContext.Provider

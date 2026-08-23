@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 export function AuthView({ error }: { error?: string }) {
   const supabase = createClient();
   const router = useRouter();
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
@@ -29,10 +28,20 @@ export function AuthView({ error }: { error?: string }) {
       }
     }
 
+    let isMounted = true;
+
     const checkUser = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        // Fast local session check with a strict timeout to avoid hanging
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1500)
+        );
+
+        const { data } = await Promise.race([sessionPromise, timeoutPromise]);
+        if (!isMounted) return;
+
+        if (data?.session?.user) {
           // If there's an invite token stored or in cookie, claim it and go straight to the group
           let activeToken = typeof window !== 'undefined'
             ? (window.sessionStorage.getItem('deudita_invite_token') ?? window.localStorage.getItem('deudita_pending_invite'))
@@ -53,7 +62,7 @@ export function AuthView({ error }: { error?: string }) {
                 body: JSON.stringify({ token: activeToken }),
               });
               const claimData = await claimRes.json();
-              if (claimData?.groupId) {
+              if (claimData?.groupId && isMounted) {
                 if (typeof window !== 'undefined') {
                   window.sessionStorage.removeItem('deudita_invite_token');
                   window.localStorage.removeItem('deudita_pending_invite');
@@ -67,15 +76,20 @@ export function AuthView({ error }: { error?: string }) {
             }
           }
 
-          router.replace('/groups');
-        } else {
-          setCheckingAuth(false);
+          if (isMounted) {
+            router.replace('/groups');
+          }
         }
-      } catch {
-        setCheckingAuth(false);
+      } catch (err) {
+        console.warn('Auth check error in AuthView:', err);
       }
     };
+
     void checkUser();
+
+    return () => {
+      isMounted = false;
+    };
   }, [supabase, router]);
 
   const handleGoogleLogin = async () => {
@@ -102,15 +116,6 @@ export function AuthView({ error }: { error?: string }) {
       },
     });
   };
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
-        <Loader2 className="w-8 h-8 text-zinc-900 animate-spin" />
-        <p className="text-sm text-zinc-500 mt-3 font-medium">Verificando sesión...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
