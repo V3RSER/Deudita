@@ -622,6 +622,18 @@ export interface ReverseOffsetItem {
   groupName?: string;
 }
 
+export interface SimplificationExpenseItem {
+  expense: Expense;
+  split?: ExpenseSplit;
+  relevantAmount: number;
+  role: 'debtor_owes_third_party' | 'creditor_paid_third_party';
+  payerProfile?: Profile;
+  participantProfile?: Profile;
+  groupName?: string;
+  currency?: string;
+  explanation: string;
+}
+
 export interface PairwiseDebtDetail {
   debtor: Profile;
   creditor: Profile;
@@ -634,6 +646,7 @@ export interface PairwiseDebtDetail {
   allExpenses: DebtBreakdownItem[];
   appliedPayments: AppliedPaymentItem[];
   reverseOffsetExpenses: ReverseOffsetItem[];
+  simplificationExpenses: SimplificationExpenseItem[];
 }
 
 export function calculatePairwiseDebtDetail(
@@ -828,6 +841,66 @@ export function calculatePairwiseDebtDetail(
 
   const netDirectBalance = Math.round((totalOriginalDebt - totalReverseOffsets - netPaymentsApplied) * 100) / 100;
 
+  // 5. Group simplification triangulated expenses
+  const simplificationExpenses: SimplificationExpenseItem[] = [];
+  const seenExpSplitKeys = new Set<string>();
+
+  // A. Debtor participated in group expenses paid by third parties (transferred to Creditor in simplification)
+  filteredExpenses.forEach((exp) => {
+    if (!debtorIds.includes(exp.paid_by) && !creditorIds.includes(exp.paid_by) && exp.splits) {
+      exp.splits.forEach((s) => {
+        if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
+          const splitKey = `${exp.id}:${s.user_id}:debtor_owes`;
+          if (!seenExpSplitKeys.has(splitKey)) {
+            seenExpSplitKeys.add(splitKey);
+            const g = groupMap.get(exp.group_id);
+            const payer = profileMap.get(exp.paid_by);
+            const debtorUser = profileMap.get(s.user_id);
+            simplificationExpenses.push({
+              expense: exp,
+              split: s,
+              relevantAmount: s.amount_owed,
+              role: 'debtor_owes_third_party',
+              payerProfile: payer,
+              participantProfile: debtorUser,
+              groupName: g?.name,
+              currency: g?.currency || 'COP',
+              explanation: `${debtorUser?.full_name || 'Deudor'} debía a ${payer?.full_name || 'Tercero'} en el grupo`,
+            });
+          }
+        }
+      });
+    }
+  });
+
+  // B. Creditor paid for group expenses where third parties participated (collected from Debtor in simplification)
+  filteredExpenses.forEach((exp) => {
+    if (creditorIds.includes(exp.paid_by) && exp.splits) {
+      exp.splits.forEach((s) => {
+        if (!debtorIds.includes(s.user_id) && !creditorIds.includes(s.user_id) && s.amount_owed > 0) {
+          const splitKey = `${exp.id}:${s.user_id}:creditor_paid`;
+          if (!seenExpSplitKeys.has(splitKey)) {
+            seenExpSplitKeys.add(splitKey);
+            const g = groupMap.get(exp.group_id);
+            const payer = profileMap.get(exp.paid_by);
+            const thirdPartyUser = profileMap.get(s.user_id);
+            simplificationExpenses.push({
+              expense: exp,
+              split: s,
+              relevantAmount: s.amount_owed,
+              role: 'creditor_paid_third_party',
+              payerProfile: payer,
+              participantProfile: thirdPartyUser,
+              groupName: g?.name,
+              currency: g?.currency || 'COP',
+              explanation: `${thirdPartyUser?.full_name || 'Tercero'} debía a ${payer?.full_name || 'Acreedor'} en el grupo`,
+            });
+          }
+        }
+      });
+    }
+  });
+
   return {
     debtor,
     creditor,
@@ -840,5 +913,6 @@ export function calculatePairwiseDebtDetail(
     allExpenses: [...allExpenses].sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
     appliedPayments: appliedPayments.sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime()),
     reverseOffsetExpenses: reverseOffsets.sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
+    simplificationExpenses: simplificationExpenses.sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
   };
 }

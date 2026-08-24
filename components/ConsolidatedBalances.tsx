@@ -104,7 +104,7 @@ function formatFullDateTime(dateStr: string | null | undefined): string {
 interface BalanceExpenseItemProps {
   expense: Expense;
   relevantAmount: number;
-  amountType: 'debt' | 'offset';
+  amountType: 'debt' | 'offset' | 'simplification';
   debtorProfile: Profile;
   creditorProfile: Profile;
   currentProfile: Profile | null;
@@ -112,6 +112,8 @@ interface BalanceExpenseItemProps {
   groupCurrency?: string;
   profiles: Profile[];
   onOpenReceipt: (url: string) => void;
+  customExplanation?: string;
+  simplificationRole?: 'debtor_owes_third_party' | 'creditor_paid_third_party';
 }
 
 function BalanceExpenseItem({
@@ -125,6 +127,8 @@ function BalanceExpenseItem({
   groupCurrency,
   profiles,
   onOpenReceipt,
+  customExplanation,
+  simplificationRole,
 }: BalanceExpenseItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -139,6 +143,9 @@ function BalanceExpenseItem({
 
   const isCurrentDebtor = currentProfile?.id === debtorProfile.id;
   const isCurrentCreditor = currentProfile?.id === creditorProfile.id;
+
+  const debtorDisplayName = isCurrentDebtor ? 'Tú' : debtorProfile.full_name || 'Deudor';
+  const creditorDisplayName = isCurrentCreditor ? 'Tú' : creditorProfile.full_name || 'Acreedor';
 
   // Build participant summary breakdown for expanded view
   const participantSummaryList: ParticipantSummaryData[] = useMemo(() => {
@@ -187,25 +194,38 @@ function BalanceExpenseItem({
   if (amountType === 'debt') {
     if (isCurrentDebtor) {
       contextLabel = `debes ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-rose-600';
+      contextColorClass = 'text-rose-600 font-extrabold';
     } else if (isCurrentCreditor) {
       contextLabel = `te debe ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-emerald-700';
+      contextColorClass = 'text-emerald-700 font-extrabold';
     } else {
       contextLabel = `debe ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-zinc-700';
+      contextColorClass = 'text-rose-600 font-extrabold';
+    }
+  } else if (amountType === 'offset') {
+    // Reverse offset: debtor paid and creditor owes -> debtor recovers
+    if (isCurrentDebtor) {
+      contextLabel = `recuperas ${formatCurrency(relevantAmount, currency)}`;
+      contextColorClass = 'text-emerald-700 font-extrabold';
+    } else if (isCurrentCreditor) {
+      contextLabel = `debes ${formatCurrency(relevantAmount, currency)}`;
+      contextColorClass = 'text-rose-600 font-extrabold';
+    } else {
+      contextLabel = `recupera ${formatCurrency(relevantAmount, currency)}`;
+      contextColorClass = 'text-emerald-700 font-extrabold';
     }
   } else {
-    // Reverse offset (expense discounts from balance)
-    if (isCurrentDebtor) {
-      contextLabel = `te descuenta -${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-indigo-600';
-    } else if (isCurrentCreditor) {
-      contextLabel = `descuenta -${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-indigo-600';
+    // Group Simplification
+    if (simplificationRole === 'debtor_owes_third_party') {
+      contextLabel = isCurrentDebtor
+        ? `debes ${formatCurrency(relevantAmount, currency)}`
+        : `debe ${formatCurrency(relevantAmount, currency)}`;
+      contextColorClass = 'text-rose-600 font-extrabold';
     } else {
-      contextLabel = `descuenta -${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-indigo-600';
+      contextLabel = isCurrentCreditor
+        ? `te deben ${formatCurrency(relevantAmount, currency)}`
+        : `recupera ${formatCurrency(relevantAmount, currency)}`;
+      contextColorClass = 'text-emerald-700 font-extrabold';
     }
   }
 
@@ -277,13 +297,23 @@ function BalanceExpenseItem({
               <span>
                 {amountType === 'debt' ? (
                   <span>
-                    Consumo de {debtorProfile.full_name || 'Deudor'}:{' '}
-                    <strong className="text-zinc-800">{formatCurrency(relevantAmount, currency)}</strong>
+                    {debtorDisplayName} {isCurrentDebtor ? 'debes' : 'debe'}:{' '}
+                    <strong className="text-rose-600 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
+                  </span>
+                ) : amountType === 'offset' ? (
+                  <span>
+                    {debtorDisplayName} {isCurrentDebtor ? 'recuperas' : 'recupera'}:{' '}
+                    <strong className="text-emerald-700 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
+                  </span>
+                ) : simplificationRole === 'debtor_owes_third_party' ? (
+                  <span>
+                    {debtorDisplayName} {isCurrentDebtor ? 'debes' : 'debe'}:{' '}
+                    <strong className="text-rose-600 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
                   </span>
                 ) : (
                   <span>
-                    Consumo de {creditorProfile.full_name || 'Acreedor'}:{' '}
-                    <strong className="text-indigo-900">{formatCurrency(relevantAmount, currency)}</strong>
+                    {customExplanation || `${payerName} recupera`}:{' '}
+                    <strong className="text-emerald-700 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
                   </span>
                 )}
               </span>
@@ -297,7 +327,7 @@ function BalanceExpenseItem({
             <span className="text-xs sm:text-sm font-black text-zinc-900 leading-tight">
               {formatCurrency(expense.total_amount, currency)}
             </span>
-            <span className={`text-[10.5px] font-extrabold leading-tight mt-0.5 ${contextColorClass}`}>
+            <span className={`text-[10.5px] leading-tight mt-0.5 ${contextColorClass}`}>
               {contextLabel}
             </span>
           </div>
@@ -792,9 +822,9 @@ function UnifiedBalanceCard({
                   <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
                     3. Pagado por {debtorName}
                   </span>
-                  <Minus className="w-3 h-3 text-indigo-600" />
+                  <Minus className="w-3 h-3 text-emerald-600" />
                 </div>
-                <span className="font-black text-indigo-700 text-base mt-1 block">
+                <span className="font-black text-emerald-700 text-base mt-1 block">
                   -{formatCurrency(debtDetail.totalReverseOffsets)}
                 </span>
                 <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
@@ -829,10 +859,10 @@ function UnifiedBalanceCard({
                   <div className="w-6 h-6 rounded-lg bg-zinc-900 text-white flex items-center justify-center text-xs font-black">
                     1
                   </div>
-                  <span>Pagado por {creditorName} • Consumos de {debtorName}</span>
+                  <span>Pagado por {creditorName} • {debtorName} debe</span>
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Gastos donde {creditorName} pagó y {debtorName} participó como consumidor.
+                  Gastos donde {creditorName} pagó y {debtorName} debe su consumo.
                 </p>
               </div>
 
@@ -956,22 +986,22 @@ function UnifiedBalanceCard({
             )}
           </div>
 
-          {/* SECTION 3: Gastos pagados por el Deudor (Consumos del Acreedor - Descuentan) */}
+          {/* SECTION 3: Gastos pagados por el Deudor (Consumos del Acreedor - Recupera) */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
                     3
                   </div>
-                  <span>Pagado por {debtorName} • Consumos de {creditorName}</span>
+                  <span>Pagado por {debtorName} • {debtorName} recupera</span>
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Gastos que pagó {debtorName} donde {creditorName} participó, los cuales descuentan de la deuda.
+                  Gastos pagados por {debtorName} donde {creditorName} participó, los cuales recuperan saldo.
                 </p>
               </div>
 
-              <span className="text-xs sm:text-sm font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">
+              <span className="text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
                 -{formatCurrency(debtDetail.totalReverseOffsets)}
               </span>
             </div>
@@ -1016,7 +1046,7 @@ function UnifiedBalanceCard({
                   <span>Ajuste simplificado • Optimización grupal</span>
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Optimización matemática para reducir el número total de transferencias requeridas en los grupos.
+                  Gastos triangulados y optimización del grupo para liquidar en menos transferencias.
                 </p>
               </div>
 
@@ -1042,9 +1072,9 @@ function UnifiedBalanceCard({
 
                 <div className="flex items-center justify-between py-1 border-b border-zinc-100">
                   <span className="text-zinc-600">
-                    3. Gastos compensatorios pagados por {debtorName}
+                    3. Gastos pagados por {debtorName} ({debtorName} recupera)
                   </span>
-                  <strong className="text-indigo-700">-{formatCurrency(debtDetail.totalReverseOffsets)}</strong>
+                  <strong className="text-emerald-700">-{formatCurrency(debtDetail.totalReverseOffsets)}</strong>
                 </div>
 
                 <div className="flex items-center justify-between py-1.5 bg-zinc-50 px-2.5 rounded-xl border border-zinc-200/60 font-bold">
@@ -1082,6 +1112,41 @@ function UnifiedBalanceCard({
                   : 'En el modo directo, cada integrante transfiere exactamente según sus cuentas individuales sin reasignar pagos.'}
               </p>
             </div>
+
+            {/* Gastos involucrados en el ajuste simplificado */}
+            {isSimplified && debtDetail.simplificationExpenses && debtDetail.simplificationExpenses.length > 0 && (
+              <div className="space-y-2.5 pt-2">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="text-xs font-extrabold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+                    <span>Gastos triangulados involucrados ({debtDetail.simplificationExpenses.length})</span>
+                  </span>
+                  <span className="text-[11px] text-zinc-500 font-medium">
+                    Gastos con terceros optimizados en este saldo
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {debtDetail.simplificationExpenses.map((simpItem, sIdx) => (
+                    <BalanceExpenseItem
+                      key={simpItem.expense.id + sIdx}
+                      expense={simpItem.expense}
+                      relevantAmount={simpItem.relevantAmount}
+                      amountType="simplification"
+                      debtorProfile={pairwise.debtor}
+                      creditorProfile={pairwise.creditor}
+                      currentProfile={currentProfile}
+                      groupName={simpItem.groupName}
+                      groupCurrency={simpItem.currency}
+                      profiles={profiles}
+                      onOpenReceipt={onOpenReceipt}
+                      customExplanation={simpItem.explanation}
+                      simplificationRole={simpItem.role}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
