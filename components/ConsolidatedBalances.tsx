@@ -49,6 +49,7 @@ import {
   X,
   Calculator,
   Users,
+  ArrowRight,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -62,6 +63,56 @@ function getInitials(name?: string): string {
   const trimmed = name.trim();
   if (!trimmed) return 'U';
   return trimmed.charAt(0).toUpperCase();
+}
+
+function UserAvatar({
+  profile,
+  size = 'md',
+  className = '',
+}: {
+  profile?: Profile | null;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  className?: string;
+}) {
+  const sizeClasses = {
+    xs: 'w-5 h-5 text-[9px]',
+    sm: 'w-6 h-6 text-[10px]',
+    md: 'w-8 h-8 text-xs',
+    lg: 'w-10 h-10 text-sm',
+  };
+
+  const pxSizes = {
+    xs: 20,
+    sm: 24,
+    md: 32,
+    lg: 40,
+  };
+
+  const name = profile?.full_name || 'Usuario';
+  const initial = getInitials(name);
+
+  if (profile?.avatar_url) {
+    return (
+      <Image
+        src={profile.avatar_url}
+        alt={name}
+        width={pxSizes[size]}
+        height={pxSizes[size]}
+        className={`rounded-full object-cover shrink-0 ring-1.5 ring-white shadow-2xs ${sizeClasses[size]} ${className}`}
+        unoptimized
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-full bg-zinc-800 text-white font-bold flex items-center justify-center shrink-0 ring-1.5 ring-white shadow-2xs ${sizeClasses[size]} ${className}`}
+      title={name}
+    >
+      {initial}
+    </div>
+  );
 }
 
 type FilterType = 'all' | 'mine' | 'to_receive' | 'to_pay' | 'third_party';
@@ -470,7 +521,7 @@ function TriangularChainCard({
   return (
     <div className="bg-white rounded-2xl border border-violet-200/90 shadow-2xs overflow-hidden transition-all">
       <div
-        className="p-3.5 sm:p-4 cursor-pointer hover:bg-violet-50/40 select-none transition-colors"
+        className="p-3.5 sm:p-4 cursor-pointer hover:bg-violet-50/30 select-none transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
         role="button"
         tabIndex={0}
@@ -481,80 +532,95 @@ function TriangularChainCard({
           }
         }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2 min-w-0 flex-1">
-            {/* Header badges: Intermediary & Group */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-black bg-violet-100 text-violet-900 px-2.5 py-0.5 rounded-lg border border-violet-200">
-                <Users className="w-3.5 h-3.5 text-violet-600" />
-                Intermediario: {thirdPartyName}
+        {/* Top Header: Intermediary Badge & Group & Count */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold bg-violet-100/80 text-violet-900 px-2.5 py-1 rounded-lg border border-violet-200">
+              <UserAvatar profile={chain.thirdParty} size="xs" />
+              <span>Intermediario: <strong>{thirdPartyName}</strong></span>
+            </span>
+            {chain.groupName && (
+              <span className="text-[10px] font-bold bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md border border-zinc-200/60">
+                {chain.groupName}
               </span>
-              {chain.groupName && (
-                <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-md border border-zinc-200">
-                  {chain.groupName}
-                </span>
-              )}
-            </div>
-
-            {/* Clear narrative explanation of the debt chain */}
-            <div className="space-y-1.5 text-xs text-zinc-800 bg-zinc-50/80 p-3 rounded-xl border border-zinc-200/70">
-              {chain.debtorOwesThirdPartyAmount > 0 && (
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                    <span>
-                      <strong>{debtorName}</strong> le debe a <strong>{thirdPartyName}</strong>
-                    </span>
-                  </div>
-                  <strong className="text-rose-600 font-black">
-                    +{formatCurrency(chain.debtorOwesThirdPartyAmount, currency)}
-                  </strong>
-                </div>
-              )}
-              {chain.thirdPartyOwesCreditorAmount > 0 && (
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span>
-                      <strong>{thirdPartyName}</strong> le debe a <strong>{creditorName}</strong>
-                    </span>
-                  </div>
-                  <strong className="text-emerald-700 font-black">
-                    +{formatCurrency(chain.thirdPartyOwesCreditorAmount, currency)}
-                  </strong>
-                </div>
-              )}
-            </div>
-
-            {/* Summary optimization note */}
-            <p className="text-[11px] text-violet-900 bg-violet-50/90 border border-violet-200/70 p-2.5 rounded-xl font-medium">
-              💡 <strong>Optimización grupal:</strong> {debtorName} le transfiere directamente a {creditorName} para saldar ambas cuentas en un solo pago sin necesidad de triangular dinero con {thirdPartyName}.
-            </p>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 pt-0.5">
-            <span className="text-[11px] font-extrabold text-violet-700 bg-violet-100/80 px-2.5 py-1 rounded-lg border border-violet-200 hidden sm:inline-block">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-lg border border-violet-200/70 hidden sm:inline-block">
               {totalChainExpenses} {totalChainExpenses === 1 ? 'gasto' : 'gastos'}
             </span>
-            <div className="p-1.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-700">
+            <div className="p-1 rounded-lg border border-violet-200/70 bg-violet-50 text-violet-700">
               {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </div>
+          </div>
+        </div>
+
+        {/* Narrative Flowchart */}
+        <div className="bg-zinc-50/90 rounded-xl p-3 sm:p-3.5 border border-zinc-200/70 space-y-2">
+          {/* Step 1 */}
+          {chain.debtorOwesThirdPartyAmount > 0 && (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-zinc-200/70 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <UserAvatar profile={debtorProfile} size="sm" />
+                <span className="text-xs text-zinc-800 truncate">
+                  <strong className="font-extrabold text-zinc-900">{debtorName}</strong> le debe a{' '}
+                  <strong className="font-extrabold text-zinc-900">{thirdPartyName}</strong>
+                </span>
+              </div>
+              <span className="text-xs font-black text-rose-600 shrink-0 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                {formatCurrency(chain.debtorOwesThirdPartyAmount, currency)}
+              </span>
+            </div>
+          )}
+
+          {/* Step 2 */}
+          {chain.thirdPartyOwesCreditorAmount > 0 && (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-zinc-200/70 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <UserAvatar profile={chain.thirdParty} size="sm" />
+                <span className="text-xs text-zinc-800 truncate">
+                  <strong className="font-extrabold text-zinc-900">{thirdPartyName}</strong> le debe a{' '}
+                  <strong className="font-extrabold text-zinc-900">{creditorName}</strong>
+                </span>
+              </div>
+              <span className="text-xs font-black text-emerald-700 shrink-0 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                {formatCurrency(chain.thirdPartyOwesCreditorAmount, currency)}
+              </span>
+            </div>
+          )}
+
+          {/* Step 3: Therefore (Resolution) */}
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-violet-50/90 border border-violet-200 text-violet-950">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center -space-x-1.5 shrink-0">
+                <UserAvatar profile={debtorProfile} size="xs" />
+                <UserAvatar profile={creditorProfile} size="xs" />
+              </div>
+              <span className="text-xs font-semibold text-violet-950 truncate">
+                <span className="font-black text-violet-900">Por lo tanto:</span>{' '}
+                {debtorName} le transfiere directamente a {creditorName}
+              </span>
+            </div>
+            <span className="text-[10px] font-extrabold text-violet-700 bg-white px-2 py-0.5 rounded-md border border-violet-200 shrink-0">
+              Transferencia directa
+            </span>
           </div>
         </div>
       </div>
 
       {/* Expanded list of specific expenses in this chain */}
       {isExpanded && (
-        <div className="border-t border-violet-100 bg-zinc-50/70 p-3 sm:p-4 space-y-3.5">
+        <div className="border-t border-violet-100 bg-zinc-50/60 p-3 sm:p-4 space-y-3">
           {chain.debtorToThirdPartyExpenses.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span className="text-[11px] font-extrabold text-zinc-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
                   Gastos donde {debtorName} le debe a {thirdPartyName} ({chain.debtorToThirdPartyExpenses.length})
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {chain.debtorToThirdPartyExpenses.map((dItem, dIdx) => (
                   <BalanceExpenseItem
                     key={dItem.expense.id + dIdx}
@@ -576,14 +642,14 @@ function TriangularChainCard({
           )}
 
           {chain.thirdPartyToCreditorExpenses.length > 0 && (
-            <div className="space-y-2 pt-1 border-t border-zinc-200/60">
+            <div className="space-y-2 pt-2 border-t border-zinc-200/60">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-[11px] font-extrabold text-zinc-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
                   Gastos donde {thirdPartyName} le debe a {creditorName} ({chain.thirdPartyToCreditorExpenses.length})
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {chain.thirdPartyToCreditorExpenses.map((cItem, cIdx) => (
                   <BalanceExpenseItem
                     key={cItem.expense.id + cIdx}
@@ -899,37 +965,28 @@ function UnifiedBalanceCard({
 
       {/* Expanded 4-Section Auditable Detail */}
       {isExpanded && (
-        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5 space-y-6">
+        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5 space-y-5">
           {/* SECTION 1: Gastos pagados por el Acreedor (Consumos del Deudor) */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-lg bg-zinc-900 text-white flex items-center justify-center text-xs font-black">
-                    1
-                  </div>
-                  <span>Pagado por {creditorName} • {debtorName} debe</span>
-                </h4>
-                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Gastos donde {creditorName} pagó y {debtorName} debe su consumo.
-                </p>
-              </div>
+              <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
+                <div className="w-5 h-5 rounded-md bg-zinc-900 text-white flex items-center justify-center text-[11px] font-black">
+                  1
+                </div>
+                <span>Pagado por {creditorName} • {debtorName} debe</span>
+              </h4>
 
-              <span className="text-xs sm:text-sm font-black text-rose-600 bg-rose-50 px-3 py-1 rounded-xl border border-rose-200">
+              <span className="text-xs font-black text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200">
                 +{formatCurrency(debtDetail.totalOriginalDebt)}
               </span>
             </div>
 
             {debtDetail.allExpenses.length === 0 ? (
-              <div className="p-6 bg-white rounded-2xl border border-zinc-200/80 text-center space-y-1">
-                <CheckCircle2 className="w-6 h-6 text-zinc-400 mx-auto" />
-                <p className="text-xs font-bold text-zinc-900">No hay gastos pagados por {creditorName}</p>
-                <p className="text-[11px] text-zinc-500">
-                  No se encontraron consumos registrados de {debtorName} asumidos por {creditorName}.
-                </p>
+              <div className="p-3.5 bg-white rounded-xl border border-zinc-200/70 text-center text-xs text-zinc-500 font-medium">
+                No hay consumos de {debtorName} pagados por {creditorName}.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {debtDetail.allExpenses.map((item, idx) => (
                   <BalanceExpenseItem
                     key={item.expense.id + idx}
@@ -950,58 +1007,42 @@ function UnifiedBalanceCard({
           </div>
 
           {/* SECTION 2: Abonos de deuda (Transferencias directas) */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
-                    2
-                  </div>
-                  <span>Abonos de deuda • Transferencias directas</span>
-                </h4>
-                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Pagos y transferencias registradas directamente entre {debtorName} y {creditorName}.
-                </p>
-              </div>
+              <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
+                <div className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black">
+                  2
+                </div>
+                <span>Abonos de deuda • Transferencias directas</span>
+              </h4>
 
-              <span className="text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+              <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
                 -{formatCurrency(debtDetail.totalPaymentsApplied)}
               </span>
             </div>
 
             {debtDetail.appliedPayments.length === 0 ? (
-              <div className="p-5 bg-white rounded-2xl border border-zinc-200/80 flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-zinc-100 text-zinc-400 flex items-center justify-center shrink-0">
-                    <HandCoins className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-zinc-900">No hay transferencias directas registradas</p>
-                    <p className="text-[11px] text-zinc-500">
-                      No se han registrado abonos o pagos bancarios directos entre ambos.
-                    </p>
-                  </div>
-                </div>
-
+              <div className="p-3 bg-white rounded-xl border border-zinc-200/70 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <span className="text-zinc-500 font-medium">No se han registrado transferencias directas.</span>
                 <button
                   type="button"
                   onClick={() =>
                     onOpenSettleModal(pairwise.group_id, pairwise.debtor.id, pairwise.creditor.id, pairwise.amount)
                   }
-                  className="px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-xs font-extrabold transition-all cursor-pointer"
+                  className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
                 >
                   Registrar abono
                 </button>
               </div>
             ) : (
-              <div className="divide-y divide-zinc-200/70 rounded-2xl border border-zinc-200/80 bg-white overflow-hidden shadow-2xs">
+              <div className="divide-y divide-zinc-200/70 rounded-xl border border-zinc-200/80 bg-white overflow-hidden shadow-2xs">
                 {debtDetail.appliedPayments.map((payItem, pIdx) => (
                   <div
                     key={payItem.payment.id || pIdx}
-                    className="p-3.5 flex items-center justify-between text-xs hover:bg-zinc-50/80 transition-colors gap-3"
+                    className="p-3 flex items-center justify-between text-xs hover:bg-zinc-50/80 transition-colors gap-3"
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shrink-0 border border-emerald-200/80">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200/80">
                         ✓
                       </div>
                       <div className="min-w-0">
@@ -1015,7 +1056,7 @@ function UnifiedBalanceCard({
                             Transferencia {payItem.payment.note ? `• ${payItem.payment.note}` : ''}
                           </span>
                         </div>
-                        <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
+                        <span className="text-[10.5px] text-zinc-500 font-medium block">
                           Fecha: {payItem.payment.payment_date}
                         </span>
                       </div>
@@ -1025,9 +1066,6 @@ function UnifiedBalanceCard({
                       <span className="font-black text-emerald-700 text-xs sm:text-sm block">
                         -{formatCurrency(payItem.amountApplied)}
                       </span>
-                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
-                        Abono aplicado
-                      </span>
                     </div>
                   </div>
                 ))}
@@ -1036,36 +1074,26 @@ function UnifiedBalanceCard({
           </div>
 
           {/* SECTION 3: Gastos pagados por el Deudor (Consumos del Acreedor - Recupera) */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black">
-                    3
-                  </div>
-                  <span>Pagado por {debtorName} • {debtorName} recupera</span>
-                </h4>
-                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Gastos pagados por {debtorName} donde {creditorName} participó, los cuales recuperan saldo.
-                </p>
-              </div>
+              <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
+                <div className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black">
+                  3
+                </div>
+                <span>Pagado por {debtorName} • {debtorName} recupera</span>
+              </h4>
 
-              <span className="text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+              <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
                 -{formatCurrency(debtDetail.totalReverseOffsets)}
               </span>
             </div>
 
             {debtDetail.reverseOffsetExpenses.length === 0 ? (
-              <div className="p-5 bg-white rounded-2xl border border-zinc-200/80 text-center space-y-1">
-                <p className="text-xs font-bold text-zinc-900">
-                  No hay gastos compensatorios pagados por {debtorName}
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  No hay gastos cruzados donde {debtorName} haya asumido consumos de {creditorName}.
-                </p>
+              <div className="p-3.5 bg-white rounded-xl border border-zinc-200/70 text-center text-xs text-zinc-500 font-medium">
+                No hay gastos pagados por {debtorName} donde {creditorName} participó.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {debtDetail.reverseOffsetExpenses.map((revItem, revIdx) => (
                   <BalanceExpenseItem
                     key={revItem.expense.id + revIdx}
@@ -1085,30 +1113,25 @@ function UnifiedBalanceCard({
           </div>
 
           {/* SECTION 4: Gastos triangulados involucrados (Ajuste por optimización grupal) */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black">
-                    4
-                  </div>
-                  <span>
-                    Gastos triangulados involucrados ({debtDetail.simplificationExpenses.length}) • Optimización grupal
-                  </span>
-                </h4>
-                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Cadenas de deuda con terceros donde las transferencias se optimizan directamente entre {debtorName} y {creditorName}.
-                </p>
-              </div>
+              <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
+                <div className="w-5 h-5 rounded-md bg-violet-600 text-white flex items-center justify-center text-[11px] font-black">
+                  4
+                </div>
+                <span>
+                  Gastos triangulados ({debtDetail.simplificationExpenses.length}) • Optimización grupal
+                </span>
+              </h4>
 
-              <span className="text-xs sm:text-sm font-black text-violet-700 bg-violet-50 px-3 py-1 rounded-xl border border-violet-200">
+              <span className="text-xs font-black text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-lg border border-violet-200">
                 {simplifiedDiff > 0 ? '+' : ''}
                 {formatCurrency(simplifiedDiff)}
               </span>
             </div>
 
             {isSimplified && debtDetail.triangularChains && debtDetail.triangularChains.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {debtDetail.triangularChains.map((chain, cIdx) => (
                   <TriangularChainCard
                     key={chain.thirdParty.id + cIdx}
@@ -1122,7 +1145,7 @@ function UnifiedBalanceCard({
                 ))}
               </div>
             ) : isSimplified && debtDetail.simplificationExpenses && debtDetail.simplificationExpenses.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {debtDetail.simplificationExpenses.map((simpItem, sIdx) => (
                   <BalanceExpenseItem
                     key={simpItem.expense.id + sIdx}
@@ -1142,105 +1165,32 @@ function UnifiedBalanceCard({
                 ))}
               </div>
             ) : (
-              <div className="p-5 bg-white rounded-2xl border border-zinc-200/80 text-center space-y-1">
-                <p className="text-xs font-bold text-zinc-900">
-                  No hay gastos triangulados adicionales
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  {isSimplified
-                    ? 'El saldo entre ambos proviene enteramente de consumos y transferencias directas.'
-                    : 'Modo directo activo: se saldan directamente las deudas 1 a 1 sin optimización grupal.'}
-                </p>
+              <div className="p-3.5 bg-white rounded-xl border border-zinc-200/70 text-center text-xs text-zinc-500 font-medium">
+                {isSimplified
+                  ? 'No hay deudas trianguladas adicionales con terceros.'
+                  : 'Modo directo activo: se saldan directamente las deudas 1 a 1.'}
               </div>
             )}
           </div>
 
           {/* SECTION 5 (At bottom): ¿De dónde sale esta cifra? (Ecuación completa) */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-4 pt-2">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
-              <span className="text-xs font-extrabold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-indigo-600" />
-                <span>¿De dónde sale esta cifra? (Ecuación completa)</span>
+          <div className="bg-white rounded-2xl p-4 border border-zinc-200/90 shadow-2xs space-y-3 pt-3">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+              <span className="text-xs font-black text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                <span>¿De dónde sale esta cifra? (Ecuación)</span>
               </span>
 
-              <span className="text-[11px] font-bold text-zinc-400">
+              <span className="text-[10.5px] font-bold text-zinc-400">
                 {isSimplified ? 'Modo Simplificado' : 'Modo Directo'}
               </span>
             </div>
 
-            {/* 4 Summary Equation Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              {/* 1. Pagado por Acreedor */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    1. Pagado por {creditorName}
-                  </span>
-                  <Plus className="w-3 h-3 text-zinc-400" />
-                </div>
-                <span className="font-black text-rose-600 text-base mt-1 block">
-                  +{formatCurrency(debtDetail.totalOriginalDebt)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Consumos de {debtorName}
-                </span>
-              </div>
-
-              {/* 2. Abonos de deuda */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    2. Abonos de deuda
-                  </span>
-                  <Minus className="w-3 h-3 text-emerald-600" />
-                </div>
-                <span className="font-black text-emerald-700 text-base mt-1 block">
-                  -{formatCurrency(debtDetail.totalPaymentsApplied)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Transferencias directas
-                </span>
-              </div>
-
-              {/* 3. Pagado por Deudor */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    3. Pagado por {debtorName}
-                  </span>
-                  <Minus className="w-3 h-3 text-emerald-600" />
-                </div>
-                <span className="font-black text-emerald-700 text-base mt-1 block">
-                  -{formatCurrency(debtDetail.totalReverseOffsets)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Consumos de {creditorName}
-                </span>
-              </div>
-
-              {/* 4. Ajuste simplificado */}
-              <div className="p-3.5 rounded-2xl bg-violet-50/70 border border-violet-200/80 text-violet-950">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-violet-800 font-extrabold uppercase truncate">
-                    4. Ajuste simplificado
-                  </span>
-                  <Sparkles className="w-3 h-3 text-violet-600" />
-                </div>
-                <span className="font-black text-violet-900 text-base mt-1 block">
-                  {simplifiedDiff > 0 ? '+' : ''}
-                  {formatCurrency(simplifiedDiff)}
-                </span>
-                <span className="text-[11px] text-violet-700 font-medium block mt-0.5">
-                  {isSimplified ? 'Optimización grupal' : 'Sin optimización (Directo)'}
-                </span>
-              </div>
-            </div>
-
             {/* Arithmetic Breakdown */}
-            <div className="space-y-2 text-xs pt-1">
+            <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between py-1 border-b border-zinc-100">
                 <span className="text-zinc-600">
-                  1. Consumos acumulados de {debtorName} (Pagó {creditorName})
+                  1. Consumos de {debtorName} (Pagó {creditorName})
                 </span>
                 <strong className="text-rose-600 font-bold">+{formatCurrency(debtDetail.totalOriginalDebt)}</strong>
               </div>
@@ -1257,13 +1207,13 @@ function UnifiedBalanceCard({
                 <strong className="text-emerald-700 font-bold">-{formatCurrency(debtDetail.totalReverseOffsets)}</strong>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 bg-zinc-50 px-2.5 rounded-xl border border-zinc-200/60 font-bold">
+              <div className="flex items-center justify-between py-1.5 bg-zinc-50 px-2.5 rounded-lg border border-zinc-200/60 font-bold">
                 <span className="text-zinc-700">= Saldo directo acumulado (1 a 1)</span>
                 <span className="text-zinc-900">{formatCurrency(directBalance)}</span>
               </div>
 
               {isSimplified ? (
-                <div className="flex items-center justify-between py-1.5 bg-violet-50/70 px-2.5 rounded-xl border border-violet-200/70 font-bold text-violet-950">
+                <div className="flex items-center justify-between py-1.5 bg-violet-50/80 px-2.5 rounded-lg border border-violet-200 font-bold text-violet-950">
                   <span className="text-violet-800 flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-violet-600" />
                     <span>4. Ajuste por simplificación grupal</span>
@@ -1273,24 +1223,13 @@ function UnifiedBalanceCard({
                     {formatCurrency(simplifiedDiff)}
                   </span>
                 </div>
-              ) : (
-                <div className="p-2.5 bg-zinc-50 rounded-xl text-zinc-500 text-[11px]">
-                  Modo directo activo: se saldan directamente las deudas 1 a 1 sin optimización grupal.
-                </div>
-              )}
+              ) : null}
 
-              <div className="flex items-center justify-between py-2 bg-zinc-900 text-white px-3 rounded-xl font-black text-sm shadow-xs mt-2">
+              <div className="flex items-center justify-between py-2 bg-zinc-900 text-white px-3 rounded-xl font-black text-sm shadow-xs mt-1">
                 <span>= Saldo final a liquidar</span>
                 <span className="text-base text-emerald-400">{formatCurrency(pairwise.amount)}</span>
               </div>
             </div>
-
-            <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
-              <Info className="w-3.5 h-3.5 inline mr-1 text-zinc-400" />
-              {isSimplified
-                ? 'La simplificación de deudas une los saldos triangulares entre todos los participantes del grupo para que nadie pague ni cobre de más, reduciendo al mínimo la cantidad de transferencias.'
-                : 'En el modo directo, cada integrante transfiere exactamente según sus cuentas individuales sin reasignar pagos.'}
-            </p>
           </div>
         </div>
       )}
