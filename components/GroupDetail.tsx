@@ -729,6 +729,7 @@ export function GroupDetail({
             onDeletePayment={onDeletePayment || ((payId) => deletePayment(payId))}
             showGroupBadge={false}
             initialExpandedExpenseId={highlightedExpenseId}
+            pageSize={20}
           />
         </div>
       )}

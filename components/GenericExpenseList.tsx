@@ -33,7 +33,8 @@ import {
   Calendar,
   ImageIcon,
   ShoppingBag,
-  Layers
+  Layers,
+  Loader2,
 } from 'lucide-react';
 
 type UnifiedTransaction =
@@ -69,6 +70,7 @@ interface GenericExpenseListProps {
   onDeletePayment?: (paymentId: string) => void;
   showGroupBadge?: boolean;
   initialExpandedExpenseId?: string | null;
+  pageSize?: number;
 }
 
 const MONTH_NAMES_ES = [
@@ -131,6 +133,7 @@ export function GenericExpenseList({
   onDeletePayment,
   showGroupBadge = true,
   initialExpandedExpenseId,
+  pageSize = 20,
 }: GenericExpenseListProps) {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
   const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
@@ -139,6 +142,14 @@ export function GenericExpenseList({
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
   const [isDeletingExpense, setIsDeletingExpense] = useState(false);
   const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+  const [extraPages, setExtraPages] = useState<number>(0);
+  const [prevFilterKey, setPrevFilterKey] = useState<string>(`${expenses.length}_${payments.length}_${dateFilterMode}`);
+  const currentFilterKey = `${expenses.length}_${payments.length}_${dateFilterMode}`;
+  if (prevFilterKey !== currentFilterKey) {
+    setPrevFilterKey(currentFilterKey);
+    setExtraPages(0);
+  }
+  const visibleCount = pageSize + extraPages * pageSize;
 
   // Scroll to targeted expense card if initialExpandedExpenseId provided
   React.useEffect(() => {
@@ -219,10 +230,15 @@ export function GenericExpenseList({
     );
   }
 
-  // Group transactions by month
+  // Paginated visible transactions
+  const visibleTransactions = transactions.slice(0, visibleCount);
+  const hasMoreTransactions = transactions.length > visibleCount;
+  const remainingCount = transactions.length - visibleCount;
+
+  // Group visible transactions by month
   const groupedByMonth: { key: string; label: string; items: UnifiedTransaction[] }[] = [];
 
-  transactions.forEach((tx) => {
+  visibleTransactions.forEach((tx) => {
     const parsed = parseTxDate(tx.dateObj);
     let existing = groupedByMonth.find((g) => g.key === parsed.key);
     if (!existing) {
@@ -937,6 +953,33 @@ export function GenericExpenseList({
           </div>
         </div>
       ))}
+
+      {/* Pagination / Load More Controls */}
+      {transactions.length > pageSize && (
+        <div className="pt-2 pb-4 flex flex-col items-center justify-center gap-2">
+          {hasMoreTransactions ? (
+            <button
+              type="button"
+              onClick={() => setExtraPages((prev) => prev + 1)}
+              className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-zinc-50 active:scale-[0.98] border border-zinc-200/90 hover:border-zinc-300 text-zinc-900 rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <ChevronDown className="w-4 h-4 text-emerald-600" />
+              <span>
+                Cargar más ({Math.min(pageSize, remainingCount)} de {remainingCount} restantes)
+              </span>
+            </button>
+          ) : (
+            <div className="text-center">
+              <span className="text-[11px] font-medium text-zinc-500 bg-zinc-50 px-3 py-1.5 rounded-full border border-zinc-200/60">
+                Has cargado todos los movimientos ({transactions.length})
+              </span>
+            </div>
+          )}
+          <span className="text-[11px] font-medium text-zinc-400">
+            Mostrando {visibleTransactions.length} de {transactions.length} movimientos
+          </span>
+        </div>
+      )}
 
       {/* Delete Expense Modal (Generic & Reusable) */}
       <ConfirmModal
