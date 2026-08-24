@@ -280,18 +280,16 @@ export async function GET(req: NextRequest) {
     }
     profiles = Array.from(uniqueProfilesMap.values());
 
-    // 6. Expenses & Parallel Queries (payments, drafts, notifications, audit logs)
-    const expenseFilter =
-      userGroupIds.length > 0
-        ? `group_id.in.(${userGroupIds.join(',')}),created_by.eq.${user.id},paid_by.eq.${user.id}`
-        : `created_by.eq.${user.id},paid_by.eq.${user.id}`;
+    // 6. Expenses & Parallel Queries (payments, drafts, notifications, audit logs, personal expenses)
+    let expenses: any[] = [];
+    const expenseIdsSeen = new Set<string>();
 
     const [
       { data: paymentData },
       { data: draftsData },
       { data: notificationsData },
       { data: auditLogsData },
-      { data: expenseData },
+      { data: personalExpenses },
     ] = await Promise.all([
       userGroupIds.length > 0
         ? db
@@ -319,12 +317,34 @@ export async function GET(req: NextRequest) {
         : Promise.resolve({ data: [] }),
       db
         .from('expenses')
-        .select('id,group_id,paid_by,created_by,amount,description,category,expense_date,created_at,split_type,receipt_url,payment_proof_url,splits:expense_splits(id,expense_id,user_id,amount_owed,has_custom_amount)')
-        .or(expenseFilter)
+        .select('*, items:expense_items(*), splits:expense_splits(*)')
+        .or(`created_by.eq.${user.id},paid_by.eq.${user.id}`)
         .order('created_at', { ascending: false }),
     ]);
 
-    const expenses = expenseData || [];
+    if (userGroupIds.length > 0) {
+      const { data: expenseData } = await db
+        .from('expenses')
+        .select('*, items:expense_items(*), splits:expense_splits(*)')
+        .in('group_id', userGroupIds)
+        .order('created_at', { ascending: false });
+
+      (expenseData || []).forEach((e) => {
+        expenseIdsSeen.add(e.id);
+        expenses.push(e);
+      });
+    }
+
+    if (personalExpenses) {
+      personalExpenses.forEach((e) => {
+        if (!expenseIdsSeen.has(e.id)) {
+          expenseIdsSeen.add(e.id);
+          expenses.push(e);
+        }
+      });
+    }
+
+    expenses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // 7. Payments
     const payments = paymentData || [];
