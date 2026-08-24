@@ -622,6 +622,56 @@ export interface ReverseOffsetItem {
   groupName?: string;
 }
 
+export interface ThirdPartyTriangulationExpense {
+  expense: Expense;
+  split?: ExpenseSplit;
+  description: string;
+  totalExpenseAmount: number;
+  originalDebtAmount: number;
+  allocatedDiscountAmount: number;
+  role:
+    | 'debtor_owes_third_party'
+    | 'third_party_owes_creditor'
+    | 'creditor_owes_third_party'
+    | 'third_party_owes_debtor'
+    | 'group_shared';
+  payerName: string;
+  payerProfile?: Profile;
+  participantName: string;
+  participantProfile?: Profile;
+  date: string;
+  groupName?: string;
+  currency?: string;
+  receiptUrl?: string;
+}
+
+export interface ThirdPartyTriangulation {
+  thirdParty: Profile;
+  thirdPartyName: string;
+  amount: number;
+  isDiscount: boolean;
+  role:
+    | 'debtor_pays_third_party'
+    | 'third_party_pays_creditor'
+    | 'mutual_cross_compensation'
+    | 'debt_consolidation';
+  shortSummary: string;
+  explanation: string;
+  directDebtsWithDebtor: number;
+  directDebtsWithCreditor: number;
+  expenses: ThirdPartyTriangulationExpense[];
+}
+
+export interface GroupOptimizationDetail {
+  simplifiedDiff: number;
+  isDiscount: boolean;
+  directBalance: number;
+  simplifiedAmount: number;
+  totalCompensated: number;
+  triangulations: ThirdPartyTriangulation[];
+  summaryNarrative: string;
+}
+
 export interface SimplificationExpenseItem {
   expense: Expense;
   split?: ExpenseSplit;
@@ -671,6 +721,7 @@ export interface PairwiseDebtDetail {
   reverseOffsetExpenses: ReverseOffsetItem[];
   simplificationExpenses: SimplificationExpenseItem[];
   triangularChains: TriangularDebtChain[];
+  optimizationDetail?: GroupOptimizationDetail;
 }
 
 export function calculatePairwiseDebtDetail(
@@ -963,15 +1014,51 @@ export function calculatePairwiseDebtDetail(
   const netDirectBalance = Math.round((totalOriginalDebt - totalPaymentsApplied - totalReverseOffsets) * 100) / 100;
   const netPendingAmount = Math.max(0, netDirectBalance);
 
-  // 7. Group optimization: Active simplification expenses & triangular chains
+  // 7. Group optimization: Active simplification expenses, third-party triangulations & coherent allocation
   const simplificationExpenses: SimplificationExpenseItem[] = [];
   const seenExpSplitKeys = new Set<string>();
+  let optimizationDetail: GroupOptimizationDetail | undefined = undefined;
 
   if (isSimplified && !skipSimplification) {
-    profiles.forEach((tp) => {
-      if (tp.id === debtor.id || tp.id === creditor.id) return;
+    // 1. Calculate simplified balances in this scope
+    const simplifiedBalances = calculateSimplifiedBalances(
+      filteredExpenses,
+      filteredPayments,
+      profiles,
+      groupId
+    );
 
-      // A. Does Debtor owe TP directly?
+    // Find simplified edge for (debtor -> creditor)
+    const simplifiedEdge = simplifiedBalances.find(
+      (b) => b.debtor.id === debtor.id && b.creditor.id === creditor.id
+    );
+    const simplifiedAmount = simplifiedEdge ? simplifiedEdge.amount : 0;
+    const simplifiedDiff = Math.round((simplifiedAmount - netDirectBalance) * 100) / 100;
+    const hasAdjustment = Math.abs(simplifiedDiff) >= 0.01;
+    const isDiscount = simplifiedDiff < 0;
+    const totalDiff = Math.abs(simplifiedDiff);
+
+    // Find third parties
+    const otherProfiles = profiles.filter(
+      (p) => !debtorIds.includes(p.id) && !creditorIds.includes(p.id)
+    );
+
+    interface CandidateTP {
+      tp: Profile;
+      dToTp: number;
+      tpToD: number;
+      tpToC: number;
+      cToTp: number;
+      sDToTp: number;
+      sTpToC: number;
+      weight: number;
+      allocatedAmount: number;
+    }
+
+    const candidates: CandidateTP[] = [];
+
+    otherProfiles.forEach((tp) => {
+      // Direct relationships
       const dToTpDetail = calculatePairwiseDebtDetail(
         debtor,
         tp,
@@ -983,7 +1070,82 @@ export function calculatePairwiseDebtDetail(
         groupId,
         true
       );
+      const tpToDDetail = calculatePairwiseDebtDetail(
+        tp,
+        debtor,
+        expenses,
+        payments,
+        profiles,
+        groups,
+        false,
+        groupId,
+        true
+      );
+      const tpToCDetail = calculatePairwiseDebtDetail(
+        tp,
+        creditor,
+        expenses,
+        payments,
+        profiles,
+        groups,
+        false,
+        groupId,
+        true
+      );
+      const cToTpDetail = calculatePairwiseDebtDetail(
+        creditor,
+        tp,
+        expenses,
+        payments,
+        profiles,
+        groups,
+        false,
+        groupId,
+        true
+      );
 
+      const dToTp = dToTpDetail.netDirectBalance > 0.009 ? dToTpDetail.netDirectBalance : 0;
+      const tpToD = tpToDDetail.netDirectBalance > 0.009 ? tpToDDetail.netDirectBalance : 0;
+      const tpToC = tpToCDetail.netDirectBalance > 0.009 ? tpToCDetail.netDirectBalance : 0;
+      const cToTp = cToTpDetail.netDirectBalance > 0.009 ? cToTpDetail.netDirectBalance : 0;
+
+      const sDToTp =
+        simplifiedBalances.find((b) => b.debtor.id === debtor.id && b.creditor.id === tp.id)?.amount ||
+        0;
+      const sTpToC =
+        simplifiedBalances.find((b) => b.debtor.id === tp.id && b.creditor.id === creditor.id)?.amount ||
+        0;
+
+      let weight = 0;
+      if (isDiscount) {
+        weight =
+          (sTpToC > 0 ? sTpToC * 3 : 0) +
+          (sDToTp > 0 ? sDToTp * 3 : 0) +
+          (tpToC > 0 ? tpToC * 2 : 0) +
+          (dToTp > 0 ? dToTp * 2 : 0) +
+          (tpToD > 0 ? tpToD : 0) +
+          (cToTp > 0 ? cToTp : 0);
+      } else {
+        weight =
+          (dToTp > 0 ? dToTp * 2 : 0) +
+          (tpToC > 0 ? tpToC * 2 : 0) +
+          (sDToTp > 0 ? sDToTp : 0) +
+          (sTpToC > 0 ? sTpToC : 0);
+      }
+
+      candidates.push({
+        tp,
+        dToTp,
+        tpToD,
+        tpToC,
+        cToTp,
+        sDToTp,
+        sTpToC,
+        weight,
+        allocatedAmount: 0,
+      });
+
+      // Keep legacy simplificationExpenses for backwards compatibility
       if (dToTpDetail.netDirectBalance > 0.009) {
         dToTpDetail.pendingExpenses.forEach((pExp) => {
           const splitKey = `${pExp.expense.id}:${pExp.split.user_id}:debtor_owes`;
@@ -1003,19 +1165,6 @@ export function calculatePairwiseDebtDetail(
           }
         });
       }
-
-      // B. Does TP owe Creditor directly?
-      const tpToCDetail = calculatePairwiseDebtDetail(
-        tp,
-        creditor,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
 
       if (tpToCDetail.netDirectBalance > 0.009) {
         tpToCDetail.pendingExpenses.forEach((pExp) => {
@@ -1037,6 +1186,286 @@ export function calculatePairwiseDebtDetail(
         });
       }
     });
+
+    if (hasAdjustment) {
+      // Filter candidates with positive weight
+      let activeCandidates = candidates.filter((c) => c.weight > 0.001);
+      if (activeCandidates.length === 0 && candidates.length > 0) {
+        candidates.forEach((c) => (c.weight = 1));
+        activeCandidates = candidates;
+      }
+
+      const totalWeight = activeCandidates.reduce((acc, c) => acc + c.weight, 0) || 1;
+
+      // Proportional allocation of totalDiff
+      activeCandidates.forEach((c) => {
+        c.allocatedAmount = Math.round((totalDiff * (c.weight / totalWeight)) * 100) / 100;
+      });
+
+      // Fix rounding errors so sum is exactly totalDiff
+      const allocatedSum = activeCandidates.reduce((acc, c) => acc + c.allocatedAmount, 0);
+      const remainder = Math.round((totalDiff - allocatedSum) * 100) / 100;
+      if (Math.abs(remainder) >= 0.01 && activeCandidates.length > 0) {
+        activeCandidates.sort((a, b) => b.weight - a.weight);
+        activeCandidates[0].allocatedAmount = Math.round(
+          (activeCandidates[0].allocatedAmount + remainder) * 100
+        ) / 100;
+      }
+
+      const triangulations: ThirdPartyTriangulation[] = [];
+
+      activeCandidates.forEach((cand) => {
+        if (cand.allocatedAmount <= 0.009) return;
+
+        const tpName = cand.tp.full_name || 'Tercero';
+        const dName = debtor.full_name || 'Deudor';
+        const cName = creditor.full_name || 'Acreedor';
+
+        let role: ThirdPartyTriangulation['role'] = 'mutual_cross_compensation';
+        let shortSummary = '';
+        let explanation = '';
+
+        if (isDiscount) {
+          if (cand.sTpToC > 0 || cand.tpToC > 0) {
+            role = 'third_party_pays_creditor';
+            shortSummary = `${tpName} le transfiere directamente a ${cName}`;
+            explanation = `${tpName} tiene consumos por saldar con ${cName}. Al hacer que ${tpName} le pague a ${cName} directamente, se descuentan ${formatCurrency(
+              cand.allocatedAmount
+            )} de lo que ${dName} necesita transferirle a ${cName}.`;
+          } else if (cand.sDToTp > 0 || cand.dToTp > 0) {
+            role = 'debtor_pays_third_party';
+            shortSummary = `${dName} le transfiere directamente a ${tpName}`;
+            explanation = `${dName} compensa pagos directamente con ${tpName}. Como ${dName} ya salda ${formatCurrency(
+              cand.allocatedAmount
+            )} con ${tpName}, ese valor se descuenta de la cuenta que ${dName} tenía pendiente con ${cName}.`;
+          } else {
+            role = 'mutual_cross_compensation';
+            shortSummary = `Compensación cruzada con ${tpName}`;
+            explanation = `Las cuentas cruzadas de gastos compartidos entre ${dName}, ${cName} y ${tpName} se cancelan mutuamente en el grupo, liberando ${formatCurrency(
+              cand.allocatedAmount
+            )} de esta transferencia directa.`;
+          }
+        } else {
+          role = 'debt_consolidation';
+          shortSummary = `${dName} consolida pagos de ${tpName} hacia ${cName}`;
+          explanation = `Para reducir transferencias en el grupo, ${dName} unifica y asume una transferencia adicional de ${formatCurrency(
+            cand.allocatedAmount
+          )} hacia ${cName} en representación de ${tpName}.`;
+        }
+
+        // Find relevant expenses for this candidate
+        interface MatchedExp {
+          expense: Expense;
+          split?: ExpenseSplit;
+          role: ThirdPartyTriangulationExpense['role'];
+          payerProfile?: Profile;
+          participantProfile?: Profile;
+          groupName?: string;
+          currency?: string;
+          relevantShare: number;
+        }
+
+        const matchedList: MatchedExp[] = [];
+
+        filteredExpenses.forEach((exp) => {
+          const g = groupMap.get(exp.group_id);
+          const gName = g?.name;
+          const gCurr = g?.currency || 'COP';
+
+          // 1. Cand paid, Debtor participated
+          if (exp.paid_by === cand.tp.id && exp.splits) {
+            exp.splits.forEach((s) => {
+              if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
+                matchedList.push({
+                  expense: exp,
+                  split: s,
+                  role: 'debtor_owes_third_party',
+                  payerProfile: cand.tp,
+                  participantProfile: profileMap.get(s.user_id),
+                  groupName: gName,
+                  currency: gCurr,
+                  relevantShare: s.amount_owed,
+                });
+              }
+            });
+          }
+
+          // 2. Creditor paid, Cand participated
+          if (creditorIds.includes(exp.paid_by) && exp.splits) {
+            exp.splits.forEach((s) => {
+              if (s.user_id === cand.tp.id && s.amount_owed > 0) {
+                matchedList.push({
+                  expense: exp,
+                  split: s,
+                  role: 'third_party_owes_creditor',
+                  payerProfile: profileMap.get(exp.paid_by),
+                  participantProfile: cand.tp,
+                  groupName: gName,
+                  currency: gCurr,
+                  relevantShare: s.amount_owed,
+                });
+              }
+            });
+          }
+
+          // 3. Debtor paid, Cand participated
+          if (debtorIds.includes(exp.paid_by) && exp.splits) {
+            exp.splits.forEach((s) => {
+              if (s.user_id === cand.tp.id && s.amount_owed > 0) {
+                matchedList.push({
+                  expense: exp,
+                  split: s,
+                  role: 'third_party_owes_debtor',
+                  payerProfile: profileMap.get(exp.paid_by),
+                  participantProfile: cand.tp,
+                  groupName: gName,
+                  currency: gCurr,
+                  relevantShare: s.amount_owed,
+                });
+              }
+            });
+          }
+
+          // 4. Cand paid, Creditor participated
+          if (exp.paid_by === cand.tp.id && exp.splits) {
+            exp.splits.forEach((s) => {
+              if (creditorIds.includes(s.user_id) && s.amount_owed > 0) {
+                matchedList.push({
+                  expense: exp,
+                  split: s,
+                  role: 'creditor_owes_third_party',
+                  payerProfile: cand.tp,
+                  participantProfile: profileMap.get(s.user_id),
+                  groupName: gName,
+                  currency: gCurr,
+                  relevantShare: s.amount_owed,
+                });
+              }
+            });
+          }
+
+          // 5. Fallback if Cand participated in group expense
+          if (
+            matchedList.length === 0 &&
+            exp.splits &&
+            exp.splits.some((s) => s.user_id === cand.tp.id)
+          ) {
+            const mySplit = exp.splits.find((s) => s.user_id === cand.tp.id);
+            matchedList.push({
+              expense: exp,
+              split: mySplit,
+              role: 'group_shared',
+              payerProfile: profileMap.get(exp.paid_by),
+              participantProfile: cand.tp,
+              groupName: gName,
+              currency: gCurr,
+              relevantShare: mySplit?.amount_owed || exp.total_amount,
+            });
+          }
+        });
+
+        // Deduplicate and sort chronological DESC
+        const uniqueMatched: MatchedExp[] = [];
+        const seenExp = new Set<string>();
+        matchedList.forEach((m) => {
+          const key = `${m.expense.id}:${m.split?.user_id || 'all'}`;
+          if (!seenExp.has(key)) {
+            seenExp.add(key);
+            uniqueMatched.push(m);
+          }
+        });
+
+        uniqueMatched.sort(
+          (a, b) =>
+            new Date(b.expense.expense_date || '').getTime() -
+            new Date(a.expense.expense_date || '').getTime()
+        );
+
+        // Distribute cand.allocatedAmount across uniqueMatched
+        let remainingToAllocate = cand.allocatedAmount;
+        const tpExpenses: ThirdPartyTriangulationExpense[] = [];
+
+        for (const m of uniqueMatched) {
+          if (remainingToAllocate <= 0.009) break;
+          const share = m.relevantShare > 0 ? m.relevantShare : m.expense.total_amount;
+          const allocatedDiscountAmount =
+            Math.round(Math.min(remainingToAllocate, share) * 100) / 100;
+          remainingToAllocate =
+            Math.round((remainingToAllocate - allocatedDiscountAmount) * 100) / 100;
+
+          tpExpenses.push({
+            expense: m.expense,
+            split: m.split,
+            description: m.expense.description,
+            totalExpenseAmount: m.expense.total_amount,
+            originalDebtAmount: share,
+            allocatedDiscountAmount,
+            role: m.role,
+            payerName: m.payerProfile?.full_name || 'Integrante',
+            payerProfile: m.payerProfile,
+            participantName: m.participantProfile?.full_name || 'Integrante',
+            participantProfile: m.participantProfile,
+            date: m.expense.expense_date || 'Reciente',
+            groupName: m.groupName,
+            currency: m.currency,
+            receiptUrl: m.expense.receipt_url,
+          });
+        }
+
+        // If remainingToAllocate > 0, allocate the rest on the first item to ensure exact match
+        if (remainingToAllocate > 0.009 && tpExpenses.length > 0) {
+          tpExpenses[0].allocatedDiscountAmount =
+            Math.round((tpExpenses[0].allocatedDiscountAmount + remainingToAllocate) * 100) /
+            100;
+          remainingToAllocate = 0;
+        }
+
+        triangulations.push({
+          thirdParty: cand.tp,
+          thirdPartyName: tpName,
+          amount: cand.allocatedAmount,
+          isDiscount,
+          role,
+          shortSummary,
+          explanation,
+          directDebtsWithDebtor: cand.dToTp,
+          directDebtsWithCreditor: cand.tpToC,
+          expenses: tpExpenses,
+        });
+      });
+
+      // Sort triangulations by amount descending
+      triangulations.sort((a, b) => b.amount - a.amount);
+
+      const debtorDisplayName = debtor.full_name || 'Deudor';
+      const creditorDisplayName = creditor.full_name || 'Acreedor';
+
+      const summaryNarrative = isDiscount
+        ? `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
+            netDirectBalance
+          )}. Para optimizar y simplificar las cuentas del grupo, se descuentan -${formatCurrency(
+            totalDiff
+          )} de esta transferencia porque se compensan mediante ${
+            triangulations.length === 1
+              ? `pagos directos con ${triangulations[0].thirdPartyName}`
+              : `triangulaciones y pagos directos con ${triangulations.length} integrantes del grupo`
+          }.`
+        : `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
+            netDirectBalance
+          )}. Para optimizar y liquidar el grupo con menos transferencias, se consolidan +${formatCurrency(
+            totalDiff
+          )} en este pago.`;
+
+      optimizationDetail = {
+        simplifiedDiff,
+        isDiscount,
+        directBalance: netDirectBalance,
+        simplifiedAmount,
+        totalCompensated: totalDiff,
+        triangulations,
+        summaryNarrative,
+      };
+    }
   }
 
   return {
@@ -1055,5 +1484,6 @@ export function calculatePairwiseDebtDetail(
       (a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()
     ),
     triangularChains: [],
+    optimizationDetail,
   };
 }
