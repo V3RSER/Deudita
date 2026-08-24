@@ -634,6 +634,29 @@ export interface SimplificationExpenseItem {
   explanation: string;
 }
 
+export interface TriangularDebtChain {
+  thirdParty: Profile;
+  groupName?: string;
+  currency?: string;
+  debtorOwesThirdPartyAmount: number;
+  thirdPartyOwesCreditorAmount: number;
+  debtorToThirdPartyExpenses: {
+    expense: Expense;
+    split?: ExpenseSplit;
+    amount: number;
+    groupName?: string;
+    currency?: string;
+  }[];
+  thirdPartyToCreditorExpenses: {
+    expense: Expense;
+    split?: ExpenseSplit;
+    amount: number;
+    groupName?: string;
+    currency?: string;
+  }[];
+  explanation: string;
+}
+
 export interface PairwiseDebtDetail {
   debtor: Profile;
   creditor: Profile;
@@ -647,6 +670,7 @@ export interface PairwiseDebtDetail {
   appliedPayments: AppliedPaymentItem[];
   reverseOffsetExpenses: ReverseOffsetItem[];
   simplificationExpenses: SimplificationExpenseItem[];
+  triangularChains: TriangularDebtChain[];
 }
 
 export function calculatePairwiseDebtDetail(
@@ -841,64 +865,156 @@ export function calculatePairwiseDebtDetail(
 
   const netDirectBalance = Math.round((totalOriginalDebt - totalReverseOffsets - netPaymentsApplied) * 100) / 100;
 
-  // 5. Group simplification triangulated expenses
+  // 5. Group simplification triangulated expenses and chains
   const simplificationExpenses: SimplificationExpenseItem[] = [];
   const seenExpSplitKeys = new Set<string>();
+
+  const thirdPartyMap = new Map<
+    string,
+    {
+      thirdParty: Profile;
+      groupName?: string;
+      currency?: string;
+      debtorOwesThirdPartyAmount: number;
+      thirdPartyOwesCreditorAmount: number;
+      debtorToThirdPartyExpenses: {
+        expense: Expense;
+        split?: ExpenseSplit;
+        amount: number;
+        groupName?: string;
+        currency?: string;
+      }[];
+      thirdPartyToCreditorExpenses: {
+        expense: Expense;
+        split?: ExpenseSplit;
+        amount: number;
+        groupName?: string;
+        currency?: string;
+      }[];
+    }
+  >();
+
+  const getOrCreateThirdParty = (tpProfile: Profile, gName?: string, curr?: string) => {
+    let tpEntry = thirdPartyMap.get(tpProfile.id);
+    if (!tpEntry) {
+      tpEntry = {
+        thirdParty: tpProfile,
+        groupName: gName,
+        currency: curr || 'COP',
+        debtorOwesThirdPartyAmount: 0,
+        thirdPartyOwesCreditorAmount: 0,
+        debtorToThirdPartyExpenses: [],
+        thirdPartyToCreditorExpenses: [],
+      };
+      thirdPartyMap.set(tpProfile.id, tpEntry);
+    }
+    return tpEntry;
+  };
 
   // A. Debtor participated in group expenses paid by third parties (transferred to Creditor in simplification)
   filteredExpenses.forEach((exp) => {
     if (!debtorIds.includes(exp.paid_by) && !creditorIds.includes(exp.paid_by) && exp.splits) {
-      exp.splits.forEach((s) => {
-        if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
-          const splitKey = `${exp.id}:${s.user_id}:debtor_owes`;
-          if (!seenExpSplitKeys.has(splitKey)) {
-            seenExpSplitKeys.add(splitKey);
-            const g = groupMap.get(exp.group_id);
-            const payer = profileMap.get(exp.paid_by);
-            const debtorUser = profileMap.get(s.user_id);
-            simplificationExpenses.push({
-              expense: exp,
-              split: s,
-              relevantAmount: s.amount_owed,
-              role: 'debtor_owes_third_party',
-              payerProfile: payer,
-              participantProfile: debtorUser,
-              groupName: g?.name,
-              currency: g?.currency || 'COP',
-              explanation: `${debtorUser?.full_name || 'Deudor'} debía a ${payer?.full_name || 'Tercero'} en el grupo`,
-            });
+      const payer = profileMap.get(exp.paid_by);
+      const g = groupMap.get(exp.group_id);
+      if (payer) {
+        exp.splits.forEach((s) => {
+          if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
+            const splitKey = `${exp.id}:${s.user_id}:debtor_owes`;
+            if (!seenExpSplitKeys.has(splitKey)) {
+              seenExpSplitKeys.add(splitKey);
+              const debtorUser = profileMap.get(s.user_id);
+              simplificationExpenses.push({
+                expense: exp,
+                split: s,
+                relevantAmount: s.amount_owed,
+                role: 'debtor_owes_third_party',
+                payerProfile: payer,
+                participantProfile: debtorUser,
+                groupName: g?.name,
+                currency: g?.currency || 'COP',
+                explanation: `${debtorUser?.full_name || debtor.full_name} debía a ${payer.full_name}`,
+              });
+
+              const tp = getOrCreateThirdParty(payer, g?.name, g?.currency);
+              tp.debtorOwesThirdPartyAmount += s.amount_owed;
+              tp.debtorToThirdPartyExpenses.push({
+                expense: exp,
+                split: s,
+                amount: s.amount_owed,
+                groupName: g?.name,
+                currency: g?.currency || 'COP',
+              });
+            }
           }
-        }
-      });
+        });
+      }
     }
   });
 
   // B. Creditor paid for group expenses where third parties participated (collected from Debtor in simplification)
   filteredExpenses.forEach((exp) => {
     if (creditorIds.includes(exp.paid_by) && exp.splits) {
+      const g = groupMap.get(exp.group_id);
+      const payer = profileMap.get(exp.paid_by);
       exp.splits.forEach((s) => {
         if (!debtorIds.includes(s.user_id) && !creditorIds.includes(s.user_id) && s.amount_owed > 0) {
           const splitKey = `${exp.id}:${s.user_id}:creditor_paid`;
           if (!seenExpSplitKeys.has(splitKey)) {
             seenExpSplitKeys.add(splitKey);
-            const g = groupMap.get(exp.group_id);
-            const payer = profileMap.get(exp.paid_by);
             const thirdPartyUser = profileMap.get(s.user_id);
-            simplificationExpenses.push({
-              expense: exp,
-              split: s,
-              relevantAmount: s.amount_owed,
-              role: 'creditor_paid_third_party',
-              payerProfile: payer,
-              participantProfile: thirdPartyUser,
-              groupName: g?.name,
-              currency: g?.currency || 'COP',
-              explanation: `${thirdPartyUser?.full_name || 'Tercero'} debía a ${payer?.full_name || 'Acreedor'} en el grupo`,
-            });
+            if (thirdPartyUser) {
+              simplificationExpenses.push({
+                expense: exp,
+                split: s,
+                relevantAmount: s.amount_owed,
+                role: 'creditor_paid_third_party',
+                payerProfile: payer,
+                participantProfile: thirdPartyUser,
+                groupName: g?.name,
+                currency: g?.currency || 'COP',
+                explanation: `${thirdPartyUser.full_name} debía a ${payer?.full_name || creditor.full_name}`,
+              });
+
+              const tp = getOrCreateThirdParty(thirdPartyUser, g?.name, g?.currency);
+              tp.thirdPartyOwesCreditorAmount += s.amount_owed;
+              tp.thirdPartyToCreditorExpenses.push({
+                expense: exp,
+                split: s,
+                amount: s.amount_owed,
+                groupName: g?.name,
+                currency: g?.currency || 'COP',
+              });
+            }
           }
         }
       });
     }
+  });
+
+  const debtorName = debtor.full_name || 'Deudor';
+  const creditorName = creditor.full_name || 'Acreedor';
+
+  const triangularChains: TriangularDebtChain[] = Array.from(thirdPartyMap.values()).map((tp) => {
+    const tpName = tp.thirdParty.full_name || 'Tercero';
+    let explanation = '';
+    if (tp.debtorOwesThirdPartyAmount > 0 && tp.thirdPartyOwesCreditorAmount > 0) {
+      explanation = `${debtorName} le debía a ${tpName} y ${tpName} le debía a ${creditorName}. Al optimizar las transferencias del grupo, ${debtorName} le transfiere directamente a ${creditorName}.`;
+    } else if (tp.debtorOwesThirdPartyAmount > 0) {
+      explanation = `${debtorName} le debía a ${tpName}. La optimización del grupo compensa este saldo reasignando el pago hacia ${creditorName}.`;
+    } else {
+      explanation = `${tpName} le debía a ${creditorName}. Al optimizar las transferencias del grupo, ${debtorName} transfiere a ${creditorName} para saldar la cuenta común.`;
+    }
+
+    return {
+      thirdParty: tp.thirdParty,
+      groupName: tp.groupName,
+      currency: tp.currency,
+      debtorOwesThirdPartyAmount: Math.round(tp.debtorOwesThirdPartyAmount * 100) / 100,
+      thirdPartyOwesCreditorAmount: Math.round(tp.thirdPartyOwesCreditorAmount * 100) / 100,
+      debtorToThirdPartyExpenses: tp.debtorToThirdPartyExpenses,
+      thirdPartyToCreditorExpenses: tp.thirdPartyToCreditorExpenses,
+      explanation,
+    };
   });
 
   return {
@@ -914,5 +1030,10 @@ export function calculatePairwiseDebtDetail(
     appliedPayments: appliedPayments.sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime()),
     reverseOffsetExpenses: reverseOffsets.sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
     simplificationExpenses: simplificationExpenses.sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()),
+    triangularChains: triangularChains.sort(
+      (a, b) =>
+        b.debtorOwesThirdPartyAmount + b.thirdPartyOwesCreditorAmount -
+        (a.debtorOwesThirdPartyAmount + a.thirdPartyOwesCreditorAmount)
+    ),
   };
 }

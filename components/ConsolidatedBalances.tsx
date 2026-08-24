@@ -10,6 +10,7 @@ import {
   calculateDirectBalances,
   calculatePairwiseDebtDetail,
   PairwiseDebtDetail,
+  TriangularDebtChain,
 } from '@/lib/balance-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import {
@@ -47,6 +48,7 @@ import {
   FileText,
   X,
   Calculator,
+  Users,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -141,11 +143,9 @@ function BalanceExpenseItem({
   const createdByProfile = profiles.find((p) => p.id === expense.created_by);
   const payerName = paidByProfile?.full_name || 'Usuario';
 
-  const isCurrentDebtor = currentProfile?.id === debtorProfile.id;
-  const isCurrentCreditor = currentProfile?.id === creditorProfile.id;
-
-  const debtorDisplayName = isCurrentDebtor ? 'Tú' : debtorProfile.full_name || 'Deudor';
-  const creditorDisplayName = isCurrentCreditor ? 'Tú' : creditorProfile.full_name || 'Acreedor';
+  // Always use the real names, never "Tú"
+  const debtorName = debtorProfile.full_name || 'Deudor';
+  const creditorName = creditorProfile.full_name || 'Acreedor';
 
   // Build participant summary breakdown for expanded view
   const participantSummaryList: ParticipantSummaryData[] = useMemo(() => {
@@ -187,45 +187,34 @@ function BalanceExpenseItem({
 
   const eventInfo = getRecordEventDateInfo(expense);
 
-  // Label text determining what the debtor / creditor sees
-  let contextLabel = '';
-  let contextColorClass = '';
+  // Directly display the exact relevant amount and who owes or recovers
+  let primaryAmountText = '';
+  let primaryAmountColorClass = '';
+  let detailRoleText = '';
+  let detailRoleColorClass = '';
 
   if (amountType === 'debt') {
-    if (isCurrentDebtor) {
-      contextLabel = `debes ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-rose-600 font-extrabold';
-    } else if (isCurrentCreditor) {
-      contextLabel = `te debe ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-emerald-700 font-extrabold';
-    } else {
-      contextLabel = `debe ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-rose-600 font-extrabold';
-    }
+    primaryAmountText = `+${formatCurrency(relevantAmount, currency)}`;
+    primaryAmountColorClass = 'text-rose-600';
+    detailRoleText = `${debtorName} debe`;
+    detailRoleColorClass = 'text-rose-700 font-bold';
   } else if (amountType === 'offset') {
-    // Reverse offset: debtor paid and creditor owes -> debtor recovers
-    if (isCurrentDebtor) {
-      contextLabel = `recuperas ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-emerald-700 font-extrabold';
-    } else if (isCurrentCreditor) {
-      contextLabel = `debes ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-rose-600 font-extrabold';
-    } else {
-      contextLabel = `recupera ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-emerald-700 font-extrabold';
-    }
+    primaryAmountText = `-${formatCurrency(relevantAmount, currency)}`;
+    primaryAmountColorClass = 'text-emerald-700';
+    detailRoleText = `${debtorName} recupera`;
+    detailRoleColorClass = 'text-emerald-700 font-bold';
   } else {
-    // Group Simplification
+    // simplification
     if (simplificationRole === 'debtor_owes_third_party') {
-      contextLabel = isCurrentDebtor
-        ? `debes ${formatCurrency(relevantAmount, currency)}`
-        : `debe ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-rose-600 font-extrabold';
+      primaryAmountText = `+${formatCurrency(relevantAmount, currency)}`;
+      primaryAmountColorClass = 'text-rose-600';
+      detailRoleText = `${debtorName} debe`;
+      detailRoleColorClass = 'text-rose-700 font-bold';
     } else {
-      contextLabel = isCurrentCreditor
-        ? `te deben ${formatCurrency(relevantAmount, currency)}`
-        : `recupera ${formatCurrency(relevantAmount, currency)}`;
-      contextColorClass = 'text-emerald-700 font-extrabold';
+      primaryAmountText = formatCurrency(relevantAmount, currency);
+      primaryAmountColorClass = 'text-emerald-700';
+      detailRoleText = `pagó ${payerName}`;
+      detailRoleColorClass = 'text-emerald-700 font-bold';
     }
   }
 
@@ -270,9 +259,9 @@ function BalanceExpenseItem({
             <CategoryIcon className="w-4 h-4" />
           </div>
 
-          {/* Group Badge, Title & Context */}
+          {/* Group Badge, Title & Payer */}
           <div className="min-w-0 flex-1 space-y-0.5">
-            {/* First thing prominently displayed: Group Badge */}
+            {/* Group Badge & Title */}
             <div className="flex items-center space-x-1.5 flex-wrap">
               {groupName ? (
                 <span className="inline-flex items-center text-[10px] font-extrabold bg-zinc-100 text-zinc-800 px-2 py-0.5 rounded-md border border-zinc-200 shadow-2xs shrink-0">
@@ -288,47 +277,21 @@ function BalanceExpenseItem({
               </h4>
             </div>
 
-            {/* Payer and narrative detail */}
-            <div className="flex items-center space-x-1.5 text-[11px] text-zinc-500 font-medium truncate">
-              <span>
-                Pagó <strong className="text-zinc-700 font-semibold">{payerName}</strong>
-              </span>
-              <span>•</span>
-              <span>
-                {amountType === 'debt' ? (
-                  <span>
-                    {debtorDisplayName} {isCurrentDebtor ? 'debes' : 'debe'}:{' '}
-                    <strong className="text-rose-600 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
-                  </span>
-                ) : amountType === 'offset' ? (
-                  <span>
-                    {debtorDisplayName} {isCurrentDebtor ? 'recuperas' : 'recupera'}:{' '}
-                    <strong className="text-emerald-700 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
-                  </span>
-                ) : simplificationRole === 'debtor_owes_third_party' ? (
-                  <span>
-                    {debtorDisplayName} {isCurrentDebtor ? 'debes' : 'debe'}:{' '}
-                    <strong className="text-rose-600 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
-                  </span>
-                ) : (
-                  <span>
-                    {customExplanation || `${payerName} recupera`}:{' '}
-                    <strong className="text-emerald-700 font-bold">{formatCurrency(relevantAmount, currency)}</strong>
-                  </span>
-                )}
-              </span>
+            {/* Payer text only (no redundant information afterwards) */}
+            <div className="text-[11px] text-zinc-500 font-medium truncate">
+              Pagó <strong className="text-zinc-700 font-semibold">{payerName}</strong>
             </div>
           </div>
         </div>
 
-        {/* Right: Total Amount & Debtor Share Info */}
+        {/* Right: Direct Relevant Amount & Debtor/Creditor detail */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="flex flex-col items-end justify-center text-right">
-            <span className="text-xs sm:text-sm font-black text-zinc-900 leading-tight">
-              {formatCurrency(expense.total_amount, currency)}
+            <span className={`text-xs sm:text-sm font-black leading-tight ${primaryAmountColorClass}`}>
+              {primaryAmountText}
             </span>
-            <span className={`text-[10.5px] leading-tight mt-0.5 ${contextColorClass}`}>
-              {contextLabel}
+            <span className={`text-[10.5px] leading-tight mt-0.5 ${detailRoleColorClass}`}>
+              {detailRoleText}
             </span>
           </div>
 
@@ -478,6 +441,174 @@ function BalanceExpenseItem({
   );
 }
 
+interface TriangularChainCardProps {
+  chain: TriangularDebtChain;
+  debtorProfile: Profile;
+  creditorProfile: Profile;
+  currentProfile: Profile | null;
+  profiles: Profile[];
+  onOpenReceipt: (url: string) => void;
+}
+
+function TriangularChainCard({
+  chain,
+  debtorProfile,
+  creditorProfile,
+  currentProfile,
+  profiles,
+  onOpenReceipt,
+}: TriangularChainCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const debtorName = debtorProfile.full_name || 'Deudor';
+  const creditorName = creditorProfile.full_name || 'Acreedor';
+  const thirdPartyName = chain.thirdParty.full_name || 'Tercero';
+  const currency = chain.currency || currentProfile?.currency || 'COP';
+
+  const totalChainExpenses =
+    chain.debtorToThirdPartyExpenses.length + chain.thirdPartyToCreditorExpenses.length;
+
+  return (
+    <div className="bg-white rounded-2xl border border-violet-200/90 shadow-2xs overflow-hidden transition-all">
+      <div
+        className="p-3.5 sm:p-4 cursor-pointer hover:bg-violet-50/40 select-none transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-2 min-w-0 flex-1">
+            {/* Header badges: Intermediary & Group */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-black bg-violet-100 text-violet-900 px-2.5 py-0.5 rounded-lg border border-violet-200">
+                <Users className="w-3.5 h-3.5 text-violet-600" />
+                Intermediario: {thirdPartyName}
+              </span>
+              {chain.groupName && (
+                <span className="text-[10px] font-extrabold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-md border border-zinc-200">
+                  {chain.groupName}
+                </span>
+              )}
+            </div>
+
+            {/* Clear narrative explanation of the debt chain */}
+            <div className="space-y-1.5 text-xs text-zinc-800 bg-zinc-50/80 p-3 rounded-xl border border-zinc-200/70">
+              {chain.debtorOwesThirdPartyAmount > 0 && (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span>
+                      <strong>{debtorName}</strong> le debe a <strong>{thirdPartyName}</strong>
+                    </span>
+                  </div>
+                  <strong className="text-rose-600 font-black">
+                    +{formatCurrency(chain.debtorOwesThirdPartyAmount, currency)}
+                  </strong>
+                </div>
+              )}
+              {chain.thirdPartyOwesCreditorAmount > 0 && (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span>
+                      <strong>{thirdPartyName}</strong> le debe a <strong>{creditorName}</strong>
+                    </span>
+                  </div>
+                  <strong className="text-emerald-700 font-black">
+                    +{formatCurrency(chain.thirdPartyOwesCreditorAmount, currency)}
+                  </strong>
+                </div>
+              )}
+            </div>
+
+            {/* Summary optimization note */}
+            <p className="text-[11px] text-violet-900 bg-violet-50/90 border border-violet-200/70 p-2.5 rounded-xl font-medium">
+              💡 <strong>Optimización grupal:</strong> {debtorName} le transfiere directamente a {creditorName} para saldar ambas cuentas en un solo pago sin necesidad de triangular dinero con {thirdPartyName}.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 pt-0.5">
+            <span className="text-[11px] font-extrabold text-violet-700 bg-violet-100/80 px-2.5 py-1 rounded-lg border border-violet-200 hidden sm:inline-block">
+              {totalChainExpenses} {totalChainExpenses === 1 ? 'gasto' : 'gastos'}
+            </span>
+            <div className="p-1.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-700">
+              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded list of specific expenses in this chain */}
+      {isExpanded && (
+        <div className="border-t border-violet-100 bg-zinc-50/70 p-3 sm:p-4 space-y-3.5">
+          {chain.debtorToThirdPartyExpenses.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  Gastos donde {debtorName} le debe a {thirdPartyName} ({chain.debtorToThirdPartyExpenses.length})
+                </span>
+              </div>
+              <div className="space-y-2">
+                {chain.debtorToThirdPartyExpenses.map((dItem, dIdx) => (
+                  <BalanceExpenseItem
+                    key={dItem.expense.id + dIdx}
+                    expense={dItem.expense}
+                    relevantAmount={dItem.amount}
+                    amountType="simplification"
+                    debtorProfile={debtorProfile}
+                    creditorProfile={chain.thirdParty}
+                    currentProfile={currentProfile}
+                    groupName={dItem.groupName || chain.groupName}
+                    groupCurrency={dItem.currency || currency}
+                    profiles={profiles}
+                    onOpenReceipt={onOpenReceipt}
+                    simplificationRole="debtor_owes_third_party"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {chain.thirdPartyToCreditorExpenses.length > 0 && (
+            <div className="space-y-2 pt-1 border-t border-zinc-200/60">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Gastos donde {thirdPartyName} le debe a {creditorName} ({chain.thirdPartyToCreditorExpenses.length})
+                </span>
+              </div>
+              <div className="space-y-2">
+                {chain.thirdPartyToCreditorExpenses.map((cItem, cIdx) => (
+                  <BalanceExpenseItem
+                    key={cItem.expense.id + cIdx}
+                    expense={cItem.expense}
+                    relevantAmount={cItem.amount}
+                    amountType="simplification"
+                    debtorProfile={chain.thirdParty}
+                    creditorProfile={creditorProfile}
+                    currentProfile={currentProfile}
+                    groupName={cItem.groupName || chain.groupName}
+                    groupCurrency={cItem.currency || currency}
+                    profiles={profiles}
+                    onOpenReceipt={onOpenReceipt}
+                    simplificationRole="creditor_paid_third_party"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface BalanceCardProps {
   pairwise: PairwiseBalance;
   currentProfile: Profile | null;
@@ -530,8 +661,8 @@ function UnifiedBalanceCard({
     );
   }, [pairwise.debtor, pairwise.creditor, expenses, payments, profiles, groups, isSimplified, pairwise.group_id]);
 
-  const debtorName = isDebtor ? 'Tú' : pairwise.debtor.full_name || 'Usuario';
-  const creditorName = isCreditor ? 'Tú' : pairwise.creditor.full_name || 'Usuario';
+  const debtorName = pairwise.debtor.full_name || 'Usuario';
+  const creditorName = pairwise.creditor.full_name || 'Usuario';
 
   // Direct and simplified arithmetic calculations
   const directBalance = debtDetail.netDirectBalance;
@@ -769,88 +900,6 @@ function UnifiedBalanceCard({
       {/* Expanded 4-Section Auditable Detail */}
       {isExpanded && (
         <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5 space-y-6">
-          {/* Top 4 Explanatory Metric Summary Cards */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/80 shadow-2xs space-y-3.5">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
-              <span className="text-xs font-extrabold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-indigo-600" />
-                <span>¿De dónde sale esta cifra? (Ecuación completa)</span>
-              </span>
-
-              <span className="text-[11px] font-bold text-zinc-400">
-                {isSimplified ? 'Modo Simplificado' : 'Modo Directo'}
-              </span>
-            </div>
-
-            {/* 4 Summary Equation Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              {/* 1. Pagado por Acreedor */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    1. Pagado por {creditorName}
-                  </span>
-                  <Plus className="w-3 h-3 text-zinc-400" />
-                </div>
-                <span className="font-black text-zinc-900 text-base mt-1 block">
-                  +{formatCurrency(debtDetail.totalOriginalDebt)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Consumos de {debtorName}
-                </span>
-              </div>
-
-              {/* 2. Abonos de deuda */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    2. Abonos de deuda
-                  </span>
-                  <Minus className="w-3 h-3 text-emerald-600" />
-                </div>
-                <span className="font-black text-emerald-700 text-base mt-1 block">
-                  -{formatCurrency(debtDetail.totalPaymentsApplied)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Transferencias directas
-                </span>
-              </div>
-
-              {/* 3. Pagado por Deudor */}
-              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
-                    3. Pagado por {debtorName}
-                  </span>
-                  <Minus className="w-3 h-3 text-emerald-600" />
-                </div>
-                <span className="font-black text-emerald-700 text-base mt-1 block">
-                  -{formatCurrency(debtDetail.totalReverseOffsets)}
-                </span>
-                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
-                  Consumos de {creditorName}
-                </span>
-              </div>
-
-              {/* 4. Ajuste simplificado */}
-              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 text-indigo-950">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] text-indigo-800 font-extrabold uppercase truncate">
-                    4. Ajuste simplificado
-                  </span>
-                  <Sparkles className="w-3 h-3 text-indigo-600" />
-                </div>
-                <span className="font-black text-indigo-900 text-base mt-1 block">
-                  {simplifiedDiff > 0 ? '+' : ''}
-                  {formatCurrency(simplifiedDiff)}
-                </span>
-                <span className="text-[11px] text-indigo-700 font-medium block mt-0.5">
-                  {isSimplified ? 'Optimización grupal' : 'Sin optimización (Directo)'}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* SECTION 1: Gastos pagados por el Acreedor (Consumos del Deudor) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -866,7 +915,7 @@ function UnifiedBalanceCard({
                 </p>
               </div>
 
-              <span className="text-xs sm:text-sm font-black text-zinc-900 bg-zinc-100 px-3 py-1 rounded-xl border border-zinc-200">
+              <span className="text-xs sm:text-sm font-black text-rose-600 bg-rose-50 px-3 py-1 rounded-xl border border-rose-200">
                 +{formatCurrency(debtDetail.totalOriginalDebt)}
               </span>
             </div>
@@ -1035,7 +1084,7 @@ function UnifiedBalanceCard({
             )}
           </div>
 
-          {/* SECTION 4: Ajuste simplificado (Optimización grupal) */}
+          {/* SECTION 4: Gastos triangulados involucrados (Ajuste por optimización grupal) */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -1043,10 +1092,12 @@ function UnifiedBalanceCard({
                   <div className="w-6 h-6 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black">
                     4
                   </div>
-                  <span>Ajuste simplificado • Optimización grupal</span>
+                  <span>
+                    Gastos triangulados involucrados ({debtDetail.simplificationExpenses.length}) • Optimización grupal
+                  </span>
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  Gastos triangulados y optimización del grupo para liquidar en menos transferencias.
+                  Cadenas de deuda con terceros donde las transferencias se optimizan directamente entre {debtorName} y {creditorName}.
                 </p>
               </div>
 
@@ -1056,97 +1107,190 @@ function UnifiedBalanceCard({
               </span>
             </div>
 
-            <div className="p-4 sm:p-5 bg-white rounded-2xl border border-zinc-200/90 shadow-2xs space-y-3.5">
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between py-1 border-b border-zinc-100">
-                  <span className="text-zinc-600">
-                    1. Consumos acumulados de {debtorName} (Pagó {creditorName})
-                  </span>
-                  <strong className="text-zinc-900">+{formatCurrency(debtDetail.totalOriginalDebt)}</strong>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-zinc-100">
-                  <span className="text-zinc-600">2. Abonos y transferencias directas</span>
-                  <strong className="text-emerald-700">-{formatCurrency(debtDetail.totalPaymentsApplied)}</strong>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-zinc-100">
-                  <span className="text-zinc-600">
-                    3. Gastos pagados por {debtorName} ({debtorName} recupera)
-                  </span>
-                  <strong className="text-emerald-700">-{formatCurrency(debtDetail.totalReverseOffsets)}</strong>
-                </div>
-
-                <div className="flex items-center justify-between py-1.5 bg-zinc-50 px-2.5 rounded-xl border border-zinc-200/60 font-bold">
-                  <span className="text-zinc-700">= Saldo directo acumulado (1 a 1)</span>
-                  <span className="text-zinc-900">{formatCurrency(directBalance)}</span>
-                </div>
-
-                {isSimplified ? (
-                  <div className="flex items-center justify-between py-1.5 bg-indigo-50/70 px-2.5 rounded-xl border border-indigo-200/70 font-bold text-indigo-950">
-                    <span className="text-indigo-800 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-indigo-600" />
-                      <span>4. Ajuste por simplificación grupal</span>
-                    </span>
-                    <span className="text-indigo-900 font-extrabold">
-                      {simplifiedDiff > 0 ? '+' : ''}
-                      {formatCurrency(simplifiedDiff)}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="p-2.5 bg-zinc-50 rounded-xl text-zinc-500 text-[11px]">
-                    Modo directo activo: se saldan directamente las deudas 1 a 1 sin optimización grupal.
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between py-2 bg-zinc-900 text-white px-3 rounded-xl font-black text-sm shadow-xs mt-2">
-                  <span>= Saldo final a liquidar</span>
-                  <span className="text-base text-emerald-400">{formatCurrency(pairwise.amount)}</span>
-                </div>
+            {isSimplified && debtDetail.triangularChains && debtDetail.triangularChains.length > 0 ? (
+              <div className="space-y-3">
+                {debtDetail.triangularChains.map((chain, cIdx) => (
+                  <TriangularChainCard
+                    key={chain.thirdParty.id + cIdx}
+                    chain={chain}
+                    debtorProfile={pairwise.debtor}
+                    creditorProfile={pairwise.creditor}
+                    currentProfile={currentProfile}
+                    profiles={profiles}
+                    onOpenReceipt={onOpenReceipt}
+                  />
+                ))}
               </div>
-
-              <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
-                <Info className="w-3.5 h-3.5 inline mr-1 text-zinc-400" />
-                {isSimplified
-                  ? 'La simplificación de deudas une los saldos triangulares entre todos los participantes del grupo para que nadie pague ni cobre de más, reduciendo al mínimo la cantidad de transferencias.'
-                  : 'En el modo directo, cada integrante transfiere exactamente según sus cuentas individuales sin reasignar pagos.'}
-              </p>
-            </div>
-
-            {/* Gastos involucrados en el ajuste simplificado */}
-            {isSimplified && debtDetail.simplificationExpenses && debtDetail.simplificationExpenses.length > 0 && (
-              <div className="space-y-2.5 pt-2">
-                <div className="flex items-center justify-between flex-wrap gap-1">
-                  <span className="text-xs font-extrabold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-violet-600" />
-                    <span>Gastos triangulados involucrados ({debtDetail.simplificationExpenses.length})</span>
-                  </span>
-                  <span className="text-[11px] text-zinc-500 font-medium">
-                    Gastos con terceros optimizados en este saldo
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  {debtDetail.simplificationExpenses.map((simpItem, sIdx) => (
-                    <BalanceExpenseItem
-                      key={simpItem.expense.id + sIdx}
-                      expense={simpItem.expense}
-                      relevantAmount={simpItem.relevantAmount}
-                      amountType="simplification"
-                      debtorProfile={pairwise.debtor}
-                      creditorProfile={pairwise.creditor}
-                      currentProfile={currentProfile}
-                      groupName={simpItem.groupName}
-                      groupCurrency={simpItem.currency}
-                      profiles={profiles}
-                      onOpenReceipt={onOpenReceipt}
-                      customExplanation={simpItem.explanation}
-                      simplificationRole={simpItem.role}
-                    />
-                  ))}
-                </div>
+            ) : isSimplified && debtDetail.simplificationExpenses && debtDetail.simplificationExpenses.length > 0 ? (
+              <div className="space-y-2">
+                {debtDetail.simplificationExpenses.map((simpItem, sIdx) => (
+                  <BalanceExpenseItem
+                    key={simpItem.expense.id + sIdx}
+                    expense={simpItem.expense}
+                    relevantAmount={simpItem.relevantAmount}
+                    amountType="simplification"
+                    debtorProfile={pairwise.debtor}
+                    creditorProfile={pairwise.creditor}
+                    currentProfile={currentProfile}
+                    groupName={simpItem.groupName}
+                    groupCurrency={simpItem.currency}
+                    profiles={profiles}
+                    onOpenReceipt={onOpenReceipt}
+                    customExplanation={simpItem.explanation}
+                    simplificationRole={simpItem.role}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="p-5 bg-white rounded-2xl border border-zinc-200/80 text-center space-y-1">
+                <p className="text-xs font-bold text-zinc-900">
+                  No hay gastos triangulados adicionales
+                </p>
+                <p className="text-[11px] text-zinc-500">
+                  {isSimplified
+                    ? 'El saldo entre ambos proviene enteramente de consumos y transferencias directas.'
+                    : 'Modo directo activo: se saldan directamente las deudas 1 a 1 sin optimización grupal.'}
+                </p>
               </div>
             )}
+          </div>
+
+          {/* SECTION 5 (At bottom): ¿De dónde sale esta cifra? (Ecuación completa) */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-200/90 shadow-2xs space-y-4 pt-2">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
+              <span className="text-xs font-extrabold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Calculator className="w-4 h-4 text-indigo-600" />
+                <span>¿De dónde sale esta cifra? (Ecuación completa)</span>
+              </span>
+
+              <span className="text-[11px] font-bold text-zinc-400">
+                {isSimplified ? 'Modo Simplificado' : 'Modo Directo'}
+              </span>
+            </div>
+
+            {/* 4 Summary Equation Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {/* 1. Pagado por Acreedor */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
+                    1. Pagado por {creditorName}
+                  </span>
+                  <Plus className="w-3 h-3 text-zinc-400" />
+                </div>
+                <span className="font-black text-rose-600 text-base mt-1 block">
+                  +{formatCurrency(debtDetail.totalOriginalDebt)}
+                </span>
+                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
+                  Consumos de {debtorName}
+                </span>
+              </div>
+
+              {/* 2. Abonos de deuda */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
+                    2. Abonos de deuda
+                  </span>
+                  <Minus className="w-3 h-3 text-emerald-600" />
+                </div>
+                <span className="font-black text-emerald-700 text-base mt-1 block">
+                  -{formatCurrency(debtDetail.totalPaymentsApplied)}
+                </span>
+                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
+                  Transferencias directas
+                </span>
+              </div>
+
+              {/* 3. Pagado por Deudor */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70 hover:border-zinc-300 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] text-zinc-500 font-extrabold uppercase truncate">
+                    3. Pagado por {debtorName}
+                  </span>
+                  <Minus className="w-3 h-3 text-emerald-600" />
+                </div>
+                <span className="font-black text-emerald-700 text-base mt-1 block">
+                  -{formatCurrency(debtDetail.totalReverseOffsets)}
+                </span>
+                <span className="text-[11px] text-zinc-500 font-medium block mt-0.5">
+                  Consumos de {creditorName}
+                </span>
+              </div>
+
+              {/* 4. Ajuste simplificado */}
+              <div className="p-3.5 rounded-2xl bg-violet-50/70 border border-violet-200/80 text-violet-950">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] text-violet-800 font-extrabold uppercase truncate">
+                    4. Ajuste simplificado
+                  </span>
+                  <Sparkles className="w-3 h-3 text-violet-600" />
+                </div>
+                <span className="font-black text-violet-900 text-base mt-1 block">
+                  {simplifiedDiff > 0 ? '+' : ''}
+                  {formatCurrency(simplifiedDiff)}
+                </span>
+                <span className="text-[11px] text-violet-700 font-medium block mt-0.5">
+                  {isSimplified ? 'Optimización grupal' : 'Sin optimización (Directo)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Arithmetic Breakdown */}
+            <div className="space-y-2 text-xs pt-1">
+              <div className="flex items-center justify-between py-1 border-b border-zinc-100">
+                <span className="text-zinc-600">
+                  1. Consumos acumulados de {debtorName} (Pagó {creditorName})
+                </span>
+                <strong className="text-rose-600 font-bold">+{formatCurrency(debtDetail.totalOriginalDebt)}</strong>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-zinc-100">
+                <span className="text-zinc-600">2. Abonos y transferencias directas</span>
+                <strong className="text-emerald-700 font-bold">-{formatCurrency(debtDetail.totalPaymentsApplied)}</strong>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-zinc-100">
+                <span className="text-zinc-600">
+                  3. Gastos pagados por {debtorName} ({debtorName} recupera)
+                </span>
+                <strong className="text-emerald-700 font-bold">-{formatCurrency(debtDetail.totalReverseOffsets)}</strong>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5 bg-zinc-50 px-2.5 rounded-xl border border-zinc-200/60 font-bold">
+                <span className="text-zinc-700">= Saldo directo acumulado (1 a 1)</span>
+                <span className="text-zinc-900">{formatCurrency(directBalance)}</span>
+              </div>
+
+              {isSimplified ? (
+                <div className="flex items-center justify-between py-1.5 bg-violet-50/70 px-2.5 rounded-xl border border-violet-200/70 font-bold text-violet-950">
+                  <span className="text-violet-800 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-violet-600" />
+                    <span>4. Ajuste por simplificación grupal</span>
+                  </span>
+                  <span className="text-violet-900 font-extrabold">
+                    {simplifiedDiff > 0 ? '+' : ''}
+                    {formatCurrency(simplifiedDiff)}
+                  </span>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-zinc-50 rounded-xl text-zinc-500 text-[11px]">
+                  Modo directo activo: se saldan directamente las deudas 1 a 1 sin optimización grupal.
+                </div>
+              )}
+
+              <div className="flex items-center justify-between py-2 bg-zinc-900 text-white px-3 rounded-xl font-black text-sm shadow-xs mt-2">
+                <span>= Saldo final a liquidar</span>
+                <span className="text-base text-emerald-400">{formatCurrency(pairwise.amount)}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
+              <Info className="w-3.5 h-3.5 inline mr-1 text-zinc-400" />
+              {isSimplified
+                ? 'La simplificación de deudas une los saldos triangulares entre todos los participantes del grupo para que nadie pague ni cobre de más, reduciendo al mínimo la cantidad de transferencias.'
+                : 'En el modo directo, cada integrante transfiere exactamente según sus cuentas individuales sin reasignar pagos.'}
+            </p>
           </div>
         </div>
       )}
