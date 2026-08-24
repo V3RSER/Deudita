@@ -157,6 +157,9 @@ function formatFullDateTime(dateStr: string | null | undefined): string {
 interface BalanceExpenseItemProps {
   expense: Expense;
   relevantAmount: number;
+  originalAmount?: number;
+  paidAmount?: number;
+  isPartiallyPaid?: boolean;
   amountType: 'debt' | 'offset' | 'simplification';
   debtorProfile: Profile;
   creditorProfile: Profile;
@@ -172,6 +175,9 @@ interface BalanceExpenseItemProps {
 function BalanceExpenseItem({
   expense,
   relevantAmount,
+  originalAmount,
+  paidAmount,
+  isPartiallyPaid,
   amountType,
   debtorProfile,
   creditorProfile,
@@ -247,7 +253,11 @@ function BalanceExpenseItem({
   if (amountType === 'debt') {
     primaryAmountText = `+${formatCurrency(relevantAmount, currency)}`;
     primaryAmountColorClass = 'text-rose-600';
-    detailRoleText = `${debtorName} debe`;
+    if (isPartiallyPaid && paidAmount && paidAmount > 0.009) {
+      detailRoleText = `${debtorName} debe (abono de ${formatCurrency(paidAmount, currency)})`;
+    } else {
+      detailRoleText = `${debtorName} debe`;
+    }
     detailRoleColorClass = 'text-rose-700 font-bold';
   } else if (amountType === 'offset') {
     primaryAmountText = `-${formatCurrency(relevantAmount, currency)}`;
@@ -341,6 +351,11 @@ function BalanceExpenseItem({
             <span className={`text-xs sm:text-sm font-black leading-tight ${primaryAmountColorClass}`}>
               {primaryAmountText}
             </span>
+            {isPartiallyPaid && originalAmount ? (
+              <span className="text-[9.5px] text-zinc-400 font-medium leading-tight">
+                de {formatCurrency(originalAmount, currency)}
+              </span>
+            ) : null}
             <span className={`text-[10.5px] leading-tight mt-0.5 ${detailRoleColorClass}`}>
               {detailRoleText}
             </span>
@@ -511,6 +526,7 @@ function GroupOptimizationSection({
   currency,
   onOpenReceipt,
 }: GroupOptimizationSectionProps) {
+  const [isExpensesExpanded, setIsExpensesExpanded] = useState(false);
   const debtorName = debtorProfile.full_name || 'Deudor';
   const creditorName = creditorProfile.full_name || 'Acreedor';
 
@@ -551,59 +567,78 @@ function GroupOptimizationSection({
         </p>
       </div>
 
-      {/* Flat list of participating group expenses */}
+      {/* Collapsible list of participating group expenses (Collapsed by default) */}
       {simplificationExpenses.length > 0 && (
         <div className="space-y-1.5 pt-0.5">
-          <div className="text-[10.5px] font-extrabold text-zinc-500 uppercase tracking-wider px-0.5">
-            Gastos del grupo vinculados a este ajuste ({simplificationExpenses.length})
-          </div>
-          <div className="divide-y divide-zinc-200/70 rounded-xl border border-zinc-200/80 bg-white overflow-hidden shadow-2xs">
-            {simplificationExpenses.map((item, idx) => {
-              const payerName = item.payerProfile?.full_name || 'Participante';
-              const participantName = item.participantProfile?.full_name || 'Participante';
-              const itemDate = item.expense.expense_date
-                ? formatHumanDate(new Date(item.expense.expense_date + 'T12:00:00'))
-                : 'Fecha no especificada';
+          <button
+            type="button"
+            onClick={() => setIsExpensesExpanded((prev) => !prev)}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl border border-violet-200/90 bg-white hover:bg-violet-50/70 text-violet-950 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+          >
+            <span className="flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+              <span>
+                {isExpensesExpanded
+                  ? 'Ocultar gastos del grupo vinculados'
+                  : `Ver gastos del grupo vinculados (${simplificationExpenses.length})`}
+              </span>
+            </span>
+            {isExpensesExpanded ? (
+              <ChevronUp className="w-4 h-4 text-violet-600 shrink-0" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-violet-600 shrink-0" />
+            )}
+          </button>
 
-              return (
-                <div
-                  key={item.expense.id + ':' + (item.split?.user_id || idx)}
-                  className="p-3 flex items-center justify-between gap-3 hover:bg-zinc-50/80 transition-colors text-xs"
-                >
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {item.groupName && (
-                        <span className="text-[10px] font-bold bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded-md border border-zinc-200">
-                          {item.groupName}
-                        </span>
-                      )}
-                      <span className="font-extrabold text-zinc-900 truncate">{item.expense.description}</span>
-                      {item.expense.receipt_url && (
-                        <button
-                          type="button"
-                          onClick={() => item.expense.receipt_url && onOpenReceipt(item.expense.receipt_url)}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 cursor-pointer"
-                        >
-                          <Receipt className="w-3 h-3" />
-                          Comprobante
-                        </button>
-                      )}
+          {isExpensesExpanded && (
+            <div className="divide-y divide-zinc-200/70 rounded-xl border border-zinc-200/80 bg-white overflow-hidden shadow-2xs">
+              {simplificationExpenses.map((item, idx) => {
+                const payerName = item.payerProfile?.full_name || 'Participante';
+                const participantName = item.participantProfile?.full_name || 'Participante';
+                const itemDate = item.expense.expense_date
+                  ? formatHumanDate(new Date(item.expense.expense_date + 'T12:00:00'))
+                  : 'Fecha no especificada';
+
+                return (
+                  <div
+                    key={item.expense.id + ':' + (item.split?.user_id || idx)}
+                    className="p-3 flex items-center justify-between gap-3 hover:bg-zinc-50/80 transition-colors text-xs"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {item.groupName && (
+                          <span className="text-[10px] font-bold bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded-md border border-zinc-200">
+                            {item.groupName}
+                          </span>
+                        )}
+                        <span className="font-extrabold text-zinc-900 truncate">{item.expense.description}</span>
+                        {item.expense.receipt_url && (
+                          <button
+                            type="button"
+                            onClick={() => item.expense.receipt_url && onOpenReceipt(item.expense.receipt_url)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 cursor-pointer"
+                          >
+                            <Receipt className="w-3 h-3" />
+                            Comprobante
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 font-medium">
+                        Pagó <strong className="text-zinc-700">{payerName}</strong> • Consumo de{' '}
+                        <strong className="text-zinc-700">{participantName}</strong> • {itemDate}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-zinc-500 font-medium">
-                      Pagó <strong className="text-zinc-700">{payerName}</strong> • Consumo de{' '}
-                      <strong className="text-zinc-700">{participantName}</strong> • {itemDate}
+
+                    <div className="text-right shrink-0">
+                      <span className="font-bold text-zinc-800 text-xs sm:text-sm block">
+                        {formatCurrency(item.relevantAmount, item.currency || currency)}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-zinc-800 text-xs sm:text-sm block">
-                      {formatCurrency(item.relevantAmount, item.currency || currency)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -764,8 +799,8 @@ function UnifiedBalanceCard({
                 </span>
 
                 <span className="text-[11px] font-bold text-zinc-500 bg-zinc-100/90 px-2 py-0.5 rounded-full border border-zinc-200/60">
-                  {debtDetail.allExpenses.length}{' '}
-                  {debtDetail.allExpenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}
+                  {debtDetail.pendingExpenses.length}{' '}
+                  {debtDetail.pendingExpenses.length === 1 ? 'gasto pendiente' : 'gastos pendientes'}
                 </span>
               </div>
 
@@ -902,7 +937,7 @@ function UnifiedBalanceCard({
       {/* Expanded Auditable Detail */}
       {isExpanded && (
         <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5 space-y-5">
-          {/* GASTOS PAGADOS POR EL ACREEDOR (CONSUMOS DEL DEUDOR) */}
+          {/* GASTOS PAGADOS POR EL ACREEDOR (CONSUMOS DEL DEUDOR PENDIENTES) */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h4 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wider flex items-center space-x-2">
@@ -914,17 +949,20 @@ function UnifiedBalanceCard({
               </span>
             </div>
 
-            {debtDetail.allExpenses.length === 0 ? (
+            {debtDetail.pendingExpenses.length === 0 ? (
               <div className="p-3.5 bg-white rounded-xl border border-zinc-200/70 text-center text-xs text-zinc-500 font-medium">
-                No hay consumos de {debtorName} pagados por {creditorName}.
+                No hay consumos pendientes de {debtorName} pagados por {creditorName}.
               </div>
             ) : (
               <div className="space-y-1.5">
-                {debtDetail.allExpenses.map((item, idx) => (
+                {debtDetail.pendingExpenses.map((item, idx) => (
                   <BalanceExpenseItem
                     key={item.expense.id + idx}
                     expense={item.expense}
-                    relevantAmount={item.originalAmount}
+                    relevantAmount={item.pendingAmount}
+                    originalAmount={item.originalAmount}
+                    paidAmount={item.paidAmount}
+                    isPartiallyPaid={item.isPartiallyPaid}
                     amountType="debt"
                     debtorProfile={pairwise.debtor}
                     creditorProfile={pairwise.creditor}
