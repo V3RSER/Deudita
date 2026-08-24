@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Group, Expense, Payment, Profile } from '@/lib/types';
+import { Group, Expense, Payment, Profile, PairwiseBalance } from '@/lib/types';
 import {
   formatCurrency,
   calculatePairwiseBalances,
@@ -61,6 +61,7 @@ import {
 import { EditGroupModal } from '@/components/EditGroupModal';
 import { GroupSettingsModal } from '@/components/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
 
 interface GroupDetailProps {
   group: Group;
@@ -188,6 +189,7 @@ export function GroupDetail({
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
   const [expandedBalanceKeys, setExpandedBalanceKeys] = useState<Set<string>>(new Set());
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
+  const [selectedPairwiseForDetail, setSelectedPairwiseForDetail] = useState<PairwiseBalance | null>(null);
 
   const toggleBalanceExpand = (cardKey: string) => {
     setExpandedBalanceKeys((prev) => {
@@ -815,7 +817,8 @@ export function GroupDetail({
                   return (
                     <div
                       key={idx}
-                      className={`bg-white rounded-3xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden ${
+                      onClick={() => setSelectedPairwiseForDetail(p)}
+                      className={`bg-white rounded-3xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden cursor-pointer group ${
                         isOwedToMe
                           ? 'border-emerald-200/90 hover:border-emerald-300'
                           : isMyDebt
@@ -908,7 +911,10 @@ export function GroupDetail({
                           </div>
 
                           <button
-                            onClick={() => onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount);
+                            }}
                             className="bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs transition-all active:scale-95 shadow-xs shrink-0 self-end sm:self-center cursor-pointer"
                           >
                             Saldar
@@ -953,22 +959,16 @@ export function GroupDetail({
                         <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
                           <button
                             type="button"
-                            onClick={() => toggleBalanceExpand(cardKey)}
-                            className="inline-flex items-center space-x-1.5 text-xs font-bold text-zinc-700 hover:text-zinc-900 py-1 cursor-pointer transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPairwiseForDetail(p);
+                            }}
+                            className="inline-flex items-center space-x-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 py-1 cursor-pointer transition-colors"
                           >
-                            <Receipt className="w-3.5 h-3.5 text-zinc-400" />
+                            <Receipt className="w-3.5 h-3.5 text-indigo-600" />
                             <span>
-                              {isExpanded
-                                ? 'Ocultar desglose'
-                                : `Ver desglose (${detail.pendingExpenses.length} ${
-                                    detail.pendingExpenses.length === 1 ? 'pendiente' : 'pendientes'
-                                  })`}
+                              Ver desglose detallado de cuentas →
                             </span>
-                            {isExpanded ? (
-                              <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
-                            ) : (
-                              <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-                            )}
                           </button>
                         </div>
                       </div>
@@ -1323,6 +1323,24 @@ export function GroupDetail({
         cancelText="Cancelar"
         variant="danger"
         isLoading={isDeletingGroup}
+      />
+
+      {/* Spacious Full-View Pairwise Detail Modal */}
+      <PairwiseDetailModal
+        isOpen={Boolean(selectedPairwiseForDetail)}
+        onClose={() => setSelectedPairwiseForDetail(null)}
+        pairwise={selectedPairwiseForDetail}
+        currentProfile={currentProfile}
+        expenses={expenses}
+        payments={payments}
+        profiles={profiles}
+        groups={userGroups}
+        isSimplified={isSimplifiedBalances}
+        groupId={group.id}
+        onOpenSettleModal={(groupId, debtorId, creditorId, amount) => {
+          onOpenSettleModal(groupId || group.id, debtorId, creditorId, amount);
+        }}
+        onEditPayment={onEditPayment}
       />
     </div>
   );

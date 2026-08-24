@@ -8,24 +8,8 @@ import {
   formatCurrency,
   calculateSimplifiedBalances,
   calculateDirectBalances,
-  calculatePairwiseDebtDetail,
-  PairwiseDebtDetail,
-  SimplificationExpenseItem,
 } from '@/lib/balance-utils';
-import { getCategoryConfig } from '@/lib/expense-category-utils';
 import {
-  ExpenseParticipantSummary,
-  ParticipantSummaryData,
-  ParticipantItemBreakdown,
-} from '@/components/ExpenseParticipantSummary';
-import { GroupOptimizationSection } from '@/components/GroupOptimizationSection';
-import { PairwiseSettlementView } from '@/components/PairwiseSettlementView';
-import {
-  formatHumanDate,
-  getRecordEventDateInfo,
-} from '@/lib/transaction-date-utils';
-import {
-  Wallet,
   TrendingUp,
   TrendingDown,
   ArrowRightLeft,
@@ -34,26 +18,12 @@ import {
   Layers,
   Shield,
   UserCheck,
-  ChevronDown,
-  ChevronUp,
-  Receipt,
   Search,
-  Calendar,
-  Clock,
-  ExternalLink,
-  Plus,
-  Minus,
-  Info,
-  HandCoins,
-  ShoppingBag,
-  ImageIcon,
-  FileText,
   X,
-  Calculator,
-  Users,
-  ArrowRight,
+  ChevronRight,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
 
 interface ConsolidatedBalancesProps {
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
@@ -67,474 +37,22 @@ function getInitials(name?: string): string {
   return trimmed.charAt(0).toUpperCase();
 }
 
-function UserAvatar({
-  profile,
-  size = 'md',
-  className = '',
-}: {
-  profile?: Profile | null;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
-  className?: string;
-}) {
-  const sizeClasses = {
-    xs: 'w-5 h-5 text-[9px]',
-    sm: 'w-6 h-6 text-[10px]',
-    md: 'w-8 h-8 text-xs',
-    lg: 'w-10 h-10 text-sm',
-  };
-
-  const pxSizes = {
-    xs: 20,
-    sm: 24,
-    md: 32,
-    lg: 40,
-  };
-
-  const name = profile?.full_name || 'Usuario';
-  const initial = getInitials(name);
-
-  if (profile?.avatar_url) {
-    return (
-      <Image
-        src={profile.avatar_url}
-        alt={name}
-        width={pxSizes[size]}
-        height={pxSizes[size]}
-        className={`rounded-full object-cover shrink-0 ring-1.5 ring-white shadow-2xs ${sizeClasses[size]} ${className}`}
-        unoptimized
-        referrerPolicy="no-referrer"
-      />
-    );
-  }
-
-  return (
-    <div
-      className={`rounded-full bg-zinc-800 text-white font-bold flex items-center justify-center shrink-0 ring-1.5 ring-white shadow-2xs ${sizeClasses[size]} ${className}`}
-      title={name}
-    >
-      {initial}
-    </div>
-  );
-}
-
 type FilterType = 'all' | 'mine' | 'to_receive' | 'to_pay' | 'third_party';
-
-const MONTH_ABBR_ES = [
-  'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-  'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
-];
-
-function parseExpenseDate(dateInput?: string | null) {
-  if (!dateInput) {
-    return { monthAbbr: 'EXP', dayStr: '--' };
-  }
-  const d = new Date(dateInput);
-  if (!isNaN(d.getTime())) {
-    const monthIndex = d.getMonth();
-    const dayNum = d.getDate();
-    const dayStr = dayNum < 10 ? `0${dayNum}` : `${dayNum}`;
-    const monthAbbr = MONTH_ABBR_ES[monthIndex] || 'EXP';
-    return { monthAbbr, dayStr };
-  }
-  return { monthAbbr: 'EXP', dayStr: '--' };
-}
-
-function formatFullDateTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  const dateFormatted = d.toLocaleDateString('es-CO', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const timeFormatted = d.toLocaleTimeString('es-CO', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  return `${dateFormatted}, ${timeFormatted}`;
-}
-
-interface BalanceExpenseItemProps {
-  expense: Expense;
-  relevantAmount: number;
-  originalAmount?: number;
-  paidAmount?: number;
-  isPartiallyPaid?: boolean;
-  amountType: 'debt' | 'offset' | 'simplification';
-  debtorProfile: Profile;
-  creditorProfile: Profile;
-  currentProfile: Profile | null;
-  groupName?: string;
-  groupCurrency?: string;
-  profiles: Profile[];
-  onOpenReceipt: (url: string) => void;
-  customExplanation?: string;
-  simplificationRole?: 'debtor_owes_third_party' | 'creditor_paid_third_party';
-}
-
-function BalanceExpenseItem({
-  expense,
-  relevantAmount,
-  originalAmount,
-  paidAmount,
-  isPartiallyPaid,
-  amountType,
-  debtorProfile,
-  creditorProfile,
-  currentProfile,
-  groupName,
-  groupCurrency,
-  profiles,
-  onOpenReceipt,
-  customExplanation,
-  simplificationRole,
-}: BalanceExpenseItemProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const catConfig = getCategoryConfig(expense.category);
-  const CategoryIcon = catConfig.icon;
-  const currency = groupCurrency || currentProfile?.currency || 'COP';
-  const dateParsed = parseExpenseDate(expense.expense_date || expense.created_at);
-
-  const paidByProfile = profiles.find((p) => p.id === expense.paid_by);
-  const createdByProfile = profiles.find((p) => p.id === expense.created_by);
-  const payerName = paidByProfile?.full_name || 'Usuario';
-
-  // Always use the real names, never "Tú"
-  const debtorName = debtorProfile.full_name || 'Deudor';
-  const creditorName = creditorProfile.full_name || 'Acreedor';
-
-  // Build participant summary breakdown for expanded view
-  const participantSummaryList: ParticipantSummaryData[] = useMemo(() => {
-    return (expense.splits || []).map((split) => {
-      const profile = profiles.find((p) => p.id === split.user_id);
-      const userAmt = split.amount_owed;
-      const breakdown: ParticipantItemBreakdown[] = [];
-
-      if (expense.items && expense.items.length > 0 && expense.total_amount > 0) {
-        expense.items.forEach((item) => {
-          const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
-          const totalQty = match ? parseFloat(match[1]) || 1 : 1;
-          const cleanDesc = match ? match[2].trim() : item.description;
-          const ratio = expense.total_amount > 0 ? userAmt / expense.total_amount : 0;
-          const userItemQty = totalQty * ratio;
-          const userItemCost = item.amount * ratio;
-
-          breakdown.push({
-            desc: cleanDesc,
-            qty: userItemQty,
-            cost: userItemCost,
-          });
-        });
-      }
-
-      return {
-        userId: split.user_id,
-        profile,
-        amount: userAmt,
-        breakdown: breakdown.length > 0 ? breakdown : undefined,
-      };
-    });
-  }, [expense.splits, expense.items, expense.total_amount, profiles]);
-
-  const hasItems = Boolean(expense.items && expense.items.length > 0);
-  const hasNotes = Boolean(expense.notes && expense.notes.trim().length > 0);
-  const hasReceipt = Boolean(expense.receipt_url);
-  const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
-
-  const eventInfo = getRecordEventDateInfo(expense);
-
-  // Directly display the exact relevant amount and who owes or recovers
-  let primaryAmountText = '';
-  let primaryAmountColorClass = '';
-  let detailRoleText = '';
-  let detailRoleColorClass = '';
-
-  if (amountType === 'debt') {
-    primaryAmountText = `+${formatCurrency(relevantAmount, currency)}`;
-    primaryAmountColorClass = 'text-rose-600';
-    if (isPartiallyPaid && paidAmount && paidAmount > 0.009) {
-      detailRoleText = `${debtorName} debe (abono de ${formatCurrency(paidAmount, currency)})`;
-    } else {
-      detailRoleText = `${debtorName} debe`;
-    }
-    detailRoleColorClass = 'text-rose-700 font-bold';
-  } else if (amountType === 'offset') {
-    primaryAmountText = `-${formatCurrency(relevantAmount, currency)}`;
-    primaryAmountColorClass = 'text-emerald-700';
-    detailRoleText = `${debtorName} recupera`;
-    detailRoleColorClass = 'text-emerald-700 font-bold';
-  } else {
-    // simplification
-    if (simplificationRole === 'debtor_owes_third_party') {
-      primaryAmountText = `+${formatCurrency(relevantAmount, currency)}`;
-      primaryAmountColorClass = 'text-rose-600';
-      detailRoleText = `${debtorName} debe`;
-      detailRoleColorClass = 'text-rose-700 font-bold';
-    } else {
-      primaryAmountText = formatCurrency(relevantAmount, currency);
-      primaryAmountColorClass = 'text-emerald-700';
-      detailRoleText = `pagó ${payerName}`;
-      detailRoleColorClass = 'text-emerald-700 font-bold';
-    }
-  }
-
-  return (
-    <div
-      className={`bg-white rounded-2xl border transition-all overflow-hidden ${
-        isExpanded
-          ? 'border-indigo-300 ring-2 ring-indigo-500/10 shadow-xs'
-          : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
-      }`}
-    >
-      {/* Unexpanded Main Header Row */}
-      <div
-        className={`p-3 sm:p-3.5 flex items-center justify-between gap-3 min-w-0 cursor-pointer select-none transition-colors ${
-          isExpanded ? 'bg-zinc-50/90 border-b border-zinc-200/70' : 'hover:bg-zinc-50/70'
-        }`}
-        onClick={() => setIsExpanded(!isExpanded)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setIsExpanded(!isExpanded);
-          }
-        }}
-      >
-        <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
-          {/* Date Badge */}
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-100 border border-zinc-200/90 text-zinc-900 flex flex-col items-center justify-center shrink-0 text-center shadow-2xs">
-            <span className="text-[8px] font-black uppercase tracking-wider text-zinc-500 leading-none">
-              {dateParsed.monthAbbr}
-            </span>
-            <span className="text-xs sm:text-sm font-black leading-none mt-0.5">
-              {dateParsed.dayStr}
-            </span>
-          </div>
-
-          {/* Category Icon */}
-          <div
-            className={`w-8 h-8 rounded-xl border border-black/5 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}
-          >
-            <CategoryIcon className="w-4 h-4" />
-          </div>
-
-          {/* Group Badge, Title & Payer */}
-          <div className="min-w-0 flex-1 space-y-0.5">
-            {/* Group Badge & Title */}
-            <div className="flex items-center space-x-1.5 flex-wrap">
-              {groupName ? (
-                <span className="inline-flex items-center text-[10px] font-extrabold bg-zinc-100 text-zinc-800 px-2 py-0.5 rounded-md border border-zinc-200 shadow-2xs shrink-0">
-                  {groupName}
-                </span>
-              ) : (
-                <span className="inline-flex items-center text-[10px] font-extrabold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-md border border-zinc-200 shadow-2xs shrink-0">
-                  Gasto
-                </span>
-              )}
-              <h4 className="font-extrabold text-zinc-900 text-xs sm:text-sm truncate">
-                {expense.description}
-              </h4>
-            </div>
-
-            {/* Payer text only (no redundant information afterwards) */}
-            <div className="text-[11px] text-zinc-500 font-medium truncate">
-              Pagó <strong className="text-zinc-700 font-semibold">{payerName}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Direct Relevant Amount & Debtor/Creditor detail */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="flex flex-col items-end justify-center text-right">
-            <span className={`text-xs sm:text-sm font-black leading-tight ${primaryAmountColorClass}`}>
-              {primaryAmountText}
-            </span>
-            {isPartiallyPaid && originalAmount ? (
-              <span className="text-[9.5px] text-zinc-400 font-medium leading-tight">
-                de {formatCurrency(originalAmount, currency)}
-              </span>
-            ) : null}
-            <span className={`text-[10.5px] leading-tight mt-0.5 ${detailRoleColorClass}`}>
-              {detailRoleText}
-            </span>
-          </div>
-
-          {/* Expand toggle chevron */}
-          <div
-            className={`p-1.5 rounded-xl border transition-all ${
-              isExpanded
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500'
-            }`}
-          >
-            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </div>
-        </div>
-      </div>
-
-      {/* Expanded Content (In-place breakdown without page navigation) */}
-      {isExpanded && (
-        <div className="bg-zinc-50/50 p-3 sm:p-4 space-y-3">
-          {hasSecondaryDetails ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-              {/* Left col: Resumen por participante */}
-              <ExpenseParticipantSummary
-                participants={participantSummaryList}
-                currency={currency}
-                currentUserId={currentProfile?.id}
-                title="Desglose por participantes"
-                defaultExpanded={true}
-              />
-
-              {/* Right col: Items, receipt and notes */}
-              <div className="space-y-2.5">
-                {hasItems && (
-                  <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                    <div className="px-3 py-2 bg-zinc-50/80 border-b border-zinc-200/70 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <ShoppingBag className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">
-                          Artículos ({expense.items?.length || 0})
-                        </span>
-                      </div>
-                    </div>
-                    <div className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
-                      {expense.items?.map((item, idx) => (
-                        <div
-                          key={item.id || idx}
-                          className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/50 transition-colors"
-                        >
-                          <div className="flex items-center space-x-2 min-w-0 pr-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                            <span className="font-medium text-zinc-800 truncate">{item.description}</span>
-                          </div>
-                          <span className="text-zinc-900 font-bold shrink-0 text-xs">
-                            {formatCurrency(item.amount, currency)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {hasReceipt && (
-                  <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                    <div className="px-3 py-2 bg-zinc-50/80 border-b border-zinc-200/70 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <ImageIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">
-                          Comprobante de pago
-                        </span>
-                      </div>
-                    </div>
-                    <div className="p-3">
-                      <div
-                        onClick={() => onOpenReceipt(expense.receipt_url!)}
-                        className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-indigo-500 transition-all shadow-2xs"
-                      >
-                        <Image
-                          src={expense.receipt_url!}
-                          alt="Comprobante"
-                          fill
-                          className="object-cover group-hover/img:scale-105 transition-transform"
-                          unoptimized
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Ver</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {hasNotes && (
-                  <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                    <div className="px-3 py-2 bg-zinc-50/80 border-b border-zinc-200/70 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">
-                        Notas
-                      </span>
-                    </div>
-                    <div className="p-3">
-                      <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                        {expense.notes}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <ExpenseParticipantSummary
-              participants={participantSummaryList}
-              currency={currency}
-              currentUserId={currentProfile?.id}
-              title="Desglose por participantes"
-              defaultExpanded={true}
-            />
-          )}
-
-          {/* Timestamp & Metadata Footer */}
-          <div className="pt-2.5 border-t border-zinc-200/70 text-[11px] text-zinc-500 space-y-1 bg-white/70 p-2.5 rounded-xl">
-            <div className="flex items-center space-x-2 flex-wrap">
-              <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-              <span>
-                Fecha del gasto:{' '}
-                <strong className="font-semibold text-zinc-700">
-                  {formatHumanDate(eventInfo.dateObj, { includeTime: Boolean(expense.expense_time) })}
-                </strong>
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-2 flex-wrap">
-              <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-              <span>
-                Registrado por{' '}
-                <strong className="font-semibold text-zinc-700">
-                  {createdByProfile ? createdByProfile.full_name : 'Usuario'}
-                </strong>{' '}
-                el {formatFullDateTime(expense.created_at)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface BalanceCardProps {
   pairwise: PairwiseBalance;
   currentProfile: Profile | null;
   isSimplified: boolean;
-  expenses: Expense[];
-  payments: Payment[];
-  profiles: Profile[];
-  groups: Group[];
-  isExpanded: boolean;
-  onToggleExpand: () => void;
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
-  onOpenReceipt: (url: string) => void;
+  onSelectPairwise: (pairwise: PairwiseBalance) => void;
 }
 
 function UnifiedBalanceCard({
   pairwise,
   currentProfile,
   isSimplified,
-  expenses,
-  payments,
-  profiles,
-  groups,
-  isExpanded,
-  onToggleExpand,
   onOpenSettleModal,
-  onOpenReceipt,
+  onSelectPairwise,
 }: BalanceCardProps) {
   const isDebtor =
     pairwise.debtor.id === currentProfile?.id ||
@@ -546,29 +64,6 @@ function UnifiedBalanceCard({
 
   const isDebtorMyDependent = !isSimplified && pairwise.debtorSponsor?.id === currentProfile?.id;
   const isCreditorMyDependent = !isSimplified && pairwise.creditorSponsor?.id === currentProfile?.id;
-
-  // Calculate detailed debt breakdown
-  const debtDetail: PairwiseDebtDetail = useMemo(() => {
-    return calculatePairwiseDebtDetail(
-      pairwise.debtor,
-      pairwise.creditor,
-      expenses,
-      payments,
-      profiles,
-      groups,
-      isSimplified,
-      pairwise.group_id
-    );
-  }, [pairwise.debtor, pairwise.creditor, expenses, payments, profiles, groups, isSimplified, pairwise.group_id]);
-
-  const debtorName = pairwise.debtor.full_name || 'Usuario';
-  const creditorName = pairwise.creditor.full_name || 'Usuario';
-
-  // Direct and simplified arithmetic calculations
-  const directBalance = debtDetail.netDirectBalance;
-  const simplifiedDiff = pairwise.amount - directBalance;
-  const cardCurrency = currentProfile?.currency || 'COP';
-  const hasSimplifiedAdjustment = isSimplified && Math.abs(simplifiedDiff) > 0.01;
 
   // Determine card type styling
   const cardTheme = isCreditor
@@ -609,7 +104,8 @@ function UnifiedBalanceCard({
 
   return (
     <div
-      className={`rounded-3xl border ${cardTheme.borderClass} ${cardTheme.bgGradient} shadow-2xs hover:shadow-md transition-all overflow-hidden flex flex-col`}
+      onClick={() => onSelectPairwise(pairwise)}
+      className={`rounded-3xl border ${cardTheme.borderClass} ${cardTheme.bgGradient} shadow-2xs hover:shadow-md transition-all overflow-hidden flex flex-col cursor-pointer group`}
     >
       {/* Top Header Card */}
       <div className="p-4 sm:p-5 flex flex-col gap-3.5">
@@ -660,11 +156,6 @@ function UnifiedBalanceCard({
                   className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-black border tracking-wide uppercase ${cardTheme.badgeClass}`}
                 >
                   {cardTheme.badgeText}
-                </span>
-
-                <span className="text-[11px] font-bold text-zinc-500 bg-zinc-100/90 px-2 py-0.5 rounded-full border border-zinc-200/60">
-                  {debtDetail.pendingExpenses.length}{' '}
-                  {debtDetail.pendingExpenses.length === 1 ? 'gasto pendiente' : 'gastos pendientes'}
                 </span>
               </div>
 
@@ -727,9 +218,10 @@ function UnifiedBalanceCard({
             </div>
 
             <button
-              onClick={() =>
-                onOpenSettleModal(pairwise.group_id, pairwise.debtor.id, pairwise.creditor.id, pairwise.amount)
-              }
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSettleModal(pairwise.group_id, pairwise.debtor.id, pairwise.creditor.id, pairwise.amount);
+              }}
               className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shadow-xs active:scale-95 cursor-pointer shrink-0 ${cardTheme.btnClass}`}
             >
               {cardTheme.btnText}
@@ -772,51 +264,17 @@ function UnifiedBalanceCard({
             </div>
           )}
 
-        {/* Toggle Expand Trigger Button */}
-        <div className="pt-2 border-t border-zinc-100/90 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-zinc-700 hover:text-zinc-900 py-1 cursor-pointer transition-colors group"
-          >
-            <Receipt className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" />
-            <span>
-              {isExpanded
-                ? 'Ocultar desglose de cuentas'
-                : 'Ver desglose detallado de cuentas'}
-            </span>
-            {isExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-            )}
-          </button>
-
-          <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline-block">
-            {isExpanded ? 'Expande cada gasto para ver sus artículos' : 'Cuentas claras paso a paso'}
+        {/* Bottom click affordance */}
+        <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 group-hover:text-zinc-800 transition-colors">
+          <span className="font-medium text-[11px] text-zinc-400 group-hover:text-zinc-600">
+            Haz clic para ver el desglose detallado de cuentas
           </span>
+          <div className="flex items-center space-x-1 text-xs font-bold text-indigo-700">
+            <span>Ver desglose</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </div>
       </div>
-
-      {/* Expanded Redesigned Settlement Detail */}
-      {isExpanded && (
-        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 sm:p-5">
-          <PairwiseSettlementView
-            debtor={pairwise.debtor}
-            creditor={pairwise.creditor}
-            currentProfile={currentProfile}
-            debtDetail={debtDetail}
-            finalAmount={pairwise.amount}
-            isSimplified={isSimplified}
-            currency={cardCurrency}
-            groupName={groups.find((g) => g.id === pairwise.group_id)?.name}
-            profiles={profiles}
-            onOpenReceipt={onOpenReceipt}
-            onOpenSettleModal={onOpenSettleModal}
-            groupId={pairwise.group_id}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -826,20 +284,8 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
   const [isSimplified, setIsSimplified] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-
-  const toggleCardExpand = (cardKey: string) => {
-    setExpandedCardKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(cardKey)) {
-        next.delete(cardKey);
-      } else {
-        next.add(cardKey);
-      }
-      return next;
-    });
-  };
+  const [selectedPairwiseForDetail, setSelectedPairwiseForDetail] = useState<PairwiseBalance | null>(null);
 
   const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
   const userExpenses = useMemo(() => expenses.filter((e) => userGroupIds.has(e.group_id)), [expenses, userGroupIds]);
@@ -898,85 +344,57 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
 
   // Unified List Filtering (Filter pills + Search)
   const filteredPairwiseList = useMemo(() => {
-    let list = activePairwise;
+    return activePairwise.filter((p) => {
+      const isDebtorMe =
+        p.debtor.id === currentProfile?.id ||
+        (!isSimplified && p.debtorSponsor?.id === currentProfile?.id);
+      const isCreditorMe =
+        p.creditor.id === currentProfile?.id ||
+        (!isSimplified && p.creditorSponsor?.id === currentProfile?.id);
 
-    // Filter by type
-    if (activeFilter === 'mine') {
-      list = list.filter((p) => {
-        const isCreditor =
-          p.creditor.id === currentProfile?.id ||
-          (!isSimplified && p.creditorSponsor?.id === currentProfile?.id);
-        const isDebtor =
-          p.debtor.id === currentProfile?.id ||
-          (!isSimplified && p.debtorSponsor?.id === currentProfile?.id);
-        return isCreditor || isDebtor;
-      });
-    } else if (activeFilter === 'to_receive') {
-      list = myOwedToMe;
-    } else if (activeFilter === 'to_pay') {
-      list = myIOwe;
-    } else if (activeFilter === 'third_party') {
-      list = otherPairwise;
-    }
+      if (activeFilter === 'mine') {
+        if (!isDebtorMe && !isCreditorMe) return false;
+      } else if (activeFilter === 'to_receive') {
+        if (!isCreditorMe) return false;
+      } else if (activeFilter === 'to_pay') {
+        if (!isDebtorMe) return false;
+      } else if (activeFilter === 'third_party') {
+        if (isDebtorMe || isCreditorMe) return false;
+      }
 
-    // Filter by search
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter((p) => {
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
         const debtorName = (p.debtor.full_name || '').toLowerCase();
         const creditorName = (p.creditor.full_name || '').toLowerCase();
-        const debtorEmail = (p.debtor.email || '').toLowerCase();
-        const creditorEmail = (p.creditor.email || '').toLowerCase();
-        return (
-          debtorName.includes(q) ||
-          creditorName.includes(q) ||
-          debtorEmail.includes(q) ||
-          creditorEmail.includes(q)
-        );
-      });
-    }
+        const matchDebtor = debtorName.includes(query);
+        const matchCreditor = creditorName.includes(query);
+        if (!matchDebtor && !matchCreditor) return false;
+      }
 
-    // Sort order: My debts & credits first (higher urgency), then highest amount
-    return [...list].sort((a, b) => {
-      const aIsMine =
-        a.creditor.id === currentProfile?.id || a.debtor.id === currentProfile?.id;
-      const bIsMine =
-        b.creditor.id === currentProfile?.id || b.debtor.id === currentProfile?.id;
-
-      if (aIsMine && !bIsMine) return -1;
-      if (!aIsMine && bIsMine) return 1;
-      return b.amount - a.amount;
+      return true;
     });
-  }, [
-    activePairwise,
-    activeFilter,
-    searchQuery,
-    myOwedToMe,
-    myIOwe,
-    otherPairwise,
-    currentProfile,
-    isSimplified,
-  ]);
+  }, [activePairwise, activeFilter, searchQuery, currentProfile, isSimplified]);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 pb-20 sm:pb-12">
+      {/* Header */}
       <PageHeader
-        title="Balances & Pagos"
-        subtitle="Vista unificada de cuentas claras: quién le debe a quién, sumas a tu favor, deudas y liquidación auditable."
-        icon={<Wallet className="w-5 h-5" />}
+        title="Balance consolidado"
+        subtitle="Estado general de tus cuentas y deudas entre integrantes de todos tus grupos"
         actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center p-0.5 bg-zinc-100/90 rounded-xl border border-zinc-200/80 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2">
+            {/* Optimization Toggle */}
+            <div className="bg-zinc-100 p-1 rounded-xl flex items-center border border-zinc-200">
               <button
                 type="button"
                 onClick={() => setIsSimplified(true)}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isSimplified
-                    ? 'bg-white text-zinc-900 shadow-2xs'
+                    ? 'bg-white text-indigo-950 shadow-2xs'
                     : 'text-zinc-500 hover:text-zinc-800'
                 }`}
               >
-                <Sparkles className={`w-3.5 h-3.5 ${isSimplified ? 'text-emerald-600' : 'text-zinc-400'}`} />
+                <Sparkles className={`w-3.5 h-3.5 ${isSimplified ? 'text-indigo-600' : 'text-zinc-400'}`} />
                 <span>Simplificado</span>
                 <span className="text-[10px] opacity-60 font-bold">({simplifiedTransactionsCount})</span>
               </button>
@@ -1211,7 +629,6 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
           <div className="space-y-4">
             {filteredPairwiseList.map((pairwise) => {
               const cardKey = `${pairwise.debtor.id}->${pairwise.creditor.id}`;
-              const isExpanded = expandedCardKeys.has(cardKey);
 
               return (
                 <UnifiedBalanceCard
@@ -1219,20 +636,28 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                   pairwise={pairwise}
                   currentProfile={currentProfile}
                   isSimplified={isSimplified}
-                  expenses={userExpenses}
-                  payments={userPayments}
-                  profiles={profiles}
-                  groups={userGroups}
-                  isExpanded={isExpanded}
-                  onToggleExpand={() => toggleCardExpand(cardKey)}
                   onOpenSettleModal={onOpenSettleModal}
-                  onOpenReceipt={(url) => setSelectedProofUrl(url)}
+                  onSelectPairwise={setSelectedPairwiseForDetail}
                 />
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Spacious Full-View Pairwise Detail Modal */}
+      <PairwiseDetailModal
+        isOpen={Boolean(selectedPairwiseForDetail)}
+        onClose={() => setSelectedPairwiseForDetail(null)}
+        pairwise={selectedPairwiseForDetail}
+        currentProfile={currentProfile}
+        expenses={userExpenses}
+        payments={userPayments}
+        profiles={profiles}
+        groups={userGroups}
+        isSimplified={isSimplified}
+        onOpenSettleModal={onOpenSettleModal}
+      />
 
       {/* Proof/Receipt Modal */}
       {selectedProofUrl && (
