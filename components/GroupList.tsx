@@ -11,6 +11,7 @@ import {
   TrendingDown,
   MinusCircle,
   ChevronRight,
+  Plus,
 } from 'lucide-react';
 
 import { getGroupImage, getGroupCategoryConfig } from '@/lib/group-utils';
@@ -21,7 +22,7 @@ interface GroupListProps {
   onOpenNewGroup?: () => void;
 }
 
-export function GroupList({ onSelectGroup }: GroupListProps) {
+export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
   const { currentProfile, userGroups, expenses, payments, profiles, pendingInvites, acceptGroupInvite, rejectGroupInvite } = useExpense();
   const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
 
@@ -53,6 +54,17 @@ export function GroupList({ onSelectGroup }: GroupListProps) {
         title="Mis Grupos"
         subtitle="Administra los grupos donde compartes gastos."
         icon={<Users className="w-5 h-5" />}
+        actions={
+          onOpenNewGroup && (
+            <button
+              onClick={onOpenNewGroup}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Crear grupo</span>
+            </button>
+          )
+        }
       />
 
       {/* PENDING INVITES BANNER */}
@@ -103,14 +115,25 @@ export function GroupList({ onSelectGroup }: GroupListProps) {
 
       {/* Group Cards */}
       {userGroups.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-          <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-4">
+        <div className="text-center py-16 bg-white rounded-3xl border border-zinc-200/80 p-8 shadow-sm space-y-4">
+          <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
             <Users className="w-8 h-8" />
           </div>
-          <h3 className="text-base font-bold text-slate-800">Aún no perteneces a ningún grupo</h3>
-          <p className="text-slate-500 text-sm max-w-md mx-auto mt-1">
-            Cuando te unas a un grupo o te inviten, aparecerá aquí.
+          <h3 className="text-base font-bold text-zinc-900">Aún no perteneces a ningún grupo</h3>
+          <p className="text-zinc-500 text-sm max-w-md mx-auto">
+            Crea un nuevo grupo para comenzar a dividir gastos con tus amigos o compañeros.
           </p>
+          {onOpenNewGroup && (
+            <div className="pt-2">
+              <button
+                onClick={onOpenNewGroup}
+                className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>Crear mi primer grupo</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

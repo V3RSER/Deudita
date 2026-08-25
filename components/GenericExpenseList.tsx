@@ -27,6 +27,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   User,
   Users,
   Clock,
@@ -298,52 +299,56 @@ export function GenericExpenseList({
                   <div
                     id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
-                    className={`bg-white rounded-xl border transition-all overflow-hidden ${
+                    className={`bg-white rounded-2xl border transition-all overflow-hidden mb-2.5 ${
                       isTargeted
                         ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
                         : isExpanded
                         ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
-                        : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
+                        : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
                     }`}
                   >
                     <div
-                      className={`px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between gap-2.5 min-w-0 cursor-pointer group transition-colors select-none ${
+                      className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
                         isExpanded
                           ? 'bg-zinc-50/80 border-b border-zinc-200/70'
                           : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
                       }`}
                       onClick={() => toggleExpenseExpanded(exp.id)}
                     >
-                      <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
-                        {/* Date Block: Only Month & Day (e.g. AGO 22) */}
+                      <div className="flex items-center space-x-3 min-w-0 flex-1">
+                        {/* Date Block: Only Month & Day (e.g. 24 AGO) */}
                         <div
-                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
+                          className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
                             dateFilterMode === 'entry_date'
                               ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                              : 'bg-zinc-100 border-zinc-200/90 text-zinc-900'
+                              : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
                           }`}
                         >
-                          <span className={`text-[8px] font-black uppercase tracking-wider leading-none ${
-                            dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-500'
-                          }`}>
-                            {parsed.monthAbbr}
-                          </span>
-                          <span className="text-xs sm:text-sm font-black leading-none mt-0.5">
+                          <span className="text-sm font-bold text-zinc-900 leading-none">
                             {parsed.dayStr}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${
+                              dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                            }`}
+                          >
+                            {parsed.monthAbbr}
                           </span>
                         </div>
 
                         {/* Category Circular Badge */}
-                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-black/5 ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}>
-                          <CategoryIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80 flex items-center justify-center shrink-0 shadow-2xs">
+                          <CategoryIcon className="w-4 h-4" />
                         </div>
 
                         {/* Expense Name & Details */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
-                            <h3 className={`font-semibold text-zinc-900 text-xs sm:text-sm transition-colors truncate ${
-                              !isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
-                            }`}>
+                            <h3
+                              className={`font-semibold text-zinc-900 text-sm transition-colors truncate ${
+                                !isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
+                              }`}
+                            >
                               {exp.description}
                             </h3>
                             {exp.source === 'gmail' && (
@@ -359,19 +364,19 @@ export function GenericExpenseList({
                           </div>
 
                           {/* Subtitle row */}
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5 leading-none">
+                          <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
                             {showGroupBadge && groupObj && (
                               <>
-                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[9.5px]">
+                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
                                   {groupObj.name}
                                 </span>
                                 <span>•</span>
                               </>
                             )}
                             <span className="truncate">
-                              Pagó <strong className="text-zinc-700 font-medium">{paidBy ? paidBy.full_name : 'Alguien'}</strong>
+                              Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
                               {isPayer && (
-                                <span className="ml-0.5 text-[10px] text-emerald-700 font-bold">(Tú)</span>
+                                <span className="ml-1 text-xs text-emerald-600 font-semibold">(Tú)</span>
                               )}
                             </span>
                           </div>
@@ -379,17 +384,17 @@ export function GenericExpenseList({
                       </div>
 
                       {/* Right Amount & Personal Share info beneath amount */}
-                      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         <div className="flex flex-col items-end justify-center text-right">
-                          <span className="text-xs sm:text-sm font-black text-zinc-900 leading-tight tracking-tight">
+                          <span className="text-sm font-bold text-zinc-900 leading-tight">
                             {formatCurrency(exp.total_amount, currency)}
                           </span>
                           <span
-                            className={`text-[10px] sm:text-[10.5px] font-semibold leading-tight mt-0.5 ${
+                            className={`text-xs font-semibold leading-tight mt-0.5 ${
                               isPayer && recovers > 0
                                 ? 'text-emerald-600'
                                 : isPayer
-                                ? 'text-emerald-700'
+                                ? 'text-emerald-600'
                                 : myTotalOwed > 0
                                 ? 'text-rose-600'
                                 : 'text-zinc-400'
@@ -433,21 +438,11 @@ export function GenericExpenseList({
                           </div>
                         )}
 
-                        <button
-                          type="button"
-                          aria-label={isExpanded ? 'Contraer detalle de gasto' : 'Expandir detalle de gasto'}
-                          className={`p-1 rounded-lg border transition-all ${
-                            isExpanded
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                              : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500 group-hover:bg-zinc-200 group-hover:text-zinc-800'
+                        <ChevronRight
+                          className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${
+                            isExpanded ? 'rotate-90 text-emerald-600' : ''
                           }`}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          )}
-                        </button>
+                        />
                       </div>
                     </div>
 
@@ -652,50 +647,50 @@ export function GenericExpenseList({
                 <div
                   key={`pay-${payment.id}`}
                   id={`payment-card-${payment.id}`}
-                  className={`bg-white rounded-xl border transition-all overflow-hidden ${
+                  className={`bg-white rounded-2xl border transition-all overflow-hidden mb-2.5 ${
                     isExpanded
                       ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
-                      : 'border-zinc-200/80 shadow-2xs hover:border-zinc-300'
+                      : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
                   }`}
                 >
                   {/* Collapsed / Summary Header (Click toggles expansion) */}
                   <div
                     onClick={() => togglePaymentExpanded(payment.id)}
-                    className={`px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between gap-2.5 min-w-0 transition-colors cursor-pointer select-none ${
+                    className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 transition-colors cursor-pointer select-none ${
                       isExpanded
                         ? 'bg-zinc-50/80 border-b border-zinc-200/70'
                         : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
                     }`}
                   >
-                    <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1">
-                      {/* Date Block: Only Month & Day (e.g. AGO 22) */}
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      {/* Date Block: Day on top, Month below */}
                       <div
-                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
+                        className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
                           dateFilterMode === 'entry_date'
                             ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                            : 'bg-zinc-100 border-zinc-200/90 text-zinc-900'
+                            : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
                         }`}
                       >
+                        <span className="text-sm font-bold text-zinc-900 leading-none">
+                          {parsed.dayStr}
+                        </span>
                         <span
-                          className={`text-[8px] font-black uppercase tracking-wider leading-none ${
-                            dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-500'
+                          className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${
+                            dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
                           }`}
                         >
                           {parsed.monthAbbr}
                         </span>
-                        <span className="text-xs sm:text-sm font-black leading-none mt-0.5">
-                          {parsed.dayStr}
-                        </span>
                       </div>
 
                       {/* Payment Circular Badge */}
-                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-2xs">
-                        <HandCoins className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
+                      <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80 flex items-center justify-center shrink-0 shadow-2xs">
+                        <HandCoins className="w-4 h-4 text-emerald-600" />
                       </div>
 
                       {/* Payment Description & Details */}
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-zinc-900 text-xs sm:text-sm flex items-center space-x-1 flex-wrap truncate">
+                        <h3 className="font-semibold text-zinc-900 text-sm flex items-center space-x-1 flex-wrap truncate">
                           <span className={isIpaid ? 'text-emerald-700 font-bold' : ''}>
                             {payer ? payer.full_name : 'Usuario'}
                           </span>
@@ -711,10 +706,10 @@ export function GenericExpenseList({
                         </h3>
 
                         {/* Subtitle row */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500 mt-0.5 leading-none">
+                        <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
                           {showGroupBadge && groupObj && (
                             <>
-                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[9.5px]">
+                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
                                 {groupObj.name}
                               </span>
                               <span>•</span>
@@ -722,19 +717,19 @@ export function GenericExpenseList({
                           )}
                           <span className="truncate">
                             {isIpaid ? 'Transferiste a ' : 'Pagó a '}
-                            <strong className="text-zinc-700 font-medium">{receiver ? receiver.full_name : 'Usuario'}</strong>
+                            <span className="font-medium text-zinc-700">{receiver ? receiver.full_name : 'Usuario'}</span>
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Right Amount & Personal Share info beneath amount */}
-                    <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <div className="flex flex-col items-end justify-center text-right">
-                        <span className="text-xs sm:text-sm font-black text-zinc-900 leading-tight tracking-tight">
+                        <span className="text-sm font-bold text-zinc-900 leading-tight">
                           {formatCurrency(payment.amount, currency)}
                         </span>
-                        <span className="text-[10px] sm:text-[10.5px] font-semibold text-emerald-700 leading-tight mt-0.5">
+                        <span className="text-xs font-semibold text-emerald-600 leading-tight mt-0.5">
                           {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'abono'}
                         </span>
                       </div>
@@ -767,26 +762,11 @@ export function GenericExpenseList({
                         </div>
                       )}
 
-                      {/* Expand / Collapse Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePaymentExpanded(payment.id);
-                        }}
-                        aria-label={isExpanded ? 'Contraer detalle de pago' : 'Expandir detalle de pago'}
-                        className={`p-1 rounded-lg border transition-all ${
-                          isExpanded
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                            : 'bg-zinc-100/80 border-zinc-200/80 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800'
+                      <ChevronRight
+                        className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${
+                          isExpanded ? 'rotate-90 text-emerald-600' : ''
                         }`}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      />
                     </div>
                   </div>
 
@@ -969,9 +949,9 @@ export function GenericExpenseList({
               </span>
             </button>
           ) : (
-            <div className="text-center">
-              <span className="text-[11px] font-medium text-zinc-500 bg-zinc-50 px-3 py-1.5 rounded-full border border-zinc-200/60">
-                Has cargado todos los movimientos ({transactions.length})
+            <div className="text-center py-4">
+              <span className="text-xs font-medium text-zinc-400">
+                No hay más gastos
               </span>
             </div>
           )}

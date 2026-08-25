@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import {
@@ -16,7 +16,8 @@ import {
   UserCheck,
   Settings,
   SplitSquareHorizontal,
-  Sparkles,
+  Menu,
+  X,
 } from 'lucide-react';
 
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -28,48 +29,48 @@ interface NavbarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   onOpenNewExpense: () => void;
-  onOpenNewGroup: () => void;
+  onOpenNewGroup?: () => void;
 }
 
 export function Navbar({
   activeTab,
   setActiveTab,
   onOpenNewExpense,
-  onOpenNewGroup,
 }: NavbarProps) {
   const { currentProfile, drafts, logout } = useExpense();
-  const [profileDropdownOpen, setProfileDropdownOpen] = React.useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const pendingDraftsCount = drafts.filter((d) => d.status === 'pending').length;
 
   if (!currentProfile) return null;
 
+  const isTabActive = (tab: ActiveTab) => activeTab === tab;
+
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-zinc-200">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-zinc-100/90 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-15 sm:h-16">
             {/* Brand Logo & Name */}
             <div
-              className="flex items-center space-x-3 cursor-pointer group"
+              className="flex items-center space-x-2.5 cursor-pointer group"
               onClick={() => setActiveTab('dashboard')}
             >
-              <div className="w-9 h-9 rounded-xl bg-zinc-900 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300">
+              <div className="w-9 h-9 rounded-xl bg-zinc-950 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform duration-300">
                 <SplitSquareHorizontal className="w-5 h-5 text-white" />
               </div>
-              <div className="flex flex-col">
-                <span className="font-semibold text-lg text-zinc-900 leading-tight tracking-tight">
-                  Deudita
-                </span>
-              </div>
+              <span className="font-bold text-lg text-zinc-900 leading-tight tracking-tight">
+                Deudita
+              </span>
             </div>
 
             {/* Navigation Tabs (Desktop) */}
-            <nav className="hidden lg:flex items-center space-x-1.5 bg-zinc-100/60 p-1.5 rounded-2xl ring-1 ring-zinc-200/50">
+            <nav className="hidden lg:flex items-center space-x-1 bg-zinc-100/70 p-1.5 rounded-2xl ring-1 ring-zinc-200/50">
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'dashboard'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -81,7 +82,7 @@ export function Navbar({
 
               <button
                 onClick={() => setActiveTab('groups')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'groups'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -93,7 +94,7 @@ export function Navbar({
 
               <button
                 onClick={() => setActiveTab('friends')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'friends'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -105,7 +106,7 @@ export function Navbar({
 
               <button
                 onClick={() => setActiveTab('balances')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'balances'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -117,7 +118,7 @@ export function Navbar({
 
               <button
                 onClick={() => setActiveTab('expenses')}
-                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'expenses'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -129,7 +130,7 @@ export function Navbar({
 
               <button
                 onClick={() => setActiveTab('drafts')}
-                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all ${
+                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === 'drafts'
                     ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
@@ -147,63 +148,47 @@ export function Navbar({
 
             {/* Right Action Area */}
             <div className="flex items-center space-x-2 sm:space-x-3">
-              {/* Mobile Quick Add Button */}
-              <button
-                onClick={onOpenNewExpense}
-                className="sm:hidden flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold shadow-xs active:scale-95 transition-transform cursor-pointer"
-                title="Nuevo Gasto"
-                aria-label="Nuevo Gasto"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-              </button>
-
-              {/* Desktop Global Add Buttons */}
-              <div className="hidden sm:flex items-center space-x-2 mr-2">
+              {/* Desktop Global Add Button (only on desktop where bottom bar is hidden) */}
+              <div className="hidden lg:flex items-center space-x-2 mr-1">
                 <button
                   onClick={onOpenNewExpense}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3.5 py-2 rounded-xl text-sm shadow-xs transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Nuevo gasto</span>
                 </button>
-                <button
-                  onClick={onOpenNewGroup}
-                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <Users className="w-4 h-4" />
-                  <span>Grupo</span>
-                </button>
               </div>
 
-              {/* Notifications Center */}
+              {/* Notifications Bell */}
               <NotificationCenter />
 
-              {/* Profile Dropdown */}
+              {/* Profile Avatar Button */}
               <div className="relative">
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center space-x-2 bg-transparent hover:bg-zinc-100 text-zinc-700 px-2.5 py-1.5 rounded-xl transition text-sm font-medium min-h-[44px]"
+                  className="flex items-center space-x-1.5 p-1 rounded-full hover:bg-zinc-100 transition cursor-pointer min-h-[40px]"
+                  title="Opciones de perfil"
+                  aria-label="Opciones de perfil"
                 >
                   {currentProfile.avatar_url ? (
                     <Image
                       src={currentProfile.avatar_url}
                       alt={currentProfile.full_name}
-                      width={32}
-                      height={32}
-                      className="w-8 h-8 rounded-full object-cover ring-2 ring-zinc-100 shadow-sm"
+                      width={34}
+                      height={34}
+                      className="w-8.5 h-8.5 rounded-full object-cover ring-2 ring-zinc-100 shadow-2xs"
                       unoptimized
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-sm">
+                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-950 text-white flex items-center justify-center text-xs font-bold shadow-2xs">
                       {currentProfile.full_name ? currentProfile.full_name.charAt(0).toUpperCase() : 'U'}
                     </div>
                   )}
-                  <ChevronDown className="w-4 h-4 text-zinc-400" />
                 </button>
 
                 {profileDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-2xl py-2 z-50 overflow-hidden">
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-xl py-2 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                     <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50">
                       <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider flex items-center gap-1">
                         <UserCheck className="w-3 h-3 text-emerald-600" />
@@ -221,7 +206,7 @@ export function Navbar({
                           setProfileDropdownOpen(false);
                           setIsProfileModalOpen(true);
                         }}
-                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition"
+                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
                       >
                         <Settings className="w-4 h-4 text-zinc-500" />
                         <span>Mi Perfil y Ajustes</span>
@@ -232,7 +217,7 @@ export function Navbar({
                           setProfileDropdownOpen(false);
                           logout();
                         }}
-                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
                       >
                         <LogOut className="w-4 h-4" />
                         <span>Cerrar Sesión</span>
@@ -246,83 +231,141 @@ export function Navbar({
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar (Cellular Optimized) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200 px-1 py-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-2xl">
+      {/* Mobile Bottom Navigation Bar (Cellular Optimized matching screenshot) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200/80 px-2 py-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-lg">
+        {/* Tab 1: Inicio */}
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'dashboard'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
+            isTabActive('dashboard')
+              ? 'text-emerald-600 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 font-medium'
           }`}
         >
-          <LayoutDashboard className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Inicio</span>
+          <LayoutDashboard className={`w-5 h-5 ${isTabActive('dashboard') ? 'text-emerald-600' : 'text-zinc-600'}`} />
+          <span className="text-[10.5px] mt-1 leading-none">Inicio</span>
         </button>
 
+        {/* Tab 2: Grupos */}
         <button
           onClick={() => setActiveTab('groups')}
-          className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'groups'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
+            isTabActive('groups')
+              ? 'text-emerald-600 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 font-medium'
           }`}
         >
-          <Users className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Grupos</span>
+          <Users className={`w-5 h-5 ${isTabActive('groups') ? 'text-emerald-600 stroke-[2.2]' : 'text-zinc-600'}`} />
+          <span className="text-[10.5px] mt-1 leading-none">Grupos</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('friends')}
-          className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'friends'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
-          }`}
-        >
-          <UserPlus className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Amigos</span>
-        </button>
+        {/* Tab 3: Center Floating Plus Action Button */}
+        <div className="flex items-center justify-center flex-1">
+          <button
+            onClick={onOpenNewExpense}
+            className="w-12 h-12 -mt-5 rounded-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 ring-4 ring-white transition-transform cursor-pointer"
+            title="Nuevo gasto"
+            aria-label="Nuevo gasto"
+          >
+            <Plus className="w-6 h-6 stroke-[2.5]" />
+          </button>
+        </div>
 
+        {/* Tab 4: Balances */}
         <button
           onClick={() => setActiveTab('balances')}
-          className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'balances'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
+            isTabActive('balances')
+              ? 'text-emerald-600 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 font-medium'
           }`}
         >
-          <Wallet className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Balances</span>
+          <Wallet className={`w-5 h-5 ${isTabActive('balances') ? 'text-emerald-600' : 'text-zinc-600'}`} />
+          <span className="text-[10.5px] mt-1 leading-none">Balances</span>
         </button>
 
+        {/* Tab 5: Más */}
         <button
-          onClick={() => setActiveTab('expenses')}
-          className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'expenses'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
+            isMobileMenuOpen || isTabActive('friends') || isTabActive('expenses') || isTabActive('drafts')
+              ? 'text-emerald-600 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 font-medium'
           }`}
         >
-          <Receipt className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Gastos</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('drafts')}
-          className={`relative flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-h-[44px] flex-1 max-w-[64px] ${
-            activeTab === 'drafts'
-              ? 'text-zinc-900 bg-zinc-100 font-bold'
-              : 'text-zinc-500 hover:text-zinc-900'
-          }`}
-        >
-          <MailCheck className="w-5 h-5" />
-          <span className="text-[10px] mt-0.5 leading-tight">Tickets</span>
-          {pendingDraftsCount > 0 && (
-            <span className="absolute top-1 right-2 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white" />
-          )}
+          <Menu className={`w-5 h-5 ${isMobileMenuOpen ? 'text-emerald-600' : 'text-zinc-600'}`} />
+          <span className="text-[10.5px] mt-1 leading-none">Más</span>
         </button>
       </nav>
+
+      {/* Mobile Drawer / Menu when tapping "Más" */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end animate-in fade-in duration-150">
+          <div className="bg-white rounded-t-3xl p-5 space-y-3 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl border-t border-zinc-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <span className="text-sm font-bold text-zinc-900">Opciones adicionales</span>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <button
+                onClick={() => {
+                  setActiveTab('friends');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-zinc-50 text-left transition cursor-pointer"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <span className="font-semibold text-sm text-zinc-900">Amigos</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('expenses');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-zinc-50 text-left transition cursor-pointer"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <span className="font-semibold text-sm text-zinc-900">Todos los gastos</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('drafts');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-zinc-50 text-left transition cursor-pointer"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <MailCheck className="w-5 h-5" />
+                  </div>
+                  <span className="font-semibold text-sm text-zinc-900">Tickets y Borradores</span>
+                </div>
+                {pendingDraftsCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold bg-rose-500 text-white rounded-full">
+                    {pendingDraftsCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ProfileSettingsModal
         isOpen={isProfileModalOpen}

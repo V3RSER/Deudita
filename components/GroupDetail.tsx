@@ -42,6 +42,11 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
+  ArrowLeftRight,
+  X,
   ArrowUpRight,
   Calendar,
 } from 'lucide-react';
@@ -186,6 +191,8 @@ export function GroupDetail({
     setFilters((prev) => ({ ...prev, ...updates }));
   };
 
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
   const [expandedBalanceKeys, setExpandedBalanceKeys] = useState<Set<string>>(new Set());
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
@@ -293,6 +300,14 @@ export function GroupDetail({
   const savedGroupTransactions = Math.max(0, directGroupPairwise.length - simplifiedGroupPairwise.length);
 
   const isSoloMember = memberProfiles.length <= 1;
+
+  // Group user summaries for net balance banner
+  const groupUserSummaries = React.useMemo(() => {
+    return calculateUserSummaries(expenses, payments, profiles, group.id);
+  }, [expenses, payments, profiles, group.id]);
+
+  const mySummary = groupUserSummaries.find((s) => s.user.id === currentProfile?.id);
+  const myNetBalance = mySummary ? mySummary.netBalance : 0;
 
   // Group activities calculation (creates, updates, deletes, payments, member joins)
   const effectiveCurrency = group.currency ?? currentProfile?.currency ?? 'COP';
@@ -545,74 +560,94 @@ export function GroupDetail({
 
   return (
     <div className="space-y-4">
-      {/* Group Hero Header Banner (Compact & Mobile-Optimized) */}
-      <div className="relative w-full min-h-[75px] sm:min-h-[85px] rounded-2xl overflow-hidden shadow-2xs ring-1 ring-zinc-200/50 bg-zinc-950 p-3 sm:p-4 flex items-center justify-between gap-3">
-        {groupImageUrl ? (
-          <Image
-            src={groupImageUrl}
-            alt={group.name}
-            fill
-            className="object-cover opacity-50"
-            unoptimized
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950 opacity-95" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/95 via-zinc-950/80 to-zinc-950/50" />
-        
-        {/* Left info: Category, Title, Description */}
-        <div className="relative z-10 space-y-1 min-w-0 flex-1">
-          <div className="flex items-center space-x-2">
-            {(() => {
-              const catConfig = getGroupCategoryConfig(group.category);
-              const GroupCategoryIcon = catConfig.icon;
-              return (
-                <div className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-white/20 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold ring-1 ring-white/20 shadow-xs">
-                  <GroupCategoryIcon className="w-3 h-3" />
-                  <span>{catConfig.label}</span>
-                </div>
-              );
-            })()}
+      {/* Group Header: Luminous white card with avatar, title, members count, and settings chevron */}
+      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-zinc-100/90 shadow-2xs flex items-center justify-between gap-3.5">
+        <div className="flex items-center space-x-3.5 sm:space-x-4 min-w-0">
+          <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl overflow-hidden relative shadow-2xs border border-zinc-100 shrink-0 bg-zinc-100">
+            {groupImageUrl ? (
+              <Image
+                src={groupImageUrl}
+                alt={group.name}
+                fill
+                className="object-cover"
+                unoptimized
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-bold text-xl">
+                {group.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
           </div>
-          <h1 className="text-lg sm:text-xl font-black text-white tracking-tight drop-shadow-md truncate">
-            {group.name}
-          </h1>
-          {getCleanGroupDescription(group.description) && (
-            <p className="text-white/75 text-xs max-w-xl truncate leading-tight">
-              {getCleanGroupDescription(group.description)}
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight truncate">
+              {group.name}
+            </h1>
+            <p className="text-sm text-zinc-500 font-normal mt-0.5">
+              {memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}
             </p>
-          )}
+          </div>
         </div>
 
-        {/* Right actions: Settings button */}
-        <div className="relative z-10 flex items-center shrink-0">
-          <button
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-white transition-all shadow-sm ring-1 ring-white/30 active:scale-95 cursor-pointer"
-            title="Configuración del grupo"
-            aria-label="Configuración del grupo"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Right Settings / Details Chevron button */}
+        <button
+          onClick={() => setIsSettingsModalOpen(true)}
+          className="w-10 h-10 rounded-full hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-zinc-700 transition cursor-pointer shrink-0"
+          title="Ajustes del grupo"
+          aria-label="Ajustes del grupo"
+        >
+          <ChevronRight className="w-6 h-6 text-zinc-400" />
+        </button>
       </div>
 
-      {/* Action Bar: Saldar & Nuevo gasto */}
-      <div className="flex items-center gap-2">
+      {/* Navigation Tabs (Gastos, Balances, Miembros, Actividad) */}
+      <div className="flex border-b border-zinc-200 justify-between sm:justify-start sm:space-x-8 px-1">
         <button
-          onClick={() => onOpenSettleModal(group.id)}
-          className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 bg-white hover:bg-zinc-50 text-zinc-800 font-semibold px-3.5 py-2 rounded-xl text-xs sm:text-sm border border-zinc-200 shadow-2xs transition-all active:scale-95 cursor-pointer"
+          onClick={() => setActiveTab('expenses')}
+          className={`flex items-center space-x-1.5 pb-3 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+            activeTab === 'expenses'
+              ? 'border-emerald-600 text-emerald-600 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
         >
-          <Wallet className="w-3.5 h-3.5 text-zinc-600" />
-          <span>Saldar</span>
+          <Receipt className="w-4 h-4" />
+          <span>Gastos</span>
         </button>
+
         <button
-          onClick={() => onOpenNewExpense(group.id)}
-          className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-2xs transition-all active:scale-95 cursor-pointer"
+          onClick={() => setActiveTab('balances')}
+          className={`flex items-center space-x-1.5 pb-3 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+            activeTab === 'balances'
+              ? 'border-emerald-600 text-emerald-600 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo gasto</span>
+          <Wallet className="w-4 h-4" />
+          <span>Balances</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('members')}
+          className={`flex items-center space-x-1.5 pb-3 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+            activeTab === 'members'
+              ? 'border-emerald-600 text-emerald-600 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Miembros</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={`flex items-center space-x-1.5 pb-3 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+            activeTab === 'activity'
+              ? 'border-emerald-600 text-emerald-600 font-bold'
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          <span>Actividad</span>
         </button>
       </div>
 
@@ -651,71 +686,121 @@ export function GroupDetail({
         </div>
       )}
 
-      {/* Pestañas compactas de Gastos, Balances y Miembros */}
-      <div className="flex border-b border-zinc-200 overflow-x-auto no-scrollbar scroll-smooth gap-1 sm:gap-1.5 -mb-px">
-        <button
-          onClick={() => setActiveTab('expenses')}
-          className={`flex items-center space-x-1.5 py-2 px-3 sm:px-3.5 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'expenses'
-              ? 'border-zinc-900 text-zinc-900 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
-          }`}
-        >
-          <Receipt className="w-3.5 h-3.5" />
-          <span>Gastos ({groupExpenses.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('balances')}
-          className={`flex items-center space-x-1.5 py-2 px-3 sm:px-3.5 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'balances'
-              ? 'border-zinc-900 text-zinc-900 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
-          }`}
-        >
-          <Wallet className="w-3.5 h-3.5" />
-          <span>Balances</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('members')}
-          className={`flex items-center space-x-1.5 py-2 px-3 sm:px-3.5 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'members'
-              ? 'border-zinc-900 text-zinc-900 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Miembros ({memberProfiles.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('activity')}
-          className={`flex items-center space-x-1.5 py-2 px-3 sm:px-3.5 text-xs sm:text-sm border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'activity'
-              ? 'border-zinc-900 text-zinc-900 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 font-medium'
-          }`}
-        >
-          <Activity className="w-3.5 h-3.5" />
-          <span>Actividad</span>
-        </button>
-      </div>
-
       {/* TAB CONTENT: Expenses */}
       {activeTab === 'expenses' && (
-        <div className="space-y-4">
-          <TransactionFilterBar
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            availableMonths={groupAvailableMonths}
-            categories={groupCategories}
-            showGroupFilter={false}
-            showCategoryFilter={groupCategories.length > 0}
-            showSearch={true}
-            totalCount={groupExpenses.length + groupPayments.length}
-            myCount={myGroupCount}
-          />
+        <div className="space-y-3">
+          {/* Action Buttons: Nuevo gasto y Saldar juntos, luego Buscar gastos y Filtros */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+            <button
+              onClick={() => onOpenNewExpense(group.id)}
+              className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Nuevo gasto</span>
+            </button>
+
+            <button
+              onClick={() => onOpenSettleModal(group.id)}
+              className="flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-zinc-800 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border border-zinc-200 shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-zinc-600" />
+              <span>Saldar</span>
+            </button>
+
+            <button
+              onClick={() => setIsSearchActive(!isSearchActive)}
+              className={`flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0 ${
+                isSearchActive || filters.searchTerm
+                  ? 'border-emerald-500 text-emerald-700 bg-emerald-50/50'
+                  : 'border-zinc-200 text-zinc-600'
+              }`}
+            >
+              <Search className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Buscar gastos</span>
+            </button>
+
+            <button
+              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+              className={`flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0 ${
+                isFiltersOpen || filters.category !== 'all' || filters.datePreset !== 'all' || filters.scope !== 'all'
+                  ? 'border-emerald-500 text-emerald-700 bg-emerald-50/50'
+                  : 'border-zinc-200 text-zinc-800'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-600" />
+              <span>Filtros</span>
+            </button>
+          </div>
+
+          {/* Expandable Search Input */}
+          {isSearchActive && (
+            <div className="relative">
+              <input
+                type="text"
+                value={filters.searchTerm}
+                onChange={(e) => handleFilterChange({ searchTerm: e.target.value })}
+                placeholder="Buscar por concepto o persona..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
+                autoFocus
+              />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              {filters.searchTerm && (
+                <button
+                  onClick={() => handleFilterChange({ searchTerm: '' })}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Expandable Filters Panel */}
+          {isFiltersOpen && (
+            <div className="bg-zinc-50/70 p-3 rounded-2xl border border-zinc-200/70 space-y-2">
+              <TransactionFilterBar
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                availableMonths={groupAvailableMonths}
+                categories={groupCategories}
+                showGroupFilter={false}
+                showCategoryFilter={groupCategories.length > 0}
+                showSearch={false}
+                totalCount={groupExpenses.length + groupPayments.length}
+                myCount={myGroupCount}
+              />
+            </div>
+          )}
+          {/* Subheader: Period Filter Select + User Balance Status */}
+          <div className="flex items-center justify-between pt-0.5 pb-1 px-0.5">
+            <div className="relative">
+              <select
+                value={filters.datePreset}
+                onChange={(e) => handleFilterChange({ datePreset: e.target.value as any })}
+                className="appearance-none bg-transparent hover:bg-zinc-100 text-xs sm:text-sm font-medium text-zinc-700 py-1 pl-1 pr-6 rounded-lg cursor-pointer transition border-none focus:ring-0 focus:outline-none"
+              >
+                <option value="all">Gastos recientes</option>
+                <option value="this_month">Este mes</option>
+                <option value="last_month">Mes anterior</option>
+                <option value="this_year">Este año</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            <div className="text-xs sm:text-sm font-medium text-zinc-600">
+              {myNetBalance > 0.01 ? (
+                <span>
+                  Tú recuperas <span className="text-emerald-600 font-bold ml-1">{formatCurrency(myNetBalance, effectiveCurrency)}</span>
+                </span>
+              ) : myNetBalance < -0.01 ? (
+                <span>
+                  Debes <span className="text-rose-600 font-bold ml-1">{formatCurrency(Math.abs(myNetBalance), effectiveCurrency)}</span>
+                </span>
+              ) : (
+                <span className="text-zinc-500 font-medium">Estás al día</span>
+              )}
+            </div>
+          </div>
 
           <GenericExpenseList
             expenses={filteredExpenses}
