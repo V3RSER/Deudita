@@ -58,6 +58,7 @@ import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
+import { GroupExpenseFilterSheet } from '@/components/GroupExpenseFilterSheet';
 import {
   getEffectiveTransactionDate,
   isDateMatchingFilter,
@@ -191,7 +192,6 @@ export function GroupDetail({
     setFilters((prev) => ({ ...prev, ...updates }));
   };
 
-  const [isSearchActive, setIsSearchActive] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
   const [expandedBalanceKeys, setExpandedBalanceKeys] = useState<Set<string>>(new Set());
@@ -223,6 +223,13 @@ export function GroupDetail({
 
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
   const groupPayments = payments.filter((p) => p.group_id === group.id);
+
+  const activeFiltersCount =
+    (filters.datePreset !== 'all' ? 1 : 0) +
+    (filters.category !== 'all' ? 1 : 0) +
+    (filters.scope === 'mine' ? 1 : 0) +
+    (filters.dateMode !== 'expense_date' ? 1 : 0) +
+    (filters.customStartDate || filters.customEndDate ? 1 : 0);
 
   const groupCategories = React.useMemo(() => {
     return Array.from(new Set(groupExpenses.map((e) => e.category || 'Varios'))).filter(Boolean);
@@ -689,88 +696,80 @@ export function GroupDetail({
       {/* TAB CONTENT: Expenses */}
       {activeTab === 'expenses' && (
         <div className="space-y-3">
-          {/* Action Buttons: Nuevo gasto y Saldar juntos, luego Buscar gastos y Filtros */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-            <button
-              onClick={() => onOpenNewExpense(group.id)}
-              className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Nuevo gasto</span>
-            </button>
-
-            <button
-              onClick={() => onOpenSettleModal(group.id)}
-              className="flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-zinc-800 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border border-zinc-200 shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
-            >
-              <ArrowLeftRight className="w-3.5 h-3.5 text-zinc-600" />
-              <span>Saldar</span>
-            </button>
-
-            <button
-              onClick={() => setIsSearchActive(!isSearchActive)}
-              className={`flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0 ${
-                isSearchActive || filters.searchTerm
-                  ? 'border-emerald-500 text-emerald-700 bg-emerald-50/50'
-                  : 'border-zinc-200 text-zinc-600'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Buscar gastos</span>
-            </button>
-
-            <button
-              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-              className={`flex items-center space-x-1.5 bg-white hover:bg-zinc-50 text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl border shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0 ${
-                isFiltersOpen || filters.category !== 'all' || filters.datePreset !== 'all' || filters.scope !== 'all'
-                  ? 'border-emerald-500 text-emerald-700 bg-emerald-50/50'
-                  : 'border-zinc-200 text-zinc-800'
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-600" />
-              <span>Filtros</span>
-            </button>
-          </div>
-
-          {/* Expandable Search Input */}
-          {isSearchActive && (
-            <div className="relative">
+          {/* Row 1: Dominant Search Bar + Compact Filter Button */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={filters.searchTerm}
                 onChange={(e) => handleFilterChange({ searchTerm: e.target.value })}
-                placeholder="Buscar por concepto o persona..."
-                className="w-full pl-9 pr-8 py-2 bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
-                autoFocus
+                placeholder="Buscar gastos"
+                className="w-full h-11 pl-10 pr-9 bg-white border border-zinc-200/90 rounded-2xl text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-300 focus:ring-1 focus:ring-emerald-500/20 shadow-2xs transition"
               />
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
               {filters.searchTerm && (
                 <button
+                  type="button"
                   onClick={() => handleFilterChange({ searchTerm: '' })}
                   className="p-1 text-zinc-400 hover:text-zinc-600 absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
+                  aria-label="Borrar búsqueda"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-          )}
 
-          {/* Expandable Filters Panel */}
-          {isFiltersOpen && (
-            <div className="bg-zinc-50/70 p-3 rounded-2xl border border-zinc-200/70 space-y-2">
-              <TransactionFilterBar
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                availableMonths={groupAvailableMonths}
-                categories={groupCategories}
-                showGroupFilter={false}
-                showCategoryFilter={groupCategories.length > 0}
-                showSearch={false}
-                totalCount={groupExpenses.length + groupPayments.length}
-                myCount={myGroupCount}
-              />
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setIsFiltersOpen(true)}
+              className={`h-11 px-3 rounded-2xl border transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                activeFiltersCount > 0
+                  ? 'border-zinc-300 bg-white text-zinc-800'
+                  : 'border-zinc-200/90 bg-white text-zinc-600 hover:bg-zinc-50'
+              }`}
+              aria-label="Abrir filtros"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
+              {activeFiltersCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Row 2: Action Buttons (Saldar & Nuevo gasto) */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => onOpenSettleModal(group.id)}
+              className="h-11 bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200/90 rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-[0.99] shadow-2xs cursor-pointer"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-zinc-600" />
+              <span>Saldar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenNewExpense(group.id)}
+              className="h-11 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-[0.99] shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Nuevo gasto</span>
+            </button>
+          </div>
+
+          {/* Bottom Sheet for Filters */}
+          <GroupExpenseFilterSheet
+            isOpen={isFiltersOpen}
+            onClose={() => setIsFiltersOpen(false)}
+            filters={filters}
+            onApplyFilters={(newFilters) => {
+              setFilters(newFilters);
+            }}
+            availableMonths={groupAvailableMonths}
+            categories={groupCategories}
+          />
           {/* Subheader: Period Filter Select + User Balance Status */}
           <div className="flex items-center justify-between pt-0.5 pb-1 px-0.5">
             <div className="relative">
