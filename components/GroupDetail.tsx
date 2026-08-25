@@ -973,16 +973,16 @@ export function GroupDetail({
                         </div>
                       </div>
 
-                      {/* Expanded Section with Pending Expenses List */}
+                      {/* Expanded Section with GenericExpenseList */}
                       {isExpanded && (
-                        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-4 space-y-3">
+                        <div className="border-t border-zinc-200/90 bg-zinc-50/70 p-3 sm:p-4 space-y-3">
                           <div className="flex items-center justify-between text-xs font-extrabold text-zinc-900">
                             <span className="flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                               <span>Gastos pendientes que componen la deuda</span>
                             </span>
                             <span className="text-[11px] text-zinc-400 font-normal">
-                              Clic para abrir en la pestaña de gastos
+                              Perspectiva de {debtorDisplayName}
                             </span>
                           </div>
 
@@ -995,62 +995,17 @@ export function GroupDetail({
                               </p>
                             </div>
                           ) : (
-                            <div className="divide-y divide-zinc-200/70 rounded-2xl border border-zinc-200/90 overflow-hidden bg-white shadow-2xs">
-                              {detail.pendingExpenses.map((item, itemIdx) => {
-                                const catConfig = getCategoryConfig(item.expense.category);
-                                const IconComponent = catConfig.icon;
-                                const payerName = item.payerProfile?.full_name || creditorDisplayName;
-
-                                return (
-                                  <div
-                                    key={item.expense.id + itemIdx}
-                                    onClick={() => {
-                                      setActiveTab('expenses');
-                                      setSelectedExpenseId(item.expense.id);
-                                    }}
-                                    className="p-3 flex items-center justify-between gap-3 hover:bg-zinc-50 transition-all cursor-pointer group"
-                                  >
-                                    <div className="flex items-center space-x-2.5 min-w-0">
-                                      <div
-                                        className={`p-2 rounded-lg ${catConfig.bgClass} ${catConfig.textClass} shrink-0 border border-zinc-200/60`}
-                                      >
-                                        <IconComponent className="w-3.5 h-3.5" />
-                                      </div>
-                                      <div className="min-w-0 space-y-0.5">
-                                        <span className="font-extrabold text-zinc-900 text-xs truncate group-hover:text-indigo-700 block transition-colors">
-                                          {item.expense.description}
-                                        </span>
-                                        <div className="text-[11px] text-zinc-600 font-medium">
-                                          <span>{payerName} pagó {formatCurrency(item.expense.total_amount, group.currency ?? 'COP')}</span>
-                                          <span className="text-zinc-400"> • </span>
-                                          <span className="font-semibold text-zinc-900">
-                                            Parte de {debtorDisplayName}: {formatCurrency(item.originalAmount, group.currency ?? 'COP')}
-                                          </span>
-                                        </div>
-                                        <span className="text-[10px] text-zinc-400 flex items-center gap-1 font-medium">
-                                          <Calendar className="w-2.5 h-2.5" />
-                                          <span>{item.expense.expense_date}</span>
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2 shrink-0 text-right">
-                                      <div>
-                                        <span className="text-xs font-black text-zinc-900 block">
-                                          {formatCurrency(item.pendingAmount, group.currency ?? 'COP')}
-                                        </span>
-                                        {item.isPartiallyPaid && (
-                                          <span className="text-[9px] text-zinc-400 font-medium block">
-                                            (de {formatCurrency(item.originalAmount, group.currency ?? 'COP')})
-                                          </span>
-                                        )}
-                                      </div>
-                                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-900 transition-colors" />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                            <GenericExpenseList
+                              expenses={detail.pendingExpenses.map((d) => d.expense)}
+                              payments={[]}
+                              profiles={memberProfiles}
+                              userGroups={[group]}
+                              currentProfile={p.debtor}
+                              groupCurrency={group.currency ?? 'COP'}
+                              showGroupBadge={false}
+                              onEditExpense={onEditExpense}
+                              onDeleteExpense={deleteExpense}
+                            />
                           )}
                         </div>
                       )}

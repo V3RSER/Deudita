@@ -2,21 +2,13 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
-import { Expense, Payment, Profile, Group, PairwiseBalance, ExpenseSplit } from '@/lib/types';
+import { Expense, Payment, Profile, Group, PairwiseBalance } from '@/lib/types';
 import {
   formatCurrency,
   calculatePairwiseDebtDetail,
-  DebtBreakdownItem,
-  AppliedPaymentItem,
-  ReverseOffsetItem,
-  ThirdPartyTriangulation,
 } from '@/lib/balance-utils';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
-import {
-  ExpenseParticipantSummary,
-  ParticipantSummaryData,
-  ParticipantItemBreakdown,
-} from '@/components/ExpenseParticipantSummary';
 import {
   ArrowLeft,
   X,
@@ -30,12 +22,7 @@ import {
   Layers,
   ArrowRight,
   Receipt,
-  ExternalLink,
-  ShoppingBag,
-  FileText,
-  ImageIcon,
-  Shield,
-  CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 
 interface PairwiseDetailModalProps {
@@ -51,6 +38,9 @@ interface PairwiseDetailModalProps {
   groupId?: string;
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
   onEditPayment?: (payment: Payment) => void;
+  onEditExpense?: (expense: Expense) => void;
+  onDeleteExpense?: (expenseId: string) => void;
+  onDeletePayment?: (paymentId: string) => void;
 }
 
 function getInitials(name?: string | null): string {
@@ -62,28 +52,6 @@ function getInitials(name?: string | null): string {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return trimmed.slice(0, 2).toUpperCase();
-}
-
-function formatExpenseDateDisplay(dateStr?: string | null): { dateStr: string; timeStr?: string } {
-  if (!dateStr) return { dateStr: 'Reciente' };
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return { dateStr: dateStr };
-  
-  const formattedDate = d.toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const formattedTime = d.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-
-  return {
-    dateStr: formattedDate,
-    timeStr: formattedTime !== '00:00' ? formattedTime : undefined,
-  };
 }
 
 export function PairwiseDetailModal({
@@ -98,17 +66,20 @@ export function PairwiseDetailModal({
   isSimplified,
   groupId,
   onOpenSettleModal,
+  onEditPayment,
+  onEditExpense,
+  onDeleteExpense,
+  onDeletePayment,
 }: PairwiseDetailModalProps) {
+  // Collapsed by default as requested: "haz que por defecto aparezca todo colapsado"
   const [expandedSections, setExpandedSections] = useState({
-    debts: true,
-    recovers: true,
-    triangulations: true,
-    calculation: true,
+    debts: false,
+    recovers: false,
+    triangulations: false,
+    calculation: false,
   });
 
-  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Set<string>>(new Set());
   const [expandedTriangulationIndexes, setExpandedTriangulationIndexes] = useState<Set<number>>(new Set());
-  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
 
   const detail = useMemo(() => {
     if (!pairwise) return null;
@@ -143,6 +114,17 @@ export function PairwiseDetailModal({
   const debtorName = pairwise.debtor.full_name || 'Deudor';
   const creditorName = pairwise.creditor.full_name || 'Acreedor';
 
+  // Debtor profile to evaluate perspective for GenericExpenseList
+  const debtorProfile: Profile =
+    profiles.find((p) => p.id === pairwise.debtor.id) || {
+      id: pairwise.debtor.id,
+      full_name: debtorName,
+      email: pairwise.debtor.email || '',
+      avatar_url: pairwise.debtor.avatar_url || '',
+      currency: currency,
+      created_at: new Date().toISOString(),
+    };
+
   const allSectionsExpanded =
     expandedSections.debts &&
     expandedSections.recovers &&
@@ -159,15 +141,6 @@ export function PairwiseDetailModal({
     });
   };
 
-  const toggleExpenseExpand = (id: string) => {
-    setExpandedExpenseIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const toggleTriangulationExpand = (idx: number) => {
     setExpandedTriangulationIndexes((prev) => {
       const next = new Set(prev);
@@ -177,7 +150,7 @@ export function PairwiseDetailModal({
     });
   };
 
-  // Calculations for summary card
+  // Calculations for summary & calculations section
   const totalDebtsFromCreditor = detail.pendingExpenses.reduce((acc, d) => acc + d.originalAmount, 0);
   const totalRecoversFromDebtor = detail.reverseOffsetExpenses.reduce((acc, r) => acc + r.amount, 0);
   const totalDirectPayments = detail.appliedPayments.reduce((acc, p) => acc + p.amountApplied, 0);
@@ -185,6 +158,14 @@ export function PairwiseDetailModal({
   const finalSettlementAmount = pairwise.amount;
 
   const pendingExpensesCount = detail.pendingExpenses.length;
+  const recoversCount = detail.reverseOffsetExpenses.length + detail.appliedPayments.length;
+
+  // Expenses paid by creditor that debtor owes
+  const debtExpensesList: Expense[] = detail.pendingExpenses.map((pe) => pe.expense);
+
+  // Expenses and Payments from debtor to creditor that reduce debt
+  const recoverExpensesList: Expense[] = detail.reverseOffsetExpenses.map((ro) => ro.expense);
+  const appliedPaymentsList: Payment[] = detail.appliedPayments.map((ap) => ap.payment);
 
   return (
     <div
@@ -195,10 +176,10 @@ export function PairwiseDetailModal({
         className="relative w-full max-w-5xl max-h-[94vh] bg-zinc-50 rounded-3xl shadow-2xl border border-zinc-200/90 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* TOP MODAL HEADER (Matching image layout) */}
-        <div className="bg-white px-4 sm:px-6 py-3.5 border-b border-zinc-200/80 shrink-0">
+        {/* TOP MODAL HEADER (Oriented to debtor) */}
+        <div className="bg-white px-4 sm:px-6 py-4 border-b border-zinc-200/80 shrink-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Left Header info */}
+            {/* Left Header info: Saludo y orientación al deudor */}
             <div className="flex items-center space-x-3.5 min-w-0">
               <button
                 type="button"
@@ -244,7 +225,7 @@ export function PairwiseDetailModal({
                 )}
               </div>
 
-              {/* Title & Badges */}
+              {/* Title & Perspective oriented to debtor */}
               <div className="min-w-0">
                 <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                   <span className="text-xs font-bold text-zinc-600">
@@ -264,7 +245,7 @@ export function PairwiseDetailModal({
               </div>
             </div>
 
-            {/* Right Saldo a liquidar & Saldar button */}
+            {/* Right: Saldo a liquidar & Saldar button */}
             <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-100">
               <div className="text-left md:text-right">
                 <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">
@@ -279,7 +260,12 @@ export function PairwiseDetailModal({
                 type="button"
                 onClick={() => {
                   onClose();
-                  onOpenSettleModal(pairwise.group_id || groupId, pairwise.debtor.id, pairwise.creditor.id, finalSettlementAmount);
+                  onOpenSettleModal(
+                    pairwise.group_id || groupId,
+                    pairwise.debtor.id,
+                    pairwise.creditor.id,
+                    finalSettlementAmount
+                  );
                 }}
                 className="bg-[#581c87] hover:bg-[#4a1470] active:scale-95 text-white font-extrabold px-6 py-2.5 rounded-xl text-sm transition-all shadow-md cursor-pointer shrink-0"
               >
@@ -287,9 +273,22 @@ export function PairwiseDetailModal({
               </button>
             </div>
           </div>
+
+          {/* Perspective Greeting Banner for the debtor */}
+          <div className="mt-3.5 pt-3 border-t border-zinc-100 flex items-center justify-between bg-purple-50/60 rounded-xl px-3.5 py-2 text-xs text-purple-950">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-[#581c87] shrink-0" />
+              <span>
+                Desglose desde la perspectiva de <strong className="font-bold text-[#581c87]">{debtorName}</strong> ({debtorName} debe / recupera frente a {creditorName})
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-purple-700 hidden sm:inline">
+              Movimientos sincronizados
+            </span>
+          </div>
         </div>
 
-        {/* SUB-HEADER TOOLBAR (Ocultar detalles / Expande cada gasto) */}
+        {/* SUB-HEADER TOOLBAR (Expandir / Colapsar todo) */}
         <div className="px-4 sm:px-6 py-2 bg-zinc-100/70 border-b border-zinc-200/70 flex items-center justify-between text-xs text-zinc-500 shrink-0">
           <button
             type="button"
@@ -297,7 +296,7 @@ export function PairwiseDetailModal({
             className="flex items-center space-x-1.5 font-bold text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>{allSectionsExpanded ? 'Ocultar detalles' : 'Mostrar todos los detalles'}</span>
+            <span>{allSectionsExpanded ? 'Colapsar todas las secciones' : 'Expandir todas las secciones'}</span>
             {allSectionsExpanded ? (
               <ChevronUp className="w-3.5 h-3.5 ml-0.5" />
             ) : (
@@ -306,14 +305,14 @@ export function PairwiseDetailModal({
           </button>
 
           <div className="flex items-center space-x-1 text-zinc-500 text-[11px] font-medium hidden sm:flex">
-            <span>Expande cada gasto para ver sus artículos</span>
+            <span>Haz clic en cada sección o gasto para ver su detalle</span>
             <Info className="w-3.5 h-3.5 text-zinc-400" />
           </div>
         </div>
 
         {/* SCROLLABLE MODAL CONTENT */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6 space-y-4">
-          {/* 1. SECCIÓN: GASTOS QUE GENERAN LA DEUDA */}
+          {/* 1. SECCIÓN: GASTOS QUE GENERAN LA DEUDA (Componente GenericExpenseList reutilizado) */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {/* Section Header */}
             <div
@@ -328,12 +327,10 @@ export function PairwiseDetailModal({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    {isDebtor
-                      ? 'Gastos que generan tu deuda'
-                      : `Gastos que generan la deuda de ${debtorName}`}
+                    Gastos que generan la deuda de {debtorName}
                   </h3>
                   <p className="text-xs text-zinc-500 font-medium">
-                    Pagados por {creditorName}
+                    Pagados por {creditorName} donde participa {debtorName}
                   </p>
                 </div>
               </div>
@@ -341,7 +338,7 @@ export function PairwiseDetailModal({
               <div className="flex items-center space-x-3 shrink-0">
                 <div className="text-right">
                   <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    {isDebtor ? `Total que debes a ${creditorName}` : `Total adeudado a ${creditorName}`}
+                    Total que debe {debtorName}
                   </span>
                   <span className="text-sm sm:text-base font-black text-[#581c87]">
                     + {formatCurrency(totalDebtsFromCreditor, currency)}
@@ -357,157 +354,31 @@ export function PairwiseDetailModal({
               </div>
             </div>
 
-            {/* Section Content */}
+            {/* Section Content with REUSED GenericExpenseList */}
             {expandedSections.debts && (
-              <div className="border-t border-zinc-200/80 bg-zinc-50/40 divide-y divide-zinc-200/60">
-                {detail.pendingExpenses.length === 0 ? (
-                  <div className="p-6 text-center text-zinc-500 text-xs">
+              <div className="border-t border-zinc-200/80 bg-zinc-50/40 p-3 sm:p-4">
+                {debtExpensesList.length === 0 ? (
+                  <div className="p-6 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
                     No hay gastos directos pendientes pagados por {creditorName}.
                   </div>
                 ) : (
-                  <>
-                    {/* Header Columns */}
-                    <div className="hidden lg:grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-100/60">
-                      <div className="col-span-2">Fecha</div>
-                      <div className="col-span-3">Gasto</div>
-                      <div className="col-span-2">Pagó</div>
-                      <div className="col-span-2">Participantes</div>
-                      <div className="col-span-1 text-right">Total gasto</div>
-                      <div className="col-span-1 text-right">Tu parte</div>
-                      <div className="col-span-1 text-right">Efecto</div>
-                    </div>
-
-                    {/* Expense Rows */}
-                    {detail.pendingExpenses.map((item, idx) => {
-                      const exp = item.expense;
-                      const isExpanded = expandedExpenseIds.has(exp.id);
-                      const catConfig = getCategoryConfig(exp.category);
-                      const CategoryIcon = catConfig.icon;
-                      const dateInfo = formatExpenseDateDisplay(exp.expense_date || exp.created_at);
-
-                      return (
-                        <div key={`${exp.id}-${idx}`} className="bg-white">
-                          <div
-                            onClick={() => toggleExpenseExpand(exp.id)}
-                            className="p-3 sm:px-4 sm:py-3 flex flex-col lg:grid lg:grid-cols-12 gap-2 lg:gap-3 items-start lg:items-center cursor-pointer hover:bg-zinc-50 transition-colors select-none"
-                          >
-                            {/* Fecha */}
-                            <div className="lg:col-span-2 flex items-center space-x-2 text-xs font-semibold text-zinc-700">
-                              <div className="flex flex-col">
-                                <span>{dateInfo.dateStr}</span>
-                                {dateInfo.timeStr && (
-                                  <span className="text-[10px] text-zinc-400 font-normal">
-                                    {dateInfo.timeStr}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Gasto Description + Category Badge */}
-                            <div className="lg:col-span-3 flex items-center space-x-2 min-w-0">
-                              <div
-                                className={`w-6 h-6 rounded-md ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}
-                              >
-                                <CategoryIcon className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                {exp.description}
-                              </span>
-                            </div>
-
-                            {/* Pagó */}
-                            <div className="lg:col-span-2 flex items-center space-x-1.5 text-xs text-zinc-700">
-                              <div className="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                                {getInitials(item.payerProfile?.full_name || creditorName)}
-                              </div>
-                              <span className="truncate font-medium">
-                                {item.payerProfile?.full_name || creditorName}
-                              </span>
-                            </div>
-
-                            {/* Participantes */}
-                            <div className="lg:col-span-2 flex items-center -space-x-1 text-xs">
-                              {(exp.splits || []).slice(0, 3).map((split, sIdx) => {
-                                const pProf = profiles.find((p) => p.id === split.user_id);
-                                return (
-                                  <div
-                                    key={sIdx}
-                                    title={pProf?.full_name || 'Participante'}
-                                    className="w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[9px] font-bold ring-1 ring-white shrink-0"
-                                  >
-                                    {getInitials(pProf?.full_name)}
-                                  </div>
-                                );
-                              })}
-                              {(exp.splits?.length || 0) > 3 && (
-                                <span className="text-[10px] font-bold text-zinc-500 pl-2">
-                                  +{(exp.splits?.length || 0) - 3}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Total del gasto */}
-                            <div className="lg:col-span-1 text-right text-xs font-semibold text-zinc-700">
-                              <span className="lg:hidden text-zinc-400 font-normal mr-1">Total:</span>
-                              {formatCurrency(exp.total_amount, currency)}
-                            </div>
-
-                            {/* Tu parte */}
-                            <div className="lg:col-span-1 text-right text-xs font-semibold text-zinc-900">
-                              <span className="lg:hidden text-zinc-400 font-normal mr-1">Tu parte:</span>
-                              {formatCurrency(item.originalAmount, currency)}
-                            </div>
-
-                            {/* Efecto + Chevron */}
-                            <div className="lg:col-span-1 flex items-center justify-end space-x-1.5 text-right w-full lg:w-auto">
-                              <span className="text-xs sm:text-sm font-black text-[#581c87]">
-                                + {formatCurrency(item.originalAmount, currency)}
-                              </span>
-                              <div className="text-zinc-400">
-                                {isExpanded ? (
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* EXPANDED RICH DETAILS */}
-                          {isExpanded && (
-                            <div className="bg-zinc-50/80 p-3 sm:p-4 border-t border-zinc-100 space-y-3">
-                              <RenderExpenseSubDetails
-                                expense={exp}
-                                profiles={profiles}
-                                currency={currency}
-                                currentProfile={currentProfile}
-                                onSelectReceipt={(url) => setSelectedReceiptUrl(url)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Section Footer */}
-                    <div className="p-3 sm:px-4 bg-white flex items-center justify-between text-xs font-bold border-t border-zinc-200/80">
-                      <span className="text-zinc-500">
-                        {pendingExpensesCount === 1 ? '1 gasto' : `${pendingExpensesCount} gastos`}
-                      </span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-zinc-700">Total que debes a {creditorName}:</span>
-                        <span className="text-sm font-black text-[#581c87]">
-                          + {formatCurrency(totalDebtsFromCreditor, currency)}
-                        </span>
-                      </div>
-                    </div>
-                  </>
+                  <GenericExpenseList
+                    expenses={debtExpensesList}
+                    payments={[]}
+                    profiles={profiles}
+                    userGroups={groups}
+                    currentProfile={debtorProfile}
+                    groupCurrency={currency}
+                    showGroupBadge={!groupId}
+                    onEditExpense={onEditExpense}
+                    onDeleteExpense={onDeleteExpense}
+                  />
                 )}
               </div>
             )}
           </div>
 
-          {/* 2. SECCIÓN: GASTOS QUE TE PERMITEN RECUPERAR */}
+          {/* 2. SECCIÓN: GASTOS Y ABONOS QUE PERMITEN RECUPERAR (GenericExpenseList reutilizado) */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {/* Section Header */}
             <div
@@ -522,12 +393,10 @@ export function PairwiseDetailModal({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    {isDebtor
-                      ? 'Gastos que te permiten recuperar'
-                      : `Gastos compensados por ${debtorName}`}
+                    Gastos y abonos que recupera {debtorName}
                   </h3>
                   <p className="text-xs text-zinc-500 font-medium">
-                    Pagados por {debtorName}
+                    Pagados por {debtorName} que compensan o reducen la deuda frente a {creditorName}
                   </p>
                 </div>
               </div>
@@ -535,7 +404,7 @@ export function PairwiseDetailModal({
               <div className="flex items-center space-x-3 shrink-0">
                 <div className="text-right">
                   <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    Total que recuperas
+                    Total que recupera {debtorName}
                   </span>
                   <span className="text-sm sm:text-base font-black text-emerald-600">
                     - {formatCurrency(totalRecoversFromDebtor + totalDirectPayments, currency)}
@@ -551,147 +420,27 @@ export function PairwiseDetailModal({
               </div>
             </div>
 
-            {/* Section Content */}
+            {/* Section Content with REUSED GenericExpenseList */}
             {expandedSections.recovers && (
-              <div className="border-t border-zinc-200/80 bg-zinc-50/40 divide-y divide-zinc-200/60">
-                {detail.reverseOffsetExpenses.length === 0 && detail.appliedPayments.length === 0 ? (
-                  <div className="p-6 text-center text-zinc-500 text-xs">
-                    No hay gastos pagados por {debtorName} donde participe {creditorName}.
+              <div className="border-t border-zinc-200/80 bg-zinc-50/40 p-3 sm:p-4">
+                {recoverExpensesList.length === 0 && appliedPaymentsList.length === 0 ? (
+                  <div className="p-6 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
+                    No hay gastos pagados ni abonos directos registrados por {debtorName} hacia {creditorName}.
                   </div>
                 ) : (
-                  <>
-                    {/* Header Columns */}
-                    <div className="hidden lg:grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-100/60">
-                      <div className="col-span-2">Fecha</div>
-                      <div className="col-span-3">Gasto / Movimiento</div>
-                      <div className="col-span-2">Debe</div>
-                      <div className="col-span-2">Total gasto</div>
-                      <div className="col-span-2 text-right">Tu parte pendiente</div>
-                      <div className="col-span-1 text-right">Efecto</div>
-                    </div>
-
-                    {/* Reverse Expense Rows */}
-                    {detail.reverseOffsetExpenses.map((item, idx) => {
-                      const exp = item.expense;
-                      const isExpanded = expandedExpenseIds.has(exp.id);
-                      const catConfig = getCategoryConfig(exp.category);
-                      const CategoryIcon = catConfig.icon;
-                      const dateInfo = formatExpenseDateDisplay(exp.expense_date || exp.created_at);
-
-                      return (
-                        <div key={`rev-${exp.id}-${idx}`} className="bg-white">
-                          <div
-                            onClick={() => toggleExpenseExpand(exp.id)}
-                            className="p-3 sm:px-4 sm:py-3 flex flex-col lg:grid lg:grid-cols-12 gap-2 lg:gap-3 items-start lg:items-center cursor-pointer hover:bg-zinc-50 transition-colors select-none"
-                          >
-                            {/* Fecha */}
-                            <div className="lg:col-span-2 flex items-center space-x-2 text-xs font-semibold text-zinc-700">
-                              <div className="flex flex-col">
-                                <span>{dateInfo.dateStr}</span>
-                                {dateInfo.timeStr && (
-                                  <span className="text-[10px] text-zinc-400 font-normal">
-                                    {dateInfo.timeStr}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Gasto Description */}
-                            <div className="lg:col-span-3 flex items-center space-x-2 min-w-0">
-                              <div
-                                className={`w-6 h-6 rounded-md ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0 shadow-2xs`}
-                              >
-                                <CategoryIcon className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                {exp.description}
-                              </span>
-                            </div>
-
-                            {/* Debe (Creditor) */}
-                            <div className="lg:col-span-2 flex items-center space-x-1.5 text-xs text-zinc-700">
-                              <div className="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                                {getInitials(creditorName)}
-                              </div>
-                              <span className="truncate font-medium">{creditorName}</span>
-                            </div>
-
-                            {/* Total del gasto */}
-                            <div className="lg:col-span-2 text-xs font-semibold text-zinc-700">
-                              <span className="lg:hidden text-zinc-400 font-normal mr-1">Total:</span>
-                              {formatCurrency(exp.total_amount, currency)}
-                            </div>
-
-                            {/* Tu parte pendiente */}
-                            <div className="lg:col-span-2 text-right text-xs font-semibold text-zinc-900">
-                              <span className="lg:hidden text-zinc-400 font-normal mr-1">Recuperas:</span>
-                              {formatCurrency(item.amount, currency)}
-                            </div>
-
-                            {/* Efecto */}
-                            <div className="lg:col-span-1 flex items-center justify-end space-x-1.5 text-right w-full lg:w-auto">
-                              <span className="text-xs sm:text-sm font-black text-emerald-600">
-                                - {formatCurrency(item.amount, currency)}
-                              </span>
-                              <div className="text-zinc-400">
-                                {isExpanded ? (
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* EXPANDED DETAILS */}
-                          {isExpanded && (
-                            <div className="bg-zinc-50/80 p-3 sm:p-4 border-t border-zinc-100 space-y-3">
-                              <RenderExpenseSubDetails
-                                expense={exp}
-                                profiles={profiles}
-                                currency={currency}
-                                currentProfile={currentProfile}
-                                onSelectReceipt={(url) => setSelectedReceiptUrl(url)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Direct Payments (if any) */}
-                    {detail.appliedPayments.map((p, pIdx) => {
-                      const dateInfo = formatExpenseDateDisplay(p.payment.payment_date || p.payment.created_at);
-                      return (
-                        <div key={`pay-${p.payment.id}-${pIdx}`} className="p-3 sm:px-4 sm:py-3 bg-emerald-50/40 flex items-center justify-between text-xs">
-                          <div className="flex items-center space-x-3">
-                            <span className="font-bold text-zinc-700">{dateInfo.dateStr}</span>
-                            <span className="font-semibold text-emerald-900">
-                              Pago / Abono directo registrado
-                            </span>
-                          </div>
-                          <span className="font-black text-emerald-700 text-sm">
-                            - {formatCurrency(p.amountApplied, currency)}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                    {/* Section Footer */}
-                    <div className="p-3 sm:px-4 bg-white flex items-center justify-between text-xs font-bold border-t border-zinc-200/80">
-                      <span className="text-zinc-500">
-                        {detail.reverseOffsetExpenses.length + detail.appliedPayments.length === 1
-                          ? '1 movimiento'
-                          : `${detail.reverseOffsetExpenses.length + detail.appliedPayments.length} movimientos`}
-                      </span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-zinc-700">Total que recuperas:</span>
-                        <span className="text-sm font-black text-emerald-600">
-                          - {formatCurrency(totalRecoversFromDebtor + totalDirectPayments, currency)}
-                        </span>
-                      </div>
-                    </div>
-                  </>
+                  <GenericExpenseList
+                    expenses={recoverExpensesList}
+                    payments={appliedPaymentsList}
+                    profiles={profiles}
+                    userGroups={groups}
+                    currentProfile={debtorProfile}
+                    groupCurrency={currency}
+                    showGroupBadge={!groupId}
+                    onEditExpense={onEditExpense}
+                    onDeleteExpense={onDeleteExpense}
+                    onEditPayment={onEditPayment}
+                    onDeletePayment={onDeletePayment}
+                  />
                 )}
               </div>
             )}
@@ -874,60 +623,15 @@ export function PairwiseDetailModal({
                           {/* Unfolded Underlying Expenses */}
                           {isUnfolded && (
                             <div className="pt-2 border-t border-zinc-100 space-y-2">
-                              {t.expenses.map((tExp, teIdx) => {
-                                const catConfig = getCategoryConfig(tExp.expense.category);
-                                const CategoryIcon = catConfig.icon;
-                                const isExpExpanded = expandedExpenseIds.has(tExp.expense.id);
-
-                                return (
-                                  <div
-                                    key={`texp-${teIdx}`}
-                                    className="bg-zinc-50 rounded-xl border border-zinc-200/70 p-2.5 space-y-2"
-                                  >
-                                    <div
-                                      onClick={() => toggleExpenseExpand(tExp.expense.id)}
-                                      className="flex items-center justify-between cursor-pointer"
-                                    >
-                                      <div className="flex items-center space-x-2 min-w-0">
-                                        <div
-                                          className={`w-6 h-6 rounded-md ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}
-                                        >
-                                          <CategoryIcon className="w-3.5 h-3.5" />
-                                        </div>
-                                        <div className="min-w-0">
-                                          <span className="text-xs font-bold text-zinc-900 truncate block">
-                                            {tExp.description}
-                                          </span>
-                                          <span className="text-[10px] text-zinc-500 font-medium">
-                                            Pagó: {tExp.payerName}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div className="text-right shrink-0">
-                                        <span className="text-xs font-black text-emerald-700 block">
-                                          - {formatCurrency(tExp.allocatedDiscountAmount, currency)}
-                                        </span>
-                                        <span className="text-[10px] text-zinc-400">
-                                          Total: {formatCurrency(tExp.totalExpenseAmount, currency)}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {isExpExpanded && (
-                                      <div className="pt-2 border-t border-zinc-200/60">
-                                        <RenderExpenseSubDetails
-                                          expense={tExp.expense}
-                                          profiles={profiles}
-                                          currency={currency}
-                                          currentProfile={currentProfile}
-                                          onSelectReceipt={(url) => setSelectedReceiptUrl(url)}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                              <GenericExpenseList
+                                expenses={t.expenses.map((te) => te.expense)}
+                                payments={[]}
+                                profiles={profiles}
+                                userGroups={groups}
+                                currentProfile={debtorProfile}
+                                groupCurrency={currency}
+                                showGroupBadge={!groupId}
+                              />
                             </div>
                           )}
                         </div>
@@ -950,7 +654,12 @@ export function PairwiseDetailModal({
           {/* 4. SECCIÓN: CÁLCULO DEL SALDO A LIQUIDAR */}
           <div className="bg-white rounded-2xl border border-purple-200/90 shadow-2xs overflow-hidden">
             {/* Header */}
-            <div className="p-4 sm:p-4.5 bg-gradient-to-r from-purple-50/50 via-white to-white flex items-center justify-between border-b border-purple-100">
+            <div
+              onClick={() =>
+                setExpandedSections((prev) => ({ ...prev, calculation: !prev.calculation }))
+              }
+              className="p-4 sm:p-4.5 bg-gradient-to-r from-purple-50/50 via-white to-white flex items-center justify-between border-b border-purple-100 cursor-pointer hover:bg-purple-50/80 transition-colors select-none"
+            >
               <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-full bg-purple-100 text-[#581c87] flex items-center justify-center shrink-0">
                   <Calculator className="w-4.5 h-4.5" />
@@ -960,242 +669,73 @@ export function PairwiseDetailModal({
                 </h3>
               </div>
 
-              <span className="bg-purple-100/80 text-purple-900 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
-                {isSimplified ? 'Modo simplificado' : 'Modo directo'}
-              </span>
+              <div className="flex items-center space-x-2.5">
+                <span className="bg-purple-100/80 text-purple-900 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                  {isSimplified ? 'Modo simplificado' : 'Modo directo'}
+                </span>
+                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                  {expandedSections.calculation ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Calculations Box */}
-            <div className="p-4 sm:p-6 space-y-3">
-              <div className="space-y-2.5 text-xs sm:text-sm">
-                {/* Deuda generada */}
-                <div className="flex items-center justify-between text-zinc-700">
-                  <div className="flex items-center space-x-2">
-                    <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                    <span>Deuda generada por gastos de {creditorName}</span>
-                  </div>
-                  <span className="font-black text-[#581c87]">
-                    + {formatCurrency(totalDebtsFromCreditor, currency)}
-                  </span>
-                </div>
-
-                {/* Lo que recuperas */}
-                <div className="flex items-center justify-between text-zinc-700">
-                  <div className="flex items-center space-x-2">
-                    <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Lo que recuperas por gastos tuyos</span>
-                  </div>
-                  <span className="font-black text-emerald-600">
-                    - {formatCurrency(totalRecoversFromDebtor + totalDirectPayments, currency)}
-                  </span>
-                </div>
-
-                {/* Descuento triangulaciones */}
-                {isSimplified && triangulationDiscount > 0.009 && (
+            {expandedSections.calculation && (
+              <div className="p-4 sm:p-6 space-y-3">
+                <div className="space-y-2.5 text-xs sm:text-sm">
+                  {/* Deuda generada */}
                   <div className="flex items-center justify-between text-zinc-700">
                     <div className="flex items-center space-x-2">
-                      <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                      <span>Descuento por triangulaciones</span>
+                      <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span>Deuda generada por gastos de {creditorName}</span>
                     </div>
-                    <span className="font-black text-emerald-600">
-                      - {formatCurrency(triangulationDiscount, currency)}
+                    <span className="font-black text-[#581c87]">
+                      + {formatCurrency(totalDebtsFromCreditor, currency)}
                     </span>
                   </div>
-                )}
-              </div>
 
-              {/* Total Final Line */}
-              <div className="pt-3 border-t border-purple-200/80 flex items-center justify-between">
-                <span className="text-sm sm:text-base font-black text-[#581c87]">
-                  Saldo a liquidar
-                </span>
-                <span className="text-xl sm:text-2xl font-black text-[#581c87] tracking-tight">
-                  {formatCurrency(finalSettlementAmount, currency)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Proof/Receipt Modal (nested for image viewing) */}
-        {selectedReceiptUrl && (
-          <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in duration-200"
-            onClick={() => setSelectedReceiptUrl(null)}
-          >
-            <div
-              className="relative max-w-3xl max-h-[90vh] w-full bg-zinc-950 rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-300">Comprobante de gasto</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedReceiptUrl(null)}
-                  className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="relative w-full h-[70vh] bg-zinc-900">
-                <Image
-                  src={selectedReceiptUrl}
-                  alt="Comprobante"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Reusable helper component to render items breakdown, participant summary, notes, and receipt
- */
-function RenderExpenseSubDetails({
-  expense,
-  profiles,
-  currency,
-  currentProfile,
-  onSelectReceipt,
-}: {
-  expense: Expense;
-  profiles: Profile[];
-  currency: string;
-  currentProfile: Profile | null;
-  onSelectReceipt: (url: string) => void;
-}) {
-  const hasItems = Boolean(expense.items && expense.items.length > 0);
-  const hasNotes = Boolean(expense.notes && expense.notes.trim().length > 0);
-  const hasReceipt = Boolean(expense.receipt_url);
-
-  const participantSummaryList: ParticipantSummaryData[] = (expense.splits || []).map((split) => {
-    const profile = profiles.find((p) => p.id === split.user_id);
-    const userAmt = split.amount_owed;
-    const breakdown: ParticipantItemBreakdown[] = [];
-
-    if (expense.items && expense.items.length > 0 && expense.total_amount > 0) {
-      expense.items.forEach((item) => {
-        const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
-        const totalQty = match ? parseFloat(match[1]) || 1 : 1;
-        const cleanDesc = match ? match[2].trim() : item.description;
-        const ratio = expense.total_amount > 0 ? userAmt / expense.total_amount : 0;
-        const userItemQty = totalQty * ratio;
-        const userItemCost = item.amount * ratio;
-
-        breakdown.push({
-          desc: cleanDesc,
-          qty: userItemQty,
-          cost: userItemCost,
-        });
-      });
-    }
-
-    return {
-      userId: split.user_id,
-      profile,
-      amount: userAmt,
-      breakdown: breakdown.length > 0 ? breakdown : undefined,
-    };
-  });
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start text-xs">
-      {/* Participation list */}
-      <ExpenseParticipantSummary
-        participants={participantSummaryList}
-        currency={currency}
-        currentUserId={currentProfile?.id}
-        title="Resumen por participante"
-        defaultExpanded={false}
-      />
-
-      {/* Items, Notes and Receipt (right col) */}
-      <div className="space-y-2.5">
-        {hasItems && (
-          <div className="bg-white rounded-xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-            <div className="px-3 py-2 bg-zinc-50 border-b border-zinc-200/70 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <ShoppingBag className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  Desglose de artículos ({expense.items?.length || 0})
-                </span>
-              </div>
-            </div>
-            <div className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
-              {expense.items?.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors"
-                >
-                  <div className="flex items-center space-x-2 min-w-0 pr-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
-                    <span className="font-medium text-zinc-800 truncate">{item.description}</span>
+                  {/* Lo que recuperas */}
+                  <div className="flex items-center justify-between text-zinc-700">
+                    <div className="flex items-center space-x-2">
+                      <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Lo que recupera {debtorName} por gastos y abonos</span>
+                    </div>
+                    <span className="font-black text-emerald-600">
+                      - {formatCurrency(totalRecoversFromDebtor + totalDirectPayments, currency)}
+                    </span>
                   </div>
-                  <span className="text-zinc-900 font-bold shrink-0 text-xs">
-                    {formatCurrency(item.amount, currency)}
+
+                  {/* Descuento triangulaciones */}
+                  {isSimplified && triangulationDiscount > 0.009 && (
+                    <div className="flex items-center justify-between text-zinc-700">
+                      <div className="flex items-center space-x-2">
+                        <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span>Descuento por triangulaciones</span>
+                      </div>
+                      <span className="font-black text-emerald-600">
+                        - {formatCurrency(triangulationDiscount, currency)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total Final Line */}
+                <div className="pt-3 border-t border-purple-200/80 flex items-center justify-between">
+                  <span className="text-sm sm:text-base font-black text-[#581c87]">
+                    Saldo a liquidar
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-[#581c87] tracking-tight">
+                    {formatCurrency(finalSettlementAmount, currency)}
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {hasReceipt && (
-          <div className="bg-white rounded-xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-            <div className="px-3 py-2 bg-zinc-50 border-b border-zinc-200/70 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  Comprobante
-                </span>
               </div>
-            </div>
-            <div className="p-3">
-              <div
-                onClick={() => onSelectReceipt(expense.receipt_url!)}
-                className="group/img relative w-20 h-20 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-purple-500 transition-all shadow-2xs"
-              >
-                <Image
-                  src={expense.receipt_url!}
-                  alt="Comprobante"
-                  fill
-                  className="object-cover group-hover/img:scale-105 transition-transform"
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold gap-1">
-                  <ExternalLink className="w-3 h-3" />
-                  <span>Ver</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-        )}
-
-        {hasNotes && (
-          <div className="bg-white rounded-xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-            <div className="px-3 py-2 bg-zinc-50 border-b border-zinc-200/70 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  Notas
-                </span>
-              </div>
-            </div>
-            <div className="p-3">
-              <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                {expense.notes}
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
