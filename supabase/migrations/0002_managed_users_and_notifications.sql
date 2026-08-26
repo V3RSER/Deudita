@@ -1,8 +1,22 @@
 -- ============================================================================
--- MIGRATION 0002: Managed users table & notification improvements
+-- MIGRACIÓN UNIFICADA — fusiona 0002, 0003, 0004 y 0005
+-- Idempotente: se puede correr sobre una base que ya tenga el ESQUEMA
+-- UNIFICADO (versión final) descrito anteriormente.
+--
+-- INCLUYE:
+--   - Tabla managed_users (patrocinio / usuarios gestionados) + políticas
+--   - Mejoras a notifications (columna link + índices)
+--   - Columna managed_user_ids en profiles (compatibilidad)
+--   - Columnas de tiempo en expenses/payments (expense_time, payment_time)
+--   - Columnas proof_url/updated_at/updated_by en payments (refuerzo)
+--   - Políticas UPDATE/DELETE de payments (refuerzo, ya presentes en el
+--     esquema unificado base)
+--   - REPLICA IDENTITY FULL + Supabase Realtime en expenses y payments
 -- ============================================================================
 
--- 1) Table for database-level sponsorship / managed users relationship
+-- ----------------------------------------------------------------------------
+-- 1) MANAGED USERS (patrocinio / usuarios gestionados)
+-- ----------------------------------------------------------------------------
 create table if not exists public.managed_users (
   id uuid primary key default gen_random_uuid(),
   sponsor_id uuid not null references public.profiles(id) on delete cascade,
@@ -16,7 +30,6 @@ create index if not exists idx_managed_users_managed on public.managed_users(man
 
 alter table public.managed_users enable row level security;
 
--- Policies for managed_users
 drop policy if exists "Allow authenticated to view managed_users" on public.managed_users;
 create policy "Allow authenticated to view managed_users"
   on public.managed_users for select
@@ -35,10 +48,81 @@ create policy "Allow sponsors to delete managed_users"
   to authenticated
   using (auth.uid() = sponsor_id);
 
--- 2) Enhance notifications table
+-- ----------------------------------------------------------------------------
+-- 2) NOTIFICACIONES: columna link + índices de rendimiento
+-- ----------------------------------------------------------------------------
 alter table public.notifications add column if not exists link text;
 create index if not exists idx_notifications_user_unread on public.notifications(user_id, is_read);
 create index if not exists idx_notifications_created_at on public.notifications(created_at desc);
 
--- 3) Ensure profiles table has managed_user_ids column for backward compatibility
+-- ----------------------------------------------------------------------------
+-- 3) PROFILES: columna de compatibilidad hacia atrás
+-- ----------------------------------------------------------------------------
 alter table public.profiles add column if not exists managed_user_ids uuid[] default '{}'::uuid[];
+
+-- ----------------------------------------------------------------------------
+-- 4) CAMPOS DE TIEMPO en expenses y payments
+-- ----------------------------------------------------------------------------
+alter table public.expenses add column if not exists expense_time timestamptz;
+alter table public.payments add column if not exists payment_time timestamptz;
+alter table public.payments add column if not exists updated_at timestamptz not null default now();
+alter table public.payments add column if not exists updated_by uuid references public.profiles(id);
+alter table public.payments add column if not exists proof_url text;
+
+-- Backfill de expense_time / payment_time a partir de la fecha + hora de creación
+update public.expenses
+set expense_time = (expense_date || ' ' || to_char(created_at, 'HH24:MI:SS'))::timestamptz
+where expense_time is null and expense_date is not null;
+
+update public.payments
+set payment_time = (payment_date || ' ' || to_char(created_at, 'HH24:MI:SS'))::timestamptz
+where payment_time is null and payment_date is not null;
+
+-- ----------------------------------------------------------------------------
+-- 5) POLÍTICAS RLS de payments (UPDATE/DELETE) — refuerzo idempotente
+-- ----------------------------------------------------------------------------
+drop policy if exists "update_group_payments" on public.payments;
+create policy "update_group_payments" on public.payments
+  for update using (
+    public.is_group_member(group_id, auth.uid())
+    or paid_by = auth.uid()
+    or paid_to = auth.uid()
+  );
+
+drop policy if exists "delete_group_payments" on public.payments;
+create policy "delete_group_payments" on public.payments
+  for delete using (
+    public.is_group_member(group_id, auth.uid())
+    or paid_by = auth.uid()
+    or paid_to = auth.uid()
+  );
+
+-- ----------------------------------------------------------------------------
+-- 6) SUPABASE REALTIME: expenses y payments
+-- ----------------------------------------------------------------------------
+alter table public.expenses replica identity full;
+alter table public.payments replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'expenses'
+  ) then
+    alter publication supabase_realtime add table public.expenses;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'payments'
+  ) then
+    alter publication supabase_realtime add table public.payments;
+  end if;
+end;
+$$;

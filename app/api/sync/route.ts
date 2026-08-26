@@ -286,6 +286,7 @@ export async function GET(req: NextRequest) {
 
     const [
       { data: paymentData },
+      { data: settlementData },
       { data: draftsData },
       { data: notificationsData },
       { data: auditLogsData },
@@ -297,6 +298,13 @@ export async function GET(req: NextRequest) {
             .select('*')
             .in('group_id', userGroupIds)
             .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      userGroupIds.length > 0
+        ? db
+            .from('settlements')
+            .select('*')
+            .in('group_id', userGroupIds)
+            .order('settled_at', { ascending: false })
         : Promise.resolve({ data: [] }),
       db
         .from('expense_drafts')
@@ -382,6 +390,7 @@ export async function GET(req: NextRequest) {
       members,
       expenses,
       payments,
+      settlements: settlementData || [],
       drafts: draftsData || [],
       notifications: notificationsData || [],
       pendingInvites,

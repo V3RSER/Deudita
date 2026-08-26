@@ -31,6 +31,13 @@ export async function PUT(
       updateData.payment_time = payment_time;
     }
 
+    // Fetch the existing payment to know the affected pair and timestamps
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     let { data: payment, error } = await supabase
       .from('payments')
       .update(updateData)
@@ -58,6 +65,20 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Invalidate any settlements created after the original payment was recorded
+    if (existingPayment) {
+      try {
+        await supabase
+          .from('settlements')
+          .delete()
+          .eq('group_id', existingPayment.group_id)
+          .or(`and(user_a.eq.${existingPayment.paid_by},user_b.eq.${existingPayment.paid_to}),and(user_a.eq.${existingPayment.paid_to},user_b.eq.${existingPayment.paid_by})`)
+          .gte('settled_at', existingPayment.created_at);
+      } catch (invalErr) {
+        console.warn('[API /api/payments/[id]] Error invalidating settlements on update:', invalErr);
+      }
+    }
+
     return NextResponse.json(payment);
   } catch (err: unknown) {
     console.error('[API /api/payments/[id]] Unhandled error:', err);
@@ -79,6 +100,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    // Fetch existing payment before deleting
+    const { data: existingPayment } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { error } = await supabase
       .from('payments')
       .delete()
@@ -87,6 +115,20 @@ export async function DELETE(
     if (error) {
       console.error('[API /api/payments/[id]] Delete payment error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Invalidate any settlements created after this payment
+    if (existingPayment) {
+      try {
+        await supabase
+          .from('settlements')
+          .delete()
+          .eq('group_id', existingPayment.group_id)
+          .or(`and(user_a.eq.${existingPayment.paid_by},user_b.eq.${existingPayment.paid_to}),and(user_a.eq.${existingPayment.paid_to},user_b.eq.${existingPayment.paid_by})`)
+          .gte('settled_at', existingPayment.created_at);
+      } catch (invalErr) {
+        console.warn('[API /api/payments/[id]] Error invalidating settlements on delete:', invalErr);
+      }
     }
 
     return NextResponse.json({ success: true });

@@ -166,6 +166,7 @@ export function GroupDetail({
     expenses,
     auditLogs,
     payments,
+    settlements,
     members,
     profiles,
     userGroups,
@@ -301,8 +302,8 @@ export function GroupDetail({
     .filter((p): p is NonNullable<typeof p> => p !== undefined);
 
   // Simplified and direct pairwise debts in this group
-  const simplifiedGroupPairwise = calculateSimplifiedBalances(expenses, payments, profiles, group.id);
-  const directGroupPairwise = calculateDirectBalances(expenses, payments, profiles, group.id);
+  const simplifiedGroupPairwise = calculateSimplifiedBalances(expenses, payments, profiles, group.id, settlements);
+  const directGroupPairwise = calculateDirectBalances(expenses, payments, profiles, group.id, settlements);
   const groupPairwise = isSimplifiedBalances ? simplifiedGroupPairwise : directGroupPairwise;
   const savedGroupTransactions = Math.max(0, directGroupPairwise.length - simplifiedGroupPairwise.length);
 
@@ -310,8 +311,8 @@ export function GroupDetail({
 
   // Group user summaries for net balance banner
   const groupUserSummaries = React.useMemo(() => {
-    return calculateUserSummaries(expenses, payments, profiles, group.id);
-  }, [expenses, payments, profiles, group.id]);
+    return calculateUserSummaries(expenses, payments, profiles, group.id, settlements);
+  }, [expenses, payments, profiles, group.id, settlements]);
 
   const mySummary = groupUserSummaries.find((s) => s.user.id === currentProfile?.id);
   const myNetBalance = mySummary ? mySummary.netBalance : 0;
@@ -1169,9 +1170,9 @@ export function GroupDetail({
                             <span>Vinculada a ti</span>
                           </span>
                         )}
-                        {sponsorshipMap.has(p.id) && sponsorshipMap.get(p.id) !== currentProfile?.id && (
+                        {sponsorshipMap?.userToSponsor?.has(p.id) && sponsorshipMap.userToSponsor.get(p.id) !== currentProfile?.id && (
                           <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                            Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.get(p.id))?.full_name?.split(' ')[0] || 'otro'}
+                            Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.userToSponsor.get(p.id))?.full_name?.split(' ')[0] || 'otro'}
                           </span>
                         )}
                         {isTempProfile(p) && (
@@ -1374,6 +1375,7 @@ export function GroupDetail({
         payments={payments}
         profiles={profiles}
         groups={userGroups}
+        settlements={settlements}
         isSimplified={isSimplifiedBalances}
         groupId={group.id}
         onOpenSettleModal={(groupId, debtorId, creditorId, amount) => {

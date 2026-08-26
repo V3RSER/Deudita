@@ -74,6 +74,7 @@ export async function GET(
     // 4. Fetch expenses and payments in shared groups
     let sharedExpenses: any[] = [];
     let sharedPayments: any[] = [];
+    let sharedSettlements: any[] = [];
 
     if (sharedGroupIds.length > 0) {
       const { data: expensesData } = await supabase
@@ -88,13 +89,26 @@ export async function GET(
         .in('group_id', sharedGroupIds)
         .order('created_at', { ascending: false });
 
+      const { data: settlementsData } = await supabase
+        .from('settlements')
+        .select('*')
+        .in('group_id', sharedGroupIds)
+        .order('settled_at', { ascending: false });
+
       sharedExpenses = expensesData || [];
       sharedPayments = paymentsData || [];
+      sharedSettlements = settlementsData || [];
     }
 
     // 5. Calculate pairwise balance with this friend
     const { data: profiles } = await supabase.from('profiles').select('*');
-    const pairwise = calculatePairwiseBalances(sharedExpenses, sharedPayments, profiles || []);
+    const pairwise = calculatePairwiseBalances(
+      sharedExpenses,
+      sharedPayments,
+      profiles || [],
+      undefined,
+      sharedSettlements
+    );
 
     const friendOwesMe = pairwise.find(
       (b) => b.debtor.id === friendId && b.creditor.id === user.id

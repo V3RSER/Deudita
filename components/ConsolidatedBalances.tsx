@@ -280,7 +280,7 @@ function UnifiedBalanceCard({
 }
 
 export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
-  const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
+  const { currentProfile, expenses, payments, settlements, profiles, userGroups } = useExpense();
   const [isSimplified, setIsSimplified] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -293,12 +293,12 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
 
   // Compute both simplified and direct pairwise balances
   const simplifiedPairwise = useMemo(
-    () => calculateSimplifiedBalances(userExpenses, userPayments, profiles),
-    [userExpenses, userPayments, profiles]
+    () => calculateSimplifiedBalances(userExpenses, userPayments, profiles, undefined, settlements),
+    [userExpenses, userPayments, profiles, settlements]
   );
   const directPairwise = useMemo(
-    () => calculateDirectBalances(userExpenses, userPayments, profiles),
-    [userExpenses, userPayments, profiles]
+    () => calculateDirectBalances(userExpenses, userPayments, profiles, undefined, settlements),
+    [userExpenses, userPayments, profiles, settlements]
   );
 
   const activePairwise = isSimplified ? simplifiedPairwise : directPairwise;
@@ -655,6 +655,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
         payments={userPayments}
         profiles={profiles}
         groups={userGroups}
+        settlements={settlements}
         isSimplified={isSimplified}
         onOpenSettleModal={onOpenSettleModal}
       />

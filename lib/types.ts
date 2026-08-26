@@ -184,6 +184,16 @@ export interface Payment {
   updated_by?: string;
 }
 
+export interface Settlement {
+  id: string;
+  group_id: string;
+  user_a: string;
+  user_b: string;
+  settled_at: string;
+  created_by?: string;
+  created_at: string;
+}
+
 export interface ManagedContribution {
   profile: Profile;
   amount: number;

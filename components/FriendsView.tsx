@@ -35,6 +35,7 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
     members,
     expenses,
     payments,
+    settlements,
     userGroups,
     pendingInvites,
     hiddenFriendIds,
@@ -73,7 +74,7 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
   // Pairwise balances
   const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
   const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
-  const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);
+  const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles, undefined, settlements);
 
   // Filter friends by search
   const filteredFriends = friendProfiles.filter((p) => {
@@ -194,9 +195,9 @@ export function FriendsView({ onOpenSettleModal }: FriendsViewProps) {
                           <span>Vinculada a ti</span>
                         </span>
                       )}
-                      {sponsorshipMap.has(friend.id) && sponsorshipMap.get(friend.id) !== currentProfile?.id && (
+                      {sponsorshipMap?.userToSponsor?.has(friend.id) && sponsorshipMap.userToSponsor.get(friend.id) !== currentProfile?.id && (
                         <span className="bg-zinc-100 text-zinc-700 border border-zinc-200 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md">
-                          Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.get(friend.id))?.full_name?.split(' ')[0] || 'otro'}
+                          Vinculada a {profiles.find(pr => pr.id === sponsorshipMap.userToSponsor.get(friend.id))?.full_name?.split(' ')[0] || 'otro'}
                         </span>
                       )}
                       {isTempProfile(friend) && (
