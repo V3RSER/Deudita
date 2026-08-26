@@ -63,6 +63,7 @@ interface GenericExpenseListProps {
   userGroups: Group[];
   currentProfile: Profile | null;
   pairwisePartnerProfile?: Profile | null;
+  isSimplified?: boolean;
   groupCurrency?: string;
   dateFilterMode?: DateFilterMode;
   onSelectExpense?: (expense: Expense) => void;
@@ -127,6 +128,7 @@ export function GenericExpenseList({
   userGroups,
   currentProfile,
   pairwisePartnerProfile,
+  isSimplified = true,
   groupCurrency,
   dateFilterMode = 'expense_date',
   onSelectExpense,
@@ -282,10 +284,14 @@ export function GenericExpenseList({
                 const CategoryIcon = catConfig.icon;
                 const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
 
-                const managedIds = (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id);
+                const managedIds = isSimplified
+                  ? (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id)
+                  : [];
                 const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
 
-                const partnerManagedIds = (pairwisePartnerProfile?.managed_user_ids || []).filter((id) => id !== pairwisePartnerProfile?.id);
+                const partnerManagedIds = isSimplified
+                  ? (pairwisePartnerProfile?.managed_user_ids || []).filter((id) => id !== pairwisePartnerProfile?.id)
+                  : [];
                 const partnerEffectiveIds = pairwisePartnerProfile ? [pairwisePartnerProfile.id, ...partnerManagedIds] : [];
 
                 const isPayer = Boolean(currentProfile && myEffectiveIds.includes(exp.paid_by));

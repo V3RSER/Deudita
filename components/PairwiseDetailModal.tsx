@@ -390,6 +390,7 @@ export function PairwiseDetailModal({
                     userGroups={groups}
                     currentProfile={debtorProfile}
                     pairwisePartnerProfile={creditorProfile}
+                    isSimplified={isSimplified}
                     groupCurrency={currency}
                     showGroupBadge={!groupId}
                     onEditExpense={onEditExpense}
@@ -457,6 +458,7 @@ export function PairwiseDetailModal({
                     userGroups={groups}
                     currentProfile={debtorProfile}
                     pairwisePartnerProfile={creditorProfile}
+                    isSimplified={isSimplified}
                     groupCurrency={currency}
                     showGroupBadge={!groupId}
                     onEditExpense={onEditExpense}
