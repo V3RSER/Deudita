@@ -1018,47 +1018,47 @@ export function calculatePairwiseDebtDetail(
     }
   });
 
-  // 6. Extract active items vs fully settled historical items
-  const pendingExpenses = calculatedDebts
-    .filter((d) => d.pendingAmount > 0.009)
+  // 6. Direct items between debtor and creditor
+  const pendingExpenses: DebtBreakdownItem[] = rawPrimaryDebts
+    .map((pDebt) => ({
+      expense: pDebt.expense,
+      split: pDebt.split,
+      originalAmount: pDebt.originalAmount,
+      paidAmount: 0,
+      pendingAmount: pDebt.originalAmount,
+      isFullyPaid: false,
+      isPartiallyPaid: false,
+      participantProfile: pDebt.participantProfile,
+      payerProfile: pDebt.payerProfile,
+      isManagedParticipant: pDebt.isManagedParticipant,
+      groupName: pDebt.groupName,
+      currency: pDebt.currency,
+    }))
     .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
 
-  const settledExpenses = calculatedDebts
-    .filter((d) => d.isFullyPaid)
-    .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
+  const settledExpenses: DebtBreakdownItem[] = [];
 
-  const appliedPayments: AppliedPaymentItem[] = offsetPool
-    .filter((o) => o.type === 'payment' && o.appliedToActive > 0.009 && o.payment)
-    .map((o) => ({
-      payment: o.payment!.payment,
-      amountApplied: o.appliedToActive,
-      payerProfile: o.payment!.payerProfile,
-      receiverProfile: o.payment!.receiverProfile,
-      groupName: o.payment!.groupName,
+  const appliedPayments: AppliedPaymentItem[] = rawPayments
+    .map((p) => ({
+      payment: p.payment,
+      amountApplied: p.amount,
+      payerProfile: p.payerProfile,
+      receiverProfile: p.receiverProfile,
+      groupName: p.groupName,
     }))
     .sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime());
 
-  const settledPayments: AppliedPaymentItem[] = offsetPool
-    .filter((o) => o.type === 'payment' && o.consumedBySettled > 0.009 && o.payment)
-    .map((o) => ({
-      payment: o.payment!.payment,
-      amountApplied: o.consumedBySettled,
-      payerProfile: o.payment!.payerProfile,
-      receiverProfile: o.payment!.receiverProfile,
-      groupName: o.payment!.groupName,
-    }))
-    .sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime());
+  const settledPayments: AppliedPaymentItem[] = [];
 
-  const reverseOffsets: ReverseOffsetItem[] = offsetPool
-    .filter((o) => o.type === 'reverse_offset' && o.appliedToActive > 0.009 && o.reverseOffset)
-    .map((o) => ({
-      expense: o.reverseOffset!.expense,
-      split: o.reverseOffset!.split,
-      amount: o.appliedToActive,
-      payerProfile: o.reverseOffset!.payerProfile,
-      participantProfile: o.reverseOffset!.participantProfile,
-      isManagedParticipant: o.reverseOffset!.isManagedParticipant,
-      groupName: o.reverseOffset!.groupName,
+  const reverseOffsets: ReverseOffsetItem[] = rawReverseOffsets
+    .map((r) => ({
+      expense: r.expense,
+      split: r.split,
+      amount: r.amount,
+      payerProfile: r.payerProfile,
+      participantProfile: r.participantProfile,
+      isManagedParticipant: r.isManagedParticipant,
+      groupName: r.groupName,
     }))
     .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
 
@@ -1070,7 +1070,8 @@ export function calculatePairwiseDebtDetail(
   const directPair = calculateDirectBalances(filteredExpenses, filteredPayments, profiles, groupId).find(
     (pb) => pb.debtor.id === debtor.id && pb.creditor.id === creditor.id
   );
-  const netDirectBalance = directPair ? directPair.amount : 0;
+  const directCalculated = Math.round((totalOriginalDebt - (totalReverseOffsets + totalPaymentsApplied)) * 100) / 100;
+  const netDirectBalance = directPair ? directPair.amount : Math.max(0, directCalculated);
   const netPendingAmount = Math.max(0, netDirectBalance);
 
   // 7. Group optimization: Active simplification expenses, third-party triangulations & coherent allocation

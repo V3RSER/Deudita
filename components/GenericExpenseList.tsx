@@ -62,6 +62,7 @@ interface GenericExpenseListProps {
   profiles: Profile[];
   userGroups: Group[];
   currentProfile: Profile | null;
+  pairwisePartnerProfile?: Profile | null;
   groupCurrency?: string;
   dateFilterMode?: DateFilterMode;
   onSelectExpense?: (expense: Expense) => void;
@@ -125,6 +126,7 @@ export function GenericExpenseList({
   profiles,
   userGroups,
   currentProfile,
+  pairwisePartnerProfile,
   groupCurrency,
   dateFilterMode = 'expense_date',
   onSelectExpense,
@@ -283,10 +285,68 @@ export function GenericExpenseList({
                 const managedIds = (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id);
                 const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
 
+                const partnerManagedIds = (pairwisePartnerProfile?.managed_user_ids || []).filter((id) => id !== pairwisePartnerProfile?.id);
+                const partnerEffectiveIds = pairwisePartnerProfile ? [pairwisePartnerProfile.id, ...partnerManagedIds] : [];
+
                 const isPayer = Boolean(currentProfile && myEffectiveIds.includes(exp.paid_by));
+                const isPartnerPayer = Boolean(pairwisePartnerProfile && partnerEffectiveIds.includes(exp.paid_by));
+
                 const myFamilySplits = exp.splits?.filter((s) => myEffectiveIds.includes(s.user_id)) || [];
                 const myTotalOwed = myFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
-                const recovers = isPayer ? exp.total_amount - myTotalOwed : 0;
+
+                const partnerFamilySplits = exp.splits?.filter((s) => partnerEffectiveIds.includes(s.user_id)) || [];
+                const partnerTotalOwed = partnerFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
+
+                let badgeText = '';
+                let badgeColorClass = 'text-zinc-400';
+
+                if (pairwisePartnerProfile) {
+                  // In 1-to-1 pairwise context:
+                  if (isPayer) {
+                    // Current profile paid: recovers ONLY what partner owes in this expense
+                    if (partnerTotalOwed > 0) {
+                      badgeText = `recuperas ${formatCurrency(partnerTotalOwed, currency)}`;
+                      badgeColorClass = 'text-emerald-600';
+                    } else {
+                      badgeText = 'sin aporte de ' + (pairwisePartnerProfile.full_name?.split(' ')[0] || 'contraparte');
+                      badgeColorClass = 'text-zinc-400';
+                    }
+                  } else if (isPartnerPayer) {
+                    // Partner paid: current profile owes what they split
+                    if (myTotalOwed > 0) {
+                      badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                      badgeColorClass = 'text-rose-600';
+                    } else {
+                      badgeText = 'no participas';
+                      badgeColorClass = 'text-zinc-400';
+                    }
+                  } else {
+                    // 3rd party paid
+                    if (myTotalOwed > 0) {
+                      badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                      badgeColorClass = 'text-rose-600';
+                    } else {
+                      badgeText = 'no participas';
+                      badgeColorClass = 'text-zinc-400';
+                    }
+                  }
+                } else {
+                  // General / Group feed context
+                  const recovers = isPayer ? exp.total_amount - myTotalOwed : 0;
+                  if (isPayer && recovers > 0) {
+                    badgeText = `recuperas ${formatCurrency(recovers, currency)}`;
+                    badgeColorClass = 'text-emerald-600';
+                  } else if (isPayer) {
+                    badgeText = 'pagaste todo';
+                    badgeColorClass = 'text-emerald-600';
+                  } else if (myTotalOwed > 0) {
+                    badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                    badgeColorClass = 'text-rose-600';
+                  } else {
+                    badgeText = 'no participas';
+                    badgeColorClass = 'text-zinc-400';
+                  }
+                }
 
                 const isExpanded = isExpenseExpanded(exp.id);
                 const isTargeted = initialExpandedExpenseId === exp.id;
@@ -389,24 +449,8 @@ export function GenericExpenseList({
                           <span className="text-sm font-bold text-zinc-900 leading-tight">
                             {formatCurrency(exp.total_amount, currency)}
                           </span>
-                          <span
-                            className={`text-xs font-semibold leading-tight mt-0.5 ${
-                              isPayer && recovers > 0
-                                ? 'text-emerald-600'
-                                : isPayer
-                                ? 'text-emerald-600'
-                                : myTotalOwed > 0
-                                ? 'text-rose-600'
-                                : 'text-zinc-400'
-                            }`}
-                          >
-                            {isPayer && recovers > 0
-                              ? `recuperas ${formatCurrency(recovers, currency)}`
-                              : isPayer
-                              ? 'pagaste todo'
-                              : myTotalOwed > 0
-                              ? `debes ${formatCurrency(myTotalOwed, currency)}`
-                              : 'no participas'}
+                          <span className={`text-xs font-semibold leading-tight mt-0.5 ${badgeColorClass}`}>
+                            {badgeText}
                           </span>
                         </div>
 

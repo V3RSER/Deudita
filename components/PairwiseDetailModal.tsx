@@ -167,7 +167,7 @@ export function PairwiseDetailModal({
   const activeReverseExpenses = detail.reverseOffsetExpenses.map((r) => r.expense);
   const activeDirectPayments = detail.appliedPayments.map((p) => p.payment);
 
-  const totalPendingDebt = detail.pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0);
+  const totalDirectConsumption = detail.pendingExpenses.reduce((sum, d) => sum + d.originalAmount, 0);
   const totalReverseOffsets = detail.reverseOffsetExpenses.reduce((sum, r) => sum + r.amount, 0);
   const totalPaymentsApplied = detail.appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
   const totalActiveRecoverable = Math.round((totalReverseOffsets + totalPaymentsApplied) * 100) / 100;
@@ -178,7 +178,7 @@ export function PairwiseDetailModal({
   const allSectionsExpanded =
     expandedSections.debts &&
     expandedSections.recovers &&
-    expandedSections.distribution &&
+    (!hasCompensations || expandedSections.distribution) &&
     expandedSections.calculation;
 
   const toggleAllSections = () => {
@@ -306,19 +306,6 @@ export function PairwiseDetailModal({
               </button>
             </div>
           </div>
-
-          {/* Perspective Greeting Banner */}
-          <div className="mt-3.5 pt-3 border-t border-zinc-100 flex items-center justify-between bg-purple-50/70 rounded-xl px-3.5 py-2.5 text-xs text-purple-950">
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-[#581c87] shrink-0" />
-              <span>
-                Mostrando el detalle de la cuenta entre <strong className="font-extrabold text-[#581c87]">{debtorName}</strong> y <strong className="font-extrabold text-zinc-900">{creditorName}</strong> (solo gastos y aportes pendientes de saldar).
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold text-purple-700 hidden sm:inline">
-              Cálculo transparente
-            </span>
-          </div>
         </div>
 
         {/* SUB-HEADER TOOLBAR (Expandir / Colapsar todo) */}
@@ -355,7 +342,7 @@ export function PairwiseDetailModal({
               className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
             >
               <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-purple-50 border border-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-full bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
                   <User className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
@@ -373,8 +360,8 @@ export function PairwiseDetailModal({
                   <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
                     Total consumos directos
                   </span>
-                  <span className="text-sm sm:text-base font-black text-[#581c87]">
-                    + {formatCurrency(totalPendingDebt, currency)}
+                  <span className="text-sm sm:text-base font-black text-rose-600">
+                    + {formatCurrency(totalDirectConsumption, currency)}
                   </span>
                 </div>
                 <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
@@ -402,6 +389,7 @@ export function PairwiseDetailModal({
                     profiles={profiles}
                     userGroups={groups}
                     currentProfile={debtorProfile}
+                    pairwisePartnerProfile={creditorProfile}
                     groupCurrency={currency}
                     showGroupBadge={!groupId}
                     onEditExpense={onEditExpense}
@@ -468,6 +456,7 @@ export function PairwiseDetailModal({
                     profiles={profiles}
                     userGroups={groups}
                     currentProfile={debtorProfile}
+                    pairwisePartnerProfile={creditorProfile}
                     groupCurrency={currency}
                     showGroupBadge={!groupId}
                     onEditExpense={onEditExpense}
@@ -480,215 +469,197 @@ export function PairwiseDetailModal({
             )}
           </div>
 
-          {/* 3. SECCIÓN: COMPENSACIONES DEL GRUPO Y SIMPLIFICACIÓN */}
-          <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-            {/* Section Header */}
-            <div
-              onClick={() =>
-                setExpandedSections((prev) => ({ ...prev, distribution: !prev.distribution }))
-              }
-              className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
-            >
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-sky-50 border border-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-                  <Users className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    {isSimplified ? 'Compensaciones grupales y triangulaciones' : 'Cuenta directa 1 a 1'}
-                  </h3>
-                  <p className="text-xs text-zinc-500 font-medium">
-                    {isSimplified
-                      ? 'Compensaciones del grupo que optimizan el saldo a liquidar'
-                      : 'Liquidación directa 1 a 1 sin intermediarios'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 shrink-0">
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    {hasCompensations
-                      ? detail.optimizationDetail?.isDiscount
-                        ? 'Descuento aplicado'
-                        : 'Consolidación aplicada'
-                      : 'Saldo directo'}
-                  </span>
-                  <span
-                    className={`text-sm sm:text-base font-black ${
-                      hasCompensations && detail.optimizationDetail?.isDiscount
-                        ? 'text-emerald-600'
-                        : 'text-[#581c87]'
-                    }`}
-                  >
-                    {hasCompensations
-                      ? `${detail.optimizationDetail?.isDiscount ? '- ' : '+ '}${formatCurrency(
-                          detail.optimizationDetail?.totalCompensated || 0,
-                          currency
-                        )}`
-                      : formatCurrency(detail.netDirectBalance, currency)}
-                  </span>
-                </div>
-                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
-                  {expandedSections.distribution ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Section Content: Triangulations */}
-            {expandedSections.distribution && (
-              <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
-                {/* Saldo Directo Card */}
-                <div className="bg-white rounded-2xl p-3.5 border border-zinc-200/80 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-zinc-800 block">Saldo directo 1 a 1</span>
-                    <span className="text-[11px] text-zinc-500">Consumos menos aportes directos entre ambos</span>
+          {/* 3. SECCIÓN: COMPENSACIONES DEL GRUPO Y SIMPLIFICACIÓN (Solo visible si hay compensaciones con terceros) */}
+          {isSimplified && hasCompensations && (
+            <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+              {/* Section Header */}
+              <div
+                onClick={() =>
+                  setExpandedSections((prev) => ({ ...prev, distribution: !prev.distribution }))
+                }
+                className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-sky-50 border border-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
                   </div>
-                  <span className="text-sm sm:text-base font-black text-zinc-900">
-                    {formatCurrency(detail.netDirectBalance, currency)}
-                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
+                      Compensaciones grupales y triangulaciones
+                    </h3>
+                    <p className="text-xs text-zinc-500 font-medium">
+                      Compensaciones del grupo que optimizan el saldo a liquidar
+                    </p>
+                  </div>
                 </div>
 
-                {/* Group Triangulations (if simplified mode and triangulations exist) */}
-                {isSimplified && triangulations.length > 0 ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Network className="w-4 h-4 text-purple-700 shrink-0" />
-                      <h4 className="text-xs font-extrabold text-zinc-900">
-                        {detail.optimizationDetail?.isDiscount
-                          ? `Descuentos por compensación con integrantes que pagan a ${creditorName}`
-                          : `Consolidación de pagos asumidos para reducir transferencias en el grupo`}
-                      </h4>
+                <div className="flex items-center space-x-3 shrink-0">
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
+                      {detail.optimizationDetail?.isDiscount
+                        ? 'Descuento aplicado'
+                        : 'Consolidación aplicada'}
+                    </span>
+                    <span
+                      className={`text-sm sm:text-base font-black ${
+                        detail.optimizationDetail?.isDiscount
+                          ? 'text-emerald-600'
+                          : 'text-[#581c87]'
+                      }`}
+                    >
+                      {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
+                      {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
+                    </span>
+                  </div>
+                  <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                    {expandedSections.distribution ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section Content: Triangulations */}
+              {expandedSections.distribution && (
+                <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
+                  {/* Saldo Directo Card */}
+                  <div className="bg-white rounded-2xl p-3.5 border border-zinc-200/80 shadow-2xs flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-zinc-800 block">Saldo directo 1 a 1</span>
+                      <span className="text-[11px] text-zinc-500">Consumos menos aportes directos entre ambos</span>
                     </div>
+                    <span className="text-sm sm:text-base font-black text-zinc-900">
+                      {formatCurrency(detail.netDirectBalance, currency)}
+                    </span>
+                  </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {triangulations.map((t, tIdx) => {
-                        const isUnfolded = expandedTriangulationIndexes.has(tIdx);
-                        const tpName = t.thirdParty.full_name || 'Tercero';
+                  {/* Group Triangulations */}
+                  {triangulations.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <Network className="w-4 h-4 text-purple-700 shrink-0" />
+                        <h4 className="text-xs font-extrabold text-zinc-900">
+                          {detail.optimizationDetail?.isDiscount
+                            ? `Descuentos por compensación con integrantes que pagan a ${creditorName}`
+                            : `Consolidación de pagos asumidos para reducir transferencias en el grupo`}
+                        </h4>
+                      </div>
 
-                        return (
-                          <div
-                            key={`triang-${tIdx}`}
-                            className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center space-x-2.5">
-                                {t.thirdParty.avatar_url ? (
-                                  <Image
-                                    src={t.thirdParty.avatar_url}
-                                    alt={tpName}
-                                    width={32}
-                                    height={32}
-                                    className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
-                                    unoptimized
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 border border-sky-200 flex items-center justify-center text-xs font-bold shrink-0">
-                                    {getInitials(tpName)}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {triangulations.map((t, tIdx) => {
+                          const isUnfolded = expandedTriangulationIndexes.has(tIdx);
+                          const tpName = t.thirdParty.full_name || 'Tercero';
+
+                          return (
+                            <div
+                              key={`triang-${tIdx}`}
+                              className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center space-x-2.5">
+                                  {t.thirdParty.avatar_url ? (
+                                    <Image
+                                      src={t.thirdParty.avatar_url}
+                                      alt={tpName}
+                                      width={32}
+                                      height={32}
+                                      className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
+                                      unoptimized
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 border border-sky-200 flex items-center justify-center text-xs font-bold shrink-0">
+                                      {getInitials(tpName)}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="font-extrabold text-zinc-900 text-xs block">
+                                      Compensación con {tpName}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 font-medium">
+                                      {t.shortSummary}
+                                    </span>
                                   </div>
-                                )}
-                                <div>
-                                  <span className="font-extrabold text-zinc-900 text-xs block">
-                                    Compensación con {tpName}
+                                </div>
+
+                                <span
+                                  className={`text-xs font-black ${
+                                    t.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
+                                  }`}
+                                >
+                                  {t.isDiscount ? '- ' : '+ '}
+                                  {formatCurrency(t.amount, currency)}
+                                </span>
+                              </div>
+
+                              <p className="text-[11px] text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
+                                {t.explanation}
+                              </p>
+
+                              {/* Diagram */}
+                              <div className="bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
+                                <div className="flex items-center justify-between gap-1 text-center text-[10px]">
+                                  <span className="font-bold text-zinc-800 truncate max-w-[70px]">
+                                    {debtorName}
                                   </span>
-                                  <span className="text-[10px] text-zinc-500 font-medium">
-                                    {t.shortSummary}
+                                  <ArrowRight className="w-3 h-3 text-[#581c87] shrink-0" />
+                                  <span className="font-bold text-sky-700 truncate max-w-[70px]">
+                                    {tpName}
+                                  </span>
+                                  <ArrowRight className="w-3 h-3 text-indigo-500 shrink-0" />
+                                  <span className="font-bold text-zinc-800 truncate max-w-[70px]">
+                                    {creditorName}
                                   </span>
                                 </div>
                               </div>
 
-                              <span
-                                className={`text-xs font-black ${
-                                  t.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                                }`}
-                              >
-                                {t.isDiscount ? '- ' : '+ '}
-                                {formatCurrency(t.amount, currency)}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                              {t.explanation}
-                            </p>
-
-                            {/* Diagram */}
-                            <div className="bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                              <div className="flex items-center justify-between gap-1 text-center text-[10px]">
-                                <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                  {debtorName}
-                                </span>
-                                <ArrowRight className="w-3 h-3 text-[#581c87] shrink-0" />
-                                <span className="font-bold text-sky-700 truncate max-w-[70px]">
-                                  {tpName}
-                                </span>
-                                <ArrowRight className="w-3 h-3 text-indigo-500 shrink-0" />
-                                <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                  {creditorName}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Expand button for underlying active expenses */}
-                            {t.expenses.length > 0 && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleTriangulationExpand(tIdx)}
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#581c87] text-[11px] font-bold transition-all flex items-center justify-center space-x-1 cursor-pointer border border-purple-200/60"
-                                >
-                                  <span>
-                                    {isUnfolded
-                                      ? 'Ocultar gastos vinculados'
-                                      : `Ver ${t.expenses.length} gastos vinculados`}
-                                  </span>
-                                  <ChevronDown
-                                    className={`w-3.5 h-3.5 transition-transform ${
-                                      isUnfolded ? 'rotate-180' : ''
-                                    }`}
-                                  />
-                                </button>
-
-                                {isUnfolded && (
-                                  <div className="pt-2 border-t border-zinc-100 space-y-2">
-                                    <GenericExpenseList
-                                      expenses={t.expenses.map((te) => te.expense)}
-                                      payments={[]}
-                                      profiles={profiles}
-                                      userGroups={groups}
-                                      currentProfile={debtorProfile}
-                                      groupCurrency={currency}
-                                      showGroupBadge={!groupId}
+                              {/* Expand button for underlying active expenses */}
+                              {t.expenses.length > 0 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTriangulationExpand(tIdx)}
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#581c87] text-[11px] font-bold transition-all flex items-center justify-center space-x-1 cursor-pointer border border-purple-200/60"
+                                  >
+                                    <span>
+                                      {isUnfolded
+                                        ? 'Ocultar gastos vinculados'
+                                        : `Ver ${t.expenses.length} gastos vinculados`}
+                                    </span>
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 transition-transform ${
+                                        isUnfolded ? 'rotate-180' : ''
+                                      }`}
                                     />
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
+                                  </button>
+
+                                  {isUnfolded && (
+                                    <div className="pt-2 border-t border-zinc-100 space-y-2">
+                                      <GenericExpenseList
+                                        expenses={t.expenses.map((te) => te.expense)}
+                                        payments={[]}
+                                        profiles={profiles}
+                                        userGroups={groups}
+                                        currentProfile={debtorProfile}
+                                        groupCurrency={currency}
+                                        showGroupBadge={!groupId}
+                                      />
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ) : isSimplified ? (
-                  <div className="p-4 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
-                    <p className="font-medium text-zinc-600">
-                      No se requieren triangulaciones para esta cuenta. El saldo liquidable coincide con los consumos y aportes directos.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
-                    <p className="font-medium text-zinc-600">
-                      En modo directo, todas las deudas se liquidan exclusivamente entre los dos integrantes involucrados.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 4. SECCIÓN: CÁLCULO DEL SALDO A LIQUIDAR */}
           <div className="bg-white rounded-2xl border border-purple-200/90 shadow-2xs overflow-hidden">
@@ -729,11 +700,11 @@ export function PairwiseDetailModal({
                   {/* Consumos directos */}
                   <div className="flex items-center justify-between text-zinc-700">
                     <div className="flex items-center space-x-2">
-                      <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <User className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span className="font-semibold text-zinc-900">Total consumos directos de {debtorName} con {creditorName}</span>
                     </div>
-                    <span className="font-black text-[#581c87] shrink-0">
-                      + {formatCurrency(totalPendingDebt, currency)}
+                    <span className="font-black text-rose-600 shrink-0">
+                      + {formatCurrency(totalDirectConsumption, currency)}
                     </span>
                   </div>
 
