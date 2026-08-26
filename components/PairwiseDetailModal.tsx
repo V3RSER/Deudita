@@ -721,13 +721,15 @@ export function PairwiseDetailModal({
                     </span>
                   </div>
 
-                  {/* Saldo directo */}
-                  <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-zinc-800 font-bold">
-                    <span>Saldo directo 1 a 1 entre ambos</span>
-                    <span className="text-zinc-900 font-black">
-                      {formatCurrency(detail.netDirectBalance, currency)}
-                    </span>
-                  </div>
+                  {/* Saldo directo intermedio solo si hay compensaciones que cambian el valor */}
+                  {hasCompensations && (
+                    <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-zinc-800 font-bold">
+                      <span>Saldo directo 1 a 1 entre ambos</span>
+                      <span className="text-zinc-900 font-black">
+                        {formatCurrency(detail.netDirectBalance, currency)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Descuento o consolidación de triangulaciones si aplica */}
                   {hasCompensations && (
