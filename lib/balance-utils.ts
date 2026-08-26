@@ -688,6 +688,22 @@ export interface ThirdPartyTriangulation {
   expenses: ThirdPartyTriangulationExpense[];
 }
 
+export interface RealCompensationRelation {
+  id: string;
+  from: Profile;
+  to: Profile;
+  amount: number;
+  direction:
+    | 'creditor_owes_third'
+    | 'third_owes_creditor'
+    | 'debtor_owes_third'
+    | 'third_owes_debtor'
+    | 'consolidation';
+  roleDescription: string;
+  operation: '+' | '-';
+  expenses: Expense[];
+}
+
 export interface GroupOptimizationDetail {
   simplifiedDiff: number;
   isDiscount: boolean;
@@ -696,6 +712,17 @@ export interface GroupOptimizationDetail {
   totalCompensated: number;
   triangulations: ThirdPartyTriangulation[];
   summaryNarrative: string;
+  primaryRelation?: {
+    from: Profile;
+    to: Profile;
+    amount: number;
+  };
+  relevantRelations?: RealCompensationRelation[];
+  compensationFormula?: string;
+  compensationLabel?: string;
+  settlementFormula?: string;
+  settlementLabel?: string;
+  closingSummary?: string;
 }
 
 export interface SimplificationExpenseItem {
@@ -1074,431 +1101,249 @@ export function calculatePairwiseDebtDetail(
   const netDirectBalance = directPair ? directPair.amount : Math.max(0, directCalculated);
   const netPendingAmount = Math.max(0, netDirectBalance);
 
-  // 7. Group optimization: Active simplification expenses, third-party triangulations & coherent allocation
+  // 7. Group optimization: Real debt network compensation & traceable graph derivation
   const simplificationExpenses: SimplificationExpenseItem[] = [];
-  const seenExpSplitKeys = new Set<string>();
   let optimizationDetail: GroupOptimizationDetail | undefined = undefined;
 
-  if (isSimplified && !skipSimplification) {
-    // 1. Calculate simplified balances in this scope
-    const simplifiedBalances = calculateSimplifiedBalances(
+  if (isSimplified && !skipSimplification && netDirectBalance > 0.009) {
+    const allDirectDebts = calculateDirectBalances(
       filteredExpenses,
       filteredPayments,
       profiles,
       groupId
     );
 
-    // Find simplified edge for (debtor -> creditor)
-    const simplifiedEdge = simplifiedBalances.find(
-      (b) => b.debtor.id === debtor.id && b.creditor.id === creditor.id
-    );
-    const simplifiedAmount = simplifiedEdge ? simplifiedEdge.amount : 0;
-    const simplifiedDiff = Math.round((simplifiedAmount - netDirectBalance) * 100) / 100;
-    const hasAdjustment = Math.abs(simplifiedDiff) >= 0.01;
-    const isDiscount = simplifiedDiff < 0;
-    const totalDiff = Math.abs(simplifiedDiff);
+    const currencyForFormatting = groupId
+      ? groups.find((g) => g.id === groupId)?.currency || 'COP'
+      : 'COP';
 
-    // Find third parties
-    const otherProfiles = profiles.filter(
-      (p) => !debtorIds.includes(p.id) && !creditorIds.includes(p.id)
-    );
+    const getExpensesForPair = (payerId: string, partId: string): Expense[] => {
+      return filteredExpenses.filter((e) => {
+        if (e.paid_by !== payerId) return false;
+        return e.splits?.some((s) => s.user_id === partId && s.amount_owed > 0);
+      });
+    };
 
-    interface CandidateTP {
-      tp: Profile;
-      dToTp: number;
-      tpToD: number;
-      tpToC: number;
-      cToTp: number;
-      sDToTp: number;
-      sTpToC: number;
-      weight: number;
-      allocatedAmount: number;
-      dToTpDetail: PairwiseDebtDetail;
-      tpToDDetail: PairwiseDebtDetail;
-      tpToCDetail: PairwiseDebtDetail;
-      cToTpDetail: PairwiseDebtDetail;
+    // Direct debts where Creditor owes others (Creditor -> TP)
+    const creditorDebtsToOthers = allDirectDebts
+      .filter((b) => b.debtor.id === creditor.id && b.creditor.id !== debtor.id)
+      .sort((a, b) => b.amount - a.amount);
+
+    // Direct debts where other third parties owe Creditor (TP -> Creditor)
+    const othersDebtsToCreditor = allDirectDebts
+      .filter((b) => b.creditor.id === creditor.id && b.debtor.id !== debtor.id)
+      .sort((a, b) => b.amount - a.amount);
+
+    // Direct debts where Debtor owes others (Debtor -> TP)
+    const debtorDebtsToOthers = allDirectDebts
+      .filter((b) => b.debtor.id === debtor.id && b.creditor.id !== creditor.id)
+      .sort((a, b) => b.amount - a.amount);
+
+    const relevantRelations: RealCompensationRelation[] = [];
+    let compFormula: string | undefined = undefined;
+    let compLabel: string | undefined = undefined;
+    let isDiscount = true;
+    let totalCompensated = 0;
+
+    // PATH 1: Creditor has outgoing debts to other members (Creditor -> C)
+    if (creditorDebtsToOthers.length > 0) {
+      const grossCreditorOut = creditorDebtsToOthers.reduce((acc, b) => acc + b.amount, 0);
+      const grossOthersInToCreditor = othersDebtsToCreditor.reduce((acc, b) => acc + b.amount, 0);
+      const netCreditorOutgoing = Math.round((grossCreditorOut - grossOthersInToCreditor) * 100) / 100;
+
+      if (netCreditorOutgoing > 0.009) {
+        isDiscount = true;
+        totalCompensated = Math.round(Math.min(netDirectBalance, netCreditorOutgoing) * 100) / 100;
+
+        creditorDebtsToOthers.forEach((b) => {
+          relevantRelations.push({
+            id: `c-owes-${b.creditor.id}`,
+            from: b.debtor,
+            to: b.creditor,
+            amount: b.amount,
+            direction: 'creditor_owes_third',
+            roleDescription: `${b.debtor.full_name || 'Acreedor'} debe a ${b.creditor.full_name || 'Tercero'}`,
+            operation: '+',
+            expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+          });
+
+          // Check for chained outgoing debt B -> C -> D
+          const cDebtsToOthers = allDirectDebts
+            .filter((d) => d.debtor.id === b.creditor.id && d.creditor.id !== creditor.id && d.creditor.id !== debtor.id)
+            .sort((x, y) => y.amount - x.amount);
+          if (cDebtsToOthers.length > 0) {
+            cDebtsToOthers.forEach((d) => {
+              relevantRelations.push({
+                id: `c-chain-${d.creditor.id}`,
+                from: d.debtor,
+                to: d.creditor,
+                amount: d.amount,
+                direction: 'creditor_owes_third',
+                roleDescription: `${d.debtor.full_name} debe a ${d.creditor.full_name}`,
+                operation: '+',
+                expenses: getExpensesForPair(d.creditor.id, d.debtor.id),
+              });
+            });
+          }
+        });
+
+        othersDebtsToCreditor.forEach((b) => {
+          relevantRelations.push({
+            id: `owes-c-${b.debtor.id}`,
+            from: b.debtor,
+            to: b.creditor,
+            amount: b.amount,
+            direction: 'third_owes_creditor',
+            roleDescription: `lo que ya recibe de ${b.debtor.full_name || 'Tercero'}`,
+            operation: '-',
+            expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+          });
+        });
+
+        if (creditorDebtsToOthers.length === 1 && othersDebtsToCreditor.length === 1) {
+          const outRel = creditorDebtsToOthers[0];
+          const inRel = othersDebtsToCreditor[0];
+          compFormula = `${formatCurrency(outRel.amount, currencyForFormatting)} − ${formatCurrency(inRel.amount, currencyForFormatting)} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+          compLabel = `${outRel.debtor.full_name} debe a ${outRel.creditor.full_name} − lo que ya recibe de ${inRel.debtor.full_name} = parte compensable`;
+        } else if (othersDebtsToCreditor.length === 0 && creditorDebtsToOthers.length === 1) {
+          const outRel = creditorDebtsToOthers[0];
+          compFormula = `${formatCurrency(outRel.amount, currencyForFormatting)} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+          compLabel = `${outRel.debtor.full_name} debe a ${outRel.creditor.full_name} = parte compensable`;
+        } else {
+          const outParts = creditorDebtsToOthers.map((b) => formatCurrency(b.amount, currencyForFormatting)).join(' + ');
+          const inParts = othersDebtsToCreditor.map((b) => formatCurrency(b.amount, currencyForFormatting)).join(' − ');
+          const leftSide = inParts ? `${outParts} − ${inParts}` : outParts;
+          compFormula = `${leftSide} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+          compLabel = `Obligaciones salientes de ${creditor.full_name} − ingresos recibidos de otros = parte compensable`;
+        }
+      }
+    } else if (debtorDebtsToOthers.length > 0) {
+      // PATH 2: Debtor owes third party (A -> T -> B)
+      const matchingThird = debtorDebtsToOthers.find((d) =>
+        allDirectDebts.some((b) => b.debtor.id === d.creditor.id && b.creditor.id === creditor.id)
+      ) || debtorDebtsToOthers[0];
+
+      if (matchingThird) {
+        const tToC = allDirectDebts.find((b) => b.debtor.id === matchingThird.creditor.id && b.creditor.id === creditor.id);
+        const compensableT = tToC
+          ? Math.min(netDirectBalance, matchingThird.amount, tToC.amount)
+          : Math.min(netDirectBalance, matchingThird.amount);
+
+        if (compensableT > 0.009) {
+          isDiscount = true;
+          totalCompensated = Math.round(compensableT * 100) / 100;
+          relevantRelations.push({
+            id: `d-owes-${matchingThird.creditor.id}`,
+            from: matchingThird.debtor,
+            to: matchingThird.creditor,
+            amount: matchingThird.amount,
+            direction: 'debtor_owes_third',
+            roleDescription: `${matchingThird.debtor.full_name} transfiere a ${matchingThird.creditor.full_name}`,
+            operation: '+',
+            expenses: getExpensesForPair(matchingThird.creditor.id, matchingThird.debtor.id),
+          });
+          if (tToC) {
+            relevantRelations.push({
+              id: `t-owes-c-${tToC.creditor.id}`,
+              from: tToC.debtor,
+              to: tToC.creditor,
+              amount: tToC.amount,
+              direction: 'third_owes_creditor',
+              roleDescription: `${tToC.debtor.full_name} transfiere a ${tToC.creditor.full_name}`,
+              operation: '+',
+              expenses: getExpensesForPair(tToC.creditor.id, tToC.debtor.id),
+            });
+          }
+          compFormula = `${formatCurrency(compensableT, currencyForFormatting)} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+          compLabel = `${matchingThird.debtor.full_name} compensa vía ${matchingThird.creditor.full_name} = parte compensable`;
+        }
+      }
     }
 
-    const candidates: CandidateTP[] = [];
-
-    otherProfiles.forEach((tp) => {
-      // Direct relationships
-      const dToTpDetail = calculatePairwiseDebtDetail(
-        debtor,
-        tp,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const tpToDDetail = calculatePairwiseDebtDetail(
-        tp,
-        debtor,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const tpToCDetail = calculatePairwiseDebtDetail(
-        tp,
-        creditor,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const cToTpDetail = calculatePairwiseDebtDetail(
-        creditor,
-        tp,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-
-      const dToTp = dToTpDetail.netDirectBalance > 0.009 ? dToTpDetail.netDirectBalance : 0;
-      const tpToD = tpToDDetail.netDirectBalance > 0.009 ? tpToDDetail.netDirectBalance : 0;
-      const tpToC = tpToCDetail.netDirectBalance > 0.009 ? tpToCDetail.netDirectBalance : 0;
-      const cToTp = cToTpDetail.netDirectBalance > 0.009 ? cToTpDetail.netDirectBalance : 0;
-
-      const sDToTp =
-        simplifiedBalances.find((b) => b.debtor.id === debtor.id && b.creditor.id === tp.id)?.amount ||
-        0;
-      const sTpToC =
-        simplifiedBalances.find((b) => b.debtor.id === tp.id && b.creditor.id === creditor.id)?.amount ||
-        0;
-
-      let weight = 0;
-      if (isDiscount) {
-        weight =
-          (sTpToC > 0 ? sTpToC * 3 : 0) +
-          (sDToTp > 0 ? sDToTp * 3 : 0) +
-          (tpToC > 0 ? tpToC * 2 : 0) +
-          (dToTp > 0 ? dToTp * 2 : 0) +
-          (tpToD > 0 ? tpToD : 0) +
-          (cToTp > 0 ? cToTp : 0);
-      } else {
-        weight =
-          (dToTp > 0 ? dToTp * 2 : 0) +
-          (tpToC > 0 ? tpToC * 2 : 0) +
-          (sDToTp > 0 ? sDToTp : 0) +
-          (sTpToC > 0 ? sTpToC : 0);
-      }
-
-      candidates.push({
-        tp,
-        dToTp,
-        tpToD,
-        tpToC,
-        cToTp,
-        sDToTp,
-        sTpToC,
-        weight,
-        allocatedAmount: 0,
-        dToTpDetail,
-        tpToDDetail,
-        tpToCDetail,
-        cToTpDetail,
-      });
-
-      // Keep legacy simplificationExpenses for backwards compatibility
-      if (dToTpDetail.netDirectBalance > 0.009) {
-        dToTpDetail.pendingExpenses.forEach((pExp) => {
-          const splitKey = `${pExp.expense.id}:${pExp.split.user_id}:debtor_owes`;
-          if (!seenExpSplitKeys.has(splitKey)) {
-            seenExpSplitKeys.add(splitKey);
-            simplificationExpenses.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              relevantAmount: pExp.pendingAmount,
-              role: 'debtor_owes_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency || 'COP',
-              explanation: `${pExp.participantProfile?.full_name || debtor.full_name} debe a ${pExp.payerProfile?.full_name || tp.full_name}`,
-            });
-          }
-        });
-      }
-
-      if (tpToCDetail.netDirectBalance > 0.009) {
-        tpToCDetail.pendingExpenses.forEach((pExp) => {
-          const splitKey = `${pExp.expense.id}:${pExp.split.user_id}:creditor_paid`;
-          if (!seenExpSplitKeys.has(splitKey)) {
-            seenExpSplitKeys.add(splitKey);
-            simplificationExpenses.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              relevantAmount: pExp.pendingAmount,
-              role: 'creditor_paid_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency || 'COP',
-              explanation: `${pExp.participantProfile?.full_name || tp.full_name} debe a ${pExp.payerProfile?.full_name || creditor.full_name}`,
-            });
-          }
-        });
-      }
-    });
-
-    if (hasAdjustment) {
-      // Filter candidates with positive weight
-      let activeCandidates = candidates.filter((c) => c.weight > 0.001);
-      if (activeCandidates.length === 0 && candidates.length > 0) {
-        candidates.forEach((c) => (c.weight = 1));
-        activeCandidates = candidates;
-      }
-
-      const totalWeight = activeCandidates.reduce((acc, c) => acc + c.weight, 0) || 1;
-
-      // Proportional allocation of totalDiff
-      activeCandidates.forEach((c) => {
-        c.allocatedAmount = Math.round((totalDiff * (c.weight / totalWeight)) * 100) / 100;
-      });
-
-      // Fix rounding errors so sum is exactly totalDiff
-      const allocatedSum = activeCandidates.reduce((acc, c) => acc + c.allocatedAmount, 0);
-      const remainder = Math.round((totalDiff - allocatedSum) * 100) / 100;
-      if (Math.abs(remainder) >= 0.01 && activeCandidates.length > 0) {
-        activeCandidates.sort((a, b) => b.weight - a.weight);
-        activeCandidates[0].allocatedAmount = Math.round(
-          (activeCandidates[0].allocatedAmount + remainder) * 100
-        ) / 100;
-      }
+    if (totalCompensated > 0.009 && relevantRelations.length > 0) {
+      const simplifiedAmount = Math.max(0, Math.round((netDirectBalance - totalCompensated) * 100) / 100);
+      const debtorDisplayName = debtor.full_name || 'Deudor';
+      const creditorDisplayName = creditor.full_name || 'Acreedor';
 
       const triangulations: ThirdPartyTriangulation[] = [];
-
-      activeCandidates.forEach((cand) => {
-        if (cand.allocatedAmount <= 0.009) return;
-
-        const tpName = cand.tp.full_name || 'Tercero';
-        const dName = debtor.full_name || 'Deudor';
-        const cName = creditor.full_name || 'Acreedor';
-
-        let role: ThirdPartyTriangulation['role'] = 'mutual_cross_compensation';
-        let shortSummary = '';
-        let explanation = '';
-
-        if (isDiscount) {
-          if (cand.sTpToC > 0 || cand.tpToC > 0) {
-            role = 'third_party_pays_creditor';
-            shortSummary = `${tpName} le transfiere directamente a ${cName}`;
-            explanation = `${tpName} tiene consumos por saldar con ${cName}. Al hacer que ${tpName} le pague a ${cName} directamente, se descuentan ${formatCurrency(
-              cand.allocatedAmount
-            )} de lo que ${dName} necesita transferirle a ${cName}.`;
-          } else if (cand.sDToTp > 0 || cand.dToTp > 0) {
-            role = 'debtor_pays_third_party';
-            shortSummary = `${dName} le transfiere directamente a ${tpName}`;
-            explanation = `${dName} compensa pagos directamente con ${tpName}. Como ${dName} ya salda ${formatCurrency(
-              cand.allocatedAmount
-            )} con ${tpName}, ese valor se descuenta de la cuenta que ${dName} tenía pendiente con ${cName}.`;
-          } else {
-            role = 'mutual_cross_compensation';
-            shortSummary = `Compensación cruzada con ${tpName}`;
-            explanation = `Las cuentas cruzadas de gastos compartidos entre ${dName}, ${cName} y ${tpName} se cancelan mutuamente en el grupo, liberando ${formatCurrency(
-              cand.allocatedAmount
-            )} de esta transferencia directa.`;
-          }
-        } else {
-          role = 'debt_consolidation';
-          shortSummary = `${dName} consolida pagos de ${tpName} hacia ${cName}`;
-          explanation = `Para reducir transferencias en el grupo, ${dName} unifica y asume una transferencia adicional de ${formatCurrency(
-            cand.allocatedAmount
-          )} hacia ${cName} en representación de ${tpName}.`;
-        }
-
-        // Find relevant active expenses for this candidate
-        interface MatchedExp {
-          expense: Expense;
-          split?: ExpenseSplit;
-          role: ThirdPartyTriangulationExpense['role'];
-          payerProfile?: Profile;
-          participantProfile?: Profile;
-          groupName?: string;
-          currency?: string;
-          relevantShare: number;
-        }
-
-        const matchedList: MatchedExp[] = [];
-
-        // 1. If third party owes creditor, use cand.tpToCDetail.pendingExpenses
-        if ((cand.sTpToC > 0 || cand.tpToC > 0) && cand.tpToCDetail.pendingExpenses.length > 0) {
-          cand.tpToCDetail.pendingExpenses.forEach((pExp) => {
-            matchedList.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              role: 'third_party_owes_creditor',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency,
-              relevantShare: pExp.pendingAmount,
-            });
-          });
-        }
-
-        // 2. If debtor owes third party, use cand.dToTpDetail.pendingExpenses
-        if ((cand.sDToTp > 0 || cand.dToTp > 0) && cand.dToTpDetail.pendingExpenses.length > 0) {
-          cand.dToTpDetail.pendingExpenses.forEach((pExp) => {
-            matchedList.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              role: 'debtor_owes_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency,
-              relevantShare: pExp.pendingAmount,
-            });
-          });
-        }
-
-        // 3. Fallbacks for reverse relationships if needed
-        if (matchedList.length === 0) {
-          if (cand.tpToDDetail.pendingExpenses.length > 0) {
-            cand.tpToDDetail.pendingExpenses.forEach((pExp) => {
-              matchedList.push({
-                expense: pExp.expense,
-                split: pExp.split,
-                role: 'third_party_owes_debtor',
-                payerProfile: pExp.payerProfile,
-                participantProfile: pExp.participantProfile,
-                groupName: pExp.groupName,
-                currency: pExp.currency,
-                relevantShare: pExp.pendingAmount,
-              });
-            });
-          }
-          if (cand.cToTpDetail.pendingExpenses.length > 0) {
-            cand.cToTpDetail.pendingExpenses.forEach((pExp) => {
-              matchedList.push({
-                expense: pExp.expense,
-                split: pExp.split,
-                role: 'creditor_owes_third_party',
-                payerProfile: pExp.payerProfile,
-                participantProfile: pExp.participantProfile,
-                groupName: pExp.groupName,
-                currency: pExp.currency,
-                relevantShare: pExp.pendingAmount,
-              });
-            });
-          }
-        }
-
-        // Deduplicate and sort chronological DESC
-        const uniqueMatched: MatchedExp[] = [];
-        const seenExp = new Set<string>();
-        matchedList.forEach((m) => {
-          const key = `${m.expense.id}:${m.split?.user_id || 'all'}`;
-          if (!seenExp.has(key)) {
-            seenExp.add(key);
-            uniqueMatched.push(m);
-          }
-        });
-
-        uniqueMatched.sort(
-          (a, b) =>
-            new Date(b.expense.expense_date || '').getTime() -
-            new Date(a.expense.expense_date || '').getTime()
-        );
-
-        // Distribute cand.allocatedAmount across uniqueMatched
-        let remainingToAllocate = cand.allocatedAmount;
-        const tpExpenses: ThirdPartyTriangulationExpense[] = [];
-
-        for (const m of uniqueMatched) {
-          if (remainingToAllocate <= 0.009) break;
-          const share = m.relevantShare > 0 ? m.relevantShare : m.expense.total_amount;
-          const allocatedDiscountAmount =
-            Math.round(Math.min(remainingToAllocate, share) * 100) / 100;
-          remainingToAllocate =
-            Math.round((remainingToAllocate - allocatedDiscountAmount) * 100) / 100;
-
-          tpExpenses.push({
-            expense: m.expense,
-            split: m.split,
-            description: m.expense.description,
-            totalExpenseAmount: m.expense.total_amount,
-            originalDebtAmount: share,
-            allocatedDiscountAmount,
-            role: m.role,
-            payerName: m.payerProfile?.full_name || 'Integrante',
-            payerProfile: m.payerProfile,
-            participantName: m.participantProfile?.full_name || 'Integrante',
-            participantProfile: m.participantProfile,
-            date: m.expense.expense_date || 'Reciente',
-            groupName: m.groupName,
-            currency: m.currency,
-            receiptUrl: m.expense.receipt_url,
-          });
-        }
-
-        // If remainingToAllocate > 0, allocate the rest on the first item to ensure exact match
-        if (remainingToAllocate > 0.009 && tpExpenses.length > 0) {
-          tpExpenses[0].allocatedDiscountAmount =
-            Math.round((tpExpenses[0].allocatedDiscountAmount + remainingToAllocate) * 100) /
-            100;
-          remainingToAllocate = 0;
-        }
+      relevantRelations.forEach((rel) => {
+        const thirdParty = rel.from.id === debtor.id || rel.from.id === creditor.id ? rel.to : rel.from;
+        const tpExpenses: ThirdPartyTriangulationExpense[] = (rel.expenses || []).map((exp) => ({
+          expense: exp,
+          description: exp.description,
+          totalExpenseAmount: exp.total_amount,
+          originalDebtAmount: exp.total_amount,
+          allocatedDiscountAmount: Math.min(rel.amount, exp.total_amount),
+          role: rel.direction === 'creditor_owes_third' ? 'creditor_owes_third_party' : 'third_party_owes_creditor',
+          payerName: rel.to.full_name || 'Integrante',
+          payerProfile: rel.to,
+          participantName: rel.from.full_name || 'Integrante',
+          participantProfile: rel.from,
+          date: exp.expense_date || 'Reciente',
+          groupName: groups.find((g) => g.id === exp.group_id)?.name,
+          currency: exp.currency || currencyForFormatting,
+          receiptUrl: exp.receipt_url,
+        }));
 
         triangulations.push({
-          thirdParty: cand.tp,
-          thirdPartyName: tpName,
-          amount: cand.allocatedAmount,
+          thirdParty,
+          thirdPartyName: thirdParty.full_name || 'Tercero',
+          amount: rel.amount,
           isDiscount,
-          role,
-          shortSummary,
-          explanation,
-          directDebtsWithDebtor: cand.dToTp,
-          directDebtsWithCreditor: cand.tpToC,
+          role: rel.direction === 'creditor_owes_third' ? 'creditor_owes_third_party' : 'third_party_pays_creditor',
+          shortSummary: rel.roleDescription,
+          explanation: `${rel.from.full_name} tiene una obligación directa de ${formatCurrency(rel.amount, currencyForFormatting)} con ${rel.to.full_name}.`,
+          directDebtsWithDebtor: 0,
+          directDebtsWithCreditor: rel.amount,
           expenses: tpExpenses,
         });
       });
 
-      // Sort triangulations by amount descending
-      triangulations.sort((a, b) => b.amount - a.amount);
+      const summaryNarrative = `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
+        netDirectBalance,
+        currencyForFormatting
+      )}. Para optimizar y simplificar las cuentas del grupo, se descuentan -${formatCurrency(
+        totalCompensated,
+        currencyForFormatting
+      )} de esta transferencia porque se compensan mediante las obligaciones de la red grupal.`;
 
-      const debtorDisplayName = debtor.full_name || 'Deudor';
-      const creditorDisplayName = creditor.full_name || 'Acreedor';
+      const settlementFormula = `${formatCurrency(netDirectBalance, currencyForFormatting)} − ${formatCurrency(
+        totalCompensated,
+        currencyForFormatting
+      )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`;
 
-      const summaryNarrative = isDiscount
-        ? `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
-            netDirectBalance
-          )}. Para optimizar y simplificar las cuentas del grupo, se descuentan -${formatCurrency(
-            totalDiff
-          )} de esta transferencia porque se compensan mediante ${
-            triangulations.length === 1
-              ? `pagos directos con ${triangulations[0].thirdPartyName}`
-              : `triangulaciones y pagos directos con ${triangulations.length} integrantes del grupo`
-          }.`
-        : `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
-            netDirectBalance
-          )}. Para optimizar y liquidar el grupo con menos transferencias, se consolidan +${formatCurrency(
-            totalDiff
-          )} en este pago.`;
+      const settlementLabel = 'Deuda original − compensado = saldo restante';
+
+      const closingSummary = `Por esta compensación, de los ${formatCurrency(
+        netDirectBalance,
+        currencyForFormatting
+      )} que ${debtorDisplayName} debía a ${creditorDisplayName}, ${formatCurrency(
+        totalCompensated,
+        currencyForFormatting
+      )} dejan de pagarse directamente a ella. Quedan ${formatCurrency(
+        simplifiedAmount,
+        currencyForFormatting
+      )} por transferir.`;
 
       optimizationDetail = {
-        simplifiedDiff,
-        isDiscount,
+        simplifiedDiff: -totalCompensated,
+        isDiscount: true,
         directBalance: netDirectBalance,
         simplifiedAmount,
-        totalCompensated: totalDiff,
+        totalCompensated,
         triangulations,
         summaryNarrative,
+        primaryRelation: {
+          from: debtor,
+          to: creditor,
+          amount: netDirectBalance,
+        },
+        relevantRelations,
+        compensationFormula: compFormula,
+        compensationLabel: compLabel,
+        settlementFormula,
+        settlementLabel,
+        closingSummary,
       };
     }
   }

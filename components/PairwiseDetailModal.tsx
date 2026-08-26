@@ -163,9 +163,15 @@ export function PairwiseDetailModal({
   const debtorName = debtorProfile.full_name || 'Deudor';
   const creditorName = creditorProfile.full_name || 'Acreedor';
 
-  const pendingConsumedExpenses = detail.pendingExpenses.map((d) => d.expense);
-  const activeReverseExpenses = detail.reverseOffsetExpenses.map((r) => r.expense);
-  const activeDirectPayments = detail.appliedPayments.map((p) => p.payment);
+  const pendingConsumedExpenses = Array.from(
+    new Map(detail.pendingExpenses.map((d) => [d.expense.id, d.expense])).values()
+  );
+  const activeReverseExpenses = Array.from(
+    new Map(detail.reverseOffsetExpenses.map((r) => [r.expense.id, r.expense])).values()
+  );
+  const activeDirectPayments = Array.from(
+    new Map(detail.appliedPayments.map((p) => [p.payment.id, p.payment])).values()
+  );
 
   const totalDirectConsumption = detail.pendingExpenses.reduce((sum, d) => sum + d.originalAmount, 0);
   const totalReverseOffsets = detail.reverseOffsetExpenses.reduce((sum, r) => sum + r.amount, 0);
@@ -200,7 +206,10 @@ export function PairwiseDetailModal({
     });
   };
 
-  const finalSettlementAmount = pairwise.amount;
+  const finalSettlementAmount =
+    isSimplified && detail.optimizationDetail?.totalCompensated
+      ? detail.optimizationDetail.simplifiedAmount
+      : pairwise.amount;
 
   return (
     <div
@@ -523,141 +532,524 @@ export function PairwiseDetailModal({
                 </div>
               </div>
 
-              {/* Section Content: Triangulations */}
+              {/* Section Content: Compact Visual Graph & Traceable Compensation Explanation */}
               {expandedSections.distribution && (
                 <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
-                  {/* Saldo Directo Card */}
-                  <div className="bg-white rounded-2xl p-3.5 border border-zinc-200/80 shadow-2xs flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-zinc-800 block">Saldo directo 1 a 1</span>
-                      <span className="text-[11px] text-zinc-500">Consumos menos aportes directos entre ambos</span>
-                    </div>
-                    <span className="text-sm sm:text-base font-black text-zinc-900">
-                      {formatCurrency(detail.netDirectBalance, currency)}
-                    </span>
-                  </div>
+                  <div className="bg-white rounded-2xl p-4 sm:p-6 border border-zinc-200/90 shadow-2xs space-y-5">
+                    {/* SVG Visual Graph */}
+                    {(() => {
+                      const rels = detail.optimizationDetail?.relevantRelations || [];
+                      const relThirdIn = rels.find(
+                        (r) =>
+                          r.direction === 'third_owes_creditor' ||
+                          r.direction === 'consolidation'
+                      );
+                      const relThirdOut = rels.find(
+                        (r) => r.direction === 'creditor_owes_third'
+                      );
+                      const relDebtorOut = rels.find(
+                        (r) => r.direction === 'debtor_owes_third'
+                      );
 
-                  {/* Group Triangulations */}
-                  {triangulations.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-2">
-                        <Network className="w-4 h-4 text-purple-700 shrink-0" />
-                        <h4 className="text-xs font-extrabold text-zinc-900">
-                          {detail.optimizationDetail?.isDiscount
-                            ? `Descuentos por compensación con integrantes que pagan a ${creditorName}`
-                            : `Consolidación de pagos asumidos para reducir transferencias en el grupo`}
-                        </h4>
-                      </div>
+                      const thirdInProfile = relThirdIn?.from;
+                      const thirdOutProfile = relThirdOut?.to;
+                      const thirdDebtorProfile = relDebtorOut?.to;
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {triangulations.map((t, tIdx) => {
-                          const isUnfolded = expandedTriangulationIndexes.has(tIdx);
-                          const tpName = t.thirdParty.full_name || 'Tercero';
+                      const thirdInName = thirdInProfile?.full_name || 'Tercero';
+                      const thirdOutName = thirdOutProfile?.full_name || 'Tercero';
+                      const thirdDebtorName = thirdDebtorProfile?.full_name || 'Tercero';
 
-                          return (
-                            <div
-                              key={`triang-${tIdx}`}
-                              className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs"
+                      const hasBottomLeft = !!(thirdInProfile || thirdDebtorProfile);
+                      const hasBottomRight = !!thirdOutProfile;
+                      const hasSecondary = hasBottomLeft || hasBottomRight;
+
+                      const svgHeight = hasSecondary ? 240 : 120;
+
+                      return (
+                        <div className="w-full overflow-x-auto py-2">
+                          <div className="min-w-[420px] max-w-[540px] mx-auto">
+                            <svg
+                              viewBox={`0 0 540 ${svgHeight}`}
+                              className="w-full h-auto select-none"
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-center space-x-2.5">
-                                  {t.thirdParty.avatar_url ? (
-                                    <Image
-                                      src={t.thirdParty.avatar_url}
-                                      alt={tpName}
-                                      width={32}
-                                      height={32}
-                                      className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
-                                      unoptimized
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 border border-sky-200 flex items-center justify-center text-xs font-bold shrink-0">
-                                      {getInitials(tpName)}
-                                    </div>
-                                  )}
-                                  <div>
-                                    <span className="font-extrabold text-zinc-900 text-xs block">
-                                      Compensación con {tpName}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 font-medium">
-                                      {t.shortSummary}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <span
-                                  className={`text-xs font-black ${
-                                    t.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                                  }`}
+                              <defs>
+                                <marker
+                                  id="arrow-blue"
+                                  markerWidth="8"
+                                  markerHeight="8"
+                                  refX="6"
+                                  refY="4"
+                                  orient="auto"
                                 >
-                                  {t.isDiscount ? '- ' : '+ '}
-                                  {formatCurrency(t.amount, currency)}
-                                </span>
-                              </div>
+                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#2563eb" />
+                                </marker>
+                                <marker
+                                  id="arrow-amber"
+                                  markerWidth="8"
+                                  markerHeight="8"
+                                  refX="6"
+                                  refY="4"
+                                  orient="auto"
+                                >
+                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#d97706" />
+                                </marker>
+                                <marker
+                                  id="arrow-purple"
+                                  markerWidth="8"
+                                  markerHeight="8"
+                                  refX="6"
+                                  refY="4"
+                                  orient="auto"
+                                >
+                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#7c3aed" />
+                                </marker>
+                                <marker
+                                  id="arrow-emerald"
+                                  markerWidth="8"
+                                  markerHeight="8"
+                                  refX="6"
+                                  refY="4"
+                                  orient="auto"
+                                >
+                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#059669" />
+                                </marker>
 
-                              <p className="text-[11px] text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                                {t.explanation}
-                              </p>
+                                {debtorProfile.avatar_url && (
+                                  <clipPath id="clip-debtor">
+                                    <circle cx="70" cy="55" r="22" />
+                                  </clipPath>
+                                )}
+                                {creditorProfile.avatar_url && (
+                                  <clipPath id="clip-creditor">
+                                    <circle cx="450" cy="55" r="22" />
+                                  </clipPath>
+                                )}
+                                {thirdInProfile?.avatar_url && (
+                                  <clipPath id="clip-third-in">
+                                    <circle cx="70" cy="180" r="22" />
+                                  </clipPath>
+                                )}
+                                {thirdOutProfile?.avatar_url && (
+                                  <clipPath id="clip-third-out">
+                                    <circle cx="450" cy="180" r="22" />
+                                  </clipPath>
+                                )}
+                              </defs>
 
-                              {/* Diagram */}
-                              <div className="bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                                <div className="flex items-center justify-between gap-1 text-center text-[10px]">
-                                  <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                    {debtorName}
-                                  </span>
-                                  <ArrowRight className="w-3 h-3 text-[#581c87] shrink-0" />
-                                  <span className="font-bold text-sky-700 truncate max-w-[70px]">
-                                    {tpName}
-                                  </span>
-                                  <ArrowRight className="w-3 h-3 text-indigo-500 shrink-0" />
-                                  <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                    {creditorName}
-                                  </span>
-                                </div>
-                              </div>
+                              {/* 1. Primary Arrow (Debtor -> Creditor) */}
+                              <line
+                                x1="98"
+                                y1="55"
+                                x2="420"
+                                y2="55"
+                                stroke="#2563eb"
+                                strokeWidth="2.5"
+                                markerEnd="url(#arrow-blue)"
+                              />
+                              <text
+                                x="260"
+                                y="34"
+                                fill="#2563eb"
+                                textAnchor="middle"
+                                fontWeight="800"
+                                fontSize="14px"
+                                className="font-mono"
+                              >
+                                {formatCurrency(detail.netDirectBalance, currency)}
+                              </text>
+                              <text
+                                x="260"
+                                y="48"
+                                fill="#64748b"
+                                textAnchor="middle"
+                                fontWeight="500"
+                                fontSize="11px"
+                              >
+                                {debtorProfile.id === currentProfile?.id
+                                  ? `debías a ${creditorName}`
+                                  : `${debtorName} debe a ${creditorName}`}
+                              </text>
 
-                              {/* Expand button for underlying active expenses */}
-                              {t.expenses.length > 0 && (
+                              {/* 2. Secondary Arrow: Third In -> Creditor (e.g. Robado -> Mari) */}
+                              {relThirdIn && (
                                 <>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleTriangulationExpand(tIdx)}
-                                    className="w-full py-1.5 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#581c87] text-[11px] font-bold transition-all flex items-center justify-center space-x-1 cursor-pointer border border-purple-200/60"
+                                  <line
+                                    x1="94"
+                                    y1="165"
+                                    x2="424"
+                                    y2="72"
+                                    stroke="#d97706"
+                                    strokeWidth="2"
+                                    markerEnd="url(#arrow-amber)"
+                                  />
+                                  <text
+                                    x="250"
+                                    y="136"
+                                    fill="#d97706"
+                                    textAnchor="middle"
+                                    fontWeight="800"
+                                    fontSize="13px"
+                                    className="font-mono"
                                   >
-                                    <span>
-                                      {isUnfolded
-                                        ? 'Ocultar gastos vinculados'
-                                        : `Ver ${t.expenses.length} gastos vinculados`}
-                                    </span>
-                                    <ChevronDown
-                                      className={`w-3.5 h-3.5 transition-transform ${
-                                        isUnfolded ? 'rotate-180' : ''
-                                      }`}
-                                    />
-                                  </button>
-
-                                  {isUnfolded && (
-                                    <div className="pt-2 border-t border-zinc-100 space-y-2">
-                                      <GenericExpenseList
-                                        expenses={t.expenses.map((te) => te.expense)}
-                                        payments={[]}
-                                        profiles={profiles}
-                                        userGroups={groups}
-                                        currentProfile={debtorProfile}
-                                        groupCurrency={currency}
-                                        showGroupBadge={!groupId}
-                                      />
-                                    </div>
-                                  )}
+                                    {formatCurrency(relThirdIn.amount, currency)}
+                                  </text>
+                                  <text
+                                    x="250"
+                                    y="150"
+                                    fill="#64748b"
+                                    textAnchor="middle"
+                                    fontWeight="500"
+                                    fontSize="10.5px"
+                                  >
+                                    {thirdInName} debe a {creditorName}
+                                  </text>
                                 </>
                               )}
-                            </div>
-                          );
-                        })}
+
+                              {/* 3. Secondary Arrow: Creditor -> Third Out (e.g. Mari -> Luis) */}
+                              {relThirdOut && (
+                                <>
+                                  <line
+                                    x1="450"
+                                    y1="102"
+                                    x2="450"
+                                    y2="152"
+                                    stroke="#7c3aed"
+                                    strokeWidth="2"
+                                    markerEnd="url(#arrow-purple)"
+                                  />
+                                  <text
+                                    x="480"
+                                    y="122"
+                                    fill="#7c3aed"
+                                    textAnchor="start"
+                                    fontWeight="800"
+                                    fontSize="13px"
+                                    className="font-mono"
+                                  >
+                                    {formatCurrency(relThirdOut.amount, currency)}
+                                  </text>
+                                  <text
+                                    x="480"
+                                    y="136"
+                                    fill="#64748b"
+                                    textAnchor="start"
+                                    fontWeight="500"
+                                    fontSize="10.5px"
+                                  >
+                                    {creditorName} debe
+                                  </text>
+                                  <text
+                                    x="480"
+                                    y="148"
+                                    fill="#64748b"
+                                    textAnchor="start"
+                                    fontWeight="500"
+                                    fontSize="10.5px"
+                                  >
+                                    a {thirdOutName}
+                                  </text>
+                                </>
+                              )}
+
+                              {/* 4. Secondary Arrow: Debtor -> Third (e.g. Debtor transfer) */}
+                              {relDebtorOut && !relThirdIn && (
+                                <>
+                                  <line
+                                    x1="70"
+                                    y1="102"
+                                    x2="70"
+                                    y2="152"
+                                    stroke="#059669"
+                                    strokeWidth="2"
+                                    markerEnd="url(#arrow-emerald)"
+                                  />
+                                  <text
+                                    x="100"
+                                    y="126"
+                                    fill="#059669"
+                                    textAnchor="start"
+                                    fontWeight="800"
+                                    fontSize="13px"
+                                    className="font-mono"
+                                  >
+                                    {formatCurrency(relDebtorOut.amount, currency)}
+                                  </text>
+                                  <text
+                                    x="100"
+                                    y="140"
+                                    fill="#64748b"
+                                    textAnchor="start"
+                                    fontWeight="500"
+                                    fontSize="10.5px"
+                                  >
+                                    {debtorName} debe a {thirdDebtorName}
+                                  </text>
+                                </>
+                              )}
+
+                              {/* Top Left Node: Debtor (WD) */}
+                              <circle
+                                cx="70"
+                                cy="55"
+                                r="22"
+                                fill="#eff6ff"
+                                stroke="#bfdbfe"
+                                strokeWidth="2"
+                              />
+                              {debtorProfile.avatar_url ? (
+                                <image
+                                  href={debtorProfile.avatar_url}
+                                  x="48"
+                                  y="33"
+                                  width="44"
+                                  height="44"
+                                  clipPath="url(#clip-debtor)"
+                                  preserveAspectRatio="xMidYMid slice"
+                                />
+                              ) : (
+                                <text
+                                  x="70"
+                                  y="60"
+                                  textAnchor="middle"
+                                  fill="#1d4ed8"
+                                  fontWeight="800"
+                                  fontSize="13px"
+                                >
+                                  {getInitials(debtorName)}
+                                </text>
+                              )}
+                              <text
+                                x="70"
+                                y="93"
+                                textAnchor="middle"
+                                fill="#18181b"
+                                fontWeight="800"
+                                fontSize="12px"
+                              >
+                                {debtorName}
+                              </text>
+
+                              {/* Top Right Node: Creditor (M) */}
+                              <circle
+                                cx="450"
+                                cy="55"
+                                r="22"
+                                fill="#fff1f2"
+                                stroke="#fecdd3"
+                                strokeWidth="2"
+                              />
+                              {creditorProfile.avatar_url ? (
+                                <image
+                                  href={creditorProfile.avatar_url}
+                                  x="428"
+                                  y="33"
+                                  width="44"
+                                  height="44"
+                                  clipPath="url(#clip-creditor)"
+                                  preserveAspectRatio="xMidYMid slice"
+                                />
+                              ) : (
+                                <text
+                                  x="450"
+                                  y="60"
+                                  textAnchor="middle"
+                                  fill="#e11d48"
+                                  fontWeight="800"
+                                  fontSize="13px"
+                                >
+                                  {getInitials(creditorName)}
+                                </text>
+                              )}
+                              <text
+                                x="450"
+                                y="93"
+                                textAnchor="middle"
+                                fill="#18181b"
+                                fontWeight="800"
+                                fontSize="12px"
+                              >
+                                {creditorName}
+                              </text>
+
+                              {/* Bottom Left Node: Third In (RO) */}
+                              {hasBottomLeft && (
+                                <>
+                                  <circle
+                                    cx="70"
+                                    cy="180"
+                                    r="22"
+                                    fill="#fffbeb"
+                                    stroke="#fde68a"
+                                    strokeWidth="2"
+                                  />
+                                  {thirdInProfile?.avatar_url ? (
+                                    <image
+                                      href={thirdInProfile.avatar_url}
+                                      x="48"
+                                      y="158"
+                                      width="44"
+                                      height="44"
+                                      clipPath="url(#clip-third-in)"
+                                      preserveAspectRatio="xMidYMid slice"
+                                    />
+                                  ) : (
+                                    <text
+                                      x="70"
+                                      y="185"
+                                      textAnchor="middle"
+                                      fill="#b45309"
+                                      fontWeight="800"
+                                      fontSize="13px"
+                                    >
+                                      {getInitials(
+                                        thirdInProfile ? thirdInName : thirdDebtorName
+                                      )}
+                                    </text>
+                                  )}
+                                  <text
+                                    x="70"
+                                    y="218"
+                                    textAnchor="middle"
+                                    fill="#18181b"
+                                    fontWeight="800"
+                                    fontSize="12px"
+                                  >
+                                    {thirdInProfile ? thirdInName : thirdDebtorName}
+                                  </text>
+                                </>
+                              )}
+
+                              {/* Bottom Right Node: Third Out (L) */}
+                              {hasBottomRight && (
+                                <>
+                                  <circle
+                                    cx="450"
+                                    cy="180"
+                                    r="22"
+                                    fill="#ecfdf5"
+                                    stroke="#a7f3d0"
+                                    strokeWidth="2"
+                                  />
+                                  {thirdOutProfile?.avatar_url ? (
+                                    <image
+                                      href={thirdOutProfile.avatar_url}
+                                      x="428"
+                                      y="158"
+                                      width="44"
+                                      height="44"
+                                      clipPath="url(#clip-third-out)"
+                                      preserveAspectRatio="xMidYMid slice"
+                                    />
+                                  ) : (
+                                    <text
+                                      x="450"
+                                      y="185"
+                                      textAnchor="middle"
+                                      fill="#047857"
+                                      fontWeight="800"
+                                      fontSize="13px"
+                                    >
+                                      {getInitials(thirdOutName)}
+                                    </text>
+                                  )}
+                                  <text
+                                    x="450"
+                                    y="218"
+                                    textAnchor="middle"
+                                    fill="#18181b"
+                                    fontWeight="800"
+                                    fontSize="12px"
+                                  >
+                                    {thirdOutName}
+                                  </text>
+                                </>
+                              )}
+                            </svg>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Calculation Justifying the Compensation */}
+                    {detail.optimizationDetail?.compensationFormula && (
+                      <div className="bg-zinc-50/90 rounded-2xl p-4 sm:p-5 border border-zinc-200/90 space-y-1 text-center sm:text-left">
+                        <div className="text-base sm:text-lg font-black text-zinc-900 tracking-tight font-mono">
+                          {detail.optimizationDetail.compensationFormula}
+                        </div>
+                        <div className="text-xs text-zinc-500 font-medium">
+                          {detail.optimizationDetail.compensationLabel}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                    {/* Optional Expandable Section for linked expenses */}
+                    {detail.optimizationDetail?.relevantRelations &&
+                      detail.optimizationDetail.relevantRelations.some(
+                        (rel) => rel.expenses && rel.expenses.length > 0
+                      ) && (
+                        <div className="pt-2 border-t border-zinc-100 space-y-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedTriangulationIndexes((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(999)) {
+                                  next.delete(999);
+                                } else {
+                                  next.add(999);
+                                }
+                                return next;
+                              })
+                            }
+                            className="w-full py-2 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#581c87] text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer border border-purple-200/60"
+                          >
+                            <span>
+                              {expandedTriangulationIndexes.has(999)
+                                ? 'Ocultar gastos vinculados a las compensaciones'
+                                : 'Ver gastos vinculados a las compensaciones'}
+                            </span>
+                            <ChevronDown
+                              className={`w-4 h-4 transition-transform ${
+                                expandedTriangulationIndexes.has(999) ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
+
+                          {expandedTriangulationIndexes.has(999) && (
+                            <div className="pt-2 space-y-4">
+                              {detail.optimizationDetail.relevantRelations.map((rel, rIdx) => {
+                                if (!rel.expenses || rel.expenses.length === 0) return null;
+                                return (
+                                  <div
+                                    key={`rel-exp-${rIdx}`}
+                                    className="bg-zinc-50/60 rounded-xl p-3 border border-zinc-200/70 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between text-xs font-bold text-zinc-700">
+                                      <span>
+                                        Gastos entre {rel.from.full_name} y {rel.to.full_name}
+                                      </span>
+                                      <span className="font-mono">
+                                        {formatCurrency(rel.amount, currency)}
+                                      </span>
+                                    </div>
+                                    <GenericExpenseList
+                                      expenses={rel.expenses}
+                                      payments={[]}
+                                      profiles={profiles}
+                                      userGroups={groups}
+                                      currentProfile={debtorProfile}
+                                      groupCurrency={currency}
+                                      showGroupBadge={!groupId}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                  </div>
                 </div>
               )}
             </div>
