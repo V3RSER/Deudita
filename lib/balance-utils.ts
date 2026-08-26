@@ -679,6 +679,7 @@ export interface ThirdPartyTriangulation {
   role:
     | 'debtor_pays_third_party'
     | 'third_party_pays_creditor'
+    | 'creditor_owes_third_party'
     | 'mutual_cross_compensation'
     | 'debt_consolidation';
   shortSummary: string;
@@ -1281,7 +1282,7 @@ export function calculatePairwiseDebtDetail(
           participantProfile: rel.from,
           date: exp.expense_date || 'Reciente',
           groupName: groups.find((g) => g.id === exp.group_id)?.name,
-          currency: exp.currency || currencyForFormatting,
+          currency: groups.find((g) => g.id === exp.group_id)?.currency || currencyForFormatting,
           receiptUrl: exp.receipt_url,
         }));
 
