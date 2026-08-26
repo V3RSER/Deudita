@@ -287,7 +287,7 @@ export function SettleDebtModal({
           note: notes,
           proof_url: proofUrl || undefined,
         });
-      } else if (isLockedToGroup && groupId) {
+      } else if (groupId) {
         await addPayment({
           group_id: groupId,
           paid_by: payerId,

@@ -50,13 +50,24 @@ export function getEntryTimestamp(record: {
   updated_at?: string | null;
   expense_date?: string | null;
   payment_date?: string | null;
+  payment_time?: string | null;
+  expense_time?: string | null;
 }): number {
   if (record.created_at) {
     const t = new Date(record.created_at).getTime();
     if (!isNaN(t) && t > 0) return t;
   }
+  if (record.payment_time) {
+    const t = new Date(record.payment_time).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (record.expense_time) {
+    const t = new Date(record.expense_time).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
   if (record.payment_date) {
-    const t = new Date(record.payment_date).getTime();
+    const dateStr = record.payment_date.includes('T') ? record.payment_date : `${record.payment_date}T23:59:59.999Z`;
+    const t = new Date(dateStr).getTime();
     if (!isNaN(t) && t > 0) return t;
   }
   if (record.expense_date) {
@@ -69,6 +80,9 @@ export function getEntryTimestamp(record: {
 export function buildSponsorshipMap(profiles: Profile[]): Map<string, string> {
   const map = new Map<string, string>();
   profiles.forEach((p) => {
+    if (p.managed_by && p.managed_by !== p.id) {
+      map.set(p.id, p.managed_by);
+    }
     if (p.managed_user_ids && Array.isArray(p.managed_user_ids)) {
       p.managed_user_ids.forEach((depId) => {
         if (depId && depId !== p.id) {
@@ -772,11 +786,18 @@ export function calculatePairwiseDebtDetail(
   // Run FIFO settlement engine on filtered transactions
   const fifoSettledExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments, profiles);
 
+  const sponsorshipMap = buildSponsorshipMap(profiles);
+
   // Determine debtor and creditor ID sets
   const debtorIds = new Set<string>([debtor.id]);
   const creditorIds = new Set<string>([creditor.id]);
 
   if (isSimplified) {
+    profiles.forEach((p) => {
+      const sponsorId = sponsorshipMap.get(p.id);
+      if (sponsorId === debtor.id) debtorIds.add(p.id);
+      if (sponsorId === creditor.id) creditorIds.add(p.id);
+    });
     if (debtor.managed_user_ids) {
       debtor.managed_user_ids.forEach((id) => debtorIds.add(id));
     }
@@ -786,7 +807,7 @@ export function calculatePairwiseDebtDetail(
   }
 
   // 1. Debts where creditor paid and debtor participated
-  const pendingExpenses: DebtBreakdownItem[] = [];
+  const rawPendingExpenses: DebtBreakdownItem[] = [];
   const settledExpenses: DebtBreakdownItem[] = [];
 
   fifoSettledExpenses.forEach((exp) => {
@@ -816,15 +837,15 @@ export function calculatePairwiseDebtDetail(
           if (isFullyPaid) {
             settledExpenses.push(item);
           } else {
-            pendingExpenses.push(item);
+            rawPendingExpenses.push(item);
           }
         }
       });
     }
   });
 
-  // Sort pending by entry timestamp descending (newest first for UI display)
-  pendingExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
+  // Sort candidate pending by entry timestamp descending (newest first for UI display)
+  rawPendingExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
   settledExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
 
   // 2. Reverse offsets where debtor paid and creditor participated
@@ -867,7 +888,7 @@ export function calculatePairwiseDebtDetail(
       (debtorIds.has(p.paid_by) && creditorIds.has(p.paid_to)) ||
       (creditorIds.has(p.paid_by) && debtorIds.has(p.paid_to))
     ) {
-      if (pendingExpenses.length > 0 || reverseOffsetExpenses.length > 0) {
+      if (rawPendingExpenses.length > 0 || reverseOffsetExpenses.length > 0) {
         appliedPayments.push(p);
       } else {
         settledPayments.push(p);
@@ -875,25 +896,80 @@ export function calculatePairwiseDebtDetail(
     }
   });
 
-  const netPendingAmount = Math.round(pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0) * 100) / 100;
-  const totalPaymentsApplied = 0; // Already factored into split.pending_amount by calculateFifoSettledExpenses
-  const totalReverseOffsets = Math.round(reverseOffsetExpenses.reduce((sum, r) => sum + r.pendingAmount, 0) * 100) / 100;
-  const totalActiveRecoverable = Math.round((totalPaymentsApplied + totalReverseOffsets) * 100) / 100;
-
-  const netDirectBalance = Math.max(0, Math.round((netPendingAmount - totalActiveRecoverable) * 100) / 100);
-
   // Simplified balance from simplified engine
   const simplifiedPairs = calculateSimplifiedBalances(filteredExpenses, filteredPayments, profiles, groupId);
   const matchingSimplified = simplifiedPairs.find(
     (p) => p.debtor.id === debtor.id && p.creditor.id === creditor.id
   );
   const simplifiedAmount = matchingSimplified ? matchingSimplified.amount : 0;
-  const simplifiedDiff = Math.round((netDirectBalance - simplifiedAmount) * 100) / 100;
 
+  // In simplified mode, align pending expenses strictly with simplifiedAmount
+  const pendingExpenses: DebtBreakdownItem[] = [];
+
+  if (isSimplified) {
+    if (simplifiedAmount <= 0.009) {
+      // Everything is settled
+      rawPendingExpenses.forEach((item) => {
+        settledExpenses.push({
+          ...item,
+          pendingAmount: 0,
+          paidAmount: item.splitAmount,
+          isFullyPaid: true,
+          isPartiallyPaid: false,
+        });
+      });
+    } else {
+      // Allocate simplifiedAmount starting from newest active expenses
+      let remainingToCover = simplifiedAmount;
+      for (const item of rawPendingExpenses) {
+        if (remainingToCover <= 0.009) {
+          settledExpenses.push({
+            ...item,
+            pendingAmount: 0,
+            paidAmount: item.splitAmount,
+            isFullyPaid: true,
+            isPartiallyPaid: false,
+          });
+        } else {
+          const itemPending = Math.min(remainingToCover, item.pendingAmount);
+          const itemPaid = Math.max(0, Math.round((item.splitAmount - itemPending) * 100) / 100);
+          pendingExpenses.push({
+            ...item,
+            pendingAmount: itemPending,
+            paidAmount: itemPaid,
+            isFullyPaid: itemPending <= 0.009,
+            isPartiallyPaid: itemPaid > 0.009 && itemPending > 0.009,
+          });
+          remainingToCover = Math.max(0, Math.round((remainingToCover - itemPending) * 100) / 100);
+        }
+      }
+    }
+  } else {
+    rawPendingExpenses.forEach((item) => pendingExpenses.push(item));
+  }
+
+  // Re-sort after allocation
+  pendingExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
+  settledExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
+
+  const netPendingAmount = isSimplified
+    ? simplifiedAmount
+    : Math.round(pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0) * 100) / 100;
+  const totalPaymentsApplied = 0;
+  const totalReverseOffsets = isSimplified
+    ? 0
+    : Math.round(reverseOffsetExpenses.reduce((sum, r) => sum + r.pendingAmount, 0) * 100) / 100;
+  const totalActiveRecoverable = Math.round((totalPaymentsApplied + totalReverseOffsets) * 100) / 100;
+
+  const netDirectBalance = isSimplified
+    ? simplifiedAmount
+    : Math.max(0, Math.round((netPendingAmount - totalActiveRecoverable) * 100) / 100);
+
+  const simplifiedDiff = isSimplified ? 0 : Math.round((netDirectBalance - simplifiedAmount) * 100) / 100;
   const isFullySettled = (isSimplified ? simplifiedAmount : netDirectBalance) <= 0.009;
 
   let optimizationDetail: PairwiseDebtDetail['optimizationDetail'] = undefined;
-  if (isSimplified && Math.abs(simplifiedDiff) > 0.01) {
+  if (!isSimplified && Math.abs(simplifiedDiff) > 0.01) {
     optimizationDetail = {
       isOptimized: true,
       directBalance: netDirectBalance,
