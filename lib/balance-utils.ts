@@ -154,8 +154,12 @@ export function calculateManagedSummary(
  */
 export function calculateFifoSettledExpenses(
   expenses: Expense[],
-  payments: Payment[]
+  payments: Payment[],
+  profiles?: Profile[]
 ): Expense[] {
+  const sponsorshipMap = profiles ? buildSponsorshipMap(profiles) : new Map<string, string>();
+  const getFinancialActorId = (id: string) => sponsorshipMap.get(id) || id;
+
   // Deep clone expenses to not mutate original directly
   const clonedExpenses: Expense[] = expenses.map((e) => ({
     ...e,
@@ -186,9 +190,11 @@ export function calculateFifoSettledExpenses(
 
     // Initialize all splits
     gExps.forEach((exp) => {
+      const expPayerActor = getFinancialActorId(exp.paid_by);
       if (exp.splits) {
         exp.splits.forEach((s) => {
-          if (s.user_id === exp.paid_by) {
+          const splitDebtorActor = getFinancialActorId(s.user_id);
+          if (splitDebtorActor === expPayerActor) {
             s.paid_amount = s.amount_owed;
             s.pending_amount = 0;
             s.is_settled = true;
@@ -223,6 +229,8 @@ export function calculateFifoSettledExpenses(
       expense: Expense;
       debtorId: string;
       payerId: string;
+      debtorActor: string;
+      payerActor: string;
       amountOwed: number;
       paidAmount: number;
       pendingAmount: number;
@@ -236,17 +244,20 @@ export function calculateFifoSettledExpenses(
         const exp = item.expense;
         if (!exp.splits) return;
 
+        const expPayerActor = getFinancialActorId(exp.paid_by);
+
         exp.splits.forEach((s) => {
-          if (s.user_id === exp.paid_by || s.amount_owed <= 0.009) return;
+          const splitDebtorActor = getFinancialActorId(s.user_id);
+          if (splitDebtorActor === expPayerActor || s.amount_owed <= 0.009) return;
 
           let splitPending = s.amount_owed;
           let splitPaid = 0;
 
-          // 1. Direct mutual debt offset with previous debts where exp.paid_by owed s.user_id
+          // 1. Direct mutual debt offset with previous debts where expPayerActor owed splitDebtorActor
           for (const openSplit of activeSplits) {
             if (
-              openSplit.debtorId === exp.paid_by &&
-              openSplit.payerId === s.user_id &&
+              openSplit.debtorActor === expPayerActor &&
+              openSplit.payerActor === splitDebtorActor &&
               openSplit.pendingAmount > 0.009
             ) {
               const offset = Math.min(splitPending, openSplit.pendingAmount);
@@ -275,6 +286,8 @@ export function calculateFifoSettledExpenses(
               expense: exp,
               debtorId: s.user_id,
               payerId: exp.paid_by,
+              debtorActor: splitDebtorActor,
+              payerActor: expPayerActor,
               amountOwed: s.amount_owed,
               paidAmount: splitPaid,
               pendingAmount: splitPending,
@@ -286,13 +299,15 @@ export function calculateFifoSettledExpenses(
         const pay = item.payment;
         if (pay.amount <= 0.009) return;
 
+        const payDebtorActor = getFinancialActorId(pay.paid_by);
+        const payCreditorActor = getFinancialActorId(pay.paid_to);
         let rem = pay.amount;
 
-        // Phase 1: Direct pairwise settlement (pay.paid_by -> pay.paid_to)
+        // Phase 1: Direct pairwise settlement (payDebtorActor -> payCreditorActor)
         for (const openSplit of activeSplits) {
           if (
-            openSplit.debtorId === pay.paid_by &&
-            openSplit.payerId === pay.paid_to &&
+            openSplit.debtorActor === payDebtorActor &&
+            openSplit.payerActor === payCreditorActor &&
             openSplit.pendingAmount > 0.009
           ) {
             const take = Math.min(rem, openSplit.pendingAmount);
@@ -309,10 +324,48 @@ export function calculateFifoSettledExpenses(
           }
         }
 
-        // Phase 2: Group debt simplification settlement (payer settles remaining group debts)
+        // Phase 2: Debtor multi-party settlement in group (payer settles remaining debts in group)
         if (rem > 0.009) {
           for (const openSplit of activeSplits) {
-            if (openSplit.debtorId === pay.paid_by && openSplit.pendingAmount > 0.009) {
+            if (openSplit.debtorActor === payDebtorActor && openSplit.pendingAmount > 0.009) {
+              const take = Math.min(rem, openSplit.pendingAmount);
+              if (take > 0.009) {
+                openSplit.paidAmount = Math.round((openSplit.paidAmount + take) * 100) / 100;
+                openSplit.pendingAmount = Math.max(0, Math.round((openSplit.amountOwed - openSplit.paidAmount) * 100) / 100);
+                openSplit.split.paid_amount = openSplit.paidAmount;
+                openSplit.split.pending_amount = openSplit.pendingAmount;
+                openSplit.split.is_settled = openSplit.pendingAmount <= 0.009;
+
+                rem = Math.max(0, Math.round((rem - take) * 100) / 100);
+                if (rem <= 0.009) break;
+              }
+            }
+          }
+        }
+
+        // Phase 3: Creditor group reimbursement (payCreditorActor receives reimbursement for group expenses they funded)
+        if (rem > 0.009) {
+          for (const openSplit of activeSplits) {
+            if (openSplit.payerActor === payCreditorActor && openSplit.pendingAmount > 0.009) {
+              const take = Math.min(rem, openSplit.pendingAmount);
+              if (take > 0.009) {
+                openSplit.paidAmount = Math.round((openSplit.paidAmount + take) * 100) / 100;
+                openSplit.pendingAmount = Math.max(0, Math.round((openSplit.amountOwed - openSplit.paidAmount) * 100) / 100);
+                openSplit.split.paid_amount = openSplit.paidAmount;
+                openSplit.split.pending_amount = openSplit.pendingAmount;
+                openSplit.split.is_settled = openSplit.pendingAmount <= 0.009;
+
+                rem = Math.max(0, Math.round((rem - take) * 100) / 100);
+                if (rem <= 0.009) break;
+              }
+            }
+          }
+        }
+
+        // Phase 4: General group settlement pool
+        if (rem > 0.009) {
+          for (const openSplit of activeSplits) {
+            if (openSplit.pendingAmount > 0.009) {
               const take = Math.min(rem, openSplit.pendingAmount);
               if (take > 0.009) {
                 openSplit.paidAmount = Math.round((openSplit.paidAmount + take) * 100) / 100;
@@ -717,7 +770,7 @@ export function calculatePairwiseDebtDetail(
   const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
   // Run FIFO settlement engine on filtered transactions
-  const fifoSettledExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments);
+  const fifoSettledExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments, profiles);
 
   // Determine debtor and creditor ID sets
   const debtorIds = new Set<string>([debtor.id]);
@@ -934,7 +987,7 @@ export function calculateMemberAccountStatement(
   const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
   // Compute FIFO status for all expenses in this scope
-  const fifoExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments);
+  const fifoExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments, profiles);
 
   const pendingConsumedExpenses: DebtBreakdownItem[] = [];
   const settledConsumedExpenses: DebtBreakdownItem[] = [];

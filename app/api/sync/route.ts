@@ -351,7 +351,7 @@ export async function GET(req: NextRequest) {
     const payments = paymentData || [];
 
     // Calculate FIFO settlement status on all expenses using created_at entry order
-    const processedExpenses = calculateFifoSettledExpenses(expenses, payments);
+    const processedExpenses = calculateFifoSettledExpenses(expenses, payments, profiles);
 
     // 8. Expense Drafts (draftsData)
 
