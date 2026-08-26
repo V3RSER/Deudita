@@ -758,6 +758,7 @@ export interface PairwiseDebtDetail {
     directBalance: number;
     simplifiedBalance: number;
     difference: number;
+    isReduced?: boolean;
     explanation: string;
   };
 }
@@ -880,21 +881,35 @@ export function calculatePairwiseDebtDetail(
   });
 
   // 3. Direct payments between debtor and creditor
+  // Payments that were already fully consumed by historical settled expenses belong in settledPayments.
+  // Payments that apply to current active expenses or have unallocated credit belong in appliedPayments.
   const appliedPayments: Payment[] = [];
   const settledPayments: Payment[] = [];
 
+  const activeExpenseIds = new Set(rawPendingExpenses.map((r) => r.expense.id));
+  const activePartiallyPaidExpenses = rawPendingExpenses.filter((r) => r.isPartiallyPaid);
+
   filteredPayments.forEach((p) => {
-    if (
+    const isDirectPayment =
       (debtorIds.has(p.paid_by) && creditorIds.has(p.paid_to)) ||
-      (creditorIds.has(p.paid_by) && debtorIds.has(p.paid_to))
-    ) {
-      if (rawPendingExpenses.length > 0 || reverseOffsetExpenses.length > 0) {
+      (creditorIds.has(p.paid_by) && debtorIds.has(p.paid_to));
+
+    if (isDirectPayment) {
+      const isAppliedToActiveDebt =
+        activePartiallyPaidExpenses.length > 0 &&
+        activeExpenseIds.size > 0 &&
+        getEntryTimestamp(p) >=
+          Math.min(...rawPendingExpenses.map((e) => getEntryTimestamp(e.expense)));
+
+      if (isAppliedToActiveDebt) {
         appliedPayments.push(p);
       } else {
         settledPayments.push(p);
       }
     }
   });
+
+  const pendingExpenses: DebtBreakdownItem[] = [...rawPendingExpenses];
 
   // Simplified balance from simplified engine
   const simplifiedPairs = calculateSimplifiedBalances(filteredExpenses, filteredPayments, profiles, groupId);
@@ -903,82 +918,29 @@ export function calculatePairwiseDebtDetail(
   );
   const simplifiedAmount = matchingSimplified ? matchingSimplified.amount : 0;
 
-  // In simplified mode, align pending expenses strictly with simplifiedAmount
-  const pendingExpenses: DebtBreakdownItem[] = [];
-
-  if (isSimplified) {
-    if (simplifiedAmount <= 0.009) {
-      // Everything is settled
-      rawPendingExpenses.forEach((item) => {
-        settledExpenses.push({
-          ...item,
-          pendingAmount: 0,
-          paidAmount: item.splitAmount,
-          isFullyPaid: true,
-          isPartiallyPaid: false,
-        });
-      });
-    } else {
-      // Allocate simplifiedAmount starting from newest active expenses
-      let remainingToCover = simplifiedAmount;
-      for (const item of rawPendingExpenses) {
-        if (remainingToCover <= 0.009) {
-          settledExpenses.push({
-            ...item,
-            pendingAmount: 0,
-            paidAmount: item.splitAmount,
-            isFullyPaid: true,
-            isPartiallyPaid: false,
-          });
-        } else {
-          const itemPending = Math.min(remainingToCover, item.pendingAmount);
-          const itemPaid = Math.max(0, Math.round((item.splitAmount - itemPending) * 100) / 100);
-          pendingExpenses.push({
-            ...item,
-            pendingAmount: itemPending,
-            paidAmount: itemPaid,
-            isFullyPaid: itemPending <= 0.009,
-            isPartiallyPaid: itemPaid > 0.009 && itemPending > 0.009,
-          });
-          remainingToCover = Math.max(0, Math.round((remainingToCover - itemPending) * 100) / 100);
-        }
-      }
-    }
-  } else {
-    rawPendingExpenses.forEach((item) => pendingExpenses.push(item));
-  }
-
-  // Re-sort after allocation
-  pendingExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
-  settledExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
-
-  const netPendingAmount = isSimplified
-    ? simplifiedAmount
-    : Math.round(pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0) * 100) / 100;
-  const totalPaymentsApplied = 0;
-  const totalReverseOffsets = isSimplified
-    ? 0
-    : Math.round(reverseOffsetExpenses.reduce((sum, r) => sum + r.pendingAmount, 0) * 100) / 100;
+  const netPendingAmount = Math.round(pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0) * 100) / 100;
+  const totalReverseOffsets = Math.round(reverseOffsetExpenses.reduce((sum, r) => sum + r.pendingAmount, 0) * 100) / 100;
+  const totalPaymentsApplied = Math.round(
+    appliedPayments.reduce((sum, p) => sum + (p.amount || 0), 0) * 100
+  ) / 100;
   const totalActiveRecoverable = Math.round((totalPaymentsApplied + totalReverseOffsets) * 100) / 100;
 
-  const netDirectBalance = isSimplified
-    ? simplifiedAmount
-    : Math.max(0, Math.round((netPendingAmount - totalActiveRecoverable) * 100) / 100);
-
-  const simplifiedDiff = isSimplified ? 0 : Math.round((netDirectBalance - simplifiedAmount) * 100) / 100;
+  const netDirectBalance = Math.max(0, Math.round((netPendingAmount - totalActiveRecoverable) * 100) / 100);
+  const simplifiedDiff = Math.round((netDirectBalance - simplifiedAmount) * 100) / 100;
   const isFullySettled = (isSimplified ? simplifiedAmount : netDirectBalance) <= 0.009;
 
   let optimizationDetail: PairwiseDebtDetail['optimizationDetail'] = undefined;
-  if (!isSimplified && Math.abs(simplifiedDiff) > 0.01) {
+  if (isSimplified && Math.abs(simplifiedDiff) > 0.01) {
     optimizationDetail = {
       isOptimized: true,
       directBalance: netDirectBalance,
       simplifiedBalance: simplifiedAmount,
-      difference: simplifiedDiff,
+      difference: Math.abs(simplifiedDiff),
+      isReduced: simplifiedAmount < netDirectBalance,
       explanation:
-        simplifiedDiff > 0
-          ? `La simplificación de deudas reduce el pago directo de ${formatCurrency(netDirectBalance)} a ${formatCurrency(simplifiedAmount)} al compensar saldos compartidos dentro del grupo.`
-          : `El saldo simplificado es ${formatCurrency(simplifiedAmount)} considerando las transferencias consolidadas del grupo.`,
+        simplifiedAmount < netDirectBalance
+          ? `La simplificación inteligente de deudas reduce el pago directo de ${formatCurrency(netDirectBalance)} a ${formatCurrency(simplifiedAmount)} al compensar deudas y créditos cruzados con otros integrantes del grupo.`
+          : `El saldo simplificado consolidado es ${formatCurrency(simplifiedAmount)} considerando las transferencias optimizadas del grupo.`,
     };
   }
 

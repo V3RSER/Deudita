@@ -537,10 +537,10 @@ export function PairwiseDetailModal({
             {expandedSections.distribution && (
               <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
                 {/* Saldo Directo Card */}
-                <div className="bg-white rounded-2xl p-3.5 border border-zinc-200/80 shadow-2xs flex items-center justify-between">
+                <div className="bg-white rounded-2xl p-4 border border-zinc-200/80 shadow-2xs flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-bold text-zinc-800 block">Saldo directo 1 a 1</span>
-                    <span className="text-[11px] text-zinc-500">Consumos menos aportes directos entre ambos</span>
+                    <span className="text-xs font-extrabold text-zinc-900 block">Saldo directo 1 a 1</span>
+                    <span className="text-[11px] text-zinc-500">Consumos directos menos aportes directos entre ambos</span>
                   </div>
                   <span className="text-sm sm:text-base font-black text-zinc-900">
                     {formatCurrency(detail.netDirectBalance, currency)}
@@ -548,27 +548,99 @@ export function PairwiseDetailModal({
                 </div>
 
                 {isSimplified && detail.optimizationDetail ? (
-                  <div className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs">
-                    <div className="flex items-center space-x-2">
-                      <Network className="w-4 h-4 text-purple-700 shrink-0" />
-                      <h4 className="text-xs font-extrabold text-zinc-900">
-                        Compensación multilateral de deudas
-                      </h4>
+                  <div className="bg-white rounded-2xl border border-purple-200/90 p-4 sm:p-5 space-y-4 shadow-2xs">
+                    {/* Visual Flow / Triangulation Diagram */}
+                    <div className="bg-gradient-to-br from-purple-50/70 via-white to-sky-50/50 rounded-2xl p-4 border border-purple-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Network className="w-4 h-4 text-purple-700 shrink-0" />
+                          <span className="text-xs font-extrabold text-purple-950 uppercase tracking-wider">
+                            Esquema de Triangulación y Compensación
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-black bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-full border border-purple-200">
+                          {detail.optimizationDetail.difference > 0 ? 'Compensación multilateral' : 'Ajuste de grupo'}
+                        </span>
+                      </div>
+
+                      {/* Interactive Visual Graph Nodes */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pt-1">
+                        {/* Debtor Node */}
+                        <div className="bg-white rounded-xl p-3 border border-zinc-200 shadow-2xs flex items-center space-x-3">
+                          {debtorProfile.avatar_url ? (
+                            <Image
+                              src={debtorProfile.avatar_url}
+                              alt={debtorName}
+                              width={32}
+                              height={32}
+                              className="w-8 h-8 rounded-full object-cover shrink-0"
+                              unoptimized
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-[#581c87] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                              {getInitials(debtorName)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase text-zinc-400 block">Deudor</span>
+                            <span className="text-xs font-black text-zinc-900 truncate block">{debtorName}</span>
+                          </div>
+                        </div>
+
+                        {/* Central Flow / Bridge */}
+                        <div className="bg-purple-100/70 border border-purple-200/80 rounded-xl p-2.5 text-center flex flex-col items-center justify-center">
+                          <div className="flex items-center space-x-1.5 text-purple-900 font-extrabold text-[11px]">
+                            <span>Deuda 1 a 1:</span>
+                            <span>{formatCurrency(detail.netDirectBalance, currency)}</span>
+                          </div>
+                          <div className="flex items-center space-x-1 text-emerald-700 font-black text-xs my-0.5">
+                            <ArrowRight className="w-3.5 h-3.5" />
+                            <span>{detail.optimizationDetail.difference > 0 ? '-' : '+'}{formatCurrency(detail.optimizationDetail.difference, currency)}</span>
+                          </div>
+                          <span className="text-[10px] text-purple-700 font-medium">Compensado por grupo</span>
+                        </div>
+
+                        {/* Creditor Node */}
+                        <div className="bg-white rounded-xl p-3 border border-zinc-200 shadow-2xs flex items-center space-x-3">
+                          {creditorProfile.avatar_url ? (
+                            <Image
+                              src={creditorProfile.avatar_url}
+                              alt={creditorName}
+                              width={32}
+                              height={32}
+                              className="w-8 h-8 rounded-full object-cover shrink-0"
+                              unoptimized
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-slate-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                              {getInitials(creditorName)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase text-zinc-400 block">Acreedor</span>
+                            <span className="text-xs font-black text-zinc-900 truncate block">{creditorName}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Explanation box */}
+                      <p className="text-xs text-zinc-700 leading-relaxed bg-white/80 rounded-xl p-3 border border-purple-100/80">
+                        {detail.optimizationDetail.explanation}
+                      </p>
                     </div>
-                    <p className="text-xs text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-3 border border-zinc-100">
-                      {detail.optimizationDetail.explanation}
-                    </p>
                   </div>
                 ) : isSimplified ? (
                   <div className="p-4 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
                     <p className="font-medium text-zinc-600">
-                      No se requieren compensaciones adicionales para esta cuenta. El saldo liquidable coincide con los consumos y aportes directos.
+                      No se requieren compensaciones adicionales para esta cuenta. El saldo liquidable coincide exactamente con los consumos y aportes directos.
                     </p>
                   </div>
                 ) : (
                   <div className="p-4 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
                     <p className="font-medium text-zinc-600">
-                      En modo directo, todas las deudas se liquidan exclusivamente entre los dos integrantes involucrados.
+                      En modo directo, todas las deudas se liquidan exclusivamente entre los dos integrantes involucrados sin triangulaciones.
                     </p>
                   </div>
                 )}
