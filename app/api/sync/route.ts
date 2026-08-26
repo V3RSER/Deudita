@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
-import { calculateFifoSettledExpenses } from '@/lib/balance-utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -350,9 +349,6 @@ export async function GET(req: NextRequest) {
     // 7. Payments
     const payments = paymentData || [];
 
-    // Calculate FIFO settlement status on all expenses using created_at entry order
-    const processedExpenses = calculateFifoSettledExpenses(expenses, payments, profiles);
-
     // 8. Expense Drafts (draftsData)
 
     // 9. Notifications (notificationsData)
@@ -384,7 +380,7 @@ export async function GET(req: NextRequest) {
       profiles,
       groups,
       members,
-      expenses: processedExpenses,
+      expenses,
       payments,
       drafts: draftsData || [],
       notifications: notificationsData || [],

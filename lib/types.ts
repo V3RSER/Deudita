@@ -119,9 +119,6 @@ export interface ExpenseSplit {
   user_id: string;
   amount_owed: number;
   created_at: string;
-  paid_amount?: number;
-  pending_amount?: number;
-  is_settled?: boolean;
 }
 
 export interface Expense {
@@ -144,9 +141,6 @@ export interface Expense {
   items?: ExpenseItem[];
   splits?: ExpenseSplit[];
   audit_logs?: ExpenseAuditLog[];
-  is_settled?: boolean;
-  pending_amount?: number;
-  paid_amount?: number;
 }
 
 export interface ExpenseAuditLog {
@@ -212,11 +206,9 @@ export interface PairwiseBalance {
 
 export interface UserSummaryBalance {
   user: Profile;
-  totalPaid?: number;
-  totalOwedShare?: number;
+  totalPaid: number;
+  totalOwedShare: number;
   netBalance: number; // positive = others owe me, negative = I owe others
-  owedToUser?: number;
-  userOwes?: number;
   managedUsers?: Profile[];
   managedBy?: Profile;
 }
