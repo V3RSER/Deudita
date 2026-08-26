@@ -226,7 +226,7 @@ export function GenericExpenseList({
       <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-12 text-center text-zinc-500">
         <Receipt className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
         <h3 className="font-semibold text-zinc-900 text-base">No hay movimientos registrados</h3>
-        <p className="text-xs text-zinc-500 mt-1">Los gastos y abonos de deuda aparecerán aquí.</p>
+        <p className="text-xs text-zinc-500 mt-1">Los gastos y pagos de deuda aparecerán aquí.</p>
       </div>
     );
   }
@@ -729,8 +729,16 @@ export function GenericExpenseList({
                         <span className="text-sm font-bold text-zinc-900 leading-tight">
                           {formatCurrency(payment.amount, currency)}
                         </span>
-                        <span className="text-xs font-semibold text-emerald-600 leading-tight mt-0.5">
-                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'abono'}
+                        <span
+                          className={`text-xs font-semibold leading-tight mt-0.5 ${
+                            isIpaid
+                              ? 'text-emerald-600'
+                              : isIreceived
+                              ? 'text-emerald-600'
+                              : 'text-zinc-400'
+                          }`}
+                        >
+                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'no participas'}
                         </span>
                       </div>
 
@@ -741,8 +749,8 @@ export function GenericExpenseList({
                             <button
                               type="button"
                               onClick={() => onEditPayment(payment)}
-                              title="Editar abono"
-                              aria-label="Editar abono"
+                              title="Editar pago"
+                              aria-label="Editar pago"
                               className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -752,8 +760,8 @@ export function GenericExpenseList({
                             <button
                               type="button"
                               onClick={() => setPaymentToDelete(payment.id)}
-                              title="Eliminar abono"
-                              aria-label="Eliminar abono"
+                              title="Eliminar pago"
+                              aria-label="Eliminar pago"
                               className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -806,7 +814,7 @@ export function GenericExpenseList({
                             {/* Center Amount Transfer Display */}
                             <div className="flex flex-col items-center justify-center text-center p-2">
                               <div className="inline-flex items-center space-x-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/80 mb-1">
-                                <span>Monto abonado</span>
+                                <span>Monto pagado</span>
                                 <ArrowRight className="w-3.5 h-3.5 text-emerald-600" />
                               </div>
                               <span className="text-lg sm:text-xl font-black text-zinc-900 tracking-tight">

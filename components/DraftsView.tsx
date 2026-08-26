@@ -45,7 +45,7 @@ export function DraftsView({
 
     addDraft({
       gmail_message_id: `msg_gmail_${Date.now()}`,
-      raw_snippet: `Confirmación de pago a ${pick.name} recibida por e-mail el ${new Date().toLocaleDateString()}. Total abonado ${formatCurrency(pick.amount)}.`,
+      raw_snippet: `Confirmación de pago a ${pick.name} recibida por e-mail el ${new Date().toLocaleDateString()}. Total pagado ${formatCurrency(pick.amount)}.`,
       detected_amount: pick.amount,
       detected_merchant: pick.name,
       detected_date: new Date().toISOString().split('T')[0],

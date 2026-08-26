@@ -457,7 +457,7 @@ export function GroupDetail({
     }
   });
 
-  // 3. Group payments (abonos)
+  // 3. Group payments
   groupPayments.forEach((p) => {
     const payer = profiles.find((prof) => prof.id === p.paid_by) ?? null;
     const receiver = profiles.find((prof) => prof.id === p.paid_to) ?? null;
@@ -469,11 +469,11 @@ export function GroupDetail({
       user: payer,
       userName: payerName,
       timestamp: p.created_at || p.payment_date,
-      titleAction: `registró un abono a ${receiverName}`,
-      targetTitle: p.note ?? 'Abono registrado',
+      titleAction: `registró un pago a ${receiverName}`,
+      targetTitle: p.note ?? 'Pago registrado',
       amount: p.amount,
       currency: effectiveCurrency,
-      badgeLabel: 'Abono',
+      badgeLabel: 'Pago',
       badgeClass: 'bg-sky-50 text-sky-800 border-sky-200',
       IconComponent: HandCoins,
       iconBgClass: 'bg-sky-50',
@@ -1075,7 +1075,7 @@ export function GroupDetail({
                               <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto" />
                               <p className="text-xs font-bold text-zinc-900">No hay gastos pendientes</p>
                               <p className="text-[11px] text-zinc-500">
-                                Los abonos registrados cubren los gastos anteriores.
+                                Los pagos registrados cubren los gastos anteriores.
                               </p>
                             </div>
                           ) : (

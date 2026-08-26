@@ -41,7 +41,7 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
 }
 
 /**
- * Returns the timestamp corresponding to the entry/creation date (fecha de ingreso).
+ * Returns the timestamp corresponding to the entry/creation date (fecha de ingreso al sistema).
  * Strictly prioritizes created_at over expense_date/payment_date so that backdated
  * expenses entered today are treated as recent in the FIFO debt queue.
  */
@@ -148,6 +148,167 @@ export function calculateManagedSummary(
   return details;
 }
 
+/**
+ * Calculates FIFO settlement status for all expenses based on payments and mutual expense compensations.
+ * Strictly uses entry timestamp (created_at) so that new expenses are never settled by older payments.
+ */
+export function calculateFifoSettledExpenses(
+  expenses: Expense[],
+  payments: Payment[]
+): Expense[] {
+  // Deep clone expenses to not mutate original directly
+  const clonedExpenses: Expense[] = expenses.map((e) => ({
+    ...e,
+    splits: e.splits ? e.splits.map((s) => ({ ...s })) : [],
+  }));
+
+  // Group by group_id (or null/standalone)
+  const groupExpensesMap = new Map<string, Expense[]>();
+  clonedExpenses.forEach((exp) => {
+    const gId = exp.group_id || 'none';
+    if (!groupExpensesMap.has(gId)) groupExpensesMap.set(gId, []);
+    groupExpensesMap.get(gId)!.push(exp);
+  });
+
+  const groupPaymentsMap = new Map<string, Payment[]>();
+  payments.forEach((pay) => {
+    const gId = pay.group_id || 'none';
+    if (!groupPaymentsMap.has(gId)) groupPaymentsMap.set(gId, []);
+    groupPaymentsMap.get(gId)!.push(pay);
+  });
+
+  // Process FIFO per group scope
+  groupExpensesMap.forEach((gExps, gId) => {
+    const gPays = groupPaymentsMap.get(gId) || [];
+
+    // Collect all pairwise relationships
+    const pairKeys = new Set<string>();
+
+    gExps.forEach((exp) => {
+      if (!exp.splits) return;
+      exp.splits.forEach((s) => {
+        if (s.user_id !== exp.paid_by) {
+          pairKeys.add(`${s.user_id}->${exp.paid_by}`);
+          pairKeys.add(`${exp.paid_by}->${s.user_id}`);
+        }
+      });
+    });
+
+    gPays.forEach((pay) => {
+      if (pay.paid_by !== pay.paid_to) {
+        pairKeys.add(`${pay.paid_by}->${pay.paid_to}`);
+        pairKeys.add(`${pay.paid_to}->${pay.paid_by}`);
+      }
+    });
+
+    // For every directed pair Debtor -> Creditor:
+    const processedPairs = new Set<string>();
+
+    pairKeys.forEach((pairKey) => {
+      if (processedPairs.has(pairKey)) return;
+      const [debtorId, creditorId] = pairKey.split('->');
+      const canonicalKey = [debtorId, creditorId].sort().join(':');
+      if (processedPairs.has(canonicalKey)) return;
+      processedPairs.add(canonicalKey);
+
+      // 1. Debts where Creditor paid and Debtor owes
+      const debtsDToC: { split: ExpenseSplit; exp: Expense; entryTime: number; amount: number }[] = [];
+      // 2. Debts where Debtor paid and Creditor owes (reverse debts)
+      const debtsCToD: { split: ExpenseSplit; exp: Expense; entryTime: number; amount: number }[] = [];
+
+      gExps.forEach((exp) => {
+        if (!exp.splits) return;
+        const entryTime = getEntryTimestamp(exp);
+        exp.splits.forEach((s) => {
+          if (exp.paid_by === creditorId && s.user_id === debtorId && s.amount_owed > 0) {
+            debtsDToC.push({ split: s, exp, entryTime, amount: s.amount_owed });
+          } else if (exp.paid_by === debtorId && s.user_id === creditorId && s.amount_owed > 0) {
+            debtsCToD.push({ split: s, exp, entryTime, amount: s.amount_owed });
+          }
+        });
+      });
+
+      // Sort debts strictly by entry timestamp ascending (oldest first)
+      debtsDToC.sort((a, b) => a.entryTime - b.entryTime);
+      debtsCToD.sort((a, b) => a.entryTime - b.entryTime);
+
+      // Payments from D to C
+      const paymentsDToC: { pay: Payment; entryTime: number; amount: number }[] = [];
+      // Payments from C to D
+      const paymentsCToD: { pay: Payment; entryTime: number; amount: number }[] = [];
+
+      gPays.forEach((pay) => {
+        const entryTime = getEntryTimestamp(pay);
+        if (pay.paid_by === debtorId && pay.paid_to === creditorId && pay.amount > 0) {
+          paymentsDToC.push({ pay, entryTime, amount: pay.amount });
+        } else if (pay.paid_by === creditorId && pay.paid_to === debtorId && pay.amount > 0) {
+          paymentsCToD.push({ pay, entryTime, amount: pay.amount });
+        }
+      });
+
+      paymentsDToC.sort((a, b) => a.entryTime - b.entryTime);
+      paymentsCToD.sort((a, b) => a.entryTime - b.entryTime);
+
+      // Net payments between D and C:
+      let totalPayDToC = paymentsDToC.reduce((sum, p) => sum + p.amount, 0);
+      let totalPayCToD = paymentsCToD.reduce((sum, p) => sum + p.amount, 0);
+
+      // Calculate net payment pool available from D to C and from C to D
+      let netPayPoolDToC = Math.max(0, totalPayDToC - totalPayCToD);
+      let netPayPoolCToD = Math.max(0, totalPayCToD - totalPayDToC);
+
+      // Total credits from reverse debts:
+      // In FIFO, we can also offset mutual debts between D and C:
+      // If D owes C $100 (entered Jan 1) and C owes D $40 (entered Jan 2):
+      // D owes C a net of $60. The $40 reverse debt covers the first $40 of Jan 1 debt.
+      let totalReverseDebtForDToC = debtsCToD.reduce((sum, d) => sum + d.amount, 0);
+      let totalReverseDebtForCToD = debtsDToC.reduce((sum, d) => sum + d.amount, 0);
+
+      let totalCreditForD = netPayPoolDToC + totalReverseDebtForDToC;
+      let totalCreditForC = netPayPoolCToD + totalReverseDebtForCToD;
+
+      // Apply credits to debtsDToC in FIFO order
+      let remainingCreditForD = totalCreditForD;
+      debtsDToC.forEach((item) => {
+        const debtAmt = item.amount;
+        const covered = Math.min(debtAmt, remainingCreditForD);
+        item.split.paid_amount = Math.round(covered * 100) / 100;
+        item.split.pending_amount = Math.max(0, Math.round((debtAmt - covered) * 100) / 100);
+        item.split.is_settled = item.split.pending_amount <= 0.009;
+        remainingCreditForD -= covered;
+      });
+
+      // Apply credits to debtsCToD in FIFO order
+      let remainingCreditForC = totalCreditForC;
+      debtsCToD.forEach((item) => {
+        const debtAmt = item.amount;
+        const covered = Math.min(debtAmt, remainingCreditForC);
+        item.split.paid_amount = Math.round(covered * 100) / 100;
+        item.split.pending_amount = Math.max(0, Math.round((debtAmt - covered) * 100) / 100);
+        item.split.is_settled = item.split.pending_amount <= 0.009;
+        remainingCreditForC -= covered;
+      });
+    });
+
+    // Update expense top-level pending_amount and is_settled
+    gExps.forEach((exp) => {
+      if (exp.splits && exp.splits.length > 0) {
+        const totalPending = exp.splits.reduce((sum, s) => sum + (s.pending_amount ?? (s.amount_owed || 0)), 0);
+        const totalPaid = exp.splits.reduce((sum, s) => sum + (s.paid_amount ?? 0), 0);
+        exp.pending_amount = Math.round(totalPending * 100) / 100;
+        exp.paid_amount = Math.round(totalPaid * 100) / 100;
+        exp.is_settled = exp.pending_amount <= 0.009;
+      } else {
+        exp.pending_amount = 0;
+        exp.paid_amount = exp.total_amount;
+        exp.is_settled = true;
+      }
+    });
+  });
+
+  return clonedExpenses;
+}
+
 export function calculateDirectBalances(
   expenses: Expense[],
   payments: Payment[],
@@ -250,171 +411,7 @@ export function calculateDirectBalances(
     });
   });
 
-  return pairwiseResults.sort((a, b) => b.amount - a.amount);
-}
-
-function simplifySingleScopeBalances(
-  expenses: Expense[],
-  payments: Payment[],
-  profiles: Profile[],
-  groupId?: string
-): PairwiseBalance[] {
-  const profileMap = new Map<string, Profile>();
-  profiles.forEach((p) => profileMap.set(p.id, p));
-
-  const sponsorshipMap = buildSponsorshipMap(profiles);
-  const getEffectiveId = (id: string) => sponsorshipMap.get(id) || id;
-
-  const netMap = new Map<string, number>();
-  const individualNetMap = new Map<string, number>();
-
-  expenses.forEach((exp) => {
-    const rawPayer = exp.paid_by;
-    const effPayer = getEffectiveId(rawPayer);
-
-    if (exp.splits && exp.splits.length > 0) {
-      let totalSplits = 0;
-      exp.splits.forEach((split) => {
-        const rawDebtor = split.user_id;
-        const effDebtor = getEffectiveId(rawDebtor);
-
-        totalSplits += split.amount_owed;
-        if (split.amount_owed > 0) {
-          const currentEffDebtor = netMap.get(effDebtor) ?? 0;
-          netMap.set(effDebtor, currentEffDebtor - split.amount_owed);
-
-          const currentRawDebtor = individualNetMap.get(rawDebtor) ?? 0;
-          individualNetMap.set(rawDebtor, currentRawDebtor - split.amount_owed);
-        }
-      });
-      const currentEffPayer = netMap.get(effPayer) ?? 0;
-      netMap.set(effPayer, currentEffPayer + totalSplits);
-
-      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
-      individualNetMap.set(rawPayer, currentRawPayer + totalSplits);
-    } else {
-      const currentEffPayer = netMap.get(effPayer) ?? 0;
-      netMap.set(effPayer, currentEffPayer + exp.total_amount);
-
-      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
-      individualNetMap.set(rawPayer, currentRawPayer + exp.total_amount);
-    }
-  });
-
-  payments.forEach((p) => {
-    const rawPayer = p.paid_by;
-    const rawReceiver = p.paid_to;
-    const effPayer = getEffectiveId(rawPayer);
-    const effReceiver = getEffectiveId(rawReceiver);
-
-    if (effPayer !== effReceiver) {
-      const currentPayer = netMap.get(effPayer) ?? 0;
-      netMap.set(effPayer, currentPayer + p.amount);
-
-      const currentReceiver = netMap.get(effReceiver) ?? 0;
-      netMap.set(effReceiver, currentReceiver - p.amount);
-    }
-
-    if (rawPayer !== rawReceiver) {
-      const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
-      individualNetMap.set(rawPayer, currentRawPayer + p.amount);
-
-      const currentRawReceiver = individualNetMap.get(rawReceiver) ?? 0;
-      individualNetMap.set(rawReceiver, currentRawReceiver - p.amount);
-    }
-  });
-
-  interface BalanceNode {
-    id: string;
-    amount: number;
-  }
-
-  const creditors: BalanceNode[] = [];
-  const debtors: BalanceNode[] = [];
-
-  netMap.forEach((net, userId) => {
-    const rounded = Math.round(net * 100) / 100;
-    if (rounded > 0.01) {
-      creditors.push({ id: userId, amount: rounded });
-    } else if (rounded < -0.01) {
-      debtors.push({ id: userId, amount: Math.abs(rounded) });
-    }
-  });
-
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
-
-  const simplified: PairwiseBalance[] = [];
-  let cIdx = 0;
-  let dIdx = 0;
-
-  while (cIdx < creditors.length && dIdx < debtors.length) {
-    const creditor = creditors[cIdx];
-    const debtor = debtors[dIdx];
-
-    const settleAmount = Math.min(creditor.amount, debtor.amount);
-    const roundedSettle = Math.round(settleAmount * 100) / 100;
-
-    if (roundedSettle > 0.01) {
-      const creditorProfile = profileMap.get(creditor.id);
-      const debtorProfile = profileMap.get(debtor.id);
-
-      if (creditorProfile && debtorProfile) {
-        // Collect managed profiles and breakdown for debtor
-        const debtorManagedIds = debtorProfile.managed_user_ids?.filter((id) => id !== debtorProfile.id) || [];
-        const debtorManagedProfiles = debtorManagedIds.map((id) => profileMap.get(id)!).filter(Boolean);
-
-        const debtorBreakdown = [
-          {
-            profile: debtorProfile,
-            amount: Math.abs(Math.min(0, individualNetMap.get(debtorProfile.id) ?? 0)),
-            isSelf: true,
-          },
-          ...debtorManagedProfiles.map((dep) => ({
-            profile: dep,
-            amount: Math.abs(Math.min(0, individualNetMap.get(dep.id) ?? 0)),
-            isSelf: false,
-          })),
-        ].filter((b) => b.amount > 0);
-
-        // Collect managed profiles and breakdown for creditor
-        const creditorManagedIds = creditorProfile.managed_user_ids?.filter((id) => id !== creditorProfile.id) || [];
-        const creditorManagedProfiles = creditorManagedIds.map((id) => profileMap.get(id)!).filter(Boolean);
-
-        const creditorBreakdown = [
-          {
-            profile: creditorProfile,
-            amount: Math.max(0, individualNetMap.get(creditorProfile.id) ?? 0),
-            isSelf: true,
-          },
-          ...creditorManagedProfiles.map((dep) => ({
-            profile: dep,
-            amount: Math.max(0, individualNetMap.get(dep.id) ?? 0),
-            isSelf: false,
-          })),
-        ].filter((b) => b.amount > 0);
-
-        simplified.push({
-          creditor: creditorProfile,
-          debtor: debtorProfile,
-          amount: roundedSettle,
-          group_id: groupId,
-          includedDebtors: debtorManagedProfiles && debtorManagedProfiles.length > 0 ? debtorManagedProfiles : undefined,
-          includedCreditors: creditorManagedProfiles && creditorManagedProfiles.length > 0 ? creditorManagedProfiles : undefined,
-          debtorBreakdown: debtorBreakdown.length > 1 ? debtorBreakdown : undefined,
-          creditorBreakdown: creditorBreakdown.length > 1 ? creditorBreakdown : undefined,
-        });
-      }
-    }
-
-    creditor.amount = Math.round((creditor.amount - settleAmount) * 100) / 100;
-    debtor.amount = Math.round((debtor.amount - settleAmount) * 100) / 100;
-
-    if (creditor.amount <= 0.01) cIdx++;
-    if (debtor.amount <= 0.01) dIdx++;
-  }
-
-  return simplified;
+  return pairwiseResults;
 }
 
 export function calculateSimplifiedBalances(
@@ -423,335 +420,245 @@ export function calculateSimplifiedBalances(
   profiles: Profile[],
   groupId?: string
 ): PairwiseBalance[] {
-  if (groupId) {
-    const filteredExpenses = expenses.filter((e) => e.group_id === groupId);
-    const filteredPayments = payments.filter((p) => p.group_id === groupId);
-    return simplifySingleScopeBalances(filteredExpenses, filteredPayments, profiles, groupId).sort(
-      (a, b) => b.amount - a.amount
-    );
-  }
-
-  // Consolidated across multiple groups: simplify within each group then aggregate
-  const groupIds = new Set<string>();
-  expenses.forEach((e) => {
-    if (e.group_id) groupIds.add(e.group_id);
-  });
-  payments.forEach((p) => {
-    if (p.group_id) groupIds.add(p.group_id);
-  });
-
   const profileMap = new Map<string, Profile>();
   profiles.forEach((p) => profileMap.set(p.id, p));
 
-  const combinedDebtMap = new Map<string, number>();
-  const debtorBreakdownMap = new Map<string, ManagedContribution[]>();
-  const creditorBreakdownMap = new Map<string, ManagedContribution[]>();
-  const includedDebtorsMap = new Map<string, Profile[]>();
-  const includedCreditorsMap = new Map<string, Profile[]>();
+  const sponsorshipMap = buildSponsorshipMap(profiles);
+  const getFinancialActorId = (id: string) => sponsorshipMap.get(id) || id;
 
-  const getPairKey = (debtorId: string, creditorId: string) => `${debtorId}->${creditorId}`;
+  // Determine groups to process
+  const targetGroupIds = groupId
+    ? [groupId]
+    : Array.from(
+        new Set([
+          ...expenses.map((e) => e.group_id).filter(Boolean),
+          ...payments.map((p) => p.group_id).filter(Boolean),
+        ])
+      );
 
-  groupIds.forEach((gid) => {
-    const gExpenses = expenses.filter((e) => e.group_id === gid);
-    const gPayments = payments.filter((p) => p.group_id === gid);
-    const gSimplified = simplifySingleScopeBalances(gExpenses, gPayments, profiles, gid);
+  if (targetGroupIds.length === 0 && (expenses.length > 0 || payments.length > 0)) {
+    targetGroupIds.push('__all__');
+  }
 
-    gSimplified.forEach((item) => {
-      const key = getPairKey(item.debtor.id, item.creditor.id);
-      const current = combinedDebtMap.get(key) ?? 0;
-      combinedDebtMap.set(key, current + item.amount);
+  const allPairwise: PairwiseBalance[] = [];
 
-      if (item.debtorBreakdown) {
-        debtorBreakdownMap.set(key, item.debtorBreakdown);
-      }
-      if (item.creditorBreakdown) {
-        creditorBreakdownMap.set(key, item.creditorBreakdown);
-      }
-      if (item.includedDebtors) {
-        includedDebtorsMap.set(key, item.includedDebtors);
-      }
-      if (item.includedCreditors) {
-        includedCreditorsMap.set(key, item.includedCreditors);
+  targetGroupIds.forEach((gId) => {
+    const groupExpenses = gId === '__all__' ? expenses : expenses.filter((e) => e.group_id === gId);
+    const groupPayments = gId === '__all__' ? payments : payments.filter((p) => p.group_id === gId);
+
+    // Track total spent per individual
+    const individualDebts = new Map<string, number>();
+    const individualCredits = new Map<string, number>();
+
+    // Consolidated actor net balance:
+    const actorNetMap = new Map<string, number>();
+
+    const addActorAmount = (actorId: string, amount: number) => {
+      actorNetMap.set(actorId, (actorNetMap.get(actorId) ?? 0) + amount);
+    };
+
+    groupExpenses.forEach((exp) => {
+      const payerActorId = getFinancialActorId(exp.paid_by);
+      addActorAmount(payerActorId, exp.total_amount);
+
+      const currentCred = individualCredits.get(exp.paid_by) ?? 0;
+      individualCredits.set(exp.paid_by, currentCred + exp.total_amount);
+
+      if (exp.splits) {
+        exp.splits.forEach((split) => {
+          const debtorActorId = getFinancialActorId(split.user_id);
+          addActorAmount(debtorActorId, -split.amount_owed);
+
+          const currentDebt = individualDebts.get(split.user_id) ?? 0;
+          individualDebts.set(split.user_id, currentDebt + split.amount_owed);
+        });
       }
     });
-  });
 
-  // Net across groups if symmetric debts exist
-  const results: PairwiseBalance[] = [];
-  const processedPairs = new Set<string>();
+    groupPayments.forEach((payment) => {
+      const payerActorId = getFinancialActorId(payment.paid_by);
+      const receiverActorId = getFinancialActorId(payment.paid_to);
 
-  profiles.forEach((p1) => {
-    profiles.forEach((p2) => {
-      if (p1.id === p2.id) return;
-      const pairId = [p1.id, p2.id].sort().join(':');
-      if (processedPairs.has(pairId)) return;
-      processedPairs.add(pairId);
+      addActorAmount(payerActorId, payment.amount);
+      addActorAmount(receiverActorId, -payment.amount);
 
-      const k1To2 = getPairKey(p1.id, p2.id);
-      const k2To1 = getPairKey(p2.id, p1.id);
+      const currentCred = individualCredits.get(payment.paid_by) ?? 0;
+      individualCredits.set(payment.paid_by, currentCred + payment.amount);
 
-      const d1To2 = combinedDebtMap.get(k1To2) ?? 0;
-      const d2To1 = combinedDebtMap.get(k2To1) ?? 0;
-      const net = d1To2 - d2To1;
+      const currentDebt = individualDebts.get(payment.paid_to) ?? 0;
+      individualDebts.set(payment.paid_to, currentDebt + payment.amount);
+    });
 
-      if (Math.abs(net) > 0.01) {
-        if (net > 0) {
-          const creditor = profileMap.get(p2.id);
-          const debtor = profileMap.get(p1.id);
-          if (creditor && debtor) {
-            results.push({
-              creditor,
-              debtor,
-              amount: Math.round(net * 100) / 100,
-              debtorBreakdown: debtorBreakdownMap.get(k1To2),
-              creditorBreakdown: creditorBreakdownMap.get(k1To2),
-              includedDebtors: includedDebtorsMap.get(k1To2),
-              includedCreditors: includedCreditorsMap.get(k1To2),
+    // Build debtors and creditors lists
+    const debtors: { id: string; amount: number }[] = [];
+    const creditors: { id: string; amount: number }[] = [];
+
+    actorNetMap.forEach((net, actorId) => {
+      const rounded = Math.round(net * 100) / 100;
+      if (rounded < -0.01) {
+        debtors.push({ id: actorId, amount: -rounded });
+      } else if (rounded > 0.01) {
+        creditors.push({ id: actorId, amount: rounded });
+      }
+    });
+
+    // Greedy matching for minimal transactions
+    debtors.sort((a, b) => b.amount - a.amount);
+    creditors.sort((a, b) => b.amount - a.amount);
+
+    let dIdx = 0;
+    let cIdx = 0;
+
+    while (dIdx < debtors.length && cIdx < creditors.length) {
+      const debtorObj = debtors[dIdx];
+      const creditorObj = creditors[cIdx];
+
+      const settleAmount = Math.min(debtorObj.amount, creditorObj.amount);
+      const roundedSettle = Math.round(settleAmount * 100) / 100;
+
+      if (roundedSettle > 0.01) {
+        const debtorProfile = profileMap.get(debtorObj.id);
+        const creditorProfile = profileMap.get(creditorObj.id);
+
+        if (debtorProfile && creditorProfile) {
+          // Identify included dependents for sponsor
+          const includedDebtors: Profile[] = [];
+          const debtorBreakdown: { profile: Profile; amount: number; isSelf?: boolean }[] = [];
+
+          if (debtorProfile.managed_user_ids && debtorProfile.managed_user_ids.length > 0) {
+            debtorProfile.managed_user_ids.forEach((depId) => {
+              const depProf = profileMap.get(depId);
+              if (depProf && depProf.id !== debtorProfile.id) {
+                const depSpent = individualDebts.get(depId) ?? 0;
+                const depPaid = individualCredits.get(depId) ?? 0;
+                const depNetOwed = Math.max(0, depSpent - depPaid);
+                if (depNetOwed > 0.01) {
+                  includedDebtors.push(depProf);
+                  debtorBreakdown.push({ profile: depProf, amount: Math.round(depNetOwed * 100) / 100 });
+                }
+              }
             });
           }
-        } else {
-          const creditor = profileMap.get(p1.id);
-          const debtor = profileMap.get(p2.id);
-          if (creditor && debtor) {
-            results.push({
-              creditor,
-              debtor,
-              amount: Math.round(Math.abs(net) * 100) / 100,
-              debtorBreakdown: debtorBreakdownMap.get(k2To1),
-              creditorBreakdown: creditorBreakdownMap.get(k2To1),
-              includedDebtors: includedDebtorsMap.get(k2To1),
-              includedCreditors: includedCreditorsMap.get(k2To1),
-            });
-          }
+
+          allPairwise.push({
+            creditor: creditorProfile,
+            debtor: debtorProfile,
+            amount: roundedSettle,
+            group_id: gId === '__all__' ? undefined : gId,
+            includedDebtors: includedDebtors.length > 0 ? includedDebtors : undefined,
+            debtorBreakdown: debtorBreakdown.length > 0 ? debtorBreakdown : undefined,
+          });
         }
       }
-    });
+
+      debtorObj.amount = Math.round((debtorObj.amount - settleAmount) * 100) / 100;
+      creditorObj.amount = Math.round((creditorObj.amount - settleAmount) * 100) / 100;
+
+      if (debtorObj.amount <= 0.01) dIdx++;
+      if (creditorObj.amount <= 0.01) cIdx++;
+    }
   });
 
-  return results.sort((a, b) => b.amount - a.amount);
+  return allPairwise;
 }
 
 export function calculatePairwiseBalances(
   expenses: Expense[],
   payments: Payment[],
   profiles: Profile[],
-  groupId?: string,
-  simplify: boolean = true
+  groupId?: string
 ): PairwiseBalance[] {
-  if (simplify) {
-    return calculateSimplifiedBalances(expenses, payments, profiles, groupId);
-  }
-  return calculateDirectBalances(expenses, payments, profiles, groupId);
+  return calculateSimplifiedBalances(expenses, payments, profiles, groupId);
 }
 
 export function calculateUserSummaries(
   expenses: Expense[],
   payments: Payment[],
   profiles: Profile[],
+  currentUserId: string,
   groupId?: string
 ): UserSummaryBalance[] {
-  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+  const pairwise = calculateSimplifiedBalances(expenses, payments, profiles, groupId);
+  const summaryMap = new Map<string, { owedToMe: number; iOwe: number }>();
 
-  const profileMap = new Map<string, Profile>();
-  profiles.forEach((p) => profileMap.set(p.id, p));
-
-  const sponsorshipMap = buildSponsorshipMap(profiles);
-
-  return profiles.map((user) => {
-    const isManaged = sponsorshipMap.has(user.id);
-    const sponsorId = sponsorshipMap.get(user.id);
-    const sponsorProfile = sponsorId ? profileMap.get(sponsorId) : undefined;
-
-    // Users this person takes responsibility for
-    const managedIds = user.managed_user_ids && Array.isArray(user.managed_user_ids)
-      ? user.managed_user_ids.filter((id) => id !== user.id)
-      : [];
-    const managedProfiles = managedIds.map((id) => profileMap.get(id)!).filter(Boolean);
-
-    // If managed by someone else, individual settlement balance is delegated to sponsor
-    // All IDs to sum for this user's effective calculations:
-    const targetUserIds = [user.id, ...managedIds];
-
-    let totalPaid = 0;
-    let totalOwedShare = 0;
-    let totalPaymentsMade = 0;
-    let totalPaymentsReceived = 0;
-
-    filteredExpenses.forEach((exp) => {
-      if (targetUserIds.includes(exp.paid_by)) {
-        totalPaid += exp.total_amount;
-      }
-      if (exp.splits) {
-        exp.splits.forEach((s) => {
-          if (targetUserIds.includes(s.user_id)) {
-            totalOwedShare += s.amount_owed;
-          }
-        });
-      }
-    });
-
-    filteredPayments.forEach((p) => {
-      if (targetUserIds.includes(p.paid_by)) {
-        totalPaymentsMade += p.amount;
-      }
-      if (targetUserIds.includes(p.paid_to)) {
-        totalPaymentsReceived += p.amount;
-      }
-    });
-
-    const netBalance = isManaged
-      ? 0
-      : (totalPaid + totalPaymentsMade) - (totalOwedShare + totalPaymentsReceived);
-
-    return {
-      user,
-      totalPaid,
-      totalOwedShare,
-      netBalance,
-      managedUsers: managedProfiles.length > 0 ? managedProfiles : undefined,
-      managedBy: sponsorProfile,
-    };
+  profiles.forEach((p) => {
+    if (p.id !== currentUserId) {
+      summaryMap.set(p.id, { owedToMe: 0, iOwe: 0 });
+    }
   });
+
+  pairwise.forEach((pair) => {
+    if (pair.creditor.id === currentUserId && pair.debtor.id !== currentUserId) {
+      const entry = summaryMap.get(pair.debtor.id) ?? { owedToMe: 0, iOwe: 0 };
+      entry.owedToMe += pair.amount;
+      summaryMap.set(pair.debtor.id, entry);
+    } else if (pair.debtor.id === currentUserId && pair.creditor.id !== currentUserId) {
+      const entry = summaryMap.get(pair.creditor.id) ?? { owedToMe: 0, iOwe: 0 };
+      entry.iOwe += pair.amount;
+      summaryMap.set(pair.creditor.id, entry);
+    }
+  });
+
+  const results: UserSummaryBalance[] = [];
+  summaryMap.forEach((val, userId) => {
+    const profile = profiles.find((p) => p.id === userId);
+    if (profile) {
+      const net = val.owedToMe - val.iOwe;
+      results.push({
+        user: profile,
+        netBalance: Math.round(net * 100) / 100,
+        owedToUser: Math.round(val.owedToMe * 100) / 100,
+        userOwes: Math.round(val.iOwe * 100) / 100,
+      });
+    }
+  });
+
+  return results;
 }
 
 export interface DebtBreakdownItem {
   expense: Expense;
-  split: ExpenseSplit;
-  originalAmount: number;
+  splitAmount: number;
   paidAmount: number;
   pendingAmount: number;
   isFullyPaid: boolean;
   isPartiallyPaid: boolean;
-  participantProfile?: Profile;
-  payerProfile?: Profile;
-  isManagedParticipant?: boolean;
-  groupName?: string;
-  currency?: string;
-}
-
-export interface AppliedPaymentItem {
-  payment: Payment;
-  amountApplied: number;
-  payerProfile?: Profile;
-  receiverProfile?: Profile;
-  groupName?: string;
-}
-
-export interface ReverseOffsetItem {
-  expense: Expense;
-  split: ExpenseSplit;
-  amount: number;
-  payerProfile?: Profile;
-  participantProfile?: Profile;
-  isManagedParticipant?: boolean;
-  groupName?: string;
-}
-
-export interface ThirdPartyTriangulationExpense {
-  expense: Expense;
-  split?: ExpenseSplit;
-  description: string;
-  totalExpenseAmount: number;
-  originalDebtAmount: number;
-  allocatedDiscountAmount: number;
-  role:
-    | 'debtor_owes_third_party'
-    | 'third_party_owes_creditor'
-    | 'creditor_owes_third_party'
-    | 'third_party_owes_debtor'
-    | 'group_shared';
-  payerName: string;
-  payerProfile?: Profile;
-  participantName: string;
-  participantProfile?: Profile;
-  date: string;
-  groupName?: string;
-  currency?: string;
-  receiptUrl?: string;
-}
-
-export interface ThirdPartyTriangulation {
-  thirdParty: Profile;
-  thirdPartyName: string;
-  amount: number;
-  isDiscount: boolean;
-  role:
-    | 'debtor_pays_third_party'
-    | 'third_party_pays_creditor'
-    | 'mutual_cross_compensation'
-    | 'debt_consolidation';
-  shortSummary: string;
-  explanation: string;
-  directDebtsWithDebtor: number;
-  directDebtsWithCreditor: number;
-  expenses: ThirdPartyTriangulationExpense[];
-}
-
-export interface GroupOptimizationDetail {
-  simplifiedDiff: number;
-  isDiscount: boolean;
-  directBalance: number;
-  simplifiedAmount: number;
-  totalCompensated: number;
-  triangulations: ThirdPartyTriangulation[];
-  summaryNarrative: string;
-}
-
-export interface SimplificationExpenseItem {
-  expense: Expense;
-  split?: ExpenseSplit;
-  relevantAmount: number;
-  role: 'debtor_owes_third_party' | 'creditor_paid_third_party';
-  payerProfile?: Profile;
-  participantProfile?: Profile;
-  groupName?: string;
-  currency?: string;
-  explanation: string;
-}
-
-export interface TriangularDebtChain {
-  thirdParty: Profile;
-  groupName?: string;
-  currency?: string;
-  debtorOwesThirdPartyAmount: number;
-  thirdPartyOwesCreditorAmount: number;
-  debtorToThirdPartyExpenses: {
-    expense: Expense;
-    split?: ExpenseSplit;
-    amount: number;
-    groupName?: string;
-    currency?: string;
-  }[];
-  thirdPartyToCreditorExpenses: {
-    expense: Expense;
-    split?: ExpenseSplit;
-    amount: number;
-    groupName?: string;
-    currency?: string;
-  }[];
-  explanation: string;
+  actualDebtor: Profile;
+  actualCreditor: Profile;
+  isManagedDebtor?: boolean;
+  isManagedCreditor?: boolean;
 }
 
 export interface PairwiseDebtDetail {
   debtor: Profile;
   creditor: Profile;
-  totalOriginalDebt: number;
-  totalPaymentsApplied: number;
-  totalReverseOffsets: number;
-  netPendingAmount: number;
-  netDirectBalance: number;
   pendingExpenses: DebtBreakdownItem[];
   settledExpenses: DebtBreakdownItem[];
-  allExpenses: DebtBreakdownItem[];
-  appliedPayments: AppliedPaymentItem[];
-  settledPayments: AppliedPaymentItem[];
-  reverseOffsetExpenses: ReverseOffsetItem[];
-  simplificationExpenses: SimplificationExpenseItem[];
-  triangularChains: TriangularDebtChain[];
-  optimizationDetail?: GroupOptimizationDetail;
+  appliedPayments: Payment[];
+  settledPayments: Payment[];
+  reverseOffsetExpenses: DebtBreakdownItem[];
+  netPendingAmount: number;
+  totalPaymentsApplied: number;
+  totalReverseOffsets: number;
+  totalActiveRecoverable: number;
+  netDirectBalance: number;
+  simplifiedAmount: number;
+  simplifiedDiff: number;
+  isSimplified: boolean;
+  isFullySettled: boolean;
+  optimizationDetail?: {
+    isOptimized: boolean;
+    directBalance: number;
+    simplifiedBalance: number;
+    difference: number;
+    explanation: string;
+  };
 }
 
+/**
+ * Calculates detailed breakdown between two profiles using pure FIFO debt settlement.
+ * Only unsettled expenses (pendingAmount > 0) are listed in pendingExpenses.
+ */
 export function calculatePairwiseDebtDetail(
   debtor: Profile,
   creditor: Profile,
@@ -760,847 +667,350 @@ export function calculatePairwiseDebtDetail(
   profiles: Profile[],
   groups: Group[],
   isSimplified: boolean = true,
-  groupId?: string,
-  skipSimplification: boolean = false
+  groupId?: string
 ): PairwiseDebtDetail {
-  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
-
   const profileMap = new Map<string, Profile>();
   profiles.forEach((p) => profileMap.set(p.id, p));
 
-  const groupMap = new Map<string, Group>();
-  groups.forEach((g) => groupMap.set(g.id, g));
+  const sponsorshipMap = buildSponsorshipMap(profiles);
 
-  // Debtor IDs & Creditor IDs
-  const debtorManagedIds = (debtor.managed_user_ids || []).filter((id) => id !== debtor.id);
-  const creditorManagedIds = (creditor.managed_user_ids || []).filter((id) => id !== creditor.id);
+  // Filter expenses and payments by group if applicable
+  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
-  const debtorIds = isSimplified ? [debtor.id, ...debtorManagedIds] : [debtor.id];
-  const creditorIds = isSimplified ? [creditor.id, ...creditorManagedIds] : [creditor.id];
+  // Determine debtor and creditor ID sets
+  const debtorIds = new Set<string>([debtor.id]);
+  const creditorIds = new Set<string>([creditor.id]);
 
-  // 1. Primary expense splits: Creditor paid, Debtor owes
-  interface RawDebtSplit {
-    expense: Expense;
-    split: ExpenseSplit;
-    originalAmount: number;
-    participantProfile?: Profile;
-    payerProfile?: Profile;
-    isManagedParticipant?: boolean;
-    date: string;
-    entryTime: number;
-    groupName?: string;
-    currency?: string;
+  if (isSimplified) {
+    if (debtor.managed_user_ids) {
+      debtor.managed_user_ids.forEach((id) => debtorIds.add(id));
+    }
+    if (creditor.managed_user_ids) {
+      creditor.managed_user_ids.forEach((id) => creditorIds.add(id));
+    }
   }
 
-  const rawPrimaryDebts: RawDebtSplit[] = [];
+  // 1. Primary debts: expenses paid by creditorIds where debtorIds participated
+  const rawPrimaryDebts: {
+    expense: Expense;
+    split: ExpenseSplit;
+    entryTime: number;
+    actualDebtor: Profile;
+    actualCreditor: Profile;
+  }[] = [];
 
   filteredExpenses.forEach((exp) => {
-    if (creditorIds.includes(exp.paid_by) && exp.splits) {
+    if (creditorIds.has(exp.paid_by) && exp.splits) {
+      const actualCreditor = profileMap.get(exp.paid_by) || creditor;
+      const entryTime = getEntryTimestamp(exp);
       exp.splits.forEach((s) => {
-        if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
-          const g = groupMap.get(exp.group_id);
-          const entryTime = getEntryTimestamp(exp);
+        if (debtorIds.has(s.user_id) && s.user_id !== exp.paid_by && s.amount_owed > 0) {
+          const actualDebtor = profileMap.get(s.user_id) || debtor;
           rawPrimaryDebts.push({
             expense: exp,
             split: s,
-            originalAmount: s.amount_owed,
-            participantProfile: profileMap.get(s.user_id),
-            payerProfile: profileMap.get(exp.paid_by),
-            isManagedParticipant: s.user_id !== debtor.id,
-            date: exp.expense_date || exp.created_at || '1970-01-01',
             entryTime,
-            groupName: g?.name,
-            currency: g?.currency || 'COP',
+            actualDebtor,
+            actualCreditor,
           });
         }
       });
     }
   });
 
-  // Sort chronological ASC by entryTime (created_at) so FIFO settlement covers oldest entered expenses first
-  rawPrimaryDebts.sort((a, b) => {
-    const diff = a.entryTime - b.entryTime;
-    if (diff !== 0) return diff;
-    return a.originalAmount - b.originalAmount;
+  // Sort primary debts by entry timestamp ascending (oldest first for FIFO)
+  rawPrimaryDebts.sort((a, b) => a.entryTime - b.entryTime);
+
+  // 2. Direct payments: Debtor -> Creditor
+  const rawPaymentsDToC: { pay: Payment; entryTime: number; amount: number }[] = [];
+  const rawPaymentsCToD: { pay: Payment; entryTime: number; amount: number }[] = [];
+
+  filteredPayments.forEach((p) => {
+    const entryTime = getEntryTimestamp(p);
+    if (debtorIds.has(p.paid_by) && creditorIds.has(p.paid_to) && p.amount > 0) {
+      rawPaymentsDToC.push({ pay: p, entryTime, amount: p.amount });
+    } else if (creditorIds.has(p.paid_by) && debtorIds.has(p.paid_to) && p.amount > 0) {
+      rawPaymentsCToD.push({ pay: p, entryTime, amount: p.amount });
+    }
   });
 
-  // 2. Direct Payments: Debtor paid to Creditor
-  interface RawPaymentItem {
-    payment: Payment;
-    amount: number;
-    payerProfile?: Profile;
-    receiverProfile?: Profile;
-    groupName?: string;
-    date: string;
-    entryTime: number;
-  }
+  rawPaymentsDToC.sort((a, b) => a.entryTime - b.entryTime);
+  rawPaymentsCToD.sort((a, b) => a.entryTime - b.entryTime);
 
-  const rawPayments: RawPaymentItem[] = [];
-  let directPaymentsFromDebtor = 0;
+  // Deduct reverse payments from direct payments
+  let reversePaymentDeduction = rawPaymentsCToD.reduce((sum, p) => sum + p.amount, 0);
+  const effectivePayments: { pay: Payment; entryTime: number; amount: number }[] = [];
 
-  filteredPayments.forEach((pay) => {
-    if (debtorIds.includes(pay.paid_by) && creditorIds.includes(pay.paid_to) && pay.amount > 0) {
-      directPaymentsFromDebtor += pay.amount;
-      const g = groupMap.get(pay.group_id);
-      const entryTime = getEntryTimestamp(pay);
-      rawPayments.push({
-        payment: pay,
-        amount: pay.amount,
-        payerProfile: profileMap.get(pay.paid_by),
-        receiverProfile: profileMap.get(pay.paid_to),
-        groupName: g?.name,
-        date: pay.payment_date || pay.created_at || '1970-01-01',
-        entryTime,
+  rawPaymentsDToC.forEach((pObj) => {
+    if (reversePaymentDeduction <= 0) {
+      effectivePayments.push(pObj);
+    } else if (pObj.amount <= reversePaymentDeduction) {
+      reversePaymentDeduction -= pObj.amount;
+    } else {
+      effectivePayments.push({
+        pay: pObj.pay,
+        entryTime: pObj.entryTime,
+        amount: Math.round((pObj.amount - reversePaymentDeduction) * 100) / 100,
       });
+      reversePaymentDeduction = 0;
     }
   });
 
-  // Payments from Creditor to Debtor (if any, reduce offset pool)
-  let reversePayments = 0;
-  filteredPayments.forEach((pay) => {
-    if (creditorIds.includes(pay.paid_by) && debtorIds.includes(pay.paid_to)) {
-      reversePayments += pay.amount;
-    }
-  });
-
-  // Sort payments chronological ASC by entryTime (created_at)
-  rawPayments.sort((a, b) => a.entryTime - b.entryTime);
-
-  // 3. Reverse expense splits: Debtor paid, Creditor owes (offsets debtor's balance)
-  interface RawReverseOffset {
+  // 3. Reverse offsets: expenses paid by debtorIds where creditorIds participated
+  const rawReverseOffsets: {
     expense: Expense;
     split: ExpenseSplit;
-    amount: number;
-    payerProfile?: Profile;
-    participantProfile?: Profile;
-    isManagedParticipant?: boolean;
-    groupName?: string;
-    date: string;
     entryTime: number;
-  }
+    actualDebtor: Profile;
+    actualCreditor: Profile;
+  }[] = [];
 
-  const rawReverseOffsets: RawReverseOffset[] = [];
   filteredExpenses.forEach((exp) => {
-    if (debtorIds.includes(exp.paid_by) && exp.splits) {
+    if (debtorIds.has(exp.paid_by) && exp.splits) {
+      const actualPayer = profileMap.get(exp.paid_by) || debtor;
+      const entryTime = getEntryTimestamp(exp);
       exp.splits.forEach((s) => {
-        if (creditorIds.includes(s.user_id) && s.amount_owed > 0) {
-          const g = groupMap.get(exp.group_id);
-          const entryTime = getEntryTimestamp(exp);
+        if (creditorIds.has(s.user_id) && s.user_id !== exp.paid_by && s.amount_owed > 0) {
+          const actualParticipant = profileMap.get(s.user_id) || creditor;
           rawReverseOffsets.push({
             expense: exp,
             split: s,
-            amount: s.amount_owed,
-            payerProfile: profileMap.get(exp.paid_by),
-            participantProfile: profileMap.get(s.user_id),
-            isManagedParticipant: s.user_id !== creditor.id,
-            groupName: g?.name,
-            date: exp.expense_date || exp.created_at || '1970-01-01',
             entryTime,
+            actualDebtor: actualParticipant,
+            actualCreditor: actualPayer,
           });
         }
       });
     }
   });
 
-  // Sort reverse offsets chronological ASC by entryTime (created_at)
   rawReverseOffsets.sort((a, b) => a.entryTime - b.entryTime);
 
-  // 4. Build unified offset pool (payments + reverse offsets) in chronological order
-  interface OffsetPoolItem {
+  // Total credit pool from Debtor to Creditor (Payments + Reverse expenses)
+  const offsetPool: {
     type: 'payment' | 'reverse_offset';
     id: string;
-    date: string;
     entryTime: number;
+    amount: number;
     originalAmount: number;
-    remainingAmount: number;
-    appliedToActive: number;
-    consumedBySettled: number;
-    payment?: RawPaymentItem;
-    reverseOffset?: RawReverseOffset;
-  }
+    paymentRef?: Payment;
+    expenseRef?: Expense;
+    splitRef?: ExpenseSplit;
+    actualDebtor?: Profile;
+    actualCreditor?: Profile;
+  }[] = [];
 
-  const offsetPool: OffsetPoolItem[] = [];
-
-  // Reduce reverse payments from raw payments first (oldest first)
-  let remainingReversePaymentDeduction = reversePayments;
-  rawPayments.forEach((p, idx) => {
-    let effectiveAmount = p.amount;
-    if (remainingReversePaymentDeduction > 0) {
-      const deduct = Math.min(effectiveAmount, remainingReversePaymentDeduction);
-      effectiveAmount -= deduct;
-      remainingReversePaymentDeduction -= deduct;
-    }
-    if (effectiveAmount > 0.009) {
-      offsetPool.push({
-        type: 'payment',
-        id: p.payment.id || `pay_${idx}`,
-        date: p.date,
-        entryTime: p.entryTime,
-        originalAmount: effectiveAmount,
-        remainingAmount: effectiveAmount,
-        appliedToActive: 0,
-        consumedBySettled: 0,
-        payment: p,
-      });
-    }
+  effectivePayments.forEach((p) => {
+    offsetPool.push({
+      type: 'payment',
+      id: p.pay.id,
+      entryTime: p.entryTime,
+      amount: p.amount,
+      originalAmount: p.pay.amount,
+      paymentRef: p.pay,
+    });
   });
 
-  rawReverseOffsets.forEach((r, idx) => {
+  rawReverseOffsets.forEach((ro) => {
     offsetPool.push({
       type: 'reverse_offset',
-      id: `${r.expense.id}_${r.split.user_id}_${idx}`,
-      date: r.date,
-      entryTime: r.entryTime,
-      originalAmount: r.amount,
-      remainingAmount: r.amount,
-      appliedToActive: 0,
-      consumedBySettled: 0,
-      reverseOffset: r,
+      id: `${ro.expense.id}_${ro.split.id}`,
+      entryTime: ro.entryTime,
+      amount: ro.split.amount_owed,
+      originalAmount: ro.split.amount_owed,
+      expenseRef: ro.expense,
+      splitRef: ro.split,
+      actualDebtor: ro.actualDebtor,
+      actualCreditor: ro.actualCreditor,
     });
   });
 
-  // Sort offset pool chronological ASC by entryTime (created_at)
+  // Sort offset pool by entry timestamp ascending
   offsetPool.sort((a, b) => a.entryTime - b.entryTime);
 
-  // 5. FIFO Matching of offsets against primary debts
-  const calculatedDebts: DebtBreakdownItem[] = [];
+  // 4. Match primary debts with offset pool in strict FIFO order
+  const calculatedPrimaryDebts: DebtBreakdownItem[] = [];
 
-  rawPrimaryDebts.forEach((pDebt) => {
-    let debtRemaining = Math.round(pDebt.originalAmount * 100) / 100;
-    let debtPaid = 0;
-    const currentMatches: { offset: OffsetPoolItem; amount: number }[] = [];
+  rawPrimaryDebts.forEach((debt) => {
+    const splitAmount = debt.split.amount_owed;
+    let paidAmount = 0;
 
-    for (const offset of offsetPool) {
-      if (debtRemaining <= 0.009) break;
-      if (offset.remainingAmount > 0.009) {
-        const take = Math.min(debtRemaining, offset.remainingAmount);
-        debtRemaining = Math.round((debtRemaining - take) * 100) / 100;
-        debtPaid = Math.round((debtPaid + take) * 100) / 100;
-        offset.remainingAmount = Math.round((offset.remainingAmount - take) * 100) / 100;
-        currentMatches.push({ offset, amount: take });
+    for (const credit of offsetPool) {
+      if (credit.amount > 0.009) {
+        const remainingToPay = splitAmount - paidAmount;
+        const take = Math.min(remainingToPay, credit.amount);
+        paidAmount += take;
+        credit.amount = Math.round((credit.amount - take) * 100) / 100;
+
+        if (paidAmount >= splitAmount - 0.009) {
+          paidAmount = splitAmount;
+          break;
+        }
       }
     }
 
-    const isFullyPaid = debtRemaining < 0.009;
-    const isPartiallyPaid = debtPaid > 0.009 && !isFullyPaid;
+    const pendingAmount = Math.max(0, Math.round((splitAmount - paidAmount) * 100) / 100);
+    const isFullyPaid = pendingAmount <= 0.009;
+    const isPartiallyPaid = paidAmount > 0.009 && !isFullyPaid;
 
-    calculatedDebts.push({
-      expense: pDebt.expense,
-      split: pDebt.split,
-      originalAmount: pDebt.originalAmount,
-      paidAmount: debtPaid,
-      pendingAmount: isFullyPaid ? 0 : debtRemaining,
+    calculatedPrimaryDebts.push({
+      expense: debt.expense,
+      splitAmount,
+      paidAmount: Math.round(paidAmount * 100) / 100,
+      pendingAmount,
       isFullyPaid,
       isPartiallyPaid,
-      participantProfile: pDebt.participantProfile,
-      payerProfile: pDebt.payerProfile,
-      isManagedParticipant: pDebt.isManagedParticipant,
-      groupName: pDebt.groupName,
-      currency: pDebt.currency,
+      actualDebtor: debt.actualDebtor,
+      actualCreditor: debt.actualCreditor,
+      isManagedDebtor: debt.actualDebtor.id !== debtor.id,
+      isManagedCreditor: debt.actualCreditor.id !== creditor.id,
     });
-
-    if (isFullyPaid) {
-      currentMatches.forEach((m) => {
-        m.offset.consumedBySettled = Math.round((m.offset.consumedBySettled + m.amount) * 100) / 100;
-      });
-    } else {
-      currentMatches.forEach((m) => {
-        m.offset.appliedToActive = Math.round((m.offset.appliedToActive + m.amount) * 100) / 100;
-      });
-    }
   });
 
-  // If there are unconsumed offsets remaining in pool (e.g. overpayment or advance abono), they apply to active
-  offsetPool.forEach((offset) => {
-    if (offset.remainingAmount > 0.009) {
-      offset.appliedToActive = Math.round((offset.appliedToActive + offset.remainingAmount) * 100) / 100;
-    }
-  });
-
-  // 6. Extract active items vs fully settled historical items
-  const pendingExpenses = calculatedDebts
+  // Separate pending vs settled expenses
+  // Sort pending by entry timestamp descending (newest first for UI display)
+  const pendingExpenses = calculatedPrimaryDebts
     .filter((d) => d.pendingAmount > 0.009)
-    .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
+    .sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
 
-  const settledExpenses = calculatedDebts
+  const settledExpenses = calculatedPrimaryDebts
     .filter((d) => d.isFullyPaid)
-    .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
+    .sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
 
-  const appliedPayments: AppliedPaymentItem[] = offsetPool
-    .filter((o) => o.type === 'payment' && o.appliedToActive > 0.009 && o.payment)
-    .map((o) => ({
-      payment: o.payment!.payment,
-      amountApplied: o.appliedToActive,
-      payerProfile: o.payment!.payerProfile,
-      receiverProfile: o.payment!.receiverProfile,
-      groupName: o.payment!.groupName,
-    }))
-    .sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime());
+  // Determine applied vs settled payments
+  const appliedPayments: Payment[] = [];
+  const settledPayments: Payment[] = [];
 
-  const settledPayments: AppliedPaymentItem[] = offsetPool
-    .filter((o) => o.type === 'payment' && o.consumedBySettled > 0.009 && o.payment)
-    .map((o) => ({
-      payment: o.payment!.payment,
-      amountApplied: o.consumedBySettled,
-      payerProfile: o.payment!.payerProfile,
-      receiverProfile: o.payment!.receiverProfile,
-      groupName: o.payment!.groupName,
-    }))
-    .sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime());
-
-  const reverseOffsets: ReverseOffsetItem[] = offsetPool
-    .filter((o) => o.type === 'reverse_offset' && o.appliedToActive > 0.009 && o.reverseOffset)
-    .map((o) => ({
-      expense: o.reverseOffset!.expense,
-      split: o.reverseOffset!.split,
-      amount: o.appliedToActive,
-      payerProfile: o.reverseOffset!.payerProfile,
-      participantProfile: o.reverseOffset!.participantProfile,
-      isManagedParticipant: o.reverseOffset!.isManagedParticipant,
-      groupName: o.reverseOffset!.groupName,
-    }))
-    .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
-
-  const totalOriginalDebt = pendingExpenses.reduce((sum, d) => sum + d.originalAmount, 0);
-  const totalPaymentsApplied = appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
-  const totalReverseOffsets = reverseOffsets.reduce((sum, r) => sum + r.amount, 0);
-
-  // Direct 1-to-1 balance between debtor and creditor
-  const directPair = calculateDirectBalances(filteredExpenses, filteredPayments, profiles, groupId).find(
-    (pb) => pb.debtor.id === debtor.id && pb.creditor.id === creditor.id
-  );
-  const netDirectBalance = directPair ? directPair.amount : 0;
-  const netPendingAmount = Math.max(0, netDirectBalance);
-
-  // 7. Group optimization: Active simplification expenses, third-party triangulations & coherent allocation
-  const simplificationExpenses: SimplificationExpenseItem[] = [];
-  const seenExpSplitKeys = new Set<string>();
-  let optimizationDetail: GroupOptimizationDetail | undefined = undefined;
-
-  if (isSimplified && !skipSimplification) {
-    // 1. Calculate simplified balances in this scope
-    const simplifiedBalances = calculateSimplifiedBalances(
-      filteredExpenses,
-      filteredPayments,
-      profiles,
-      groupId
-    );
-
-    // Find simplified edge for (debtor -> creditor)
-    const simplifiedEdge = simplifiedBalances.find(
-      (b) => b.debtor.id === debtor.id && b.creditor.id === creditor.id
-    );
-    const simplifiedAmount = simplifiedEdge ? simplifiedEdge.amount : 0;
-    const simplifiedDiff = Math.round((simplifiedAmount - netDirectBalance) * 100) / 100;
-    const hasAdjustment = Math.abs(simplifiedDiff) >= 0.01;
-    const isDiscount = simplifiedDiff < 0;
-    const totalDiff = Math.abs(simplifiedDiff);
-
-    // Find third parties
-    const otherProfiles = profiles.filter(
-      (p) => !debtorIds.includes(p.id) && !creditorIds.includes(p.id)
-    );
-
-    interface CandidateTP {
-      tp: Profile;
-      dToTp: number;
-      tpToD: number;
-      tpToC: number;
-      cToTp: number;
-      sDToTp: number;
-      sTpToC: number;
-      weight: number;
-      allocatedAmount: number;
-      dToTpDetail: PairwiseDebtDetail;
-      tpToDDetail: PairwiseDebtDetail;
-      tpToCDetail: PairwiseDebtDetail;
-      cToTpDetail: PairwiseDebtDetail;
-    }
-
-    const candidates: CandidateTP[] = [];
-
-    otherProfiles.forEach((tp) => {
-      // Direct relationships
-      const dToTpDetail = calculatePairwiseDebtDetail(
-        debtor,
-        tp,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const tpToDDetail = calculatePairwiseDebtDetail(
-        tp,
-        debtor,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const tpToCDetail = calculatePairwiseDebtDetail(
-        tp,
-        creditor,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-      const cToTpDetail = calculatePairwiseDebtDetail(
-        creditor,
-        tp,
-        expenses,
-        payments,
-        profiles,
-        groups,
-        false,
-        groupId,
-        true
-      );
-
-      const dToTp = dToTpDetail.netDirectBalance > 0.009 ? dToTpDetail.netDirectBalance : 0;
-      const tpToD = tpToDDetail.netDirectBalance > 0.009 ? tpToDDetail.netDirectBalance : 0;
-      const tpToC = tpToCDetail.netDirectBalance > 0.009 ? tpToCDetail.netDirectBalance : 0;
-      const cToTp = cToTpDetail.netDirectBalance > 0.009 ? cToTpDetail.netDirectBalance : 0;
-
-      const sDToTp =
-        simplifiedBalances.find((b) => b.debtor.id === debtor.id && b.creditor.id === tp.id)?.amount ||
-        0;
-      const sTpToC =
-        simplifiedBalances.find((b) => b.debtor.id === tp.id && b.creditor.id === creditor.id)?.amount ||
-        0;
-
-      let weight = 0;
-      if (isDiscount) {
-        weight =
-          (sTpToC > 0 ? sTpToC * 3 : 0) +
-          (sDToTp > 0 ? sDToTp * 3 : 0) +
-          (tpToC > 0 ? tpToC * 2 : 0) +
-          (dToTp > 0 ? dToTp * 2 : 0) +
-          (tpToD > 0 ? tpToD : 0) +
-          (cToTp > 0 ? cToTp : 0);
+  offsetPool.forEach((item) => {
+    if (item.type === 'payment' && item.paymentRef) {
+      if (item.amount > 0.009 || pendingExpenses.length > 0) {
+        appliedPayments.push(item.paymentRef);
       } else {
-        weight =
-          (dToTp > 0 ? dToTp * 2 : 0) +
-          (tpToC > 0 ? tpToC * 2 : 0) +
-          (sDToTp > 0 ? sDToTp : 0) +
-          (sTpToC > 0 ? sTpToC : 0);
+        settledPayments.push(item.paymentRef);
       }
-
-      candidates.push({
-        tp,
-        dToTp,
-        tpToD,
-        tpToC,
-        cToTp,
-        sDToTp,
-        sTpToC,
-        weight,
-        allocatedAmount: 0,
-        dToTpDetail,
-        tpToDDetail,
-        tpToCDetail,
-        cToTpDetail,
-      });
-
-      // Keep legacy simplificationExpenses for backwards compatibility
-      if (dToTpDetail.netDirectBalance > 0.009) {
-        dToTpDetail.pendingExpenses.forEach((pExp) => {
-          const splitKey = `${pExp.expense.id}:${pExp.split.user_id}:debtor_owes`;
-          if (!seenExpSplitKeys.has(splitKey)) {
-            seenExpSplitKeys.add(splitKey);
-            simplificationExpenses.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              relevantAmount: pExp.pendingAmount,
-              role: 'debtor_owes_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency || 'COP',
-              explanation: `${pExp.participantProfile?.full_name || debtor.full_name} debe a ${pExp.payerProfile?.full_name || tp.full_name}`,
-            });
-          }
-        });
-      }
-
-      if (tpToCDetail.netDirectBalance > 0.009) {
-        tpToCDetail.pendingExpenses.forEach((pExp) => {
-          const splitKey = `${pExp.expense.id}:${pExp.split.user_id}:creditor_paid`;
-          if (!seenExpSplitKeys.has(splitKey)) {
-            seenExpSplitKeys.add(splitKey);
-            simplificationExpenses.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              relevantAmount: pExp.pendingAmount,
-              role: 'creditor_paid_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency || 'COP',
-              explanation: `${pExp.participantProfile?.full_name || tp.full_name} debe a ${pExp.payerProfile?.full_name || creditor.full_name}`,
-            });
-          }
-        });
-      }
-    });
-
-    if (hasAdjustment) {
-      // Filter candidates with positive weight
-      let activeCandidates = candidates.filter((c) => c.weight > 0.001);
-      if (activeCandidates.length === 0 && candidates.length > 0) {
-        candidates.forEach((c) => (c.weight = 1));
-        activeCandidates = candidates;
-      }
-
-      const totalWeight = activeCandidates.reduce((acc, c) => acc + c.weight, 0) || 1;
-
-      // Proportional allocation of totalDiff
-      activeCandidates.forEach((c) => {
-        c.allocatedAmount = Math.round((totalDiff * (c.weight / totalWeight)) * 100) / 100;
-      });
-
-      // Fix rounding errors so sum is exactly totalDiff
-      const allocatedSum = activeCandidates.reduce((acc, c) => acc + c.allocatedAmount, 0);
-      const remainder = Math.round((totalDiff - allocatedSum) * 100) / 100;
-      if (Math.abs(remainder) >= 0.01 && activeCandidates.length > 0) {
-        activeCandidates.sort((a, b) => b.weight - a.weight);
-        activeCandidates[0].allocatedAmount = Math.round(
-          (activeCandidates[0].allocatedAmount + remainder) * 100
-        ) / 100;
-      }
-
-      const triangulations: ThirdPartyTriangulation[] = [];
-
-      activeCandidates.forEach((cand) => {
-        if (cand.allocatedAmount <= 0.009) return;
-
-        const tpName = cand.tp.full_name || 'Tercero';
-        const dName = debtor.full_name || 'Deudor';
-        const cName = creditor.full_name || 'Acreedor';
-
-        let role: ThirdPartyTriangulation['role'] = 'mutual_cross_compensation';
-        let shortSummary = '';
-        let explanation = '';
-
-        if (isDiscount) {
-          if (cand.sTpToC > 0 || cand.tpToC > 0) {
-            role = 'third_party_pays_creditor';
-            shortSummary = `${tpName} le transfiere directamente a ${cName}`;
-            explanation = `${tpName} tiene consumos por saldar con ${cName}. Al hacer que ${tpName} le pague a ${cName} directamente, se descuentan ${formatCurrency(
-              cand.allocatedAmount
-            )} de lo que ${dName} necesita transferirle a ${cName}.`;
-          } else if (cand.sDToTp > 0 || cand.dToTp > 0) {
-            role = 'debtor_pays_third_party';
-            shortSummary = `${dName} le transfiere directamente a ${tpName}`;
-            explanation = `${dName} compensa pagos directamente con ${tpName}. Como ${dName} ya salda ${formatCurrency(
-              cand.allocatedAmount
-            )} con ${tpName}, ese valor se descuenta de la cuenta que ${dName} tenía pendiente con ${cName}.`;
-          } else {
-            role = 'mutual_cross_compensation';
-            shortSummary = `Compensación cruzada con ${tpName}`;
-            explanation = `Las cuentas cruzadas de gastos compartidos entre ${dName}, ${cName} y ${tpName} se cancelan mutuamente en el grupo, liberando ${formatCurrency(
-              cand.allocatedAmount
-            )} de esta transferencia directa.`;
-          }
-        } else {
-          role = 'debt_consolidation';
-          shortSummary = `${dName} consolida pagos de ${tpName} hacia ${cName}`;
-          explanation = `Para reducir transferencias en el grupo, ${dName} unifica y asume una transferencia adicional de ${formatCurrency(
-            cand.allocatedAmount
-          )} hacia ${cName} en representación de ${tpName}.`;
-        }
-
-        // Find relevant active expenses for this candidate
-        interface MatchedExp {
-          expense: Expense;
-          split?: ExpenseSplit;
-          role: ThirdPartyTriangulationExpense['role'];
-          payerProfile?: Profile;
-          participantProfile?: Profile;
-          groupName?: string;
-          currency?: string;
-          relevantShare: number;
-        }
-
-        const matchedList: MatchedExp[] = [];
-
-        // 1. If third party owes creditor, use cand.tpToCDetail.pendingExpenses
-        if ((cand.sTpToC > 0 || cand.tpToC > 0) && cand.tpToCDetail.pendingExpenses.length > 0) {
-          cand.tpToCDetail.pendingExpenses.forEach((pExp) => {
-            matchedList.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              role: 'third_party_owes_creditor',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency,
-              relevantShare: pExp.pendingAmount,
-            });
-          });
-        }
-
-        // 2. If debtor owes third party, use cand.dToTpDetail.pendingExpenses
-        if ((cand.sDToTp > 0 || cand.dToTp > 0) && cand.dToTpDetail.pendingExpenses.length > 0) {
-          cand.dToTpDetail.pendingExpenses.forEach((pExp) => {
-            matchedList.push({
-              expense: pExp.expense,
-              split: pExp.split,
-              role: 'debtor_owes_third_party',
-              payerProfile: pExp.payerProfile,
-              participantProfile: pExp.participantProfile,
-              groupName: pExp.groupName,
-              currency: pExp.currency,
-              relevantShare: pExp.pendingAmount,
-            });
-          });
-        }
-
-        // 3. Fallbacks for reverse relationships if needed
-        if (matchedList.length === 0) {
-          if (cand.tpToDDetail.pendingExpenses.length > 0) {
-            cand.tpToDDetail.pendingExpenses.forEach((pExp) => {
-              matchedList.push({
-                expense: pExp.expense,
-                split: pExp.split,
-                role: 'third_party_owes_debtor',
-                payerProfile: pExp.payerProfile,
-                participantProfile: pExp.participantProfile,
-                groupName: pExp.groupName,
-                currency: pExp.currency,
-                relevantShare: pExp.pendingAmount,
-              });
-            });
-          }
-          if (cand.cToTpDetail.pendingExpenses.length > 0) {
-            cand.cToTpDetail.pendingExpenses.forEach((pExp) => {
-              matchedList.push({
-                expense: pExp.expense,
-                split: pExp.split,
-                role: 'creditor_owes_third_party',
-                payerProfile: pExp.payerProfile,
-                participantProfile: pExp.participantProfile,
-                groupName: pExp.groupName,
-                currency: pExp.currency,
-                relevantShare: pExp.pendingAmount,
-              });
-            });
-          }
-        }
-
-        // Deduplicate and sort chronological DESC
-        const uniqueMatched: MatchedExp[] = [];
-        const seenExp = new Set<string>();
-        matchedList.forEach((m) => {
-          const key = `${m.expense.id}:${m.split?.user_id || 'all'}`;
-          if (!seenExp.has(key)) {
-            seenExp.add(key);
-            uniqueMatched.push(m);
-          }
-        });
-
-        uniqueMatched.sort(
-          (a, b) =>
-            new Date(b.expense.expense_date || '').getTime() -
-            new Date(a.expense.expense_date || '').getTime()
-        );
-
-        // Distribute cand.allocatedAmount across uniqueMatched
-        let remainingToAllocate = cand.allocatedAmount;
-        const tpExpenses: ThirdPartyTriangulationExpense[] = [];
-
-        for (const m of uniqueMatched) {
-          if (remainingToAllocate <= 0.009) break;
-          const share = m.relevantShare > 0 ? m.relevantShare : m.expense.total_amount;
-          const allocatedDiscountAmount =
-            Math.round(Math.min(remainingToAllocate, share) * 100) / 100;
-          remainingToAllocate =
-            Math.round((remainingToAllocate - allocatedDiscountAmount) * 100) / 100;
-
-          tpExpenses.push({
-            expense: m.expense,
-            split: m.split,
-            description: m.expense.description,
-            totalExpenseAmount: m.expense.total_amount,
-            originalDebtAmount: share,
-            allocatedDiscountAmount,
-            role: m.role,
-            payerName: m.payerProfile?.full_name || 'Integrante',
-            payerProfile: m.payerProfile,
-            participantName: m.participantProfile?.full_name || 'Integrante',
-            participantProfile: m.participantProfile,
-            date: m.expense.expense_date || 'Reciente',
-            groupName: m.groupName,
-            currency: m.currency,
-            receiptUrl: m.expense.receipt_url,
-          });
-        }
-
-        // If remainingToAllocate > 0, allocate the rest on the first item to ensure exact match
-        if (remainingToAllocate > 0.009 && tpExpenses.length > 0) {
-          tpExpenses[0].allocatedDiscountAmount =
-            Math.round((tpExpenses[0].allocatedDiscountAmount + remainingToAllocate) * 100) /
-            100;
-          remainingToAllocate = 0;
-        }
-
-        triangulations.push({
-          thirdParty: cand.tp,
-          thirdPartyName: tpName,
-          amount: cand.allocatedAmount,
-          isDiscount,
-          role,
-          shortSummary,
-          explanation,
-          directDebtsWithDebtor: cand.dToTp,
-          directDebtsWithCreditor: cand.tpToC,
-          expenses: tpExpenses,
-        });
-      });
-
-      // Sort triangulations by amount descending
-      triangulations.sort((a, b) => b.amount - a.amount);
-
-      const debtorDisplayName = debtor.full_name || 'Deudor';
-      const creditorDisplayName = creditor.full_name || 'Acreedor';
-
-      const summaryNarrative = isDiscount
-        ? `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
-            netDirectBalance
-          )}. Para optimizar y simplificar las cuentas del grupo, se descuentan -${formatCurrency(
-            totalDiff
-          )} de esta transferencia porque se compensan mediante ${
-            triangulations.length === 1
-              ? `pagos directos con ${triangulations[0].thirdPartyName}`
-              : `triangulaciones y pagos directos con ${triangulations.length} integrantes del grupo`
-          }.`
-        : `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
-            netDirectBalance
-          )}. Para optimizar y liquidar el grupo con menos transferencias, se consolidan +${formatCurrency(
-            totalDiff
-          )} en este pago.`;
-
-      optimizationDetail = {
-        simplifiedDiff,
-        isDiscount,
-        directBalance: netDirectBalance,
-        simplifiedAmount,
-        totalCompensated: totalDiff,
-        triangulations,
-        summaryNarrative,
-      };
     }
+  });
+
+  // Reverse offsets that remain active
+  const reverseOffsetExpenses: DebtBreakdownItem[] = [];
+  offsetPool.forEach((item) => {
+    if (item.type === 'reverse_offset' && item.expenseRef && item.splitRef) {
+      if (item.amount > 0.009) {
+        reverseOffsetExpenses.push({
+          expense: item.expenseRef,
+          splitAmount: item.originalAmount,
+          paidAmount: Math.round((item.originalAmount - item.amount) * 100) / 100,
+          pendingAmount: Math.round(item.amount * 100) / 100,
+          isFullyPaid: false,
+          isPartiallyPaid: item.originalAmount > item.amount + 0.009,
+          actualDebtor: item.actualDebtor || debtor,
+          actualCreditor: item.actualCreditor || creditor,
+          isManagedDebtor: item.actualDebtor?.id !== debtor.id,
+          isManagedCreditor: item.actualCreditor?.id !== creditor.id,
+        });
+      }
+    }
+  });
+
+  const netPendingAmount = pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0);
+  const totalPaymentsApplied = appliedPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalReverseOffsets = reverseOffsetExpenses.reduce((sum, r) => sum + r.pendingAmount, 0);
+  const totalActiveRecoverable = Math.round((totalPaymentsApplied + totalReverseOffsets) * 100) / 100;
+
+  const netDirectBalance = Math.max(0, Math.round((netPendingAmount - totalActiveRecoverable) * 100) / 100);
+
+  // Simplified balance from simplified engine
+  const simplifiedPairs = calculateSimplifiedBalances(filteredExpenses, filteredPayments, profiles, groupId);
+  const matchingSimplified = simplifiedPairs.find(
+    (p) => p.debtor.id === debtor.id && p.creditor.id === creditor.id
+  );
+  const simplifiedAmount = matchingSimplified ? matchingSimplified.amount : 0;
+  const simplifiedDiff = Math.round((netDirectBalance - simplifiedAmount) * 100) / 100;
+
+  const isFullySettled = (isSimplified ? simplifiedAmount : netDirectBalance) <= 0.009;
+
+  let optimizationDetail: PairwiseDebtDetail['optimizationDetail'] = undefined;
+  if (isSimplified && Math.abs(simplifiedDiff) > 0.01) {
+    optimizationDetail = {
+      isOptimized: true,
+      directBalance: netDirectBalance,
+      simplifiedBalance: simplifiedAmount,
+      difference: simplifiedDiff,
+      explanation:
+        simplifiedDiff > 0
+          ? `La simplificación de deudas reduce el pago directo de ${formatCurrency(netDirectBalance)} a ${formatCurrency(simplifiedAmount)} al compensar saldos compartidos dentro del grupo.`
+          : `El saldo simplificado es ${formatCurrency(simplifiedAmount)} considerando las transferencias consolidadas del grupo.`,
+    };
   }
 
   return {
     debtor,
     creditor,
-    totalOriginalDebt: Math.round(totalOriginalDebt * 100) / 100,
-    totalPaymentsApplied: Math.round(totalPaymentsApplied * 100) / 100,
-    totalReverseOffsets: Math.round(totalReverseOffsets * 100) / 100,
-    netPendingAmount,
-    netDirectBalance,
     pendingExpenses,
     settledExpenses,
-    allExpenses: calculatedDebts,
     appliedPayments,
     settledPayments,
-    reverseOffsetExpenses: reverseOffsets,
-    simplificationExpenses: simplificationExpenses.sort(
-      (a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime()
-    ),
-    triangularChains: [],
+    reverseOffsetExpenses,
+    netPendingAmount: Math.round(netPendingAmount * 100) / 100,
+    totalPaymentsApplied: Math.round(totalPaymentsApplied * 100) / 100,
+    totalReverseOffsets: Math.round(totalReverseOffsets * 100) / 100,
+    totalActiveRecoverable,
+    netDirectBalance,
+    simplifiedAmount,
+    simplifiedDiff,
+    isSimplified,
+    isFullySettled,
     optimizationDetail,
   };
 }
 
-export interface MemberPeerBalance {
-  member: Profile;
-  debtAmount: number; // Monto de consumo pendiente activo con este par
-  historicalDebtAmount: number; // Consumo histórico total
-  pendingDebtAmount: number; // Consumo pendiente activo
-  settledDebtAmount: number; // Consumo ya saldado
-  recoverAmount: number; // Monto que recupera activo de este par
-  historicalRecoverAmount: number; // Monto que recupera histórico
-  pendingRecoverAmount: number; // Monto activo que recupera
-  settledRecoverAmount: number; // Monto ya aplicado a saldar consumos
-  netAmount: number; // positivo = member le debe al par, negativo = el par le debe a member
-  settlementAmount: number; // monto final a pagar en el modo actual (simplificado o directo)
-  isTargetCreditor: boolean;
-  consumedExpensesCount: number;
-  paidExpensesCount: number;
+export interface PeerBalanceItem {
+  peer: Profile;
+  isOwedToPeer: boolean;
+  amount: number;
+  directBalance: number;
+  isSettled: boolean;
 }
 
 export interface MemberAccountStatement {
   member: Profile;
-  targetCreditor?: Profile;
-  
-  // 1. Deudas / Consumos
-  consumedExpenses: Expense[];
-  pendingConsumedExpenses: Expense[];
-  settledConsumedExpenses: Expense[];
+  pendingConsumedExpenses: DebtBreakdownItem[];
+  settledConsumedExpenses: DebtBreakdownItem[];
   pendingDebtBreakdown: DebtBreakdownItem[];
   settledDebtBreakdown: DebtBreakdownItem[];
-  totalConsumedDebt: number;
   totalPendingDebt: number;
   totalSettledDebt: number;
-  
-  // 2. Aportes / Lo que recupera
-  paidExpenses: Expense[];
+  totalConsumedDebt: number;
   activePaidExpenses: Expense[];
   settledPaidExpenses: Expense[];
-  memberPaymentsMade: Payment[];
   activePaymentsMade: Payment[];
   settledPaymentsMade: Payment[];
-  memberPaymentsReceived: Payment[];
-  totalDirectPaymentsMade: number;
-  totalDirectPaymentsReceived: number;
-  totalRecoverable: number;
   totalActiveRecoverable: number;
   totalSettledRecoverable: number;
-  
-  // 3. Balance Neto Global
-  netGlobalBalance: number; // totalRecoverable - totalConsumedDebt (negativo = es deudor neto)
-  totalNetDebt: number; // max(0, totalConsumedDebt - totalRecoverable)
-  
-  // 4. Distribución entre integrantes
-  peerBalances: MemberPeerBalance[];
-  finalCreditors: { member: Profile; amount: number }[];
-  finalDebtors: { member: Profile; amount: number }[];
-  
-  // 5. Compensaciones y Triangulaciones
+  netGlobalBalance: number;
+  totalNetDebt: number;
+  isFullySettled: boolean;
+  peerBalances: PeerBalanceItem[];
+  finalCreditors: PeerBalanceItem[];
+  finalDebtors: PeerBalanceItem[];
   isSimplified: boolean;
-  totalCompensationsApplied: number;
-  triangulations: ThirdPartyTriangulation[];
-  optimizationDetail?: GroupOptimizationDetail;
-  
-  // 6. Paso a paso del cálculo
+  optimizationDetail?: {
+    isOptimized: boolean;
+    directBalance: number;
+    simplifiedBalance: number;
+    difference: number;
+  };
   calculation: {
-    totalPendingDebt: number;
-    totalActiveRecoverable: number;
-    totalConsumedDebt: number;
+    totalDirectDebts: number;
     totalRecoverable: number;
-    totalSettledDebt: number;
-    totalSettledRecoverable: number;
-    netGlobalBalance: number;
-    compensationDiscount: number;
-    targetSettlementAmount: number;
+    netDirect: number;
+    simplifiedSettlement: number;
   };
 }
 
 export function calculateMemberAccountStatement(
   member: Profile,
-  targetCreditor: Profile | undefined,
   expenses: Expense[],
   payments: Payment[],
   profiles: Profile[],
@@ -1608,486 +1018,143 @@ export function calculateMemberAccountStatement(
   isSimplified: boolean = true,
   groupId?: string
 ): MemberAccountStatement {
-  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
-
   const profileMap = new Map<string, Profile>();
   profiles.forEach((p) => profileMap.set(p.id, p));
 
-  const groupMap = new Map<string, Group>();
-  groups.forEach((g) => groupMap.set(g.id, g));
+  const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
+  const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
-  const memberId = member.id;
+  // Compute FIFO status for all expenses in this scope
+  const fifoExpenses = calculateFifoSettledExpenses(filteredExpenses, filteredPayments);
 
-  // Track active pending consumptions and active aportes per peer
-  const pendingDebtBreakdown: DebtBreakdownItem[] = [];
-  const settledDebtBreakdown: DebtBreakdownItem[] = [];
-  const activePaidExpensesMap = new Map<string, Expense>();
-  const settledPaidExpensesMap = new Map<string, Expense>();
-  const activePaymentsMadeMap = new Map<string, Payment>();
-  const settledPaymentsMadeMap = new Map<string, Payment>();
-  const pendingExpensesMap = new Map<string, Expense>();
-  const settledExpensesMap = new Map<string, Expense>();
-  const allConsumedExpensesMap = new Map<string, Expense>();
-  const allPaidExpensesMap = new Map<string, Expense>();
+  const pendingConsumedExpenses: DebtBreakdownItem[] = [];
+  const settledConsumedExpenses: DebtBreakdownItem[] = [];
 
-  const otherProfiles = profiles.filter((p) => p.id !== memberId);
-  const peerBreakdowns = new Map<
-    string,
-    {
-      pendingDebtAmount: number;
-      settledDebtAmount: number;
-      pendingRecoverAmount: number;
-      settledRecoverAmount: number;
-      consumedExpensesCount: number;
-      paidExpensesCount: number;
-    }
-  >();
+  fifoExpenses.forEach((exp) => {
+    if (exp.splits) {
+      const payerProfile = profileMap.get(exp.paid_by) || {
+        id: exp.paid_by,
+        full_name: 'Integrante',
+        email: null,
+        avatar_url: '',
+        created_at: '',
+      };
 
-  otherProfiles.forEach((other) => {
-    const peerId = other.id;
+      exp.splits.forEach((s) => {
+        if (s.user_id === member.id && exp.paid_by !== member.id && s.amount_owed > 0) {
+          const paidAmt = s.paid_amount ?? 0;
+          const pendingAmt = s.pending_amount ?? (s.amount_owed - paidAmt);
+          const isSettled = s.is_settled ?? pendingAmt <= 0.009;
 
-    // 1. Consumptions: expenses where 'other' paid and 'member' owes
-    interface PeerSplit {
-      expense: Expense;
-      split: ExpenseSplit;
-      amount: number;
-      entryTime: number;
-    }
-    const debtsFromMember: PeerSplit[] = [];
-    let consumedCount = 0;
-
-    filteredExpenses.forEach((exp) => {
-      if (exp.paid_by === peerId && exp.splits) {
-        const split = exp.splits.find((s) => s.user_id === memberId);
-        if (split && split.amount_owed > 0) {
-          debtsFromMember.push({
+          const item: DebtBreakdownItem = {
             expense: exp,
-            split,
-            amount: split.amount_owed,
-            entryTime: getEntryTimestamp(exp),
-          });
-          consumedCount++;
-          allConsumedExpensesMap.set(exp.id, exp);
-        }
-      }
-    });
-    debtsFromMember.sort((a, b) => a.entryTime - b.entryTime);
+            splitAmount: s.amount_owed,
+            paidAmount: paidAmt,
+            pendingAmount: pendingAmt,
+            isFullyPaid: isSettled,
+            isPartiallyPaid: paidAmt > 0.009 && !isSettled,
+            actualDebtor: member,
+            actualCreditor: payerProfile,
+          };
 
-    // 2. Aportes: expenses where 'member' paid and 'other' owes
-    const debtsFromPeer: PeerSplit[] = [];
-    let paidCount = 0;
-
-    filteredExpenses.forEach((exp) => {
-      if (exp.paid_by === memberId && exp.splits) {
-        allPaidExpensesMap.set(exp.id, exp);
-        const split = exp.splits.find((s) => s.user_id === peerId);
-        if (split && split.amount_owed > 0) {
-          debtsFromPeer.push({
-            expense: exp,
-            split,
-            amount: split.amount_owed,
-            entryTime: getEntryTimestamp(exp),
-          });
-          paidCount++;
-        }
-      }
-    });
-    debtsFromPeer.sort((a, b) => a.entryTime - b.entryTime);
-
-    // 3. Payments between member and peer
-    interface PeerPayment {
-      payment: Payment;
-      amount: number;
-      entryTime: number;
-    }
-    const paymentsMemberToPeer: PeerPayment[] = [];
-    const paymentsPeerToMember: PeerPayment[] = [];
-
-    filteredPayments.forEach((pay) => {
-      if (pay.paid_by === memberId && pay.paid_to === peerId && pay.amount > 0) {
-        paymentsMemberToPeer.push({
-          payment: pay,
-          amount: pay.amount,
-          entryTime: getEntryTimestamp(pay),
-        });
-      }
-      if (pay.paid_by === peerId && pay.paid_to === memberId && pay.amount > 0) {
-        paymentsPeerToMember.push({
-          payment: pay,
-          amount: pay.amount,
-          entryTime: getEntryTimestamp(pay),
-        });
-      }
-    });
-    paymentsMemberToPeer.sort((a, b) => a.entryTime - b.entryTime);
-    paymentsPeerToMember.sort((a, b) => a.entryTime - b.entryTime);
-
-    // Total gross money provided by member to peer (payments + expenses paid for peer)
-    const grossCreditFromMember =
-      paymentsMemberToPeer.reduce((sum, p) => sum + p.amount, 0) +
-      debtsFromPeer.reduce((sum, d) => sum + d.amount, 0);
-
-    // Total gross money provided by peer to member (payments + expenses peer paid for member)
-    const grossCreditFromPeer =
-      paymentsPeerToMember.reduce((sum, p) => sum + p.amount, 0) +
-      debtsFromMember.reduce((sum, d) => sum + d.amount, 0);
-
-    // Net pairwise balance
-    const netDirect = Math.round((grossCreditFromPeer - grossCreditFromMember) * 100) / 100;
-
-    let pendingDebtWithPeer = 0;
-    let settledDebtWithPeer = 0;
-    let pendingRecoverWithPeer = 0;
-    let settledRecoverWithPeer = 0;
-
-    if (netDirect > 0.009) {
-      // Member owes peer netDirect.
-      let creditRemaining = Math.max(
-        0,
-        grossCreditFromMember - paymentsPeerToMember.reduce((sum, p) => sum + p.amount, 0)
-      );
-
-      debtsFromMember.forEach((item) => {
-        let splitOwed = item.amount;
-        let splitPaid = 0;
-        if (creditRemaining > 0.009) {
-          const take = Math.min(splitOwed, creditRemaining);
-          splitOwed = Math.round((splitOwed - take) * 100) / 100;
-          splitPaid = take;
-          creditRemaining = Math.round((creditRemaining - take) * 100) / 100;
-        }
-
-        const isFullyPaid = splitOwed < 0.009;
-        const isPartiallyPaid = splitPaid > 0.009 && !isFullyPaid;
-        const g = groupMap.get(item.expense.group_id);
-
-        const breakdownItem: DebtBreakdownItem = {
-          expense: item.expense,
-          split: item.split,
-          originalAmount: item.amount,
-          paidAmount: splitPaid,
-          pendingAmount: isFullyPaid ? 0 : splitOwed,
-          isFullyPaid,
-          isPartiallyPaid,
-          participantProfile: profileMap.get(memberId),
-          payerProfile: profileMap.get(peerId),
-          groupName: g?.name,
-          currency: g?.currency || 'COP',
-        };
-
-        if (isFullyPaid) {
-          settledDebtBreakdown.push(breakdownItem);
-          settledExpensesMap.set(item.expense.id, item.expense);
-          settledDebtWithPeer += item.amount;
-        } else {
-          pendingDebtBreakdown.push(breakdownItem);
-          pendingExpensesMap.set(item.expense.id, item.expense);
-          pendingDebtWithPeer += splitOwed;
-          settledDebtWithPeer += splitPaid;
+          if (isSettled) {
+            settledConsumedExpenses.push(item);
+          } else {
+            pendingConsumedExpenses.push(item);
+          }
         }
       });
+    }
+  });
 
-      // Peer debts and payments are fully settled against this balance
-      debtsFromPeer.forEach((d) => settledPaidExpensesMap.set(d.expense.id, d.expense));
-      paymentsMemberToPeer.forEach((p) => settledPaymentsMadeMap.set(p.payment.id, p.payment));
-      settledRecoverWithPeer += debtsFromPeer.reduce((sum, d) => sum + d.amount, 0);
-    } else if (netDirect < -0.009) {
-      // Peer owes member |netDirect|.
-      let peerCreditRemaining = Math.max(
-        0,
-        grossCreditFromPeer - paymentsMemberToPeer.reduce((sum, p) => sum + p.amount, 0)
-      );
+  // Sort by entry timestamp descending
+  pendingConsumedExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
+  settledConsumedExpenses.sort((a, b) => getEntryTimestamp(b.expense) - getEntryTimestamp(a.expense));
 
-      debtsFromPeer.forEach((item) => {
-        let splitOwed = item.amount;
-        let splitPaid = 0;
-        if (peerCreditRemaining > 0.009) {
-          const take = Math.min(splitOwed, peerCreditRemaining);
-          splitOwed = Math.round((splitOwed - take) * 100) / 100;
-          splitPaid = take;
-          peerCreditRemaining = Math.round((peerCreditRemaining - take) * 100) / 100;
-        }
+  const totalPendingDebt = pendingConsumedExpenses.reduce((sum, d) => sum + d.pendingAmount, 0);
+  const totalSettledDebt = settledConsumedExpenses.reduce((sum, d) => sum + d.splitAmount, 0);
+  const totalConsumedDebt = totalPendingDebt + totalSettledDebt;
 
-        if (splitOwed > 0.009) {
-          activePaidExpensesMap.set(item.expense.id, item.expense);
-          pendingRecoverWithPeer += splitOwed;
-        } else {
-          settledPaidExpensesMap.set(item.expense.id, item.expense);
-        }
-        settledRecoverWithPeer += splitPaid;
-      });
+  // Paid expenses
+  const activePaidExpenses = fifoExpenses.filter((e) => e.paid_by === member.id && !e.is_settled);
+  const settledPaidExpenses = fifoExpenses.filter((e) => e.paid_by === member.id && e.is_settled);
 
-      // Excess payments made
-      const totalDebtsFromPeer = debtsFromPeer.reduce((sum, d) => sum + d.amount, 0);
-      const excessPayments = Math.max(
-        0,
-        grossCreditFromMember - totalDebtsFromPeer - grossCreditFromPeer
-      );
-      if (excessPayments > 0.009 && paymentsMemberToPeer.length > 0) {
-        pendingRecoverWithPeer += excessPayments;
-        const lastPay = paymentsMemberToPeer[paymentsMemberToPeer.length - 1].payment;
-        activePaymentsMadeMap.set(lastPay.id, lastPay);
+  // Payments made
+  const activePaymentsMade = filteredPayments.filter((p) => p.paid_by === member.id);
+  const settledPaymentsMade: Payment[] = [];
+
+  const totalActiveRecoverable = activePaidExpenses.reduce((sum, e) => sum + (e.pending_amount ?? e.total_amount), 0);
+  const totalSettledRecoverable = settledPaidExpenses.reduce((sum, e) => sum + (e.paid_amount ?? e.total_amount), 0);
+
+  // Peer balances
+  const simplifiedPairs = calculateSimplifiedBalances(fifoExpenses, filteredPayments, profiles, groupId);
+  const directPairs = calculateDirectBalances(fifoExpenses, filteredPayments, profiles, groupId);
+
+  const peerBalances: PeerBalanceItem[] = [];
+  const finalCreditors: PeerBalanceItem[] = [];
+  const finalDebtors: PeerBalanceItem[] = [];
+
+  profiles.forEach((p) => {
+    if (p.id === member.id) return;
+
+    const directAsDebtor = directPairs.find((d) => d.debtor.id === member.id && d.creditor.id === p.id);
+    const directAsCreditor = directPairs.find((d) => d.creditor.id === member.id && d.debtor.id === p.id);
+    const directNet = directAsDebtor ? -directAsDebtor.amount : directAsCreditor ? directAsCreditor.amount : 0;
+
+    const simpAsDebtor = simplifiedPairs.find((d) => d.debtor.id === member.id && d.creditor.id === p.id);
+    const simpAsCreditor = simplifiedPairs.find((d) => d.creditor.id === member.id && d.debtor.id === p.id);
+    const simpNet = simpAsDebtor ? -simpAsDebtor.amount : simpAsCreditor ? simpAsCreditor.amount : 0;
+
+    const chosenNet = isSimplified ? simpNet : directNet;
+
+    if (Math.abs(chosenNet) > 0.01) {
+      const peerItem: PeerBalanceItem = {
+        peer: p,
+        isOwedToPeer: chosenNet < 0,
+        amount: Math.abs(chosenNet),
+        directBalance: directNet,
+        isSettled: false,
+      };
+      peerBalances.push(peerItem);
+      if (chosenNet < 0) {
+        finalCreditors.push(peerItem);
       } else {
-        paymentsMemberToPeer.forEach((p) => settledPaymentsMadeMap.set(p.payment.id, p.payment));
+        finalDebtors.push(peerItem);
       }
-
-      // Member's consumptions from peer are fully settled
-      debtsFromMember.forEach((item) => {
-        const g = groupMap.get(item.expense.group_id);
-        settledDebtBreakdown.push({
-          expense: item.expense,
-          split: item.split,
-          originalAmount: item.amount,
-          paidAmount: item.amount,
-          pendingAmount: 0,
-          isFullyPaid: true,
-          isPartiallyPaid: false,
-          participantProfile: profileMap.get(memberId),
-          payerProfile: profileMap.get(peerId),
-          groupName: g?.name,
-          currency: g?.currency || 'COP',
-        });
-        settledExpensesMap.set(item.expense.id, item.expense);
-        settledDebtWithPeer += item.amount;
-      });
-    } else {
-      // Net is 0 (fully settled)
-      debtsFromMember.forEach((item) => {
-        const g = groupMap.get(item.expense.group_id);
-        settledDebtBreakdown.push({
-          expense: item.expense,
-          split: item.split,
-          originalAmount: item.amount,
-          paidAmount: item.amount,
-          pendingAmount: 0,
-          isFullyPaid: true,
-          isPartiallyPaid: false,
-          participantProfile: profileMap.get(memberId),
-          payerProfile: profileMap.get(peerId),
-          groupName: g?.name,
-          currency: g?.currency || 'COP',
-        });
-        settledExpensesMap.set(item.expense.id, item.expense);
-        settledDebtWithPeer += item.amount;
-      });
-      debtsFromPeer.forEach((d) => settledPaidExpensesMap.set(d.expense.id, d.expense));
-      paymentsMemberToPeer.forEach((p) => settledPaymentsMadeMap.set(p.payment.id, p.payment));
-      settledRecoverWithPeer += debtsFromPeer.reduce((sum, d) => sum + d.amount, 0);
-    }
-
-    peerBreakdowns.set(peerId, {
-      pendingDebtAmount: Math.round(pendingDebtWithPeer * 100) / 100,
-      settledDebtAmount: Math.round(settledDebtWithPeer * 100) / 100,
-      pendingRecoverAmount: Math.round(pendingRecoverWithPeer * 100) / 100,
-      settledRecoverAmount: Math.round(settledRecoverWithPeer * 100) / 100,
-      consumedExpensesCount: consumedCount,
-      paidExpensesCount: paidCount,
-    });
-  });
-
-  const pendingConsumedExpenses = Array.from(pendingExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-  const settledConsumedExpenses = Array.from(settledExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-  const consumedExpenses = Array.from(allConsumedExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-
-  const activePaidExpenses = Array.from(activePaidExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-  const settledPaidExpenses = Array.from(settledPaidExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-  const paidExpenses = Array.from(allPaidExpensesMap.values()).sort(
-    (a, b) => new Date(b.expense_date || '').getTime() - new Date(a.expense_date || '').getTime()
-  );
-
-  const activePaymentsMade = Array.from(activePaymentsMadeMap.values()).sort(
-    (a, b) => new Date(b.payment_date || '').getTime() - new Date(a.payment_date || '').getTime()
-  );
-  const settledPaymentsMade = Array.from(settledPaymentsMadeMap.values()).sort(
-    (a, b) => new Date(b.payment_date || '').getTime() - new Date(a.payment_date || '').getTime()
-  );
-
-  const memberPaymentsMade = filteredPayments.filter((p) => p.paid_by === memberId);
-  const memberPaymentsReceived = filteredPayments.filter((p) => p.paid_to === memberId);
-  const totalDirectPaymentsMade = memberPaymentsMade.reduce((acc, p) => acc + p.amount, 0);
-  const totalDirectPaymentsReceived = memberPaymentsReceived.reduce((acc, p) => acc + p.amount, 0);
-
-  const totalPendingDebt = Math.round(
-    pendingDebtBreakdown.reduce((sum, item) => sum + item.pendingAmount, 0) * 100
-  ) / 100;
-  const totalSettledDebt = Math.round(
-    settledDebtBreakdown.reduce((sum, item) => sum + item.originalAmount, 0) * 100
-  ) / 100;
-  const totalConsumedDebt = Math.round((totalPendingDebt + totalSettledDebt) * 100) / 100;
-
-  const totalActiveRecoverable = Math.round(
-    Array.from(peerBreakdowns.values()).reduce((sum, p) => sum + p.pendingRecoverAmount, 0) * 100
-  ) / 100;
-  const totalSettledRecoverable = Math.round(
-    Array.from(peerBreakdowns.values()).reduce((sum, p) => sum + p.settledRecoverAmount, 0) * 100
-  ) / 100;
-  const totalRecoverable = Math.round((totalActiveRecoverable + totalSettledRecoverable) * 100) / 100;
-
-  const netGlobalBalance = Math.round((totalActiveRecoverable - totalPendingDebt) * 100) / 100;
-  const totalNetDebt = netGlobalBalance < 0 ? Math.abs(netGlobalBalance) : 0;
-
-  // Active pairwise balances
-  const activePairwise = isSimplified
-    ? calculateSimplifiedBalances(filteredExpenses, filteredPayments, profiles, groupId)
-    : calculateDirectBalances(filteredExpenses, filteredPayments, profiles, groupId);
-
-  const peerBalances: MemberPeerBalance[] = [];
-  otherProfiles.forEach((other) => {
-    const b = peerBreakdowns.get(other.id) || {
-      pendingDebtAmount: 0,
-      settledDebtAmount: 0,
-      pendingRecoverAmount: 0,
-      settledRecoverAmount: 0,
-      consumedExpensesCount: 0,
-      paidExpensesCount: 0,
-    };
-
-    const netAmount = Math.round((b.pendingDebtAmount - b.pendingRecoverAmount) * 100) / 100;
-
-    const settlementPair = activePairwise.find(
-      (pb) =>
-        (pb.debtor.id === memberId && pb.creditor.id === other.id) ||
-        (pb.debtor.id === other.id && pb.creditor.id === memberId)
-    );
-
-    let settlementAmount = 0;
-    if (settlementPair) {
-      settlementAmount =
-        settlementPair.debtor.id === memberId
-          ? settlementPair.amount
-          : -settlementPair.amount;
-    }
-
-    if (
-      Math.abs(netAmount) > 0.009 ||
-      Math.abs(settlementAmount) > 0.009 ||
-      b.pendingDebtAmount > 0.009 ||
-      b.pendingRecoverAmount > 0.009 ||
-      b.consumedExpensesCount > 0 ||
-      b.paidExpensesCount > 0 ||
-      (targetCreditor && targetCreditor.id === other.id)
-    ) {
-      peerBalances.push({
-        member: other,
-        debtAmount: b.pendingDebtAmount,
-        historicalDebtAmount: b.pendingDebtAmount + b.settledDebtAmount,
-        pendingDebtAmount: b.pendingDebtAmount,
-        settledDebtAmount: b.settledDebtAmount,
-        recoverAmount: b.pendingRecoverAmount,
-        historicalRecoverAmount: b.pendingRecoverAmount + b.settledRecoverAmount,
-        pendingRecoverAmount: b.pendingRecoverAmount,
-        settledRecoverAmount: b.settledRecoverAmount,
-        netAmount,
-        settlementAmount: Math.round(settlementAmount * 100) / 100,
-        isTargetCreditor: targetCreditor ? targetCreditor.id === other.id : false,
-        consumedExpensesCount: b.consumedExpensesCount,
-        paidExpensesCount: b.paidExpensesCount,
-      });
     }
   });
 
-  peerBalances.sort((a, b) => {
-    if (a.isTargetCreditor) return -1;
-    if (b.isTargetCreditor) return 1;
-    return Math.abs(b.settlementAmount) - Math.abs(a.settlementAmount);
-  });
-
-  const finalCreditors = activePairwise
-    .filter((pb) => pb.debtor.id === memberId)
-    .map((pb) => ({ member: pb.creditor, amount: pb.amount }));
-
-  const finalDebtors = activePairwise
-    .filter((pb) => pb.creditor.id === memberId)
-    .map((pb) => ({ member: pb.debtor, amount: pb.amount }));
-
-  // Triangulation / Compensation calculation when targetCreditor is specified
-  let optimizationDetail: GroupOptimizationDetail | undefined = undefined;
-  let triangulations: ThirdPartyTriangulation[] = [];
-  let totalCompensationsApplied = 0;
-
-  if (targetCreditor) {
-    const pairwiseDetail = calculatePairwiseDebtDetail(
-      member,
-      targetCreditor,
-      filteredExpenses,
-      filteredPayments,
-      profiles,
-      groups,
-      isSimplified,
-      groupId
-    );
-
-    if (pairwiseDetail.optimizationDetail) {
-      optimizationDetail = pairwiseDetail.optimizationDetail;
-      triangulations = pairwiseDetail.optimizationDetail.triangulations;
-      totalCompensationsApplied = pairwiseDetail.optimizationDetail.totalCompensated;
-    }
-  }
-
-  // Buscar el monto objetivo a liquidar con el targetCreditor
-  let targetSettlementAmount = 0;
-  if (targetCreditor) {
-    const targetPair = activePairwise.find(
-      (pb) => pb.debtor.id === memberId && pb.creditor.id === targetCreditor.id
-    );
-    targetSettlementAmount = targetPair ? targetPair.amount : 0;
-  } else {
-    targetSettlementAmount = totalNetDebt;
-  }
+  const netGlobalBalance = finalDebtors.reduce((sum, d) => sum + d.amount, 0) - finalCreditors.reduce((sum, c) => sum + c.amount, 0);
+  const totalNetDebt = finalCreditors.reduce((sum, c) => sum + c.amount, 0);
+  const isFullySettled = Math.abs(netGlobalBalance) <= 0.01 && finalCreditors.length === 0;
 
   return {
     member,
-    targetCreditor,
-    consumedExpenses,
     pendingConsumedExpenses,
     settledConsumedExpenses,
-    pendingDebtBreakdown,
-    settledDebtBreakdown,
-    totalConsumedDebt,
-    totalPendingDebt,
-    totalSettledDebt,
-    paidExpenses,
+    pendingDebtBreakdown: pendingConsumedExpenses,
+    settledDebtBreakdown: settledConsumedExpenses,
+    totalPendingDebt: Math.round(totalPendingDebt * 100) / 100,
+    totalSettledDebt: Math.round(totalSettledDebt * 100) / 100,
+    totalConsumedDebt: Math.round(totalConsumedDebt * 100) / 100,
     activePaidExpenses,
     settledPaidExpenses,
-    memberPaymentsMade,
     activePaymentsMade,
     settledPaymentsMade,
-    memberPaymentsReceived,
-    totalDirectPaymentsMade,
-    totalDirectPaymentsReceived,
-    totalRecoverable,
-    totalActiveRecoverable,
-    totalSettledRecoverable,
-    netGlobalBalance,
-    totalNetDebt,
+    totalActiveRecoverable: Math.round(totalActiveRecoverable * 100) / 100,
+    totalSettledRecoverable: Math.round(totalSettledRecoverable * 100) / 100,
+    netGlobalBalance: Math.round(netGlobalBalance * 100) / 100,
+    totalNetDebt: Math.round(totalNetDebt * 100) / 100,
+    isFullySettled,
     peerBalances,
     finalCreditors,
     finalDebtors,
     isSimplified,
-    totalCompensationsApplied,
-    triangulations,
-    optimizationDetail,
     calculation: {
-      totalPendingDebt,
-      totalActiveRecoverable,
-      totalConsumedDebt,
-      totalRecoverable,
-      totalSettledDebt,
-      totalSettledRecoverable,
-      netGlobalBalance,
-      compensationDiscount: totalCompensationsApplied,
-      targetSettlementAmount,
+      totalDirectDebts: Math.round(totalPendingDebt * 100) / 100,
+      totalRecoverable: Math.round(totalActiveRecoverable * 100) / 100,
+      netDirect: Math.round((totalActiveRecoverable - totalPendingDebt) * 100) / 100,
+      simplifiedSettlement: Math.round(netGlobalBalance * 100) / 100,
     },
   };
 }

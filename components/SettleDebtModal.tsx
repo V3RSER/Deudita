@@ -314,7 +314,7 @@ export function SettleDebtModal({
               amount: payForThisGroup,
               payment_date: date,
               payment_time: paymentTimeISO,
-              note: notes ? notes : 'Abono distribuido',
+              note: notes ? notes : 'Pago distribuido',
               proof_url: proofUrl || undefined,
             });
 
@@ -331,7 +331,7 @@ export function SettleDebtModal({
             amount: remainingToPay,
             payment_date: date,
             payment_time: paymentTimeISO,
-            note: notes ? notes : 'Abono extra',
+            note: notes ? notes : 'Pago extra',
             proof_url: proofUrl || undefined,
           });
         }
@@ -381,7 +381,7 @@ export function SettleDebtModal({
                 {isEditing ? 'Editar pago' : 'Registrar pago'}
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
-                {targetGroup ? `En "${targetGroup.name}"` : 'Abono general de cuentas'}
+                {targetGroup ? `En "${targetGroup.name}"` : 'Pago general de cuentas'}
               </p>
             </div>
           </div>
@@ -783,7 +783,7 @@ export function SettleDebtModal({
             <div className="bg-zinc-50/80 border border-zinc-200/70 rounded-2xl p-4 space-y-2.5">
               <div className="flex items-center space-x-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
                 <Layers className="w-3.5 h-3.5 text-zinc-400" />
-                <span>Distribución del abono entre tus grupos:</span>
+                <span>Distribución del pago entre tus grupos:</span>
               </div>
               <div className="space-y-1.5">
                 {distributionPreview.map((item, idx) => (

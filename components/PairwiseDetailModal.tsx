@@ -165,15 +165,14 @@ export function PairwiseDetailModal({
 
   const pendingConsumedExpenses = detail.pendingExpenses.map((d) => d.expense);
   const activeReverseExpenses = detail.reverseOffsetExpenses.map((r) => r.expense);
-  const activeDirectPayments = detail.appliedPayments.map((p) => p.payment);
+  const activeDirectPayments = detail.appliedPayments;
 
-  const totalPendingDebt = detail.pendingExpenses.reduce((sum, d) => sum + d.pendingAmount, 0);
-  const totalReverseOffsets = detail.reverseOffsetExpenses.reduce((sum, r) => sum + r.amount, 0);
-  const totalPaymentsApplied = detail.appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
-  const totalActiveRecoverable = Math.round((totalReverseOffsets + totalPaymentsApplied) * 100) / 100;
+  const totalPendingDebt = detail.netPendingAmount;
+  const totalReverseOffsets = detail.totalReverseOffsets;
+  const totalPaymentsApplied = detail.totalPaymentsApplied;
+  const totalActiveRecoverable = detail.totalActiveRecoverable;
 
-  const triangulations = detail.optimizationDetail?.triangulations || [];
-  const hasCompensations = isSimplified && (detail.optimizationDetail?.totalCompensated || 0) > 0.009;
+  const hasOptimization = isSimplified && detail.optimizationDetail?.isOptimized;
 
   const allSectionsExpanded =
     expandedSections.debts &&
@@ -412,7 +411,7 @@ export function PairwiseDetailModal({
             )}
           </div>
 
-          {/* 2. SECCIÓN: GASTOS Y ABONOS QUE RECUPERA (Aportes directos a favor de Deudor con Acreedor) */}
+          {/* 2. SECCIÓN: GASTOS Y PAGOS QUE RECUPERA (Aportes directos a favor de Deudor con Acreedor) */}
           <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {/* Section Header */}
             <div
@@ -427,10 +426,10 @@ export function PairwiseDetailModal({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    Gastos y abonos a favor de {debtorName} (Aportes directos)
+                    Gastos y pagos a favor de {debtorName} (Aportes directos)
                   </h3>
                   <p className="text-xs text-zinc-500 font-medium">
-                    Gastos pagados por {debtorName} donde participó {creditorName} y abonos directos registrados
+                    Gastos pagados por {debtorName} donde participó {creditorName} y pagos directos registrados
                   </p>
                 </div>
               </div>
@@ -459,7 +458,7 @@ export function PairwiseDetailModal({
               <div className="border-t border-zinc-200/80 bg-zinc-50/40 p-3 sm:p-4 space-y-3">
                 {activeReverseExpenses.length === 0 && activeDirectPayments.length === 0 ? (
                   <div className="p-5 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
-                    <p className="font-semibold text-zinc-700">No hay aportes ni abonos directos pendientes a favor de {debtorName}.</p>
+                    <p className="font-semibold text-zinc-700">No hay aportes ni pagos directos pendientes a favor de {debtorName}.</p>
                   </div>
                 ) : (
                   <GenericExpenseList
@@ -495,7 +494,7 @@ export function PairwiseDetailModal({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    {isSimplified ? 'Compensaciones grupales y triangulaciones' : 'Cuenta directa 1 a 1'}
+                    {isSimplified ? 'Compensaciones y simplificación de grupo' : 'Cuenta directa 1 a 1'}
                   </h3>
                   <p className="text-xs text-zinc-500 font-medium">
                     {isSimplified
@@ -508,24 +507,19 @@ export function PairwiseDetailModal({
               <div className="flex items-center space-x-3 shrink-0">
                 <div className="text-right">
                   <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    {hasCompensations
-                      ? detail.optimizationDetail?.isDiscount
-                        ? 'Descuento aplicado'
-                        : 'Consolidación aplicada'
+                    {hasOptimization
+                      ? 'Compensación aplicada'
                       : 'Saldo directo'}
                   </span>
                   <span
                     className={`text-sm sm:text-base font-black ${
-                      hasCompensations && detail.optimizationDetail?.isDiscount
+                      hasOptimization
                         ? 'text-emerald-600'
                         : 'text-[#581c87]'
                     }`}
                   >
-                    {hasCompensations
-                      ? `${detail.optimizationDetail?.isDiscount ? '- ' : '+ '}${formatCurrency(
-                          detail.optimizationDetail?.totalCompensated || 0,
-                          currency
-                        )}`
+                    {hasOptimization
+                      ? `${formatCurrency(detail.simplifiedAmount, currency)}`
                       : formatCurrency(detail.netDirectBalance, currency)}
                   </span>
                 </div>
@@ -539,7 +533,7 @@ export function PairwiseDetailModal({
               </div>
             </div>
 
-            {/* Section Content: Triangulations */}
+            {/* Section Content */}
             {expandedSections.distribution && (
               <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
                 {/* Saldo Directo Card */}
@@ -553,130 +547,22 @@ export function PairwiseDetailModal({
                   </span>
                 </div>
 
-                {/* Group Triangulations (if simplified mode and triangulations exist) */}
-                {isSimplified && triangulations.length > 0 ? (
-                  <div className="space-y-3">
+                {isSimplified && detail.optimizationDetail ? (
+                  <div className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs">
                     <div className="flex items-center space-x-2">
                       <Network className="w-4 h-4 text-purple-700 shrink-0" />
                       <h4 className="text-xs font-extrabold text-zinc-900">
-                        {detail.optimizationDetail?.isDiscount
-                          ? `Descuentos por compensación con integrantes que pagan a ${creditorName}`
-                          : `Consolidación de pagos asumidos para reducir transferencias en el grupo`}
+                        Compensación multilateral de deudas
                       </h4>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {triangulations.map((t, tIdx) => {
-                        const isUnfolded = expandedTriangulationIndexes.has(tIdx);
-                        const tpName = t.thirdParty.full_name || 'Tercero';
-
-                        return (
-                          <div
-                            key={`triang-${tIdx}`}
-                            className="bg-white rounded-2xl border border-zinc-200/90 p-4 space-y-3 shadow-2xs"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center space-x-2.5">
-                                {t.thirdParty.avatar_url ? (
-                                  <Image
-                                    src={t.thirdParty.avatar_url}
-                                    alt={tpName}
-                                    width={32}
-                                    height={32}
-                                    className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
-                                    unoptimized
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 border border-sky-200 flex items-center justify-center text-xs font-bold shrink-0">
-                                    {getInitials(tpName)}
-                                  </div>
-                                )}
-                                <div>
-                                  <span className="font-extrabold text-zinc-900 text-xs block">
-                                    Compensación con {tpName}
-                                  </span>
-                                  <span className="text-[10px] text-zinc-500 font-medium">
-                                    {t.shortSummary}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <span
-                                className={`text-xs font-black ${
-                                  t.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                                }`}
-                              >
-                                {t.isDiscount ? '- ' : '+ '}
-                                {formatCurrency(t.amount, currency)}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                              {t.explanation}
-                            </p>
-
-                            {/* Diagram */}
-                            <div className="bg-zinc-50 rounded-xl p-2.5 border border-zinc-100">
-                              <div className="flex items-center justify-between gap-1 text-center text-[10px]">
-                                <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                  {debtorName}
-                                </span>
-                                <ArrowRight className="w-3 h-3 text-[#581c87] shrink-0" />
-                                <span className="font-bold text-sky-700 truncate max-w-[70px]">
-                                  {tpName}
-                                </span>
-                                <ArrowRight className="w-3 h-3 text-indigo-500 shrink-0" />
-                                <span className="font-bold text-zinc-800 truncate max-w-[70px]">
-                                  {creditorName}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Expand button for underlying active expenses */}
-                            {t.expenses.length > 0 && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleTriangulationExpand(tIdx)}
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#581c87] text-[11px] font-bold transition-all flex items-center justify-center space-x-1 cursor-pointer border border-purple-200/60"
-                                >
-                                  <span>
-                                    {isUnfolded
-                                      ? 'Ocultar gastos vinculados'
-                                      : `Ver ${t.expenses.length} gastos vinculados`}
-                                  </span>
-                                  <ChevronDown
-                                    className={`w-3.5 h-3.5 transition-transform ${
-                                      isUnfolded ? 'rotate-180' : ''
-                                    }`}
-                                  />
-                                </button>
-
-                                {isUnfolded && (
-                                  <div className="pt-2 border-t border-zinc-100 space-y-2">
-                                    <GenericExpenseList
-                                      expenses={t.expenses.map((te) => te.expense)}
-                                      payments={[]}
-                                      profiles={profiles}
-                                      userGroups={groups}
-                                      currentProfile={debtorProfile}
-                                      groupCurrency={currency}
-                                      showGroupBadge={!groupId}
-                                    />
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <p className="text-xs text-zinc-600 leading-relaxed bg-zinc-50 rounded-xl p-3 border border-zinc-100">
+                      {detail.optimizationDetail.explanation}
+                    </p>
                   </div>
                 ) : isSimplified ? (
                   <div className="p-4 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
                     <p className="font-medium text-zinc-600">
-                      No se requieren triangulaciones para esta cuenta. El saldo liquidable coincide con los consumos y aportes directos.
+                      No se requieren compensaciones adicionales para esta cuenta. El saldo liquidable coincide con los consumos y aportes directos.
                     </p>
                   </div>
                 ) : (
@@ -730,7 +616,7 @@ export function PairwiseDetailModal({
                   <div className="flex items-center justify-between text-zinc-700">
                     <div className="flex items-center space-x-2">
                       <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                      <span className="font-semibold text-zinc-900">Total consumos directos de {debtorName} con {creditorName}</span>
+                      <span className="font-semibold text-zinc-900">Total consumos directos pendientes de {debtorName} con {creditorName}</span>
                     </div>
                     <span className="font-black text-[#581c87] shrink-0">
                       + {formatCurrency(totalPendingDebt, currency)}
@@ -741,7 +627,7 @@ export function PairwiseDetailModal({
                   <div className="flex items-center justify-between text-zinc-700">
                     <div className="flex items-center space-x-2">
                       <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="font-semibold text-zinc-900">Total aportes y abonos directos aplicados</span>
+                      <span className="font-semibold text-zinc-900">Total aportes y pagos directos aplicados</span>
                     </div>
                     <span className="font-black text-emerald-600 shrink-0">
                       - {formatCurrency(totalActiveRecoverable, currency)}
@@ -756,24 +642,16 @@ export function PairwiseDetailModal({
                     </span>
                   </div>
 
-                  {/* Descuento o consolidación de triangulaciones si aplica */}
-                  {hasCompensations && (
+                  {/* Compensación simplificada si aplica */}
+                  {hasOptimization && detail.optimizationDetail && (
                     <div className="flex items-center justify-between text-zinc-700">
                       <div className="flex items-center space-x-2">
                         <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span>
-                          {detail.optimizationDetail?.isDiscount
-                            ? 'Descuento por compensación con integrantes'
-                            : 'Consolidación de cuentas del grupo'}
-                        </span>
+                        <span>Compensación por simplificación de grupo</span>
                       </div>
-                      <span
-                        className={`font-black ${
-                          detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                        }`}
-                      >
-                        {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
-                        {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
+                      <span className="font-black text-emerald-600">
+                        {detail.optimizationDetail.difference > 0 ? '- ' : '+ '}
+                        {formatCurrency(Math.abs(detail.optimizationDetail.difference), currency)}
                       </span>
                     </div>
                   )}
