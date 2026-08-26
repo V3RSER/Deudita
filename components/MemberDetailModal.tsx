@@ -50,7 +50,6 @@ export function MemberDetailModal({
     userGroups,
     expenses,
     payments,
-    settlements,
     pendingInvites,
     managedUserIds,
     sponsorshipMap,
@@ -117,7 +116,7 @@ export function MemberDetailModal({
   );
 
   const isCurrentlyManagedByMe = Boolean(memberProfile && managedUserIds.includes(memberProfile.id));
-  const sponsorId = memberProfile ? sponsorshipMap?.userToSponsor?.get(memberProfile.id) : undefined;
+  const sponsorId = memberProfile ? sponsorshipMap.get(memberProfile.id) : undefined;
   const isManagedByOther = Boolean(sponsorId && sponsorId !== currentProfile?.id);
   const sponsorProfile = sponsorId ? profiles.find((p) => p.id === sponsorId) : undefined;
   const sponsorName = sponsorProfile?.full_name?.split(' ')[0] || 'otro integrante';
@@ -129,8 +128,7 @@ export function MemberDetailModal({
         expenses,
         payments,
         context === 'group' ? groupId : undefined,
-        sponsorshipMap?.userToSponsor,
-        settlements
+        sponsorshipMap
       )
     : 0;
 

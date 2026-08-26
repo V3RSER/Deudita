@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
-import { Expense, Payment, Profile, Group, PairwiseBalance, Settlement } from '@/lib/types';
+import { Expense, Payment, Profile, Group, PairwiseBalance } from '@/lib/types';
 import {
   formatCurrency,
   calculatePairwiseDebtDetail,
@@ -33,7 +33,6 @@ interface PairwiseDetailModalProps {
   payments: Payment[];
   profiles: Profile[];
   groups: Group[];
-  settlements?: Settlement[];
   isSimplified: boolean;
   groupId?: string;
   onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
@@ -63,7 +62,6 @@ export function PairwiseDetailModal({
   payments,
   profiles,
   groups,
-  settlements,
   isSimplified,
   groupId,
   onOpenSettleModal,
@@ -142,10 +140,9 @@ export function PairwiseDetailModal({
       profiles,
       groups,
       isSimplified,
-      groupId || pairwise.group_id,
-      settlements
+      groupId || pairwise.group_id
     );
-  }, [debtorProfile, creditorProfile, expenses, payments, profiles, groups, isSimplified, groupId, pairwise, settlements]);
+  }, [debtorProfile, creditorProfile, expenses, payments, profiles, groups, isSimplified, groupId, pairwise]);
 
   if (!isOpen || !pairwise || !detail) return null;
 

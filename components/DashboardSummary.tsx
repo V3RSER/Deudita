@@ -40,7 +40,6 @@ export function DashboardSummary({
     userGroups,
     expenses,
     payments,
-    settlements,
     profiles,
     pendingInvites,
     acceptGroupInvite,
@@ -76,7 +75,7 @@ export function DashboardSummary({
   const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
 
   // Pairwise balances
-  const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles, undefined, settlements);
+  const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);
   const myOwedToMe = consolidatedPairwise.filter((p) => p.creditor.id === currentProfile?.id);
   const myIOwe = consolidatedPairwise.filter((p) => p.debtor.id === currentProfile?.id);
 

@@ -14,7 +14,6 @@ import {
   Notification,
   ExpenseAuditLog,
   GroupCategory,
-  Settlement,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -33,15 +32,11 @@ interface ExpenseContextType {
   auditLogs: ExpenseAuditLog[];
   drafts: ExpenseDraft[];
   payments: Payment[];
-  settlements: Settlement[];
   pendingInvites: GroupInvite[];
   notifications: Notification[];
   hiddenFriendIds: string[];
   managedUserIds: string[];
-  sponsorshipMap: {
-    userToSponsor: Map<string, string>;
-    sponsorToManaged: Map<string, string[]>;
-  };
+  sponsorshipMap: Map<string, string>;
   toggleManagedUser: (targetUserId: string, shouldManage: boolean) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -84,7 +79,6 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<ExpenseAuditLog[]>([]);
   const [drafts, setDrafts] = useState<ExpenseDraft[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [hiddenFriendIds, setHiddenFriendIds] = useState<string[]>([]);
@@ -121,7 +115,6 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       if (data.members) setMembers(data.members as GroupMember[]);
       if (data.expenses) setExpenses(data.expenses as unknown as Expense[]);
       if (data.payments) setPayments(data.payments as Payment[]);
-      if (data.settlements) setSettlements(data.settlements as Settlement[]);
       if (data.drafts) setDrafts(data.drafts as ExpenseDraft[]);
       if (data.notifications) setNotifications(data.notifications as Notification[]);
       if (data.pendingInvites) setPendingInvites(data.pendingInvites as GroupInvite[]);
@@ -1098,7 +1091,6 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         auditLogs,
         drafts,
         payments,
-        settlements,
         pendingInvites,
         notifications,
         hiddenFriendIds,

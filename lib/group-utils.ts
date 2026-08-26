@@ -9,8 +9,7 @@ import {
   Calculator,
   LucideIcon
 } from 'lucide-react';
-import { Group, GroupCategory, Expense, Payment, Settlement } from './types';
-import { calculateDirectPairwiseBalance } from './balance-utils';
+import { Group, GroupCategory, Expense, Payment } from './types';
 
 export interface GroupCategoryConfig {
   id: GroupCategory;
@@ -116,17 +115,47 @@ export function calculatePairwiseBalance(
   expenses: Expense[],
   payments: Payment[],
   groupId?: string,
-  sponsorshipMap?: Map<string, string>,
-  settlements?: Settlement[]
+  sponsorshipMap?: Map<string, string>
 ): number {
-  return calculateDirectPairwiseBalance(
-    userAId,
-    userBId,
-    expenses,
-    payments,
-    groupId,
-    settlements,
-    sponsorshipMap
-  );
+  if (!userAId || !userBId || userAId === userBId) return 0;
+
+  const getEffectiveId = (id: string) => (sponsorshipMap ? sponsorshipMap.get(id) || id : id);
+  const effA = getEffectiveId(userAId);
+  const effB = getEffectiveId(userBId);
+
+  if (effA === effB) return 0;
+
+  let balance = 0; // Positive = userB owes userA. Negative = userA owes userB.
+
+  for (const exp of expenses) {
+    if (groupId && exp.group_id !== groupId) continue;
+
+    const effPayer = getEffectiveId(exp.paid_by);
+    if (!exp.splits) continue;
+
+    for (const split of exp.splits) {
+      const effDebtor = getEffectiveId(split.user_id);
+      if (effPayer === effA && effDebtor === effB) {
+        balance += Number(split.amount_owed || 0);
+      } else if (effPayer === effB && effDebtor === effA) {
+        balance -= Number(split.amount_owed || 0);
+      }
+    }
+  }
+
+  for (const p of payments) {
+    if (groupId && p.group_id !== groupId) continue;
+
+    const effPayer = getEffectiveId(p.paid_by);
+    const effReceiver = getEffectiveId(p.paid_to);
+
+    if (effPayer === effA && effReceiver === effB) {
+      balance += Number(p.amount || 0);
+    } else if (effPayer === effB && effReceiver === effA) {
+      balance -= Number(p.amount || 0);
+    }
+  }
+
+  return balance;
 }
 
