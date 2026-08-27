@@ -149,8 +149,8 @@ export function PairwiseDetailModal({
   const currency = groupId
     ? groups.find((g) => g.id === groupId)?.currency || 'COP'
     : pairwise.group_id
-    ? groups.find((g) => g.id === pairwise.group_id)?.currency || 'COP'
-    : currentProfile?.currency || 'COP';
+      ? groups.find((g) => g.id === pairwise.group_id)?.currency || 'COP'
+      : currentProfile?.currency || 'COP';
 
   const isDebtor =
     pairwise.debtor.id === currentProfile?.id ||
@@ -512,11 +512,10 @@ export function PairwiseDetailModal({
                         : 'Consolidación aplicada'}
                     </span>
                     <span
-                      className={`text-sm sm:text-base font-black ${
-                        detail.optimizationDetail?.isDiscount
+                      className={`text-sm sm:text-base font-black ${detail.optimizationDetail?.isDiscount
                           ? 'text-emerald-600'
                           : 'text-[#581c87]'
-                      }`}
+                        }`}
                     >
                       {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                       {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
@@ -1010,9 +1009,8 @@ export function PairwiseDetailModal({
                                 : 'Ver gastos vinculados a las compensaciones'}
                             </span>
                             <ChevronDown
-                              className={`w-4 h-4 transition-transform ${
-                                expandedTriangulationIndexes.has(999) ? 'rotate-180' : ''
-                              }`}
+                              className={`w-4 h-4 transition-transform ${expandedTriangulationIndexes.has(999) ? 'rotate-180' : ''
+                                }`}
                             />
                           </button>
 
@@ -1135,9 +1133,8 @@ export function PairwiseDetailModal({
                         </span>
                       </div>
                       <span
-                        className={`font-black ${
-                          detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                        }`}
+                        className={`font-black ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
+                          }`}
                       >
                         {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                         {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
