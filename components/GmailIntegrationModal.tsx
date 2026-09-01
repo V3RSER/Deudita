@@ -5,9 +5,6 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   MailCheck,
-  Key,
-  Copy,
-  Check,
   Sparkles,
   Layers,
   Plus,
@@ -17,9 +14,12 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
-  Code2,
   Power,
   Info,
+  Link2,
+  Unlink,
+  Check,
+  Lock,
 } from 'lucide-react';
 import { EmailTemplateWithPreference, EmailIngestConnection } from '@/lib/types';
 
@@ -28,15 +28,19 @@ interface GmailIntegrationModalProps {
   onClose: () => void;
 }
 
+interface ConnectionResponseData extends EmailIngestConnection {
+  apps_script_url?: string;
+}
+
 export function GmailIntegrationModal({ isOpen, onClose }: GmailIntegrationModalProps) {
   const [activeTab, setActiveTab] = useState<'connection' | 'templates' | 'create_template'>('connection');
-  const [copiedToken, setCopiedToken] = useState(false);
-  const [copiedScript, setCopiedScript] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionData, setConnectionData] = useState<EmailIngestConnection | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionData, setConnectionData] = useState<ConnectionResponseData | null>(null);
   const [templates, setTemplates] = useState<EmailTemplateWithPreference[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [authUrlOpened, setAuthUrlOpened] = useState<string | null>(null);
 
   // AI Suggestion and Template creation state
   const [sampleEmailText, setSampleEmailText] = useState('');
@@ -64,7 +68,7 @@ export function GmailIntegrationModal({ isOpen, onClose }: GmailIntegrationModal
       const connRes = await fetch('/api/gmail-connections');
       if (connRes.ok) {
         const connJson = await connRes.json();
-        setConnectionData(connJson.connection);
+        setConnectionData(connJson.connection || null);
       }
 
       // 2. Fetch templates with user preferences
@@ -85,27 +89,81 @@ export function GmailIntegrationModal({ isOpen, onClose }: GmailIntegrationModal
       fetchData();
       setErrorMsg(null);
       setSuccessMsg(null);
+      setAuthUrlOpened(null);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleGenerateConnection = async (regenerate: boolean = false) => {
-    setIsLoading(true);
+  const isConnected = connectionData?.status === 'active';
+
+  /**
+   * Conectar con Google:
+   * 1. Llama a POST /api/gmail-connections para generar/reutilizar el webhook_token y obtener la URL del Web App de Apps Script.
+   * 2. Abre directamente la URL de autorización de Google para que el usuario solo haga clic en "Permitir".
+   */
+  const handleConnectWithGoogle = async () => {
+    setIsConnecting(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       const res = await fetch('/api/gmail-connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regenerateToken: regenerate }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al conectar');
+      if (!res.ok) throw new Error(data.error || 'Error al conectar con Google');
 
-      setConnectionData(data.connection);
-      setSuccessMsg('Token de integración generado con éxito');
+      setConnectionData(data.connection || {
+        user_id: '',
+        webhook_token: data.webhook_token,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        apps_script_url: data.apps_script_url,
+      });
+
+      const scriptUrl = data.apps_script_url;
+      if (scriptUrl) {
+        setAuthUrlOpened(scriptUrl);
+        // Abrir la pantalla oficial de autorización de Google Apps Script
+        const newWindow = window.open(scriptUrl, '_blank');
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+          // Si el navegador bloqueó el popup emergente, mantener el botón de acceso directo visible
+          setSuccessMsg('Se ha generado tu enlace de conexión. Haz clic en "Abrir ventana de autorización" si no se abrió automáticamente.');
+        } else {
+          setSuccessMsg('Se ha abierto la pantalla de autorización de Google. Haz clic en "Permitir" con tu cuenta para activar la sincronización.');
+        }
+      } else {
+        setSuccessMsg('Conexión con Google iniciada con éxito');
+      }
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al generar conexión');
+      setErrorMsg(err instanceof Error ? err.message : 'Error al conectar con Google');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('¿Deseas pausar la detección automática de Gmail? No recibirás nuevos borradores automáticos hasta que vuelvas a conectar.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/gmail-connections', {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al desconectar');
+
+      setConnectionData(null);
+      setAuthUrlOpened(null);
+      setSuccessMsg('Detección de Gmail desactivada');
+      await fetchData();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error al desactivar integración');
     } finally {
       setIsLoading(false);
     }
@@ -223,173 +281,21 @@ export function GmailIntegrationModal({ isOpen, onClose }: GmailIntegrationModal
     }
   };
 
-  const token = connectionData?.webhook_token || '';
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://deudita.app';
-
-  const appsScriptCode = `/**
- * SCRIPT DE DETECCIÓN DE GASTOS EN GMAIL - DEUDITA
- * Corre bajo tu propia cuenta de Google.
- * Nunca envía correos no reconocidos ni almacena contenido fuera de los patrones.
- */
-const CONFIG = {
-  WEBHOOK_TOKEN: '${token || 'GENERA_TU_TOKEN_EN_DEUDITA'}',
-  TEMPLATES_URL: '${currentOrigin}/api/email-templates',
-  CANDIDATE_URL: '${currentOrigin}/api/expense-candidate',
-  LABEL_NAME: 'Deudita/Procesados',
-  MAX_THREADS: 15
-};
-
-function procesarGastosGmail() {
-  const token = CONFIG.WEBHOOK_TOKEN;
-  if (!token || token.startsWith('GENERA_TU_TOKEN')) {
-    Logger.log('Configura tu WEBHOOK_TOKEN en la variable CONFIG.');
-    return;
-  }
-
-  // 1. Obtener plantillas activas de Deudita
-  let templates = [];
-  try {
-    const res = UrlFetchApp.fetch(CONFIG.TEMPLATES_URL, {
-      method: 'get',
-      headers: { 'Authorization': 'Bearer ' + token },
-      muteHttpExceptions: true
-    });
-    if (res.getResponseCode() !== 200) {
-      Logger.log('Error al consultar plantillas: ' + res.getContentText());
-      return;
-    }
-    templates = JSON.parse(res.getContentText());
-  } catch (err) {
-    Logger.log('Error de red al consultar plantillas: ' + err);
-    return;
-  }
-
-  if (!templates || templates.length === 0) {
-    Logger.log('No hay plantillas activas para este usuario.');
-    return;
-  }
-
-  // 2. Obtener o crear etiqueta para no re-procesar
-  let label = GmailApp.getUserLabelByName(CONFIG.LABEL_NAME);
-  if (!label) {
-    label = GmailApp.createLabel(CONFIG.LABEL_NAME);
-  }
-
-  // 3. Buscar correos recientes no procesados
-  const query = 'label:inbox -label:' + CONFIG.LABEL_NAME + ' newer_than:2d';
-  const threads = GmailApp.search(query, 0, CONFIG.MAX_THREADS);
-
-  for (let t = 0; t < threads.length; t++) {
-    const thread = threads[t];
-    const messages = thread.getMessages();
-
-    for (let m = 0; m < messages.length; m++) {
-      const msg = messages[m];
-      const from = msg.getFrom();
-      const subject = msg.getSubject();
-      const body = msg.getPlainBody();
-      const msgId = msg.getId();
-      const date = msg.getDate();
-
-      // Comparar contra cada plantilla
-      for (let i = 0; i < templates.length; i++) {
-        const tmpl = templates[i];
-
-        // Filtro de remitente
-        if (tmpl.sender_pattern) {
-          const reSender = new RegExp(tmpl.sender_pattern, 'i');
-          if (!reSender.test(from)) continue;
-        }
-
-        // Filtro de asunto
-        if (tmpl.subject_pattern) {
-          const reSubject = new RegExp(tmpl.subject_pattern, 'i');
-          if (!reSubject.test(subject)) continue;
-        }
-
-        // Extracción de monto (obligatorio)
-        const reAmount = new RegExp(tmpl.amount_regex, 'i');
-        const amountMatch = (subject + ' ' + body).match(reAmount);
-        if (!amountMatch || !amountMatch[1]) continue;
-
-        const rawAmount = amountMatch[1];
-
-        // Extracción de comercio
-        let merchant = null;
-        if (tmpl.merchant_regex) {
-          const reMerchant = new RegExp(tmpl.merchant_regex, 'i');
-          const mMatch = (subject + ' ' + body).match(reMerchant);
-          if (mMatch && mMatch[1]) merchant = mMatch[1].trim();
-        }
-
-        // Extracción de cuenta
-        let sourceAccount = null;
-        if (tmpl.source_account_regex) {
-          const reAcc = new RegExp(tmpl.source_account_regex, 'i');
-          const aMatch = (subject + ' ' + body).match(reAcc);
-          if (aMatch && aMatch[1]) sourceAccount = aMatch[1].trim();
-        }
-
-        // Extracción de hora
-        let time = null;
-        if (tmpl.time_regex) {
-          const reTime = new RegExp(tmpl.time_regex, 'i');
-          const tMatch = (subject + ' ' + body).match(reTime);
-          if (tMatch && tMatch[1]) time = tMatch[1].trim();
-        }
-
-        // 4. Enviar candidato de gasto a Deudita
-        const payload = {
-          gmail_message_id: msgId,
-          template_id: tmpl.id,
-          amount: rawAmount,
-          currency: tmpl.default_currency || 'COP',
-          merchant: merchant || tmpl.entity_name || 'Comercio',
-          entity: tmpl.entity_name || 'Banco',
-          sourceAccount: sourceAccount,
-          date: Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-          time: time,
-          received_at: date.toISOString()
-        };
-
-        try {
-          UrlFetchApp.fetch(CONFIG.CANDIDATE_URL, {
-            method: 'post',
-            contentType: 'application/json',
-            headers: { 'Authorization': 'Bearer ' + token },
-            payload: JSON.stringify(payload),
-            muteHttpExceptions: true
-          });
-          Logger.log('Gasto detectado y enviado: ' + payload.merchant + ' ' + payload.amount);
-        } catch (postErr) {
-          Logger.log('Error enviando borrador: ' + postErr);
-        }
-
-        break; // Coincidió con una plantilla, pasar al siguiente mensaje
-      }
-    }
-
-    // Marcar hilo como procesado
-    thread.addLabel(label);
-  }
-}
-`;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl ring-1 ring-zinc-200 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-3xl ring-1 ring-zinc-200 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-zinc-900 text-white p-6 sm:p-8 flex items-center justify-between border-b border-zinc-800">
+        <div className="bg-zinc-900 text-white p-6 sm:p-7 flex items-center justify-between border-b border-zinc-800">
           <div className="flex items-center space-x-3.5">
             <div className="w-11 h-11 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-amber-400">
               <MailCheck className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">
+              <h2 className="text-lg sm:text-xl font-semibold tracking-tight text-zinc-50">
                 Detección Automática con Gmail
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Privacidad total: tu script corre bajo tu cuenta y solo envía borradores reconocidos
+                Sincroniza tus notificaciones bancarias de forma automática y privada
               </p>
             </div>
           </div>
@@ -402,7 +308,7 @@ function procesarGastosGmail() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-zinc-200 bg-zinc-50/70 px-6 pt-3 gap-2 overflow-x-auto">
+        <div className="flex border-b border-zinc-200 bg-zinc-50/80 px-6 pt-3 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('connection')}
             className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all ${
@@ -411,10 +317,12 @@ function procesarGastosGmail() {
                 : 'text-zinc-500 hover:text-zinc-900'
             }`}
           >
-            <Key className="w-4 h-4" />
-            <span>1. Conexión y Script</span>
-            {connectionData?.status === 'active' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 ml-1" />
+            <Link2 className="w-4 h-4" />
+            <span>1. Conexión con Google</span>
+            {isConnected ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 ml-1 inline-block" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-zinc-300 ml-1 inline-block" />
             )}
           </button>
           <button
@@ -457,138 +365,194 @@ function procesarGastosGmail() {
 
         {/* Tab Contents */}
         <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
-          {/* TAB 1: CONEXIÓN & SCRIPT */}
+          {/* TAB 1: CONEXIÓN CON GOOGLE */}
           {activeTab === 'connection' && (
             <div className="space-y-6">
-              {/* Privacy Banner */}
-              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4.5 flex items-start space-x-3.5">
-                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div className="text-xs text-zinc-600 space-y-1">
-                  <p className="font-semibold text-zinc-900">
-                    Tu bandeja de entrada nunca sale de tu cuenta
-                  </p>
-                  <p>
-                    El script de Google Apps Script se ejecuta dentro de tu propio Google Workspace.
-                    Solo evalúa si los correos coinciden con las plantillas regex y envía únicamente los datos del comprobante a Deudita.
-                  </p>
-                </div>
-              </div>
-
-              {/* Webhook Token Box */}
-              <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">
-                      Token de Integración Personal (Webhook)
-                    </span>
-                    {connectionData?.webhook_token ? (
-                      <div className="flex items-center space-x-2">
-                        <code className="font-mono text-xs bg-zinc-100 text-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-200 font-semibold">
-                          {connectionData.webhook_token}
-                        </code>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(connectionData.webhook_token);
-                            setCopiedToken(true);
-                            setTimeout(() => setCopiedToken(false), 2000);
-                          }}
-                          className="p-1.5 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition-colors"
-                          title="Copiar token"
-                        >
-                          {copiedToken ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                        </button>
+              {isConnected ? (
+                /* ESTADO: CONECTADO */
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-3xl p-6 sm:p-7 space-y-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                        <CheckCircle2 className="w-7 h-7" />
                       </div>
-                    ) : (
-                      <p className="text-xs text-zinc-500">Aún no has generado tu token de conexión.</p>
-                    )}
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-base font-bold text-zinc-900">
+                            Gmail Conectado
+                          </h3>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Activo
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-600 mt-1">
+                          Tu cuenta de Gmail está vinculada para detectar automáticamente gastos y comprobantes bancarios.
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  {connectionData?.last_sync_at ? (
+                    <div className="flex items-center space-x-2 text-xs text-emerald-900 bg-white/70 border border-emerald-200/80 px-3.5 py-2 rounded-xl">
+                      <Clock className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>
+                        Última sincronización recibida:{' '}
+                        <strong>{new Date(connectionData.last_sync_at).toLocaleString()}</strong>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 text-xs text-emerald-900 bg-white/70 border border-emerald-200/80 px-3.5 py-2 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>
+                        Listo para recibir notificaciones bancarias en segundo plano.
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
                     <button
-                      onClick={() => handleGenerateConnection(!connectionData?.webhook_token)}
-                      disabled={isLoading}
-                      className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition-all"
+                      onClick={handleConnectWithGoogle}
+                      disabled={isConnecting || isLoading}
+                      className="px-4 py-2.5 bg-white hover:bg-zinc-50 border border-emerald-300 text-emerald-900 font-semibold rounded-xl text-xs shadow-2xs flex items-center space-x-2 transition-all cursor-pointer"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                      <span>{connectionData?.webhook_token ? 'Regenerar Token' : 'Generar Token'}</span>
+                      <RefreshCw className={`w-3.5 h-3.5 ${isConnecting ? 'animate-spin' : ''}`} />
+                      <span>Reconectar o Actualizar Permisos</span>
+                    </button>
+
+                    <button
+                      onClick={handleDisconnect}
+                      disabled={isLoading}
+                      className="px-4 py-2.5 bg-transparent hover:bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-xl text-xs transition-all flex items-center space-x-1.5 cursor-pointer ml-auto"
+                    >
+                      <Unlink className="w-3.5 h-3.5" />
+                      <span>Desconectar Gmail</span>
                     </button>
                   </div>
                 </div>
+              ) : (
+                /* ESTADO: NO CONECTADO */
+                <div className="space-y-6">
+                  {/* Hero Box */}
+                  <div className="bg-gradient-to-b from-zinc-50 to-white border border-zinc-200 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-2xs">
+                    <div className="w-14 h-14 rounded-2xl bg-zinc-900 text-white flex items-center justify-center mx-auto shadow-md">
+                      <MailCheck className="w-7 h-7 text-amber-400" />
+                    </div>
 
-                {connectionData?.last_sync_at && (
-                  <div className="flex items-center space-x-2 text-[11px] text-zinc-500 pt-2 border-t border-zinc-100">
-                    <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                    <span>
-                      Última sincronización recibida:{' '}
-                      <strong>{new Date(connectionData.last_sync_at).toLocaleString()}</strong>
-                    </span>
-                  </div>
-                )}
-              </div>
+                    <div className="max-w-lg mx-auto space-y-1.5">
+                      <h3 className="text-lg font-bold text-zinc-900">
+                        Conecta tu correo para detectar gastos bancarios
+                      </h3>
+                      <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed">
+                        Detecta automáticamente transferencias, pagos con tarjeta y comprobantes bancarios en tu Gmail. No requiere configuración manual.
+                      </p>
+                    </div>
 
-              {/* Instructions & Ready-to-use Apps Script Code */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-zinc-900 flex items-center space-x-2">
-                    <Code2 className="w-4 h-4 text-zinc-700" />
-                    <span>Instalación en 3 sencillos pasos</span>
-                  </h3>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(appsScriptCode);
-                      setCopiedScript(true);
-                      setTimeout(() => setCopiedScript(false), 2000);
-                    }}
-                    className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors"
-                  >
-                    {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedScript ? '¡Código Copiado!' : 'Copiar Código del Script'}</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-1.5">
-                    <span className="w-5 h-5 rounded-full bg-zinc-200 text-zinc-800 font-bold flex items-center justify-center text-[10px]">
-                      1
-                    </span>
-                    <p className="font-semibold text-zinc-900">Abre Google Apps Script</p>
-                    <p className="text-zinc-500 text-[11px]">
-                      Ve a{' '}
-                      <a
-                        href="https://script.google.com"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-600 font-medium underline inline-flex items-center"
+                    {/* Single Connect Button */}
+                    <div className="pt-2 flex flex-col items-center justify-center gap-3">
+                      <button
+                        onClick={handleConnectWithGoogle}
+                        disabled={isConnecting || isLoading}
+                        className="w-full sm:w-auto min-w-[240px] px-6 py-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold rounded-2xl text-sm shadow-md flex items-center justify-center space-x-2.5 transition-all active:scale-98 cursor-pointer disabled:opacity-75"
                       >
-                        script.google.com <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
-                      </a>{' '}
-                      y crea un &quot;Nuevo proyecto&quot;.
-                    </p>
+                        {isConnecting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                            <span>Conectando con Google...</span>
+                          </>
+                        ) : (
+                          <>
+                            {/* Google Colors G Icon SVG */}
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                              <path
+                                fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                              />
+                              <path
+                                fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                              />
+                            </svg>
+                            <span>Conectar con Google</span>
+                          </>
+                        )}
+                      </button>
+
+                      {authUrlOpened && (
+                        <div className="mt-2 text-xs text-zinc-600 bg-amber-50 border border-amber-200 rounded-xl p-3 max-w-md text-left flex items-start space-x-2.5">
+                          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="font-semibold text-amber-900">
+                              ¿No se abrió la ventana de autorización?
+                            </p>
+                            <p className="text-[11px] text-amber-800">
+                              Si tu navegador bloqueó la ventana emergente, haz clic aquí:
+                            </p>
+                            <a
+                              href={authUrlOpened}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center space-x-1 text-xs font-bold text-amber-900 underline hover:text-amber-950 pt-1"
+                            >
+                              <span>Abrir pantalla de autorización de Google</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-1.5">
-                    <span className="w-5 h-5 rounded-full bg-zinc-200 text-zinc-800 font-bold flex items-center justify-center text-[10px]">
-                      2
-                    </span>
-                    <p className="font-semibold text-zinc-900">Pega el código</p>
-                    <p className="text-zinc-500 text-[11px]">
-                      Borra el contenido de <code>Código.gs</code>, pega el script con el botón superior y guarda (Ctrl+S).
-                    </p>
-                  </div>
+                  {/* Highlights Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div className="p-4 bg-zinc-50 border border-zinc-200/80 rounded-2xl space-y-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-zinc-200 text-zinc-800 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-zinc-800" />
+                      </div>
+                      <p className="text-xs font-bold text-zinc-900">Sin código manual</p>
+                      <p className="text-[11px] text-zinc-500 leading-relaxed">
+                        Solo autorizas con tu cuenta de Google. Todo se configura y ejecuta automáticamente.
+                      </p>
+                    </div>
 
-                  <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-1.5">
-                    <span className="w-5 h-5 rounded-full bg-zinc-200 text-zinc-800 font-bold flex items-center justify-center text-[10px]">
-                      3
-                    </span>
-                    <p className="font-semibold text-zinc-900">Activa el temporizador</p>
-                    <p className="text-zinc-500 text-[11px]">
-                      En el menú lateral de Apps Script haz clic en <strong>Activadores</strong> ⏱️ &gt; Añadir activador &gt; Función <code>procesarGastosGmail</code> &gt; Cada 5 minutos.
-                    </p>
+                    <div className="p-4 bg-zinc-50 border border-zinc-200/80 rounded-2xl space-y-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                        <Lock className="w-4 h-4 text-emerald-700" />
+                      </div>
+                      <p className="text-xs font-bold text-zinc-900">Privacidad estricta</p>
+                      <p className="text-[11px] text-zinc-500 leading-relaxed">
+                        Solo se extraen datos de correos que coincidan con las plantillas bancarias activas.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-zinc-50 border border-zinc-200/80 rounded-2xl space-y-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                        <MailCheck className="w-4 h-4 text-amber-700" />
+                      </div>
+                      <p className="text-xs font-bold text-zinc-900">Tú apruebas todo</p>
+                      <p className="text-[11px] text-zinc-500 leading-relaxed">
+                        Cada gasto detectado entra como borrador en Tickets para que lo asignes a tus grupos con un toque.
+                      </p>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="relative rounded-2xl bg-zinc-950 text-zinc-300 p-4 font-mono text-[11px] max-h-56 overflow-y-auto border border-zinc-800">
-                  <pre className="whitespace-pre-wrap">{appsScriptCode}</pre>
+              {/* Privacy Footer Notice */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 flex items-start space-x-3">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-zinc-600 space-y-0.5">
+                  <span className="font-semibold text-zinc-900">Procesamiento seguro: </span>
+                  <span>
+                    La lectura de notificaciones se ejecuta bajo tu propia sesión de Google. Nunca se almacenan contraseñas ni se leen correos personales fuera de los patrones bancarios definidos.
+                  </span>
                 </div>
               </div>
             </div>
@@ -600,15 +564,15 @@ function procesarGastosGmail() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-zinc-900">
-                    Plantillas Globales Disponibles
+                    Plantillas de Notificaciones Bancarias
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Puedes desactivar individualmente cualquier plantilla que no desees procesar en tu Gmail.
+                    Activa o desactiva las entidades que deseas detectar en tu correo de Gmail.
                   </p>
                 </div>
                 <button
                   onClick={() => setActiveTab('create_template')}
-                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Crear Plantilla</span>
@@ -622,11 +586,11 @@ function procesarGastosGmail() {
                   <p className="text-xs text-zinc-400 mt-1">Crea la primera plantilla o usa el asistente con IA.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3.5">
+                <div className="grid grid-cols-1 gap-3">
                   {templates.map((tmpl) => (
                     <div
                       key={tmpl.id}
-                      className={`p-5 rounded-2xl border transition-all ${
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all ${
                         tmpl.enabled
                           ? 'bg-white border-zinc-200 shadow-xs'
                           : 'bg-zinc-50/60 border-zinc-200/60 opacity-60'
@@ -656,7 +620,7 @@ function procesarGastosGmail() {
                         {/* Toggle Button */}
                         <button
                           onClick={() => handleToggleTemplate(tmpl.id, tmpl.enabled)}
-                          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                             tmpl.enabled
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                               : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
@@ -673,7 +637,7 @@ function procesarGastosGmail() {
             </div>
           )}
 
-          {/* TAB 3: CREAR PLANTILLA (MANUAL / CON ASISTENTE IA) */}
+          {/* TAB 3: CREAR PLANTILLA (CON ASISTENTE IA) */}
           {activeTab === 'create_template' && (
             <div className="space-y-6">
               {/* AI Assistant Section */}
@@ -681,17 +645,17 @@ function procesarGastosGmail() {
                 <div className="flex items-center space-x-2">
                   <Sparkles className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-sm font-semibold text-zinc-900">
-                    Asistente de IA: Generar regex a partir de un correo de ejemplo
+                    Asistente de IA: Generar patrones a partir de un correo de ejemplo
                   </h3>
                 </div>
                 <p className="text-xs text-zinc-600">
-                  Pega aquí el texto completo o fragmento de una notificación bancaria real (sin datos personales sensibles). La IA analizará los patrones y auto-completará las expresiones regulares.
+                  Pega aquí el texto completo de una notificación bancaria real (sin datos personales sensibles). La IA extraerá automáticamente las expresiones regulares.
                 </p>
 
                 <textarea
                   value={sampleEmailText}
                   onChange={(e) => setSampleEmailText(e.target.value)}
-                  placeholder="Ejemplo: Notificación de compra Bancolombia. Compraste en STARBUCKS el 24/10/2024 por $ 18.500 con tu tarjeta débito *4521..."
+                  placeholder="Ejemplo: Notificación Bancolombia: Compraste en RESTAURANTE EL ROBLE el 24/10/2024 por $ 45.000 con tu tarjeta débito *4521..."
                   rows={3}
                   className="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-normal text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
@@ -701,7 +665,7 @@ function procesarGastosGmail() {
                     type="button"
                     onClick={handleSuggestAI}
                     disabled={isSuggesting || !sampleEmailText.trim()}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all disabled:opacity-50"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Sparkles className={`w-3.5 h-3.5 ${isSuggesting ? 'animate-spin' : ''}`} />
                     <span>{isSuggesting ? 'Analizando con IA...' : 'Sugerir Patrones con IA'}</span>
@@ -716,7 +680,7 @@ function procesarGastosGmail() {
                     Campos de la Plantilla
                   </h4>
                   <span className="text-[11px] text-zinc-400">
-                    Reutilizable globalmente por toda la comunidad
+                    Disponible globalmente para todos los usuarios
                   </span>
                 </div>
 
@@ -741,7 +705,7 @@ function procesarGastosGmail() {
                     </label>
                     <input
                       type="text"
-                      placeholder="Ej: Bancolombia, Nequi, BBVA"
+                      placeholder="Ej: Bancolombia, Nequi, BBVA, Davivienda"
                       value={templateForm.entity_name}
                       onChange={(e) => setTemplateForm({ ...templateForm, entity_name: e.target.value })}
                       className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:bg-white focus:ring-2 focus:ring-zinc-900"
@@ -767,7 +731,7 @@ function procesarGastosGmail() {
                     </label>
                     <input
                       type="text"
-                      placeholder="Ej: .*(compra|pago|aprobada).*"
+                      placeholder="Ej: .*(compra|pago|transferencia).*"
                       value={templateForm.subject_pattern}
                       onChange={(e) => setTemplateForm({ ...templateForm, subject_pattern: e.target.value })}
                       className="w-full px-3 py-2 font-mono bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:bg-white focus:ring-2 focus:ring-zinc-900"
@@ -858,14 +822,14 @@ function procesarGastosGmail() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('templates')}
-                    className="px-4 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100 rounded-xl transition-all"
+                    className="px-4 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100 rounded-xl transition-all cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition-all"
+                    className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition-all cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Guardar Plantilla</span>
@@ -880,11 +844,11 @@ function procesarGastosGmail() {
         <div className="p-4 bg-zinc-50 border-t border-zinc-200 flex justify-between items-center text-xs text-zinc-500 px-6 sm:px-8">
           <div className="flex items-center space-x-1.5">
             <Info className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Los borradores generados aparecerán en la pestaña de Borradores para tu revisión.</span>
+            <span>Los comprobantes detectados se guardarán como borradores en la sección de Tickets.</span>
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-zinc-200 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-100 transition-all text-xs"
+            className="px-4 py-2 bg-white border border-zinc-200 text-zinc-700 font-semibold rounded-xl hover:bg-zinc-100 transition-all text-xs cursor-pointer"
           >
             Cerrar
           </button>

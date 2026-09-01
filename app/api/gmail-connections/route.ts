@@ -8,6 +8,16 @@ function generateWebhookToken(): string {
   return crypto.randomBytes(24).toString('hex');
 }
 
+function getBaseAppsScriptUrl(): string {
+  const envUrl = process.env.GOOGLE_APPS_SCRIPT_URL || process.env.GMAIL_APPS_SCRIPT_URL;
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim();
+  }
+
+  const scriptId = process.env.GOOGLE_APPS_SCRIPT_ID || process.env.GMAIL_APPS_SCRIPT_ID || 'AKfycbz_GMAIL_INTEGRATION_SCRIPT_ID';
+  return `https://script.google.com/macros/s/${scriptId}/exec`;
+}
+
 /**
  * GET /api/gmail-connections
  * Consulta la conexión actual del usuario.
@@ -28,8 +38,7 @@ export async function GET() {
       .maybeSingle();
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://deudita.app';
-    const scriptId = process.env.GMAIL_APPS_SCRIPT_ID || 'AKfycbz_GMAIL_INTEGRATION_SCRIPT_ID';
-    const baseScriptUrl = process.env.GMAIL_APPS_SCRIPT_URL || `https://script.google.com/macros/s/${scriptId}/exec`;
+    const baseScriptUrl = getBaseAppsScriptUrl();
 
     if (!connection) {
       return NextResponse.json({
@@ -58,7 +67,8 @@ export async function GET() {
 
 /**
  * POST /api/gmail-connections
- * Activa la integración de Gmail para el usuario generando o reutilizando su webhook_token.
+ * Activa la integración de Gmail para el usuario generando o reutilizando su webhook_token,
+ * y devuelve la URL completa del Apps Script Web App con el parámetro ?token=<webhook_token>.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -104,12 +114,12 @@ export async function POST(req: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://deudita.app';
-    const scriptId = process.env.GMAIL_APPS_SCRIPT_ID || 'AKfycbz_GMAIL_INTEGRATION_SCRIPT_ID';
-    const baseScriptUrl = process.env.GMAIL_APPS_SCRIPT_URL || `https://script.google.com/macros/s/${scriptId}/exec`;
+    const baseScriptUrl = getBaseAppsScriptUrl();
     const appsScriptUrl = `${baseScriptUrl}?token=${webhookToken}`;
 
     return NextResponse.json({
       success: true,
+      connected: true,
       webhook_token: webhookToken,
       apps_script_url: appsScriptUrl,
       webhook_url: `${appUrl}/api/expense-candidate`,
@@ -122,3 +132,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/gmail-connections
+ * Desactiva la integración de Gmail para el usuario.
+ */
+export async function DELETE() {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+
+    if (authErr || !user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { error: updateErr } = await supabase
+      .from('email_ingest_connections')
+      .update({ status: 'inactive' })
+      .eq('user_id', user.id);
+
+    if (updateErr) {
+      console.error('[API DELETE /api/gmail-connections] Update error:', updateErr);
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      connected: false,
+      message: 'Conexión con Gmail desactivada con éxito',
+    });
+  } catch (err: unknown) {
+    console.error('[API DELETE /api/gmail-connections] Error:', err);
+    const message = err instanceof Error ? err.message : 'Error interno al desactivar Gmail';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
