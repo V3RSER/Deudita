@@ -207,9 +207,11 @@ export function PairwiseDetailModal({
   };
 
   const finalSettlementAmount =
-    isSimplified && detail.optimizationDetail?.totalCompensated
+    typeof detail.finalSettlementAmount === 'number'
+      ? detail.finalSettlementAmount
+      : isSimplified && detail.optimizationDetail
       ? detail.optimizationDetail.simplifiedAmount
-      : pairwise.amount;
+      : detail.netDirectBalance;
 
   return (
     <div
@@ -751,39 +753,79 @@ export function PairwiseDetailModal({
                                 </>
                               )}
 
-                              {/* 4. Secondary Arrow: Debtor -> Third (e.g. Debtor transfer) */}
-                              {relDebtorOut && !relThirdIn && (
+                              {/* 4. Secondary Arrow: Debtor -> Third (e.g. Debtor transfer / redirected payment) */}
+                              {relDebtorOut && (
                                 <>
-                                  <line
-                                    x1="70"
-                                    y1="102"
-                                    x2="70"
-                                    y2="152"
-                                    stroke="#059669"
-                                    strokeWidth="2"
-                                    markerEnd="url(#arrow-emerald)"
-                                  />
-                                  <text
-                                    x="100"
-                                    y="126"
-                                    fill="#059669"
-                                    textAnchor="start"
-                                    fontWeight="800"
-                                    fontSize="13px"
-                                    className="font-mono"
-                                  >
-                                    {formatCurrency(relDebtorOut.amount, currency)}
-                                  </text>
-                                  <text
-                                    x="100"
-                                    y="140"
-                                    fill="#64748b"
-                                    textAnchor="start"
-                                    fontWeight="500"
-                                    fontSize="10.5px"
-                                  >
-                                    {debtorName} debe a {thirdDebtorName}
-                                  </text>
+                                  {thirdOutProfile && relDebtorOut.to.id === thirdOutProfile.id ? (
+                                    <>
+                                      <line
+                                        x1="94"
+                                        y1="72"
+                                        x2="424"
+                                        y2="165"
+                                        stroke="#059669"
+                                        strokeWidth="2.5"
+                                        strokeDasharray="4 3"
+                                        markerEnd="url(#arrow-emerald)"
+                                      />
+                                      <text
+                                        x="220"
+                                        y="102"
+                                        fill="#059669"
+                                        textAnchor="middle"
+                                        fontWeight="800"
+                                        fontSize="13px"
+                                        className="font-mono"
+                                      >
+                                        {formatCurrency(relDebtorOut.amount, currency)}
+                                      </text>
+                                      <text
+                                        x="220"
+                                        y="116"
+                                        fill="#047857"
+                                        textAnchor="middle"
+                                        fontWeight="600"
+                                        fontSize="10px"
+                                      >
+                                        {debtorName} transfiere directo a {thirdOutName}
+                                      </text>
+                                    </>
+                                  ) : (
+                                    !relThirdIn && (
+                                      <>
+                                        <line
+                                          x1="70"
+                                          y1="102"
+                                          x2="70"
+                                          y2="152"
+                                          stroke="#059669"
+                                          strokeWidth="2"
+                                          markerEnd="url(#arrow-emerald)"
+                                        />
+                                        <text
+                                          x="100"
+                                          y="126"
+                                          fill="#059669"
+                                          textAnchor="start"
+                                          fontWeight="800"
+                                          fontSize="13px"
+                                          className="font-mono"
+                                        >
+                                          {formatCurrency(relDebtorOut.amount, currency)}
+                                        </text>
+                                        <text
+                                          x="100"
+                                          y="140"
+                                          fill="#64748b"
+                                          textAnchor="start"
+                                          fontWeight="500"
+                                          fontSize="10.5px"
+                                        >
+                                          {debtorName} debe a {thirdDebtorName}
+                                        </text>
+                                      </>
+                                    )
+                                  )}
                                 </>
                               )}
 
@@ -981,6 +1023,56 @@ export function PairwiseDetailModal({
                         </div>
                       </div>
                     )}
+
+                    {/* New Suggested Payments (Directly replaces the debt) */}
+                    {detail.optimizationDetail?.newSuggestedPayments &&
+                      detail.optimizationDetail.newSuggestedPayments.length > 0 && (
+                        <div className="bg-emerald-50/90 rounded-2xl p-4 sm:p-5 border border-emerald-200/90 space-y-3">
+                          <div className="flex items-center space-x-2 text-emerald-900 font-extrabold text-xs sm:text-sm">
+                            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Transferencia directa sugerida (reemplaza el pago a {creditorName})</span>
+                          </div>
+                          <div className="space-y-2">
+                            {detail.optimizationDetail.newSuggestedPayments.map((sug, sIdx) => (
+                              <div
+                                key={`sug-${sIdx}`}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-emerald-200 shadow-2xs"
+                              >
+                                <div className="flex items-start sm:items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                                    <ArrowRight className="w-4 h-4 text-emerald-700" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs sm:text-sm font-black text-zinc-900">
+                                      <span className="text-[#581c87]">{sug.from.full_name || 'Deudor'}</span>{' '}
+                                      <span className="text-zinc-500 font-medium">le debe pagar a</span>{' '}
+                                      <span className="text-emerald-700 font-black">{sug.to.full_name || 'Tercero'}</span>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-500 font-medium mt-0.5">{sug.description}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
+                                  <span className="text-base sm:text-lg font-black text-emerald-700 font-mono">
+                                    {formatCurrency(sug.amount, currency)}
+                                  </span>
+                                  {onOpenSettleModal && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onClose();
+                                        onOpenSettleModal(groupId || pairwise.group_id, sug.from.id, sug.to.id, sug.amount);
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-2xs"
+                                    >
+                                      Saldar con {sug.to.full_name?.split(' ')[0] || 'Tercero'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                     {/* Optional Expandable Section for linked expenses */}
                     {detail.optimizationDetail?.relevantRelations &&
