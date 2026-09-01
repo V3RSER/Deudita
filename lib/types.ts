@@ -165,8 +165,50 @@ export interface ExpenseDraft {
   confidence: number;
   status: 'pending' | 'confirmed' | 'discarded';
   confirmed_expense_id?: string;
+  template_id?: string | null;
+  currency?: string;
+  entity?: string | null;
+  source_account?: string | null;
+  detected_time?: string | null;
   created_at: string;
   extracted_items?: Array<{ description: string; amount: number }>;
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  sender_pattern?: string | null;
+  subject_pattern?: string | null;
+  amount_regex: string;
+  merchant_regex?: string | null;
+  date_regex?: string | null;
+  date_format?: string | null;
+  entity_name?: string | null;
+  default_currency?: string;
+  currency_regex?: string | null;
+  source_account_regex?: string | null;
+  time_regex?: string | null;
+  created_by?: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface UserTemplatePreference {
+  user_id: string;
+  template_id: string;
+  enabled: boolean;
+}
+
+export interface EmailTemplateWithPreference extends EmailTemplate {
+  enabled: boolean;
+}
+
+export interface EmailIngestConnection {
+  user_id: string;
+  webhook_token: string;
+  last_sync_at?: string | null;
+  status: 'active' | 'inactive';
+  created_at: string;
 }
 
 export interface Payment {

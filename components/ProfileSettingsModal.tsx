@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
+import { EmailTemplatesManager } from '@/components/EmailTemplatesManager';
 import {
   X,
   Camera,
@@ -19,6 +20,11 @@ import {
   Sparkles,
   Globe,
   Coins,
+  MailCheck,
+  CheckCircle2,
+  ExternalLink,
+  Layers,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ProfileSettingsModalProps {
@@ -64,6 +70,16 @@ export function ProfileSettingsModal({
   const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions ?? '');
   const [avatarUrl, setAvatarUrl] = useState(currentProfile?.avatar_url ?? '');
 
+  // Gmail Ingest Connection state
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailConnection, setGmailConnection] = useState<{
+    status?: string;
+    apps_script_url?: string;
+    last_sync_at?: string | null;
+  } | null>(null);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
+
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -72,6 +88,19 @@ export function ProfileSettingsModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const prevIsOpenRef = useRef(false);
+
+  const fetchGmailStatus = async () => {
+    try {
+      const res = await fetch('/api/gmail-connections');
+      if (res.ok) {
+        const data = await res.json();
+        setGmailConnected(Boolean(data.connected));
+        setGmailConnection(data.connection);
+      }
+    } catch {
+      // Ignorar errores silenciosos en carga inicial
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !currentProfile) {
@@ -89,8 +118,36 @@ export function ProfileSettingsModal({
       setSuccessMessage(null);
       setIsSaving(false);
       setIsUploading(false);
+      fetchGmailStatus();
     }
   }, [isOpen, currentProfile]);
+
+  const handleConnectGmail = async () => {
+    setIsConnectingGmail(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/gmail-connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al conectar Gmail');
+
+      setGmailConnected(true);
+      setGmailConnection(data.connection);
+      setSuccessMessage('¡Enlace de autorización de Gmail generado con éxito!');
+
+      // Automatically open the Google authorization link if available
+      if (data.connection?.apps_script_url) {
+        window.open(data.connection.apps_script_url, '_blank');
+      }
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error al conectar Gmail');
+    } finally {
+      setIsConnectingGmail(false);
+    }
+  };
 
   // Handle escape key
   useEffect(() => {
@@ -473,6 +530,84 @@ export function ProfileSettingsModal({
             </div>
           </div>
 
+          {/* Section 4: Gmail Detection & Templates */}
+          {!isOnboarding && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-0.5">
+                <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <MailCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Detección Automática con Gmail</span>
+                </h3>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                    gmailConnected
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-zinc-100 text-zinc-600'
+                  }`}
+                >
+                  {gmailConnected ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Conectado</span>
+                    </>
+                  ) : (
+                    <span>No conectado</span>
+                  )}
+                </span>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-50/40 via-white to-zinc-50 border border-indigo-100 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  Conecta tu cuenta de Gmail mediante Google Apps Script para detectar comprobantes de compra y crear borradores automáticamente.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleConnectGmail}
+                    disabled={isConnectingGmail}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isConnectingGmail ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <MailCheck className="w-3.5 h-3.5" />
+                    )}
+                    <span>{gmailConnected ? 'Reconectar Gmail' : 'Conectar Gmail (1 Clic)'}</span>
+                  </button>
+
+                  {gmailConnection?.apps_script_url && (
+                    <a
+                      href={gmailConnection.apps_script_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white border border-indigo-200 hover:bg-indigo-50/50 text-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xs transition flex items-center gap-1.5"
+                    >
+                      <span>Autorizar en Google</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsTemplatesModalOpen(true)}
+                    className="bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer ml-auto"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Catálogo de Plantillas</span>
+                  </button>
+                </div>
+
+                {gmailConnection?.last_sync_at && (
+                  <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    <span>Última sincronización: {new Date(gmailConnection.last_sync_at).toLocaleString('es-CO')}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
         </form>
 
@@ -501,6 +636,12 @@ export function ProfileSettingsModal({
           </button>
         </div>
       </div>
+
+      {/* Email Templates Manager Modal */}
+      <EmailTemplatesManager
+        isOpen={isTemplatesModalOpen}
+        onClose={() => setIsTemplatesModalOpen(false)}
+      />
     </div>
   );
 }

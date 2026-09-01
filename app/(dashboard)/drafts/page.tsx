@@ -4,12 +4,14 @@ import React, { useState } from 'react';
 import { DraftsView } from '@/components/DraftsView';
 import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
 import { ScanReceiptModal } from '@/components/ScanReceiptModal';
+import { GmailIntegrationModal } from '@/components/GmailIntegrationModal';
 import { ExpenseDraft } from '@/lib/types';
 
 export default function DraftsPage() {
   const [isConfirmDraftOpen, setIsConfirmDraftOpen] = useState(false);
   const [selectedDraft, setSelectedDraft] = useState<ExpenseDraft | null>(null);
   const [isScanReceiptOpen, setIsScanReceiptOpen] = useState(false);
+  const [isGmailIntegrationOpen, setIsGmailIntegrationOpen] = useState(false);
 
   const handleOpenConfirmDraft = (draft: ExpenseDraft) => {
     setSelectedDraft(draft);
@@ -21,6 +23,7 @@ export default function DraftsPage() {
       <DraftsView
         onOpenConfirmDraft={handleOpenConfirmDraft}
         onOpenScanReceiptModal={() => setIsScanReceiptOpen(true)}
+        onOpenGmailIntegration={() => setIsGmailIntegrationOpen(true)}
       />
 
       <ConfirmDraftModal
@@ -33,6 +36,11 @@ export default function DraftsPage() {
       <ScanReceiptModal
         isOpen={isScanReceiptOpen}
         onClose={() => setIsScanReceiptOpen(false)}
+      />
+
+      <GmailIntegrationModal
+        isOpen={isGmailIntegrationOpen}
+        onClose={() => setIsGmailIntegrationOpen(false)}
       />
     </>
   );

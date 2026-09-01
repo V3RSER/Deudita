@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
-import { X, MailCheck, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, MailCheck, CheckCircle2, Loader2, Trash2, Edit3, DollarSign, Calendar, Users } from 'lucide-react';
 
 interface ConfirmDraftModalProps {
   isOpen: boolean;
@@ -18,11 +18,15 @@ export function ConfirmDraftModal({
   onClose,
   draft,
 }: ConfirmDraftModalProps) {
-  const { currentProfile, userGroups, members, profiles, confirmDraft } = useExpense();
+  const { currentProfile, userGroups, members, profiles, confirmDraft, discardDraft } = useExpense();
 
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [paidBy, setPaidBy] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [amount, setAmount] = useState<number>(0);
+  const [expenseDate, setExpenseDate] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const prevIsOpenRef = useRef(false);
@@ -43,6 +47,11 @@ export function ConfirmDraftModal({
       prevDraftIdRef.current = draft.id;
       setErrorMsg(null);
       setIsSubmitting(false);
+      setIsDiscarding(false);
+
+      setDescription(draft.detected_merchant || 'Gasto detectado');
+      setAmount(draft.detected_amount || 0);
+      setExpenseDate(draft.detected_date || new Date().toISOString().split('T')[0]);
 
       const initialGroupId = userGroups.length > 0 ? userGroups[0].id : '';
       setSelectedGroupId(initialGroupId);
@@ -86,7 +95,7 @@ export function ConfirmDraftModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || isDiscarding) return;
 
     setErrorMsg(null);
 
@@ -100,10 +109,15 @@ export function ConfirmDraftModal({
       return;
     }
 
+    if (!amount || amount <= 0) {
+      setErrorMsg('El monto debe ser mayor a 0');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Default equal split among selected group members
-      const share = draft.detected_amount / memberProfiles.length;
+      const share = amount / memberProfiles.length;
       const splits: ExpenseSplit[] = memberProfiles.map((p) => ({
         id: '',
         expense_id: '',
@@ -112,7 +126,11 @@ export function ConfirmDraftModal({
         created_at: new Date().toISOString(),
       }));
 
-      await confirmDraft(draft.id, selectedGroupId, paidBy, splits);
+      await confirmDraft(draft.id, selectedGroupId, paidBy, splits, {
+        description: description.trim(),
+        totalAmount: amount,
+        expenseDate: expenseDate || undefined,
+      });
       onClose();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Error al confirmar borrador');
@@ -121,51 +139,125 @@ export function ConfirmDraftModal({
     }
   };
 
+  const handleDiscard = async () => {
+    if (isDiscarding || isSubmitting) return;
+    setIsDiscarding(true);
+    setErrorMsg(null);
+    try {
+      await discardDraft(draft.id);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error al descartar borrador');
+    } finally {
+      setIsDiscarding(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-      <div className="bg-white rounded-[2rem] ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/70 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white rounded-3xl ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden my-auto">
         {/* Header */}
-        <div className="bg-zinc-900 text-white p-8 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
-              <MailCheck className="w-6 h-6" />
+        <div className="bg-zinc-900 text-white p-6 flex items-center justify-between">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
+              <MailCheck className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-zinc-50">Confirmar y Asignar Borrador</h2>
-              <p className="text-sm text-zinc-400 mt-1">Gasto detectado automáticamente</p>
+              <h2 className="text-lg font-bold tracking-tight text-zinc-50">Confirmar y Asignar Gasto</h2>
+              <p className="text-xs text-zinc-400">Detectado automáticamente desde tu correo</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors"
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Draft Details Box */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          <div className="bg-amber-50/50 p-5 rounded-2xl ring-1 ring-amber-200 space-y-2">
-            <div className="flex justify-between items-center text-xs font-bold text-amber-900 uppercase tracking-widest">
-              <span>{draft.detected_merchant}</span>
-              <span className="text-sm font-extrabold text-amber-600">
-                {formatCurrency(draft.detected_amount)}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {errorMsg && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
+              {errorMsg}
+            </div>
+          )}
+
+          {/* Snippet Card */}
+          <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100 space-y-2">
+            <div className="flex justify-between items-center text-xs font-bold text-indigo-950 uppercase tracking-wider">
+              <div className="flex items-center space-x-2">
+                <span>{draft.entity || 'Correo'}</span>
+                {draft.source_account && (
+                  <span className="text-[10px] font-mono bg-white text-zinc-600 px-2 py-0.5 rounded-md border border-indigo-200">
+                    *{draft.source_account}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs font-extrabold text-indigo-700">
+                {draft.currency || 'COP'} {formatCurrency(draft.detected_amount, draft.currency || 'COP')}
               </span>
             </div>
-            <p className="text-sm text-zinc-600 line-clamp-2 mt-2 leading-relaxed">&quot;{draft.raw_snippet}&quot;</p>
-            <p className="text-[10px] text-zinc-400 uppercase tracking-widest mt-1">Fecha detectada: {draft.detected_date}</p>
+            {draft.raw_snippet && (
+              <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed bg-white/70 p-2 rounded-xl border border-indigo-100/60 font-mono text-[11px]">
+                &quot;{draft.raw_snippet}&quot;
+              </p>
+            )}
           </div>
 
-          {/* Group selection */}
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
-              Asignar al Grupo
+          {/* Editable Fields: Description & Amount */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="space-y-1 sm:col-span-2">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                Descripción / Comercio
+              </label>
+              <input
+                type="text"
+                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                Monto ({draft.currency || 'COP'})
+              </label>
+              <input
+                type="number"
+                step="any"
+                required
+                value={amount}
+                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                Fecha del Gasto
+              </label>
+              <input
+                type="date"
+                required
+                value={expenseDate}
+                onChange={(e) => setExpenseDate(e.target.value)}
+                className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+          </div>
+
+          {/* Group selection (mandatory) */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+              Asignar al Grupo <span className="text-rose-500">*</span>
             </label>
             <select
               value={selectedGroupId}
               onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition cursor-pointer"
             >
               {userGroups.map((g, idx) => (
                 <option key={g.id || `dg-${idx}`} value={g.id}>
@@ -176,14 +268,14 @@ export function ConfirmDraftModal({
           </div>
           
           {/* Paid by selection */}
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
               ¿Quién pagó?
             </label>
             <select
               value={paidBy}
               onChange={(e) => setPaidBy(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 hover:border-zinc-300 rounded-xl text-sm font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition cursor-pointer"
             >
               {memberProfiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -193,32 +285,52 @@ export function ConfirmDraftModal({
             </select>
           </div>
 
-          <div className="bg-zinc-50 p-4 rounded-2xl ring-1 ring-zinc-200 text-sm text-zinc-600">
-            Se dividirá en partes iguales entre los{' '}
-            <strong className="text-zinc-900">{memberProfiles.length} integrantes</strong> del grupo seleccionado.
+          <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-xs text-zinc-600 flex items-center justify-between">
+            <span>
+              División entre <strong className="text-zinc-900">{memberProfiles.length} integrantes</strong>:
+            </span>
+            <span className="font-bold text-zinc-900">
+              {formatCurrency(memberProfiles.length > 0 ? amount / memberProfiles.length : 0, draft.currency || 'COP')} c/u
+            </span>
           </div>
 
-          {/* Submit */}
-          <div className="pt-6 border-t border-zinc-100 flex justify-end space-x-3">
+          {/* Submit & Discard actions */}
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
             <button
               type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-full ring-1 ring-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 text-sm font-medium transition-all duration-200 active:scale-95"
+              onClick={handleDiscard}
+              disabled={isDiscarding || isSubmitting}
+              className="px-3.5 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 flex items-center space-x-2 disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              {isDiscarding ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <CheckCircle2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
               )}
-              <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}</span>
+              <span>Descartar</span>
             </button>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 text-xs font-semibold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || isDiscarding}
+                className="px-5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold shadow-xs transition flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                )}
+                <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

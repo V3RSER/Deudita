@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { draftId, groupId, paidBy, splits } = await req.json();
+    const { draftId, groupId, paidBy, splits, description: customDescription, totalAmount: customTotalAmount, expenseDate: customExpenseDate } = await req.json();
 
     // 1. Fetch draft
     const { data: draft, error: draftErr } = await supabase.from('expense_drafts').select('*').eq('id', draftId).single();
@@ -20,15 +20,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Borrador no encontrado' }, { status: 404 });
     }
 
+    const finalAmount = typeof customTotalAmount === 'number' ? customTotalAmount : (draft.detected_amount ?? 0);
+    const finalDescription = customDescription && typeof customDescription === 'string' && customDescription.trim() ? customDescription.trim() : (draft.detected_merchant ? draft.detected_merchant : 'Gasto desde Gmail');
+    const finalDate = customExpenseDate && typeof customExpenseDate === 'string' && customExpenseDate.trim() ? customExpenseDate.trim() : (draft.detected_date ? draft.detected_date : new Date().toISOString().split('T')[0]);
+
     // 2. Create expense
     const { data: newExpense, error: expErr } = await supabase
       .from('expenses')
       .insert({
         group_id: groupId,
         paid_by: paidBy,
-        total_amount: draft.detected_amount ?? 0,
-        description: draft.detected_merchant ? draft.detected_merchant : 'Gasto desde Gmail',
-        expense_date: draft.detected_date ? draft.detected_date : new Date().toISOString().split('T')[0],
+        total_amount: finalAmount,
+        description: finalDescription,
+        expense_date: finalDate,
         source: 'gmail',
         source_draft_id: draft.id,
         created_by: user.id

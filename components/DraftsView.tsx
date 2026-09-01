@@ -20,6 +20,7 @@ import {
 interface DraftsViewProps {
   onOpenConfirmDraft: (draft: ExpenseDraft) => void;
   onOpenScanReceiptModal: () => void;
+  onOpenGmailIntegration?: () => void;
 }
 
 import { PageHeader } from '@/components/PageHeader';
@@ -27,6 +28,7 @@ import { PageHeader } from '@/components/PageHeader';
 export function DraftsView({
   onOpenConfirmDraft,
   onOpenScanReceiptModal,
+  onOpenGmailIntegration,
 }: DraftsViewProps) {
   const { drafts, discardDraft, addDraft } = useExpense();
 
@@ -35,21 +37,24 @@ export function DraftsView({
 
   const simulateGmailArrival = () => {
     const sampleMerchants = [
-      { name: 'Uber Eats', amount: 18400, items: [{ description: 'Pedido Hamburguesas', amount: 15400 }, { description: 'Propina', amount: 3000 }] },
-      { name: 'Suscripción Spotify Family', amount: 8990, items: [] },
-      { name: 'Mercado Libre Electrónica', amount: 32500, items: [{ description: 'Cargador USB-C y Cable 2m', amount: 32500 }] },
-      { name: 'Estación de Servicio Shell', amount: 25000, items: [] },
+      { name: 'Uber Eats', amount: 18400, entity: 'Bancolombia', source_account: '9841', items: [{ description: 'Pedido Hamburguesas', amount: 15400 }, { description: 'Propina', amount: 3000 }] },
+      { name: 'Suscripción Spotify Family', amount: 8990, entity: 'Nequi', source_account: '4012', items: [] },
+      { name: 'Mercado Libre Electrónica', amount: 32500, entity: 'Bancolombia', source_account: '9841', items: [{ description: 'Cargador USB-C y Cable 2m', amount: 32500 }] },
+      { name: 'Estación de Servicio Shell', amount: 25000, entity: 'Daviplata', source_account: '1120', items: [] },
     ];
 
     const pick = sampleMerchants[Math.floor(Math.random() * sampleMerchants.length)];
 
     addDraft({
       gmail_message_id: `msg_gmail_${Date.now()}`,
-      raw_snippet: `Confirmación de pago a ${pick.name} recibida por e-mail el ${new Date().toLocaleDateString()}. Total pagado ${formatCurrency(pick.amount)}.`,
+      raw_snippet: `Notificación ${pick.entity}: Pago a ${pick.name} por COP ${formatCurrency(pick.amount)} desde cuenta *${pick.source_account}.`,
       detected_amount: pick.amount,
       detected_merchant: pick.name,
       detected_date: new Date().toISOString().split('T')[0],
-      confidence: 0.94,
+      confidence: 0.96,
+      entity: pick.entity,
+      source_account: pick.source_account,
+      currency: 'COP',
       extracted_items: pick.items,
     });
   };
@@ -58,10 +63,19 @@ export function DraftsView({
     <div className="space-y-6">
       <PageHeader 
         title="Tickets y Borradores"
-        subtitle="Los comprobantes escaneados o recibidos se guardan aquí. Asígnalos a un grupo para dividirlos."
+        subtitle="Los comprobantes escaneados o recibidos vía Gmail se guardan aquí. Asígnalos a un grupo para dividirlos."
         icon={<MailCheck className="w-5 h-5" />}
         actions={
           <>
+            {onOpenGmailIntegration && (
+              <button
+                onClick={onOpenGmailIntegration}
+                className="bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-800 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px]"
+              >
+                <MailCheck className="w-4 h-4 text-indigo-600" />
+                <span>Integración Gmail & Plantillas</span>
+              </button>
+            )}
             <button
               onClick={simulateGmailArrival}
               className="bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px]"
@@ -94,14 +108,25 @@ export function DraftsView({
             <Inbox className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
             <h3 className="font-semibold text-zinc-900 text-lg">No tienes borradores pendientes</h3>
             <p className="text-sm text-zinc-500 mt-1.5 mb-6 max-w-md mx-auto">
-              Usa el botón de simulación o escanea un comprobante para generar un borrador automáticamente.
+              Conecta tu Gmail para detectar automáticamente tus notificaciones de gastos o escanea un comprobante.
             </p>
-            <button
-              onClick={simulateGmailArrival}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs transition-all active:scale-95"
-            >
-              Simular entrada de e-mail
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {onOpenGmailIntegration && (
+                <button
+                  onClick={onOpenGmailIntegration}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-5 py-2.5 rounded-full text-xs transition-all active:scale-95 flex items-center space-x-1.5"
+                >
+                  <MailCheck className="w-4 h-4" />
+                  <span>Configurar Gmail & Plantillas</span>
+                </button>
+              )}
+              <button
+                onClick={simulateGmailArrival}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-5 py-2.5 rounded-full text-xs transition-all active:scale-95"
+              >
+                Simular entrada de e-mail
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -113,11 +138,23 @@ export function DraftsView({
                 <div>
                   {/* Draft Header */}
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-800 bg-amber-100/50 px-2.5 py-1 rounded-md">
-                      Borrador
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-amber-800 bg-amber-100/50 px-2.5 py-1 rounded-md">
+                        Borrador
+                      </span>
+                      {draft.entity && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200">
+                          {draft.entity}
+                        </span>
+                      )}
+                      {draft.source_account && (
+                        <span className="text-[10px] font-mono text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded-md border border-zinc-200">
+                          *{draft.source_account}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs font-semibold text-zinc-400">
-                      Verificado
+                      {draft.detected_date}
                     </span>
                   </div>
 
@@ -126,7 +163,7 @@ export function DraftsView({
                   </h3>
 
                   <p className="text-3xl font-semibold text-emerald-600 my-2 tracking-tight">
-                    {formatCurrency(draft.detected_amount)}
+                    {draft.currency ? `${draft.currency} ` : ''}{formatCurrency(draft.detected_amount)}
                   </p>
 
                   <p className="text-sm text-zinc-600 bg-zinc-50 p-4 rounded-xl ring-1 ring-zinc-100/80 leading-relaxed line-clamp-3 mt-4">

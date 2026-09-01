@@ -57,7 +57,13 @@ interface ExpenseContextType {
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
   updatePayment: (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
   deletePayment: (id: string) => Promise<void>;
-  confirmDraft: (draftId: string, groupId: string, paidBy: string, splits: ExpenseSplit[]) => Promise<{ expense: Expense; draftId: string }>;
+  confirmDraft: (
+    draftId: string,
+    groupId: string,
+    paidBy: string,
+    splits: ExpenseSplit[],
+    customData?: { description?: string; totalAmount?: number; expenseDate?: string }
+  ) => Promise<{ expense: Expense; draftId: string }>;
   discardDraft: (draftId: string) => Promise<void>;
   addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<ExpenseDraft>;
   reloadFromSupabase: (fullSync?: boolean) => Promise<void>;
@@ -971,13 +977,22 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     draftId: string,
     groupId: string,
     paidBy: string,
-    splits: ExpenseSplit[]
+    splits: ExpenseSplit[],
+    customData?: { description?: string; totalAmount?: number; expenseDate?: string }
   ): Promise<{ expense: Expense; draftId: string }> => {
     return await runOperation('Confirmando borrador...', async () => {
       const res = await fetch('/api/drafts/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draftId, groupId, paidBy, splits }),
+        body: JSON.stringify({
+          draftId,
+          groupId,
+          paidBy,
+          splits,
+          description: customData?.description,
+          totalAmount: customData?.totalAmount,
+          expenseDate: customData?.expenseDate,
+        }),
       });
 
       if (!res.ok) {
