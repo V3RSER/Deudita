@@ -180,14 +180,17 @@ begin
     );
     return NEW;
   elsif TG_OP = 'DELETE' then
-    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
-    values (
-      OLD.id,
-      OLD.group_id,
-      coalesce(v_user_id, OLD.created_by),
-      'delete',
-      jsonb_build_object('old', row_to_json(OLD))
-    );
+    -- Only log deletion if the parent group still exists (avoids FK violation during group cascade delete)
+    if exists (select 1 from public.groups where id = OLD.group_id) then
+      insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+      values (
+        OLD.id,
+        OLD.group_id,
+        coalesce(v_user_id, OLD.created_by),
+        'delete',
+        jsonb_build_object('old', row_to_json(OLD))
+      );
+    end if;
     return OLD;
   end if;
   return null;

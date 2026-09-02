@@ -106,6 +106,35 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'Solo el creador del grupo puede eliminarlo' }, { status: 403 });
     }
 
+    // 1. Delete group expenses first while group exists in the database.
+    // This allows the AFTER DELETE trigger on expenses (trg_log_expense_changes)
+    // to execute and insert into expense_audit_logs without violating expense_audit_logs_group_id_fkey.
+    const { error: expErr } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('group_id', groupId);
+
+    if (expErr) {
+      console.warn('[API DELETE /api/groups/:id] Warning deleting expenses:', expErr);
+    }
+
+    // 2. Delete group payments
+    const { error: payErr } = await supabase
+      .from('payments')
+      .delete()
+      .eq('group_id', groupId);
+
+    if (payErr) {
+      console.warn('[API DELETE /api/groups/:id] Warning deleting payments:', payErr);
+    }
+
+    // 3. Delete group invites
+    await supabase.from('group_invites').delete().eq('group_id', groupId);
+
+    // 4. Delete group members
+    await supabase.from('group_members').delete().eq('group_id', groupId);
+
+    // 5. Delete the group itself (will cascade-delete any remaining audit logs)
     const { error: deleteErr } = await supabase
       .from('groups')
       .delete()

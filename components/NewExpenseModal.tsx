@@ -1163,9 +1163,24 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 text-emerald-600" />
                     Participantes
                   </h3>
-                  <span className="text-[11px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">
-                    {selectedMembers.length} seleccionados
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedMembers.length === activeProfiles.length) {
+                          setSelectedMembers([]);
+                        } else {
+                          setSelectedMembers(activeProfiles.map(p => p.id));
+                        }
+                      }}
+                      className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline px-1.5 py-0.5 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer"
+                    >
+                      {selectedMembers.length === activeProfiles.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    </button>
+                    <span className="text-[11px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">
+                      {selectedMembers.length} {selectedMembers.length === 1 ? 'seleccionado' : 'seleccionados'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="bg-white border border-zinc-200 rounded-2xl shadow-2xs overflow-hidden p-2.5 sm:p-3">
@@ -1173,8 +1188,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     {activeProfiles.map(p => {
                       const isSelected = selectedMembers.includes(p.id);
                       const toggle = () => {
-                        if (isSelected && selectedMembers.length > 1) setSelectedMembers(selectedMembers.filter(id => id !== p.id));
-                        else if (!isSelected) setSelectedMembers([...selectedMembers, p.id]);
+                        if (isSelected) {
+                          setSelectedMembers(selectedMembers.filter(id => id !== p.id));
+                        } else {
+                          setSelectedMembers([...selectedMembers, p.id]);
+                        }
                       };
                       return (
                         <button

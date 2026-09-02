@@ -12,10 +12,16 @@ export default function DraftsPage() {
   const [selectedDraft, setSelectedDraft] = useState<ExpenseDraft | null>(null);
   const [isScanReceiptOpen, setIsScanReceiptOpen] = useState(false);
   const [isGmailIntegrationOpen, setIsGmailIntegrationOpen] = useState(false);
+  const [gmailInitialTab, setGmailInitialTab] = useState<'connection' | 'templates' | 'create_template'>('connection');
 
   const handleOpenConfirmDraft = (draft: ExpenseDraft) => {
     setSelectedDraft(draft);
     setIsConfirmDraftOpen(true);
+  };
+
+  const handleOpenGmailIntegration = (tab: 'connection' | 'templates' | 'create_template' = 'connection') => {
+    setGmailInitialTab(tab);
+    setIsGmailIntegrationOpen(true);
   };
 
   return (
@@ -23,7 +29,7 @@ export default function DraftsPage() {
       <DraftsView
         onOpenConfirmDraft={handleOpenConfirmDraft}
         onOpenScanReceiptModal={() => setIsScanReceiptOpen(true)}
-        onOpenGmailIntegration={() => setIsGmailIntegrationOpen(true)}
+        onOpenGmailIntegration={handleOpenGmailIntegration}
       />
 
       <ConfirmDraftModal
@@ -39,8 +45,10 @@ export default function DraftsPage() {
       />
 
       <GmailIntegrationModal
+        key={`gmail-modal-${isGmailIntegrationOpen}-${gmailInitialTab}`}
         isOpen={isGmailIntegrationOpen}
         onClose={() => setIsGmailIntegrationOpen(false)}
+        initialTab={gmailInitialTab}
       />
     </>
   );
