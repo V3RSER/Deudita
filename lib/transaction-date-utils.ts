@@ -43,7 +43,8 @@ export function combineDateAndTimeToISO(dateStr: string, timeStr?: string): stri
     dateStr = getTodayDateString();
   }
   const time = timeStr && timeStr.trim() !== '' ? timeStr.trim() : '00:00';
-  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const cleanDate = dateStr.split('T')[0];
+  const [yearStr, monthStr, dayStr] = cleanDate.split('-');
   const [hourStr, minuteStr] = time.split(':');
 
   const year = parseInt(yearStr, 10);
@@ -53,7 +54,7 @@ export function combineDateAndTimeToISO(dateStr: string, timeStr?: string): stri
   const minute = parseInt(minuteStr || '0', 10);
 
   const dateObj = new Date(year, monthIndex, day, hour, minute, 0, 0);
-  return dateObj.toISOString();
+  return isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString();
 }
 
 /**
@@ -309,3 +310,72 @@ export function isDateMatchingFilter(
 
   return true;
 }
+
+/**
+ * Robust parser for currency amount inputs across multiple locales
+ * (supports COP, USD, EUR, integer currencies, dot/comma separators).
+ */
+export function parseCurrencyAmount(val: unknown, currency?: string): number {
+  if (typeof val === 'number') {
+    return isNaN(val) ? 0 : val;
+  }
+  if (!val) return 0;
+  const str = String(val).trim();
+  if (!str) return 0;
+
+  // Remove currency signs, spaces and non-numeric/non-separator chars
+  const clean = str.replace(/[^0-9.,]/g, '');
+  if (!clean) return 0;
+
+  const hasComma = clean.includes(',');
+  const hasDot = clean.includes('.');
+
+  if (hasComma && hasDot) {
+    const lastCommaIndex = clean.lastIndexOf(',');
+    const lastDotIndex = clean.lastIndexOf('.');
+    if (lastCommaIndex > lastDotIndex) {
+      // e.g. 1.250,50 -> dot is thousand separator, comma is decimal
+      const numStr = clean.replace(/\./g, '').replace(',', '.');
+      return parseFloat(numStr) || 0;
+    } else {
+      // e.g. 1,250.50 -> comma is thousand separator, dot is decimal
+      const numStr = clean.replace(/,/g, '');
+      return parseFloat(numStr) || 0;
+    }
+  }
+
+  if (hasDot && !hasComma) {
+    const parts = clean.split('.');
+    if (parts.length > 2) {
+      // Multiple dots e.g. 1.500.000 -> thousands separator
+      return parseFloat(clean.replace(/\./g, '')) || 0;
+    }
+    // Single dot: e.g. 50.000 vs 50.00
+    const decimalPart = parts[1] || '';
+    const isZeroDecimalCurrency = currency === 'COP' || currency === 'CLP' || currency === 'KRW' || currency === 'JPY' || !currency;
+    if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
+      // e.g. 50.000 in COP/CLP -> 50000
+      return parseFloat(clean.replace(/\./g, '')) || 0;
+    }
+    return parseFloat(clean) || 0;
+  }
+
+  if (hasComma && !hasDot) {
+    const parts = clean.split(',');
+    if (parts.length > 2) {
+      // Multiple commas e.g. 1,500,000 -> thousands separator
+      return parseFloat(clean.replace(/,/g, '')) || 0;
+    }
+    const decimalPart = parts[1] || '';
+    const isZeroDecimalCurrency = currency === 'COP' || currency === 'CLP' || currency === 'KRW' || currency === 'JPY' || !currency;
+    if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
+      // e.g. 50,000 in COP
+      return parseFloat(clean.replace(/,/g, '')) || 0;
+    }
+    // Single comma with 1 or 2 digits e.g. 50,50 -> 50.50
+    return parseFloat(clean.replace(',', '.')) || 0;
+  }
+
+  return parseFloat(clean) || 0;
+}
+

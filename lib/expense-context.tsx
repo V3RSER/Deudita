@@ -809,8 +809,13 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Respuesta inválida del servidor al crear el gasto');
       }
 
-      setExpenses((prev) => [createdExpense, ...prev.filter((e) => e.id !== createdExpense.id)]);
-      return createdExpense;
+      const expenseWithConfig: Expense = {
+        ...createdExpense,
+        split_config: expense.split_config || createdExpense.split_config,
+      };
+
+      setExpenses((prev) => [expenseWithConfig, ...prev.filter((e) => e.id !== createdExpense.id)]);
+      return expenseWithConfig;
     });
   };
 
@@ -846,10 +851,15 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Respuesta inválida del servidor al actualizar el gasto');
       }
 
+      const expenseWithConfig: Expense = {
+        ...updatedExpense,
+        split_config: expense.split_config || updatedExpense.split_config,
+      };
+
       setExpenses((prev) =>
-        prev.map((e) => (e.id === updatedExpense.id ? updatedExpense : e))
+        prev.map((e) => (e.id === updatedExpense.id ? expenseWithConfig : e))
       );
-      return updatedExpense;
+      return expenseWithConfig;
     });
   };
 

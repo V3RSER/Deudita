@@ -15,8 +15,7 @@ import {
   Inbox,
   RefreshCw,
   ScanLine,
-  Sliders,
-  Layers,
+  SlidersHorizontal,
   ChevronRight,
   ShieldCheck,
   Check,
@@ -125,11 +124,12 @@ export function DraftsView({
           <>
             {onOpenGmailIntegration && (
               <button
+                id="btn-open-email-settings"
                 onClick={() => onOpenGmailIntegration('templates')}
                 className="bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-800 font-semibold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-2xs transition-all active:scale-95 flex items-center justify-center space-x-2 shrink-0 min-h-[40px] cursor-pointer"
               >
-                <Layers className="w-4 h-4 text-indigo-600" />
-                <span>Plantillas Bancarias</span>
+                <SlidersHorizontal className="w-4 h-4 text-zinc-600" />
+                <span>Ajustes y Bancos</span>
               </button>
             )}
 
@@ -162,8 +162,8 @@ export function DraftsView({
               <div className="flex items-center space-x-2.5 flex-wrap">
                 <h3 className="text-base font-bold text-zinc-900">
                   {gmailStatus.connected
-                    ? 'Detección Automática de Gmail Activa'
-                    : 'Conecta tu Gmail para detectar compras bancarias'}
+                    ? 'Sincronización de Compras Activa'
+                    : 'Detecta tus compras bancarias automáticamente'}
                 </h3>
                 {gmailStatus.connected ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -179,8 +179,8 @@ export function DraftsView({
 
               <p className="text-xs text-zinc-500 max-w-2xl leading-relaxed">
                 {gmailStatus.connected
-                  ? 'Tus correos de Bancolombia, Nequi, Davivienda, Nu y demás entidades se procesan de forma privada en segundo plano.'
-                  : 'Autoriza una sola vez con tu cuenta de Google. Sin código, sin tokens manuales y con total privacidad.'}
+                  ? 'Tus compras con tarjetas y transferencias se detectan automáticamente para que las revises y dividas con tus grupos en un solo toque.'
+                  : 'Conecta tu cuenta de Google una sola vez para recibir comprobantes automáticamente, sin escribir montos a mano.'}
               </p>
 
               {gmailStatus.last_sync_at && (
@@ -192,45 +192,58 @@ export function DraftsView({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start md:self-center">
             {gmailStatus.connected ? (
               <button
+                id="btn-manage-sync-settings"
                 onClick={() => onOpenGmailIntegration && onOpenGmailIntegration('connection')}
                 className="px-4 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 font-semibold rounded-xl text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
               >
-                <Sliders className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Gestionar Conexión</span>
+                <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-500" />
+                <span>Ajustes de Sincronización</span>
               </button>
             ) : (
-              <button
-                onClick={handleConnectWithGoogle}
-                disabled={isConnectingGmail}
-                className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-xs cursor-pointer active:scale-95 disabled:opacity-75"
-              >
-                {isConnectingGmail ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                ) : (
-                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
+              <>
+                {onOpenGmailIntegration && (
+                  <button
+                    id="btn-banner-view-banks"
+                    onClick={() => onOpenGmailIntegration('templates')}
+                    className="px-3.5 py-2.5 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 font-semibold rounded-xl text-xs transition cursor-pointer shadow-2xs"
+                  >
+                    Bancos compatibles
+                  </button>
                 )}
-                <span>Conectar con Google</span>
-              </button>
+                <button
+                  id="btn-banner-connect-google"
+                  onClick={handleConnectWithGoogle}
+                  disabled={isConnectingGmail}
+                  className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-xs cursor-pointer active:scale-95 disabled:opacity-75"
+                >
+                  {isConnectingGmail ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  ) : (
+                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                  )}
+                  <span>Conectar con Google</span>
+                </button>
+              </>
             )}
           </div>
         </div>

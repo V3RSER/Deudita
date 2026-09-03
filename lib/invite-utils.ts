@@ -99,15 +99,30 @@ export async function claimAllTempProfilesForUser(
             .maybeSingle();
 
           if (!realMembership) {
-            await db
+            const { error: updMemErr } = await db
               .from('group_members')
               .update({ user_id: user.id })
               .eq('user_id', tempId)
               .eq('group_id', tm.group_id);
+
+            if (updMemErr) {
+              console.warn('[claimAllTempProfilesForUser] group_members update conflict or error, deleting temp record:', updMemErr);
+              await db.from('group_members').delete().eq('user_id', tempId).eq('group_id', tm.group_id);
+            }
+          } else {
+            await db.from('group_members').delete().eq('user_id', tempId).eq('group_id', tm.group_id);
           }
         }
       }
       await db.from('group_members').delete().eq('user_id', tempId);
+
+      // Managed users: reassign or remove duplicate sponsorship links
+      try {
+        await db.from('managed_users').update({ sponsor_id: user.id }).eq('sponsor_id', tempId);
+        await db.from('managed_users').update({ managed_user_id: user.id }).eq('managed_user_id', tempId);
+      } catch (muErr) {
+        console.warn('[claimAllTempProfilesForUser] Managed users migration warning:', muErr);
+      }
 
       // Reassign group ownership, invitations, expenses, splits, payments, notifications
       await db.from('group_members').update({ invited_by: user.id }).eq('invited_by', tempId);
@@ -131,10 +146,15 @@ export async function claimAllTempProfilesForUser(
             .maybeSingle();
 
           if (!realSplit) {
-            await db
+            const { error: updSplitErr } = await db
               .from('expense_splits')
               .update({ user_id: user.id })
               .eq('id', split.id);
+
+            if (updSplitErr) {
+              console.warn('[claimAllTempProfilesForUser] expense_splits update conflict, removing duplicate:', updSplitErr);
+              await db.from('expense_splits').delete().eq('id', split.id);
+            }
           } else {
             await db.from('expense_splits').delete().eq('id', split.id);
           }

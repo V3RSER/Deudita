@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
+import { extractNotesAndConfig } from '@/lib/split-config-utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -345,6 +346,17 @@ export async function GET(req: NextRequest) {
     }
 
     expenses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    // Hydrate split_config from persisted metadata in notes
+    expenses = expenses.map((e) => {
+      if (!e.split_config && e.notes) {
+        const { splitConfig } = extractNotesAndConfig(e.notes);
+        if (splitConfig) {
+          return { ...e, split_config: splitConfig };
+        }
+      }
+      return e;
+    });
 
     // 7. Payments
     const payments = paymentData || [];

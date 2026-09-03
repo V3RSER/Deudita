@@ -15,6 +15,7 @@ import {
   UserCheck,
   ChevronDown,
 } from 'lucide-react';
+import { CustomSelect, SelectItem } from '@/components/ui/CustomSelect';
 
 export interface TransactionFilterState {
   scope: 'all' | 'mine';
@@ -241,17 +242,15 @@ export function TransactionFilterBar({
                 <UserCheck className="w-3.5 h-3.5 text-zinc-400" />
                 <span>Participación</span>
               </label>
-              <div className="relative">
-                <select
-                  value={filters.scope}
-                  onChange={(e) => onFilterChange({ scope: e.target.value as 'all' | 'mine' })}
-                  className="w-full h-9 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 pr-8 text-xs font-medium text-zinc-800 appearance-none focus:border-zinc-400 focus:bg-white focus:outline-none cursor-pointer"
-                >
-                  <option value="all">Todos los movimientos</option>
-                  <option value="mine">Solo mis movimientos</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-              </div>
+              <CustomSelect
+                value={filters.scope}
+                onChange={(val) => onFilterChange({ scope: val as 'all' | 'mine' })}
+                options={[
+                  { value: 'all', label: 'Todos los movimientos' },
+                  { value: 'mine', label: 'Solo mis movimientos' },
+                ]}
+                size="sm"
+              />
             </div>
 
             {/* Filter 2: Periodo de Fechas */}
@@ -260,37 +259,36 @@ export function TransactionFilterBar({
                 <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                 <span>Periodo</span>
               </label>
-              <div className="relative">
-                <select
-                  value={filters.datePreset}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    onFilterChange({
-                      datePreset: val,
-                      ...(val !== 'custom' ? { customStartDate: '', customEndDate: '' } : {}),
-                    });
-                  }}
-                  className="w-full h-9 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 pr-8 text-xs font-medium text-zinc-800 appearance-none focus:border-zinc-400 focus:bg-white focus:outline-none cursor-pointer"
-                >
-                  <optgroup label="Rangos estándar">
-                    {DATE_PRESET_OPTIONS.map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                  {availableMonths.length > 0 && (
-                    <optgroup label="Meses con actividad">
-                      {availableMonths.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-              </div>
+              <CustomSelect
+                value={filters.datePreset}
+                onChange={(val) => {
+                  onFilterChange({
+                    datePreset: val,
+                    ...(val !== 'custom' ? { customStartDate: '', customEndDate: '' } : {}),
+                  });
+                }}
+                options={[
+                  {
+                    group: 'Rangos estándar',
+                    options: DATE_PRESET_OPTIONS.map((preset) => ({
+                      value: preset.id,
+                      label: preset.label,
+                    })),
+                  },
+                  ...(availableMonths.length > 0
+                    ? [
+                        {
+                          group: 'Meses con actividad',
+                          options: availableMonths.map((m) => ({
+                            value: m.value,
+                            label: m.label,
+                          })),
+                        },
+                      ]
+                    : []),
+                ]}
+                size="sm"
+              />
             </div>
 
             {/* Filter 3: Criterio de Fecha */}
@@ -299,19 +297,15 @@ export function TransactionFilterBar({
                 <Clock className="w-3.5 h-3.5 text-zinc-400" />
                 <span>Criterio de fecha</span>
               </label>
-              <div className="relative">
-                <select
-                  value={filters.dateMode}
-                  onChange={(e) =>
-                    onFilterChange({ dateMode: e.target.value as DateFilterMode })
-                  }
-                  className="w-full h-9 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 pr-8 text-xs font-medium text-zinc-800 appearance-none focus:border-zinc-400 focus:bg-white focus:outline-none cursor-pointer"
-                >
-                  <option value="expense_date">Fecha del gasto</option>
-                  <option value="entry_date">Fecha de registro</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-              </div>
+              <CustomSelect
+                value={filters.dateMode}
+                onChange={(val) => onFilterChange({ dateMode: val as DateFilterMode })}
+                options={[
+                  { value: 'expense_date', label: 'Fecha del gasto' },
+                  { value: 'entry_date', label: 'Fecha de registro' },
+                ]}
+                size="sm"
+              />
             </div>
 
             {/* Filter 4: Categoría (si aplica) */}
@@ -321,21 +315,15 @@ export function TransactionFilterBar({
                   <Tag className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Categoría</span>
                 </label>
-                <div className="relative">
-                  <select
-                    value={filters.category}
-                    onChange={(e) => onFilterChange({ category: e.target.value })}
-                    className="w-full h-9 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 pr-8 text-xs font-medium text-zinc-800 appearance-none focus:border-zinc-400 focus:bg-white focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">Todas las categorías</option>
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-                </div>
+                <CustomSelect
+                  value={filters.category}
+                  onChange={(val) => onFilterChange({ category: val })}
+                  options={[
+                    { value: 'all', label: 'Todas las categorías' },
+                    ...categories.map((cat) => ({ value: cat, label: cat })),
+                  ]}
+                  size="sm"
+                />
               </div>
             )}
 
@@ -346,21 +334,15 @@ export function TransactionFilterBar({
                   <FolderKanban className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Grupo</span>
                 </label>
-                <div className="relative">
-                  <select
-                    value={filters.groupId}
-                    onChange={(e) => onFilterChange({ groupId: e.target.value })}
-                    className="w-full h-9 rounded-lg border border-zinc-200 bg-zinc-50/50 px-2.5 pr-8 text-xs font-medium text-zinc-800 appearance-none focus:border-zinc-400 focus:bg-white focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">Todos los grupos</option>
-                    {userGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
-                </div>
+                <CustomSelect
+                  value={filters.groupId}
+                  onChange={(val) => onFilterChange({ groupId: val })}
+                  options={[
+                    { value: 'all', label: 'Todos los grupos' },
+                    ...userGroups.map((group) => ({ value: group.id, label: group.name })),
+                  ]}
+                  size="sm"
+                />
               </div>
             )}
           </div>

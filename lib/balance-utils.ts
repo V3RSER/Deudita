@@ -148,6 +148,86 @@ export function calculateManagedSummary(
   return details;
 }
 
+/**
+ * Normalizes an array of splits so their sum matches totalAmount with exact precision down to the cent (2 decimals).
+ * Distributes any cent drift (e.g. 100 / 3 = 33.33, 33.33, 33.34) across participants, prioritizing
+ * the preferredUserId (typically the payer) or the first participant.
+ */
+export function normalizeSplitsToTotal<T extends { user_id: string; amount_owed: number }>(
+  totalAmount: number,
+  splits: T[],
+  preferredUserId?: string
+): T[] {
+  if (!splits || splits.length === 0) return [];
+  const targetCents = Math.round(totalAmount * 100);
+  if (targetCents <= 0) return splits;
+
+  // Clone splits and calculate rounded cents
+  const rounded = splits.map((s) => ({
+    ...s,
+    amount_owed: Math.round((Number(s.amount_owed) || 0) * 100),
+  }));
+
+  const currentCentsSum = rounded.reduce((acc, s) => acc + s.amount_owed, 0);
+  let diffCents = targetCents - currentCentsSum;
+
+  if (diffCents !== 0) {
+    // Determine priority index (e.g. preferred user or first with positive amount)
+    let priorityIdx = preferredUserId ? rounded.findIndex((s) => s.user_id === preferredUserId) : -1;
+    if (priorityIdx === -1) {
+      priorityIdx = 0;
+    }
+
+    // Adjust in whole cents
+    while (diffCents !== 0) {
+      const step = diffCents > 0 ? 1 : -1;
+      rounded[priorityIdx].amount_owed += step;
+      diffCents -= step;
+      priorityIdx = (priorityIdx + 1) % rounded.length;
+    }
+  }
+
+  return rounded.map((s) => ({
+    ...s,
+    amount_owed: Number((s.amount_owed / 100).toFixed(2)),
+  }));
+}
+
+/**
+ * Distributes totalAmount equally among userIds with exact cent precision (no floating point drift).
+ */
+export function distributeAmountEqually(
+  totalAmount: number,
+  userIds: string[],
+  preferredUserId?: string
+): { user_id: string; amount_owed: number }[] {
+  if (!userIds || userIds.length === 0) return [];
+  const totalCents = Math.round(totalAmount * 100);
+  const n = userIds.length;
+  const baseCents = Math.floor(totalCents / n);
+  let remainderCents = totalCents - baseCents * n;
+
+  // Prioritize preferred user for remainder cents if present
+  const orderedIds = [...userIds];
+  if (preferredUserId && orderedIds.includes(preferredUserId)) {
+    const idx = orderedIds.indexOf(preferredUserId);
+    orderedIds.splice(idx, 1);
+    orderedIds.unshift(preferredUserId);
+  }
+
+  return orderedIds.map((id) => {
+    let cents = baseCents;
+    if (remainderCents > 0) {
+      cents += 1;
+      remainderCents -= 1;
+    }
+    return {
+      user_id: id,
+      amount_owed: Number((cents / 100).toFixed(2)),
+    };
+  });
+}
+
 export function calculateDirectBalances(
   expenses: Expense[],
   payments: Payment[],

@@ -17,6 +17,7 @@ export interface ParticipantSummaryData {
   profile?: Profile | null;
   amount: number;
   breakdown?: ParticipantItemBreakdown[];
+  shares?: string | number;
 }
 
 interface ExpenseParticipantSummaryProps {
@@ -24,6 +25,7 @@ interface ExpenseParticipantSummaryProps {
   currency: string;
   currentUserId?: string;
   title?: string;
+  splitTypeLabel?: string;
   defaultExpanded?: boolean;
 }
 
@@ -107,6 +109,7 @@ export function ExpenseParticipantSummary({
   currency,
   currentUserId,
   title = 'Resumen por participante',
+  splitTypeLabel,
   defaultExpanded = false,
 }: ExpenseParticipantSummaryProps) {
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
@@ -131,13 +134,18 @@ export function ExpenseParticipantSummary({
   return (
     <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
       {title && (
-        <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+        <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
               {title}
             </span>
           </div>
+          {splitTypeLabel && (
+            <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-2 py-0.5 rounded-md">
+              {splitTypeLabel}
+            </span>
+          )}
         </div>
       )}
 
@@ -178,13 +186,18 @@ export function ExpenseParticipantSummary({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-bold text-zinc-900 truncate">
                         {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
                       </span>
                       {isCurrentUser && (
                         <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded shrink-0">
                           Tú
+                        </span>
+                      )}
+                      {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
+                        <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
+                          {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
                         </span>
                       )}
                     </div>

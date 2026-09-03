@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { notifyExpenseCreated } from '@/lib/notifications';
+import { normalizeSplitsToTotal } from '@/lib/balance-utils';
 
 export async function POST(req: Request) {
   try {
@@ -111,22 +112,37 @@ export async function POST(req: Request) {
       }
     }
 
-    // Add splits
+    // Add splits with precision normalization
+    let insertedSplits: any[] = [];
     if (splits && Array.isArray(splits) && splits.length > 0) {
-      const splitsToInsert = splits.map((s: any) => ({
-        expense_id: newExpense.id,
+      const rawSplits = splits.map((s: any) => ({
         user_id: s.user_id,
         amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
       }));
+
+      // Normalize splits so sum matches parsedAmount down to the cent without drift
+      const normalizedSplits = normalizeSplitsToTotal(parsedAmount, rawSplits, expense.paid_by ?? user.id);
+
+      const splitsToInsert = normalizedSplits.map((s) => ({
+        expense_id: newExpense.id,
+        user_id: s.user_id,
+        amount_owed: s.amount_owed,
+      }));
+
       const { error: splitsErr } = await supabase.from('expense_splits').insert(splitsToInsert);
       if (splitsErr) {
-        console.error('[API /api/expenses] Supabase insert splits error:', splitsErr);
+        console.error('[API /api/expenses] Supabase insert splits error, rolling back created expense:', splitsErr);
+        // Rollback created expense and items to prevent orphan records corrupting balances
+        await supabase.from('expense_items').delete().eq('expense_id', newExpense.id);
+        await supabase.from('expenses').delete().eq('id', newExpense.id);
+        return NextResponse.json({ error: 'Error al registrar la distribución del gasto. Operación cancelada.' }, { status: 500 });
       }
+      insertedSplits = splitsToInsert;
     }
 
     // Trigger notifications for participants and sponsors
     try {
-      if (splits && Array.isArray(splits) && splits.length > 0) {
+      if (insertedSplits.length > 0) {
         void notifyExpenseCreated(supabase, {
           creatorId: user.id,
           expenseId: newExpense.id,
@@ -134,9 +150,9 @@ export async function POST(req: Request) {
           totalAmount: parsedAmount,
           groupId: rawGroupId,
           currency: expense.currency || 'COP',
-          splits: splits.map((s: any) => ({
+          splits: insertedSplits.map((s) => ({
             user_id: s.user_id,
-            amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
+            amount_owed: s.amount_owed,
           })),
         });
       }
@@ -150,7 +166,8 @@ export async function POST(req: Request) {
       .eq('id', newExpense.id)
       .single();
 
-    return NextResponse.json(fullExpense ?? newExpense);
+    const returnedExpense = fullExpense ?? newExpense;
+    return NextResponse.json({ ...returnedExpense, split_config: expense.split_config });
   } catch (err: unknown) {
     console.error('[API /api/expenses] Unhandled error:', err);
     const message = err instanceof Error ? err.message : 'Error interno al guardar gasto';

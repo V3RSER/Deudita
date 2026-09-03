@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { parseCurrencyAmount } from '@/lib/transaction-date-utils';
+import { notifyPaymentCreated } from '@/lib/notifications';
 
 export async function POST(req: Request) {
   try {
@@ -13,13 +15,30 @@ export async function POST(req: Request) {
 
     const { group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url } = await req.json();
 
+    if (!group_id) {
+      return NextResponse.json({ error: 'Falta el identificador del grupo' }, { status: 400 });
+    }
+
+    if (!paid_by || !paid_to) {
+      return NextResponse.json({ error: 'El pagador y el receptor son requeridos' }, { status: 400 });
+    }
+
+    if (paid_by === paid_to) {
+      return NextResponse.json({ error: 'El pagador y el receptor no pueden ser la misma persona' }, { status: 400 });
+    }
+
+    const numericAmount = parseCurrencyAmount(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      return NextResponse.json({ error: 'El monto debe ser un valor numérico mayor a 0' }, { status: 400 });
+    }
+
     const insertData: Record<string, any> = {
       group_id,
       paid_by,
       paid_to,
-      amount,
+      amount: numericAmount,
       payment_date: payment_date ?? new Date().toISOString().split('T')[0],
-      note,
+      note: note || null,
     };
     if (payment_time) {
       insertData.payment_time = payment_time;
@@ -51,6 +70,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Trigger notification asynchronously
+    if (payment) {
+      notifyPaymentCreated(supabase, {
+        paymentId: payment.id,
+        payerId: paid_by,
+        receiverId: paid_to,
+        amount: numericAmount,
+        groupId: group_id,
+        note,
+      }).catch((notifErr) => {
+        console.warn('[API /api/payments] Notification warning:', notifErr);
+      });
+    }
+
     return NextResponse.json(payment);
   } catch (err: unknown) {
     console.error('[API /api/payments] Unhandled error:', err);
@@ -58,4 +91,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 

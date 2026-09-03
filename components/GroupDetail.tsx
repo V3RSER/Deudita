@@ -65,6 +65,7 @@ import {
   getAvailableTransactionMonths,
 } from '@/lib/transaction-date-utils';
 import { EditGroupModal } from '@/components/EditGroupModal';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { GroupSettingsModal } from '@/components/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
@@ -344,8 +345,55 @@ export function GroupDetail({
 
   const activities: GroupActivityItem[] = [];
 
-  // 1. Audit logs
+  // 1. Audit logs: filter phantom cascade logs and deduplicate rapid consecutive triggers
+  const updateLogs = groupAuditLogs.filter((l) => l.action === 'update');
+  const updateExpenseIds = new Set(updateLogs.map((l) => l.expense_id));
+
+  const phantomLogIds = new Set<string>();
   groupAuditLogs.forEach((log) => {
+    if (log.action === 'delete' || log.action === 'create') {
+      if (updateExpenseIds.has(log.expense_id)) {
+        const relatedUpdates = updateLogs.filter((u) => u.expense_id === log.expense_id);
+        const logTime = new Date(log.created_at).getTime();
+        const hasCloseUpdate = relatedUpdates.some((u) => {
+          const uTime = new Date(u.created_at).getTime();
+          return Math.abs(uTime - logTime) < 10000;
+        });
+        if (hasCloseUpdate) {
+          phantomLogIds.add(log.id);
+        }
+      }
+    }
+  });
+
+  const sortedGroupAuditLogs = [...groupAuditLogs].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const processedAuditLogs: typeof groupAuditLogs = [];
+  sortedGroupAuditLogs.forEach((log) => {
+    if (phantomLogIds.has(log.id)) return;
+
+    if (log.action === 'update') {
+      const logTime = new Date(log.created_at).getTime();
+      const existing = processedAuditLogs.find(
+        (p) =>
+          p.action === 'update' &&
+          p.expense_id === log.expense_id &&
+          Math.abs(new Date(p.created_at).getTime() - logTime) < 5000
+      );
+      if (existing) {
+        if ((!existing.changes?.details || existing.changes.details.length === 0) && log.changes?.details) {
+          existing.changes = { ...existing.changes, ...log.changes };
+        }
+        return;
+      }
+    }
+
+    processedAuditLogs.push(log);
+  });
+
+  processedAuditLogs.forEach((log) => {
     const user = profiles.find((p) => p.id === log.user_id) ?? null;
     const userName = user?.full_name ?? 'Usuario';
     const oldData = log.changes?.old;
@@ -375,20 +423,62 @@ export function GroupDetail({
       });
     } else if (log.action === 'update') {
       const desc = newData?.description ?? oldData?.description ?? currentExp?.description ?? 'Gasto';
-      const changesList: string[] = [];
+      let changesList: string[] = [];
 
-      if (oldData && newData) {
-        if (typeof oldData.total_amount === 'number' && typeof newData.total_amount === 'number' && oldData.total_amount !== newData.total_amount) {
-          changesList.push(`Monto modificado: ${formatCurrency(oldData.total_amount, effectiveCurrency)} → ${formatCurrency(newData.total_amount, effectiveCurrency)}`);
+      // A) Use unified tags from API audit log if present
+      if (Array.isArray(log.changes?.details) && log.changes.details.length > 0) {
+        changesList = [...log.changes.details];
+      } else {
+        // B) Compute fallback tags dynamically matching notification tags
+        if (oldData && newData) {
+          if (
+            typeof oldData.total_amount === 'number' &&
+            typeof newData.total_amount === 'number' &&
+            Math.abs(oldData.total_amount - newData.total_amount) > 0.01
+          ) {
+            changesList.push(
+              `Monto: ${formatCurrency(oldData.total_amount, effectiveCurrency)} → ${formatCurrency(newData.total_amount, effectiveCurrency)}`
+            );
+          }
+          if (oldData.description && newData.description && oldData.description !== newData.description) {
+            changesList.push(`Nombre: "${oldData.description}" → "${newData.description}"`);
+          }
+          if (oldData.paid_by && newData.paid_by && oldData.paid_by !== newData.paid_by) {
+            const oldPayer = profiles.find((p) => p.id === oldData.paid_by)?.full_name ?? 'Usuario anterior';
+            const newPayer = profiles.find((p) => p.id === newData.paid_by)?.full_name ?? 'Nuevo pagador';
+            changesList.push(`Pagador: ${oldPayer} → ${newPayer}`);
+          }
+          if (oldData.category && newData.category && oldData.category !== newData.category) {
+            changesList.push(`Categoría actualizada`);
+          }
+          if (oldData.expense_date && newData.expense_date && oldData.expense_date !== newData.expense_date) {
+            changesList.push(`Fecha modificada`);
+          }
+          if (oldData.notes !== newData.notes) {
+            changesList.push(`Notas modificadas`);
+          }
         }
-        if (oldData.description && newData.description && oldData.description !== newData.description) {
-          changesList.push(`Nombre: "${oldData.description}" → "${newData.description}"`);
+
+        if (Array.isArray(log.changes?.added_names) && log.changes.added_names.length > 0) {
+          changesList.push(`Añadido(s): ${log.changes.added_names.join(', ')}`);
         }
-        if (oldData.category && newData.category && oldData.category !== newData.category) {
-          changesList.push(`Categoría actualizada`);
+        if (Array.isArray(log.changes?.removed_names) && log.changes.removed_names.length > 0) {
+          changesList.push(`Removido(s): ${log.changes.removed_names.join(', ')}`);
         }
-        if (oldData.notes !== newData.notes) {
-          changesList.push(`Notas del gasto modificadas`);
+
+        if (Array.isArray(log.changes?.split_changes) && log.changes.split_changes.length > 0) {
+          if (log.changes.split_changes.length === 1) {
+            const sc = log.changes.split_changes[0];
+            changesList.push(
+              `Cuota de ${sc.userName}: ${formatCurrency(sc.previousAmount, effectiveCurrency)} → ${formatCurrency(sc.newAmount, effectiveCurrency)}`
+            );
+          } else {
+            changesList.push(`Cuotas modificadas (${log.changes.split_changes.length} personas)`);
+          }
+        }
+
+        if (changesList.length === 0 && log.changes?.summary) {
+          changesList.push(log.changes.summary);
         }
       }
 
@@ -772,18 +862,18 @@ export function GroupDetail({
           />
           {/* Subheader: Period Filter Select + User Balance Status */}
           <div className="flex items-center justify-between pt-0.5 pb-1 px-0.5">
-            <div className="relative">
-              <select
-                value={filters.datePreset}
-                onChange={(e) => handleFilterChange({ datePreset: e.target.value as any })}
-                className="appearance-none bg-transparent hover:bg-zinc-100 text-xs sm:text-sm font-medium text-zinc-700 py-1 pl-1 pr-6 rounded-lg cursor-pointer transition border-none focus:ring-0 focus:outline-none"
-              >
-                <option value="all">Gastos recientes</option>
-                <option value="this_month">Este mes</option>
-                <option value="last_month">Mes anterior</option>
-                <option value="this_year">Este año</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="w-44 sm:w-48">
+              <CustomSelect
+                value={filters.datePreset || 'all'}
+                onChange={(val) => handleFilterChange({ datePreset: val as any })}
+                options={[
+                  { value: 'all', label: 'Gastos recientes' },
+                  { value: 'this_month', label: 'Este mes' },
+                  { value: 'last_month', label: 'Mes anterior' },
+                  { value: 'this_year', label: 'Este año' },
+                ]}
+                size="sm"
+              />
             </div>
 
             <div className="text-xs sm:text-sm font-medium text-zinc-600">

@@ -4,8 +4,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
-import { formatCurrency } from '@/lib/balance-utils';
+import { formatCurrency, distributeAmountEqually } from '@/lib/balance-utils';
 import { X, MailCheck, CheckCircle2, Loader2, Trash2, Edit3, DollarSign, Calendar, Users } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface ConfirmDraftModalProps {
   isOpen: boolean;
@@ -116,13 +117,13 @@ export function ConfirmDraftModal({
 
     setIsSubmitting(true);
     try {
-      // Default equal split among selected group members
-      const share = amount / memberProfiles.length;
-      const splits: ExpenseSplit[] = memberProfiles.map((p) => ({
+      // Default equal split among selected group members with exact cent precision
+      const rawSplits = distributeAmountEqually(amount, memberProfiles.map((p) => p.id), paidBy);
+      const splits: ExpenseSplit[] = rawSplits.map((s) => ({
         id: '',
         expense_id: '',
-        user_id: p.id,
-        amount_owed: Math.round(share * 100) / 100,
+        user_id: s.user_id,
+        amount_owed: s.amount_owed,
         created_at: new Date().toISOString(),
       }));
 
@@ -254,17 +255,16 @@ export function ConfirmDraftModal({
             <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
               Asignar al Grupo <span className="text-rose-500">*</span>
             </label>
-            <select
+            <CustomSelect
               value={selectedGroupId}
-              onChange={(e) => setSelectedGroupId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition cursor-pointer"
-            >
-              {userGroups.map((g, idx) => (
-                <option key={g.id || `dg-${idx}`} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedGroupId(val)}
+              options={userGroups.map((g) => ({
+                value: g.id,
+                label: g.name,
+              }))}
+              size="md"
+              placeholder="Seleccionar grupo..."
+            />
           </div>
           
           {/* Paid by selection */}
@@ -272,17 +272,16 @@ export function ConfirmDraftModal({
             <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
               ¿Quién pagó?
             </label>
-            <select
+            <CustomSelect
               value={paidBy}
-              onChange={(e) => setPaidBy(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition cursor-pointer"
-            >
-              {memberProfiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setPaidBy(val)}
+              options={memberProfiles.map((p) => ({
+                value: p.id,
+                label: p.full_name,
+              }))}
+              size="md"
+              placeholder="Seleccionar pagador..."
+            />
           </div>
 
           <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-xs text-zinc-600 flex items-center justify-between">

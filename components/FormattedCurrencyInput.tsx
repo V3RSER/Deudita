@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { formatCurrency } from '@/lib/balance-utils';
+import { parseCurrencyAmount } from '@/lib/transaction-date-utils';
 
 interface FormattedCurrencyInputProps {
   value: string | number;
@@ -31,7 +32,7 @@ export function FormattedCurrencyInput({
   const [isFocused, setIsFocused] = useState(false);
   const [editingValue, setEditingValue] = useState<string | null>(null);
 
-  const numVal = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+  const numVal = parseCurrencyAmount(value, currency);
 
   const formattedDisplay =
     value !== '' && value !== undefined && value !== null && !isNaN(numVal) && numVal > 0

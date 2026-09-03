@@ -15,6 +15,7 @@ import {
   ListChecks,
   ChevronDown
 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface EditGroupModalProps {
   isOpen: boolean;
@@ -194,38 +195,30 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
-                  <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                    <select
-                      value={category}
-                      onChange={e => setCategory(e.target.value as GroupCategory)}
-                      className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                    >
-                      {GROUP_CATEGORY_OPTIONS.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                  <CustomSelect
+                    value={category}
+                    onChange={val => setCategory(val as GroupCategory)}
+                    options={GROUP_CATEGORY_OPTIONS.map(cat => ({ value: cat.id, label: cat.label }))}
+                    size="sm"
+                  />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Moneda principal</label>
-                  <div className="relative shadow-sm rounded-lg bg-white border border-zinc-200">
-                    <select
-                      value={selectedCurrency}
-                      onChange={e => setSelectedCurrency(e.target.value)}
-                      className="w-full pl-2.5 pr-8 py-1.5 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-lg"
-                    >
-                      <option value="COP">COP ($)</option>
-                      <option value="MXN">MXN ($)</option>
-                      <option value="CLP">CLP ($)</option>
-                      <option value="ARS">ARS ($)</option>
-                      <option value="USD">USD ($)</option>
-                      <option value="EUR">EUR (€)</option>
-                      <option value="PEN">PEN (S/)</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                  <CustomSelect
+                    value={selectedCurrency}
+                    onChange={val => setSelectedCurrency(val)}
+                    options={[
+                      { value: 'COP', label: 'COP ($)' },
+                      { value: 'MXN', label: 'MXN ($)' },
+                      { value: 'CLP', label: 'CLP ($)' },
+                      { value: 'ARS', label: 'ARS ($)' },
+                      { value: 'USD', label: 'USD ($)' },
+                      { value: 'EUR', label: 'EUR (€)' },
+                      { value: 'PEN', label: 'PEN (S/)' },
+                    ]}
+                    size="sm"
+                  />
                 </div>
               </div>
 

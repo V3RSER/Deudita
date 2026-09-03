@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { notifyExpenseUpdated, notifyExpenseDeleted } from '@/lib/notifications';
+import {
+  notifyExpenseUpdated,
+  notifyExpenseDeleted,
+  calculateExpenseChangeDetails,
+} from '@/lib/notifications';
+import { normalizeSplitsToTotal } from '@/lib/balance-utils';
 
 export async function GET(
   request: Request,
@@ -57,7 +62,7 @@ export async function PUT(
     // Fetch previous expense and splits to calculate audit differences
     const { data: previousExpense, error: prevErr } = await supabase
       .from('expenses')
-      .select('*, splits:expense_splits(*)')
+      .select('*, items:expense_items(*), splits:expense_splits(*)')
       .eq('id', id)
       .maybeSingle();
 
@@ -117,12 +122,25 @@ export async function PUT(
       return NextResponse.json({ error: expErr?.message ?? 'Error al actualizar el gasto' }, { status: 500 });
     }
 
-    // 2. Prepare target splits & items
-    const targetSplits = (splits && Array.isArray(splits)) ? splits.map((s: any) => ({
-      expense_id: id,
+    // 2. Prepare target splits & items with precision normalization
+    const expenseTotalAmt = typeof updatePayload.total_amount === 'number'
+      ? updatePayload.total_amount
+      : (typeof previousExpense.total_amount === 'number' ? previousExpense.total_amount : 0);
+
+    const rawSplits = (splits && Array.isArray(splits)) ? splits.map((s: any) => ({
       user_id: s.user_id,
       amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
     })) : [];
+
+    const normalizedSplits = rawSplits.length > 0 && expenseTotalAmt > 0
+      ? normalizeSplitsToTotal(expenseTotalAmt, rawSplits, updatePayload.paid_by ?? previousExpense.paid_by)
+      : rawSplits;
+
+    const targetSplits = normalizedSplits.map((s) => ({
+      expense_id: id,
+      user_id: s.user_id,
+      amount_owed: s.amount_owed,
+    }));
 
     const targetItems = (items && Array.isArray(items)) ? items.map((i: any) => ({
       expense_id: id,
@@ -243,98 +261,146 @@ export async function PUT(
       }
     }
 
-    // Calculate participant differences for audit trail
+    // Calculate rich participant differences and unified change details for audit trail and notifications
     try {
       const prevSplits = (previousExpense?.splits as any[]) ?? [];
       const prevUserIds = prevSplits.map((s: any) => s.user_id);
-      const newUserIds = (splits && Array.isArray(splits)) ? splits.map((s: any) => s.user_id) : [];
+      const newUserIds = targetSplits.map((s: any) => s.user_id);
 
       const addedUserIds = newUserIds.filter((uid: string) => !prevUserIds.includes(uid));
       const removedUserIds = prevUserIds.filter((uid: string) => !newUserIds.includes(uid));
-      const prevCount = prevUserIds.length;
-      const newCount = newUserIds.length;
 
-      const allAffectedIds = Array.from(new Set([...addedUserIds, ...removedUserIds]));
-      let addedNames: string[] = [];
-      let removedNames: string[] = [];
+      const allAffectedIds = Array.from(new Set([
+        ...addedUserIds,
+        ...removedUserIds,
+        ...newUserIds,
+        ...prevUserIds,
+        updatePayload.paid_by,
+        previousExpense.paid_by,
+        user.id,
+      ].filter(Boolean)));
 
+      const nameMap = new Map<string, string>();
       if (allAffectedIds.length > 0) {
         const { data: profileRecords } = await supabase
           .from('profiles')
           .select('id, full_name')
           .in('id', allAffectedIds);
 
-        const nameMap: Record<string, string> = {};
         (profileRecords ?? []).forEach((p: any) => {
-          nameMap[p.id] = p.full_name ?? 'Participante';
+          nameMap.set(p.id, p.full_name ?? 'Participante');
         });
-
-        addedNames = addedUserIds.map((uid) => nameMap[uid] ?? 'Nuevo participante');
-        removedNames = removedUserIds.map((uid) => nameMap[uid] ?? 'Participante removido');
       }
 
-      const summaryParts: string[] = [];
-      if (prevCount !== newCount || addedUserIds.length > 0 || removedUserIds.length > 0) {
-        if (prevCount !== newCount) {
-          summaryParts.push(`Participantes modificados de ${prevCount} a ${newCount} personas`);
-        }
-        if (addedNames.length > 0) {
-          summaryParts.push(`Añadido(s): ${addedNames.join(', ')}`);
-        }
-        if (removedNames.length > 0) {
-          summaryParts.push(`Removido(s): ${removedNames.join(', ')}`);
-        }
-      }
+      const effectiveCurrency = expense.currency ?? previousExpense.currency ?? 'COP';
 
-      if (previousExpense && Number(previousExpense.total_amount) !== Number(parsedAmount)) {
-        summaryParts.push(`Monto modificado de ${previousExpense.total_amount} a ${parsedAmount}`);
-      }
+      const changeDetails = calculateExpenseChangeDetails({
+        previousExpense: {
+          description: previousExpense.description,
+          total_amount: previousExpense.total_amount,
+          paid_by: previousExpense.paid_by,
+          expense_date: previousExpense.expense_date,
+          category: previousExpense.category,
+          notes: previousExpense.notes,
+          split_config: previousExpense.split_config,
+          splits: prevSplits,
+        },
+        newExpense: {
+          description: updatePayload.description,
+          total_amount: parsedAmount,
+          paid_by: updatePayload.paid_by,
+          expense_date: updatePayload.expense_date,
+          category: updatePayload.category,
+          notes: updatePayload.notes,
+          split_config: expense.split_config,
+          splits: targetSplits,
+        },
+        currency: effectiveCurrency,
+        nameMap,
+      });
 
-      if (previousExpense && previousExpense.description !== expense.description) {
-        summaryParts.push(`Descripción cambiada a "${expense.description}"`);
-      }
-
-      const summaryText = summaryParts.length > 0 ? summaryParts.join(' | ') : 'Gasto actualizado';
-
+      // Synchronize with expense_audit_logs:
+      // If the Postgres trigger already recorded an update log within the last 15 seconds,
+      // enrich it with our full change details to prevent duplicate entries in group activity.
       if (rawGroupId) {
-        await supabase.from('expense_audit_logs').insert({
-          expense_id: id,
-          group_id: rawGroupId,
-          user_id: user.id,
-          action: 'update',
-          changes: {
-            summary: summaryText,
-            participants_before: prevCount,
-            participants_after: newCount,
-            added_user_ids: addedUserIds,
-            removed_user_ids: removedUserIds,
-            added_names: addedNames,
-            removed_names: removedNames,
-            amount_before: previousExpense?.total_amount,
-            amount_after: parsedAmount,
-          },
-          created_at: new Date().toISOString(),
-        });
-      }
-    } catch (auditErr) {
-      console.warn('[API /api/expenses/[id]] Warning recording audit log:', auditErr);
-    }
+        const { data: recentTriggerLogs } = await supabase
+          .from('expense_audit_logs')
+          .select('id, changes, created_at')
+          .eq('expense_id', id)
+          .eq('action', 'update')
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-    // Trigger update notifications
-    try {
+        const recentLog = recentTriggerLogs?.[0];
+        const isRecentTriggerLog = recentLog &&
+          (new Date().getTime() - new Date(recentLog.created_at).getTime() < 15000);
+
+        const mergedChanges = {
+          ...(recentLog?.changes ?? {}),
+          old: recentLog?.changes?.old ?? previousExpense,
+          new: recentLog?.changes?.new ?? updatePayload,
+          summary: changeDetails.summaryText,
+          details: changeDetails.changeTags,
+          amount_before: previousExpense?.total_amount,
+          amount_after: parsedAmount,
+          payer_before: previousExpense?.paid_by,
+          payer_after: updatePayload.paid_by,
+          payer_name_before: changeDetails.previousPayerName,
+          payer_name_after: changeDetails.newPayerName,
+          description_before: previousExpense?.description,
+          description_after: updatePayload.description,
+          added_user_ids: changeDetails.addedUserIds,
+          removed_user_ids: changeDetails.removedUserIds,
+          added_names: changeDetails.addedNames,
+          removed_names: changeDetails.removedNames,
+          split_changes: changeDetails.splitChanges,
+        };
+
+        if (isRecentTriggerLog) {
+          await supabase
+            .from('expense_audit_logs')
+            .update({
+              changes: mergedChanges,
+              user_id: user.id,
+            })
+            .eq('id', recentLog.id);
+        } else {
+          await supabase.from('expense_audit_logs').insert({
+            expense_id: id,
+            group_id: rawGroupId,
+            user_id: user.id,
+            action: 'update',
+            changes: mergedChanges,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Trigger unified update notifications
       void notifyExpenseUpdated(supabase, {
         updaterId: user.id,
         expenseId: id,
-        description: expense.description ?? previousExpense.description ?? 'Gasto',
-        totalAmount: parsedAmount,
-        groupId: rawGroupId,
-        currency: expense.currency ?? previousExpense.currency ?? 'COP',
-        newSplits: targetSplits,
-        removedUserIds,
+        description: updatePayload.description ?? 'Gasto',
         previousDescription: previousExpense.description,
+        totalAmount: parsedAmount,
+        previousTotalAmount: previousExpense.total_amount,
+        groupId: rawGroupId,
+        currency: effectiveCurrency,
+        newSplits: targetSplits,
+        previousSplits: prevSplits,
+        removedUserIds,
+        paidBy: updatePayload.paid_by,
+        previousPaidBy: previousExpense.paid_by,
+        createdBy: previousExpense.created_by,
+        category: updatePayload.category,
+        previousCategory: previousExpense.category,
+        expenseDate: updatePayload.expense_date,
+        previousExpenseDate: previousExpense.expense_date,
+        notes: updatePayload.notes,
+        previousNotes: previousExpense.notes,
       });
-    } catch (notifErr) {
-      console.warn('[API /api/expenses/[id]] Notification warning:', notifErr);
+    } catch (auditErr) {
+      console.warn('[API /api/expenses/[id]] Warning recording audit log or notification:', auditErr);
     }
 
     // Fetch complete updated expense with items and splits to return
@@ -344,7 +410,8 @@ export async function PUT(
       .eq('id', id)
       .single();
 
-    return NextResponse.json(fullUpdatedExpense ?? updatedExpense);
+    const finalExpense = fullUpdatedExpense ?? updatedExpense;
+    return NextResponse.json({ ...finalExpense, split_config: expense.split_config });
   } catch (err: unknown) {
     console.error('[API /api/expenses/[id]] Unhandled PUT error:', err);
     const message = err instanceof Error ? err.message : 'Error interno al actualizar gasto';

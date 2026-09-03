@@ -16,8 +16,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: 'Gastos Compartidos - Plataforma Multi-Grupo',
-  description: 'Aplicación web de gastos compartidos multiusuario para administrar grupos, dividir gastos desglosados y calcular balances consolidados.',
+  title: 'Deudita - Gastos Compartidos y División de Cuentas',
+  description: 'Aplicación web de gastos compartidos multiusuario para administrar grupos, dividir gastos desglosados, calcular balances consolidados y gestionar borradores de gastos.',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {

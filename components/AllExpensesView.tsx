@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
 import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
-import { EmailTemplatesManager } from '@/components/EmailTemplatesManager';
+import { GmailIntegrationModal } from '@/components/GmailIntegrationModal';
 import {
   getEffectiveTransactionDate,
   isDateMatchingFilter,
@@ -20,7 +20,6 @@ import {
   BarChart3,
   PieChart as PieChartIcon,
   MailCheck,
-  Layers,
   Sparkles,
   CheckCircle2,
   Trash2,
@@ -32,6 +31,7 @@ import {
   Calendar,
   Clock,
   Loader2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -394,14 +394,14 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         /* Detected Drafts Tab */
         <div className="space-y-6">
           {/* Top Quick Actions Banner */}
-          <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-zinc-900 text-white rounded-3xl p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-zinc-900 text-white rounded-3xl p-6 ring-1 ring-zinc-800 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Detección Automática de Gastos por Gmail</h3>
+                <MailCheck className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Sincronización de Compras Bancarias</h3>
               </div>
-              <p className="text-xs text-zinc-300 max-w-xl">
-                Tus correos bancarios se comparan contra plantillas regex globales en tu propia cuenta de Google, creando borradores listos para confirmar.
+              <p className="text-xs text-zinc-300 max-w-xl leading-relaxed">
+                Tus compras con tarjetas y transferencias se detectan automáticamente para que las dividas en tus grupos con un solo toque.
               </p>
             </div>
 
@@ -410,23 +410,23 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
                 type="button"
                 onClick={handleConnectGmail}
                 disabled={isConnectingGmail}
-                className="bg-white hover:bg-zinc-100 text-indigo-950 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                className="bg-white hover:bg-zinc-100 text-zinc-900 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isConnectingGmail ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-900" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-900" />
                 ) : (
-                  <MailCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  <MailCheck className="w-3.5 h-3.5 text-zinc-900" />
                 )}
-                <span>{gmailStatus?.connected ? 'Reconectar Gmail' : 'Conectar Gmail (1 Clic)'}</span>
+                <span>{gmailStatus?.connected ? 'Reconectar o cambiar cuenta' : 'Conectar con Google'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsTemplatesOpen(true)}
-                className="bg-indigo-800/80 hover:bg-indigo-700 text-white border border-indigo-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+                className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Plantillas Regex</span>
+                <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Configuración y Bancos</span>
               </button>
             </div>
           </div>
@@ -434,12 +434,12 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
           {/* Drafts List */}
           {pendingDrafts.length === 0 ? (
             <div className="bg-white rounded-3xl border border-zinc-200/90 p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mx-auto">
-                <Inbox className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-600 mx-auto">
+                <Inbox className="w-6 h-6 text-zinc-400" />
               </div>
               <h4 className="text-sm font-bold text-zinc-900">No tienes gastos pendientes por confirmar</h4>
               <p className="text-xs text-zinc-500 max-w-md mx-auto">
-                Cuando recibas notificaciones bancarias en tu correo conectado que coincidan con las plantillas activas, aparecerán aquí para que los asignes a un grupo.
+                Cuando recibas notificaciones bancarias en tu correo conectado, aparecerán aquí para que los asignes a un grupo.
               </p>
               <div className="pt-2 flex justify-center gap-2">
                 <button
@@ -447,7 +447,7 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
                   onClick={() => setIsTemplatesOpen(true)}
                   className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
                 >
-                  Explorar Plantillas de Banco
+                  Ver bancos compatibles
                 </button>
               </div>
             </div>
@@ -540,10 +540,11 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         draft={selectedDraftToConfirm}
       />
 
-      {/* Email Templates Manager Modal */}
-      <EmailTemplatesManager
+      {/* Email & Bank Formats Settings Modal */}
+      <GmailIntegrationModal
         isOpen={isTemplatesOpen}
         onClose={() => setIsTemplatesOpen(false)}
+        initialTab="templates"
       />
     </div>
   );

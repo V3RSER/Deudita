@@ -33,7 +33,7 @@ export async function DELETE(
 
     const hasGroupMemberships = Boolean(friendMemberships && friendMemberships.length > 0);
 
-    // Check if friend has any associated expense splits or payments
+    // Check if friend has any associated expense splits, expenses or payments
     const { data: friendSplits } = await db
       .from('expense_splits')
       .select('id')
@@ -46,8 +46,16 @@ export async function DELETE(
       .eq('paid_by', friendId)
       .limit(1);
 
-    const hasExpenses = Boolean(
-      (friendSplits && friendSplits.length > 0) || (friendExpenses && friendExpenses.length > 0)
+    const { data: friendPayments } = await db
+      .from('payments')
+      .select('id')
+      .or(`paid_by.eq.${friendId},paid_to.eq.${friendId}`)
+      .limit(1);
+
+    const hasFinancialRecords = Boolean(
+      (friendSplits && friendSplits.length > 0) ||
+      (friendExpenses && friendExpenses.length > 0) ||
+      (friendPayments && friendPayments.length > 0)
     );
 
     // Check if the friend profile is a temporary standalone profile created by current user
@@ -62,13 +70,18 @@ export async function DELETE(
       (friendProfile?.created_by === user.id || !friendProfile?.created_by)
     );
 
-    // If it is an isolated temporary profile with NO group memberships and NO expenses, delete the orphan profile
-    if (isTempCreatedByMe && !hasGroupMemberships && !hasExpenses) {
+    // If it is an isolated temporary profile with NO group memberships and NO financial records, delete the orphan profile
+    if (isTempCreatedByMe && !hasGroupMemberships && !hasFinancialRecords) {
       await db
         .from('group_invites')
         .delete()
         .eq('invitee_profile_id', friendId)
         .eq('invited_by', user.id);
+
+      await db
+        .from('managed_users')
+        .delete()
+        .or(`sponsor_id.eq.${friendId},managed_user_id.eq.${friendId}`);
 
       await db.from('profiles').delete().eq('id', friendId);
     }

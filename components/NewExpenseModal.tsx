@@ -4,8 +4,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Expense, ExpenseItem, ExpenseSplit } from '@/lib/types';
-import { formatCurrency } from '@/lib/balance-utils';
+import { Expense, ExpenseItem, ExpenseSplit, ExpenseSplitConfig, SplitType } from '@/lib/types';
+import {
+  extractNotesAndConfig,
+  serializeNotesWithConfig,
+  saveLocalSplitConfig,
+  getExpenseSplitConfig,
+} from '@/lib/split-config-utils';
+import { formatCurrency, distributeAmountEqually, normalizeSplitsToTotal } from '@/lib/balance-utils';
 import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
 import {
   X, Plus, Trash2, AlertCircle, Loader2,
@@ -14,6 +20,7 @@ import {
   List, Table, ChevronRight, ChevronUp, Clock
 } from 'lucide-react';
 import { getCategoryConfig, EXPENSE_CATEGORY_GROUPS, DEFAULT_EXPENSE_CATEGORY } from '@/lib/expense-category-utils';
+import { CustomSelect, SelectItem } from '@/components/ui/CustomSelect';
 import { ExpenseParticipantSummary, ParticipantSummaryData } from '@/components/ExpenseParticipantSummary';
 import {
   getTodayDateString,
@@ -172,64 +179,85 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         const expGroupId = expenseToEdit.group_id ?? 'none';
         setGroupId(expGroupId);
         setReceiptUrl(expenseToEdit.receipt_url ?? '');
-        setNotes(expenseToEdit.notes ?? '');
-        setShowNoteInput(Boolean(expenseToEdit.notes));
-        setShowAdditional(Boolean(expenseToEdit.notes || expenseToEdit.receipt_url));
+        // Extract real user notes and persisted/inferred split configuration
+        const { userNote, splitConfig } = getExpenseSplitConfig(expenseToEdit);
+        setNotes(userNote);
+        setShowNoteInput(Boolean(userNote));
+        setShowAdditional(Boolean(userNote || expenseToEdit.receipt_url));
 
         if (isItemized && expenseToEdit.items && expenseToEdit.items.length > 0) {
-          setItems(expenseToEdit.items.map((i, idx) => {
-            const desc = i.description || '';
-            const match = desc.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
-            return {
-              id: idx + 1,
-              desc: match ? match[2] : desc,
-              quantity: match ? match[1] : '1',
-              amount: String(i.amount ?? ''),
-              amountType: 'total',
-              assignedTo: []
-            };
-          }));
+          if (splitConfig.items && splitConfig.items.length > 0) {
+            setItems(splitConfig.items);
+          } else {
+            setItems(expenseToEdit.items.map((i, idx) => {
+              const desc = i.description || '';
+              const match = desc.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
+              return {
+                id: idx + 1,
+                desc: match ? match[2] : desc,
+                quantity: match ? match[1] : '1',
+                amount: String(i.amount ?? ''),
+                amountType: 'total',
+                assignedTo: []
+              };
+            }));
+          }
+          if (splitConfig.isItemizedVerticalView !== undefined) {
+            setIsItemizedVerticalView(splitConfig.isItemizedVerticalView);
+          }
         } else {
           setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
         }
 
-        if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
-          const selected = expenseToEdit.splits.map(s => s.user_id);
-          setSelectedMembers(selected);
-          const newSplits: Record<string, { exact: string; pct: string; shares: string }> = {};
+        // Restore split type, participants, and values (e.g. cuotas, exact amounts, percentages)
+        setSplitType(splitConfig.splitType);
+        if (splitConfig.mode) {
+          setMode(splitConfig.mode);
+        }
 
-          const splitAmounts = expenseToEdit.splits.map(s => {
-            const val = typeof s.amount_owed === 'number'
-              ? s.amount_owed
-              : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
-            return isNaN(val) ? 0 : val;
-          });
-
-          const minAmt = Math.min(...splitAmounts);
-          const maxAmt = Math.max(...splitAmounts);
-          // Split is considered equal if difference between highest and lowest share is negligible
-          const isSplitEqual = splitAmounts.length <= 1 || (maxAmt - minAmt <= 1);
-
-          expenseToEdit.splits.forEach(s => {
-            const val = typeof s.amount_owed === 'number'
-              ? s.amount_owed
-              : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
-            newSplits[s.user_id] = {
-              exact: !isNaN(val) && val > 0 ? String(val) : '',
-              pct: '',
-              shares: '1'
-            };
-          });
-          setSplits(newSplits);
-          setSplitType(isItemized ? 'itemized' : (isSplitEqual ? 'equal' : 'exact'));
+        if (splitConfig.selectedMembers && splitConfig.selectedMembers.length > 0) {
+          setSelectedMembers(splitConfig.selectedMembers);
+        } else if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
+          setSelectedMembers(expenseToEdit.splits.map(s => s.user_id));
         } else {
           const targetGroupMemberIds = (expGroupId && expGroupId !== 'none')
             ? members.filter(m => m.group_id === expGroupId).map(m => m.user_id)
             : (currentProfile ? [currentProfile.id] : []);
           setSelectedMembers(targetGroupMemberIds.length > 0 ? targetGroupMemberIds : (currentProfile ? [currentProfile.id] : []));
-          setSplits({});
-          setSplitType(isItemized ? 'itemized' : 'equal');
         }
+
+        const newSplits: Record<string, { exact: string; pct: string; shares: string }> = {};
+
+        // 1. Seed with saved split configuration (preserves cuotas and exact amounts)
+        if (splitConfig.splits) {
+          Object.entries(splitConfig.splits).forEach(([uId, sVal]) => {
+            newSplits[uId] = {
+              exact: sVal.exact ?? '',
+              pct: sVal.pct ?? '',
+              shares: sVal.shares ?? '1'
+            };
+          });
+        }
+
+        // 2. Ensure all participants present in expense splits have an entry
+        if (expenseToEdit.splits && expenseToEdit.splits.length > 0) {
+          expenseToEdit.splits.forEach(s => {
+            const val = typeof s.amount_owed === 'number'
+              ? s.amount_owed
+              : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
+            if (!newSplits[s.user_id]) {
+              newSplits[s.user_id] = {
+                exact: !isNaN(val) && val > 0 ? String(val) : '',
+                pct: '',
+                shares: '1'
+              };
+            } else if (!newSplits[s.user_id].exact && !isNaN(val) && val > 0) {
+              newSplits[s.user_id].exact = String(val);
+            }
+          });
+        }
+
+        setSplits(newSplits);
       } else {
         // Reset to brand new expense form
         setMode('quick');
@@ -408,6 +436,20 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     setIsSubmitting(true);
     try {
       const expenseTimeISO = combineDateAndTimeToISO(date, time);
+
+      const splitConfig: ExpenseSplitConfig = {
+        version: 1,
+        splitType,
+        mode,
+        selectedMembers,
+        splits,
+        items: mode === 'itemized' ? items : undefined,
+        isItemizedVerticalView: mode === 'itemized' ? isItemizedVerticalView : undefined,
+        savedAt: new Date().toISOString(),
+      };
+
+      const combinedNotes = serializeNotesWithConfig(notes.trim(), splitConfig);
+
       const payload = {
         group_id: (groupId === 'none' ? null : groupId) as any,
         paid_by: paidById,
@@ -418,7 +460,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         expense_time: expenseTimeISO,
         source: 'manual' as const,
         receipt_url: receiptUrl ? receiptUrl : undefined,
-        notes: notes.trim() ? notes.trim() : undefined,
+        notes: combinedNotes,
+        split_config: splitConfig,
         created_by: currentProfile?.id ?? paidById,
       };
 
@@ -431,9 +474,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       })) : [];
 
       if (expenseToEdit) {
+        saveLocalSplitConfig(expenseToEdit.id, splitConfig);
         await updateExpense(expenseToEdit.id, payload, finalItems, splitsToSave);
       } else {
-        await addExpense(payload, finalItems, splitsToSave);
+        const created = await addExpense(payload, finalItems, splitsToSave);
+        if (created && (created as any).id) {
+          saveLocalSplitConfig((created as any).id, splitConfig);
+        }
       }
       onClose();
     } catch (err: any) {
@@ -460,8 +507,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     let finalSplits: any[] = [];
     if (splitType === 'equal') {
       if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
-      const share = totalAmount / selectedMembers.length;
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: share }));
+      finalSplits = distributeAmountEqually(totalAmount, selectedMembers, paidById);
     } else if (splitType === 'exact') {
       let sum = 0;
       selectedMembers.forEach(id => {
@@ -501,10 +547,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         sum += val;
       });
       if (Math.abs(sum - 100) > 0.05) return setError('La suma de porcentajes debe ser 100%.');
-      finalSplits = selectedMembers.map(id => {
+      const rawSplits = selectedMembers.map(id => {
         const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
         return { user_id: id, amount_owed: totalAmount * (val / 100) };
       });
+      finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
     } else if (splitType === 'shares') {
       if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
       let sum = 0;
@@ -513,13 +560,15 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         sum += val;
       });
       if (sum <= 0) return setError('La suma de cuotas debe ser mayor a 0.');
-      finalSplits = selectedMembers.map(id => {
+      const rawSplits = selectedMembers.map(id => {
         const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
         return { user_id: id, amount_owed: totalAmount * (val / sum) };
       });
+      finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
     } else if (splitType === 'itemized') {
       const shares = calculateItemizedShares();
-      finalSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
+      const rawSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
+      finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
     }
 
     await executeSave(totalAmount, finalSplits);
@@ -670,64 +719,51 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     Detalles
                   </h3>
                 </div>
-                <div className="bg-white border border-zinc-200 rounded-2xl p-3 sm:p-3.5 space-y-2.5 shadow-2xs overflow-hidden">
+                <div className="bg-white border border-zinc-200 rounded-2xl p-3 sm:p-3.5 space-y-2.5 shadow-2xs overflow-visible relative">
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Grupo</label>
-                      <div className="relative shadow-2xs rounded-xl bg-white border border-zinc-200">
-                        <select
-                          value={groupId}
-                          onChange={e => handleGroupChange(e.target.value)}
-                          className="w-full pl-2.5 pr-7 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
-                        >
-                          <option value="none">Sin grupo</option>
-                          {userGroups.map(g => (
-                            <option key={g.id} value={g.id}>{g.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+                      <CustomSelect
+                        value={groupId}
+                        onChange={handleGroupChange}
+                        options={[
+                          { value: 'none', label: 'Sin grupo' },
+                          ...userGroups.map((g) => ({ value: g.id, label: g.name })),
+                        ]}
+                        size="sm"
+                      />
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Pagado por</label>
-                      <div className="relative shadow-2xs rounded-xl bg-white border border-zinc-200">
-                        <select
-                          value={paidById}
-                          onChange={e => setPaidById(e.target.value)}
-                          className="w-full pl-2.5 pr-7 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
-                        >
-                          {activeProfiles.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.full_name || p.email}{p.id === currentProfile?.id ? ' (Tú)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+                      <CustomSelect
+                        value={paidById}
+                        onChange={setPaidById}
+                        options={activeProfiles.map((p) => ({
+                          value: p.id,
+                          label: `${p.full_name || p.email}${p.id === currentProfile?.id ? ' (Tú)' : ''}`,
+                        }))}
+                        size="sm"
+                      />
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
-                      <div className="relative shadow-2xs rounded-xl bg-white border border-zinc-200">
-                        <select
-                          value={subCategory}
-                          onChange={e => setSubCategory(e.target.value)}
-                          className="w-full pl-2.5 pr-7 py-2 text-xs font-semibold text-zinc-900 appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 rounded-xl"
-                        >
-                          {Object.entries(EXPENSE_CATEGORY_GROUPS).map(([main, subs]) => (
-                            <optgroup key={main} label={main}>
-                              {subs.map(sub => (
-                                <option key={sub} value={sub}>{sub}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                          {!Object.values(EXPENSE_CATEGORY_GROUPS).flat().includes(subCategory) && (
-                            <option value={subCategory}>{subCategory}</option>
-                          )}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+                      <CustomSelect
+                        value={subCategory}
+                        onChange={setSubCategory}
+                        options={[
+                          ...Object.entries(EXPENSE_CATEGORY_GROUPS).map(([main, subs]) => ({
+                            group: main,
+                            options: subs.map((sub) => ({ value: sub, label: sub })),
+                          })),
+                          ...(!Object.values(EXPENSE_CATEGORY_GROUPS).flat().includes(subCategory)
+                            ? [{ value: subCategory, label: subCategory }]
+                            : []),
+                        ]}
+                        size="sm"
+                        searchable
+                      />
                     </div>
 
                     <div className="space-y-1">

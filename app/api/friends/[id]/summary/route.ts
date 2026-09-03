@@ -41,13 +41,16 @@ export async function GET(
     const userGroupIds = userMemberships ? userMemberships.map((m) => m.group_id) : [];
 
     // 3. Find shared group IDs
-    const { data: friendMemberships } = await supabase
-      .from('group_members')
-      .select('group_id, role')
-      .eq('user_id', friendId)
-      .in('group_id', userGroupIds.length > 0 ? userGroupIds : ['none']);
+    let sharedGroupIds: string[] = [];
+    if (userGroupIds.length > 0) {
+      const { data: friendMemberships } = await supabase
+        .from('group_members')
+        .select('group_id, role')
+        .eq('user_id', friendId)
+        .in('group_id', userGroupIds);
 
-    const sharedGroupIds = friendMemberships ? friendMemberships.map((m) => m.group_id) : [];
+      sharedGroupIds = friendMemberships ? friendMemberships.map((m) => m.group_id) : [];
+    }
 
     // Fetch shared group details
     let sharedGroups: any[] = [];

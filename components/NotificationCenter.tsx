@@ -16,7 +16,22 @@ import {
   Trash2,
   ShieldCheck,
   ArrowRight,
+  Wallet,
+  Clock,
 } from 'lucide-react';
+
+function formatNotificationTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (diffSec < 60) return 'Ahora';
+  if (diffSec < 3600) return `Hace ${Math.floor(diffSec / 60)} min`;
+  if (diffSec < 86400) return `Hace ${Math.floor(diffSec / 3600)} h`;
+  if (diffSec < 86400 * 2) return 'Ayer';
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
 
 export function NotificationCenter() {
   const router = useRouter();
@@ -96,6 +111,12 @@ export function NotificationCenter() {
       case 'expense_assigned':
       case 'managed_user_assigned':
         return <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
+      case 'payment_received':
+        return <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
+      case 'payment_updated':
+        return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
+      case 'payment_deleted':
+        return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
       case 'member_joined':
         return <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
       default:
@@ -235,22 +256,44 @@ export function NotificationCenter() {
                           {getNotificationIcon(n.type)}
                           <span className="truncate">{n.title}</span>
                         </span>
-                        {!n.is_read && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              markNotificationAsRead(n.id);
-                            }}
-                            className="text-zinc-400 hover:text-zinc-700 transition-colors active:scale-95 shrink-0 p-1 cursor-pointer"
-                            title="Marcar como leída"
-                            aria-label="Marcar como leída"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <div className="flex items-center space-x-1.5 shrink-0">
+                          {n.created_at && (
+                            <span className="text-[10px] text-zinc-400">
+                              {formatNotificationTime(n.created_at)}
+                            </span>
+                          )}
+                          {!n.is_read && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markNotificationAsRead(n.id);
+                              }}
+                              className="text-zinc-400 hover:text-zinc-700 transition-colors active:scale-95 shrink-0 p-1 cursor-pointer"
+                              title="Marcar como leída"
+                              aria-label="Marcar como leída"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-zinc-600 leading-relaxed text-[11px] sm:text-xs break-words">{n.message}</p>
+                      
+                      {/* Unified change tags */}
+                      {Array.isArray(n.data?.change_tags) && n.data.change_tags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          {n.data.change_tags.map((tag: string, idx: number) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center text-[10px] text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded border border-zinc-300/50 leading-none font-normal"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
                       {(n.link || n.data?.group_id) && (
                         <div className="flex items-center space-x-1 text-[10px] font-semibold text-emerald-700 pt-0.5">
                           <span>Ver detalle</span>

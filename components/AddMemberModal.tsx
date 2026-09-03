@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Search,
 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -200,17 +201,16 @@ export function AddMemberModal({
               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                 Grupo de Destino *
               </label>
-              <select
+              <CustomSelect
                 value={activeGroupId}
-                onChange={(e) => setSelectedGroupId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all cursor-pointer"
-              >
-                {userGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedGroupId(val)}
+                options={userGroups.map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                }))}
+                size="md"
+                placeholder="Seleccionar grupo..."
+              />
             </div>
           )}
 

@@ -14,6 +14,7 @@ import {
   extractTimeFromISO,
 } from '@/lib/transaction-date-utils';
 import { ExpenseParticipantSummary, ParticipantSummaryData, ParticipantItemBreakdown } from '@/components/ExpenseParticipantSummary';
+import { getExpenseSplitConfig, extractNotesAndConfig } from '@/lib/split-config-utils';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import {
   Receipt,
@@ -502,9 +503,20 @@ export function GenericExpenseList({
                         {/* Content Grid */}
                         {(() => {
                           const hasItems = Boolean(exp.items && exp.items.length > 0);
-                          const hasNotes = Boolean(exp.notes && exp.notes.trim().length > 0);
+                          const { userNote: cleanNotes, splitConfig } = getExpenseSplitConfig(exp);
+                          const hasNotes = Boolean(cleanNotes && cleanNotes.trim().length > 0);
                           const hasReceipt = Boolean(exp.receipt_url);
                           const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
+
+                          const splitTypeLabel = splitConfig.splitType === 'shares'
+                            ? 'Por cuotas'
+                            : splitConfig.splitType === 'exact'
+                            ? 'Monto exacto'
+                            : splitConfig.splitType === 'percentage'
+                            ? 'Por porcentaje'
+                            : splitConfig.splitType === 'itemized'
+                            ? 'Por artículos'
+                            : 'Partes iguales';
 
                           const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
                             const profile = profiles.find((p) => p.id === split.user_id);
@@ -528,11 +540,14 @@ export function GenericExpenseList({
                               });
                             }
 
+                            const userShares = splitConfig.splits?.[split.user_id]?.shares;
+
                             return {
                               userId: split.user_id,
                               profile,
                               amount: userAmt,
                               breakdown: breakdown.length > 0 ? breakdown : undefined,
+                              shares: splitConfig.splitType === 'shares' ? userShares : undefined,
                             };
                           });
 
@@ -545,6 +560,7 @@ export function GenericExpenseList({
                                   currency={currency}
                                   currentUserId={currentProfile?.id}
                                   title="Resumen por participante"
+                                  splitTypeLabel={splitTypeLabel}
                                   defaultExpanded={false}
                                 />
 
@@ -620,7 +636,7 @@ export function GenericExpenseList({
                                       </div>
                                       <div className="p-3">
                                         <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                                          {exp.notes}
+                                          {cleanNotes}
                                         </p>
                                       </div>
                                     </div>
@@ -637,6 +653,7 @@ export function GenericExpenseList({
                               currency={currency}
                               currentUserId={currentProfile?.id}
                               title="Resumen por participante"
+                              splitTypeLabel={splitTypeLabel}
                               defaultExpanded={false}
                             />
                           );

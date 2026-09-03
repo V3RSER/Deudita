@@ -121,6 +121,31 @@ export interface ExpenseSplit {
   created_at: string;
 }
 
+export type SplitType = 'equal' | 'exact' | 'percentage' | 'shares' | 'itemized';
+
+export interface ExpenseSplitConfig {
+  version: 1;
+  splitType: SplitType;
+  mode?: 'quick' | 'itemized';
+  selectedMembers?: string[];
+  splits?: Record<string, {
+    exact?: string;
+    pct?: string;
+    shares?: string;
+  }>;
+  items?: Array<{
+    id: number;
+    desc: string;
+    quantity: string;
+    amount: string;
+    amountType: 'total' | 'each';
+    assignedTo: string[];
+    shares?: Record<string, string>;
+  }>;
+  isItemizedVerticalView?: boolean;
+  savedAt?: string;
+}
+
 export interface Expense {
   id: string;
   group_id: string;
@@ -134,6 +159,7 @@ export interface Expense {
   source_draft_id?: string;
   receipt_url?: string;
   notes?: string;
+  split_config?: ExpenseSplitConfig;
   created_by: string;
   created_at: string;
   updated_at?: string;

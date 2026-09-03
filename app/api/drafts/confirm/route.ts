@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { normalizeSplitsToTotal } from '@/lib/balance-utils';
 
 export async function POST(req: Request) {
   try {
@@ -45,16 +46,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: expErr.message }, { status: 500 });
     }
 
-    // 3. Add splits
+    // 3. Add splits with precision normalization
     if (splits && Array.isArray(splits) && splits.length > 0) {
-      const splitsToInsert = splits.map((s: any) => ({
+      const rawSplits = splits.map((s: any) => ({
+        user_id: s.user_id,
+        amount_owed: typeof s.amount_owed === 'number' ? s.amount_owed : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, '')) || 0,
+      }));
+
+      const normalizedSplits = normalizeSplitsToTotal(finalAmount, rawSplits, paidBy);
+
+      const splitsToInsert = normalizedSplits.map((s) => ({
         expense_id: newExpense.id,
         user_id: s.user_id,
-        amount_owed: s.amount_owed
+        amount_owed: s.amount_owed,
       }));
+
       const { error: splitsErr } = await supabase.from('expense_splits').insert(splitsToInsert);
       if (splitsErr) {
-        console.error('[API /api/drafts/confirm] Insert splits error:', splitsErr);
+        console.error('[API /api/drafts/confirm] Insert splits error, rolling back expense:', splitsErr);
+        await supabase.from('expenses').delete().eq('id', newExpense.id);
+        return NextResponse.json({ error: 'Error al registrar la distribución del borrador. Operación cancelada.' }, { status: 500 });
       }
     }
 

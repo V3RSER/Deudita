@@ -25,6 +25,7 @@ import {
   Calendar,
   Clock
 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import Image from 'next/image';
 import {
   getTodayDateString,
@@ -32,6 +33,7 @@ import {
   getDefaultTimeForDate,
   combineDateAndTimeToISO,
   extractTimeFromISO,
+  parseCurrencyAmount,
 } from '@/lib/transaction-date-utils';
 
 interface SettleDebtModalProps {
@@ -185,7 +187,7 @@ export function SettleDebtModal({
   if (!isOpen) return null;
 
   // Calculate distributed allocation preview
-  const numericAmount = parseFloat(amount) || 0;
+  const numericAmount = parseCurrencyAmount(amount, currency);
   const getDistributionPreview = () => {
     if (numericAmount <= 0 || groupDebts.length === 0) return [];
 
@@ -299,39 +301,38 @@ export function SettleDebtModal({
           proof_url: proofUrl || undefined,
         });
       } else {
-        let remainingToPay = numericAmount;
+        // Calculate exact distributed allocations per group (aligned with distribution preview)
+        const allocations: Array<{ groupId: string; amount: number }> = [];
+        let remaining = numericAmount;
         const sortedDebts = [...groupDebts].sort((a, b) => b.debt - a.debt);
 
-        if (sortedDebts.length > 0) {
-          for (const item of sortedDebts) {
-            if (remainingToPay <= 0) break;
-            const payForThisGroup = item.debt > 0 ? Math.min(remainingToPay, item.debt) : remainingToPay;
-
-            await addPayment({
-              group_id: item.group.id,
-              paid_by: payerId,
-              paid_to: receiverId,
-              amount: payForThisGroup,
-              payment_date: date,
-              payment_time: paymentTimeISO,
-              note: notes ? notes : 'Pago distribuido',
-              proof_url: proofUrl || undefined,
-            });
-
-            remainingToPay -= payForThisGroup;
+        for (const item of sortedDebts) {
+          if (remaining <= 0) break;
+          const alloc = Math.min(remaining, item.debt > 0 ? item.debt : remaining);
+          if (alloc > 0) {
+            allocations.push({ groupId: item.group.id, amount: alloc });
+            remaining -= alloc;
           }
         }
 
-        if (remainingToPay > 0 && userGroups.length > 0) {
-          const targetG = sortedDebts[0]?.group || userGroups[0];
+        if (remaining > 0) {
+          if (allocations.length > 0) {
+            allocations[0].amount += remaining;
+          } else if (userGroups.length > 0) {
+            const fallbackGroup = targetGroup || userGroups[0];
+            allocations.push({ groupId: fallbackGroup.id, amount: remaining });
+          }
+        }
+
+        for (const alloc of allocations) {
           await addPayment({
-            group_id: targetG.id,
+            group_id: alloc.groupId,
             paid_by: payerId,
             paid_to: receiverId,
-            amount: remainingToPay,
+            amount: alloc.amount,
             payment_date: date,
             payment_time: paymentTimeISO,
-            note: notes ? notes : 'Pago extra',
+            note: notes ? notes : 'Pago registrado',
             proof_url: proofUrl || undefined,
           });
         }
@@ -409,55 +410,25 @@ export function SettleDebtModal({
               Flujo del dinero
             </div>
 
-            <div className="flex items-center justify-between gap-1.5 sm:gap-2">
-              
-              {/* Payer Horizontal Card */}
-              <div className="relative flex-1 flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all min-w-0 group cursor-pointer">
-                <div className="relative shrink-0">
-                  {payerProfile?.avatar_url ? (
-                    <Image
-                      src={payerProfile.avatar_url}
-                      alt="Payer"
-                      width={36}
-                      height={36}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-rose-200 transition-all"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                      {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
-                    </div>
-                  )}
-                  <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                    PAGA
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-extrabold text-zinc-900 truncate">
-                    {payerProfile?.full_name?.split(' ')[0] || 'Pagador'}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 font-medium truncate">
-                    {payerProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
-                  </div>
-                </div>
-
-                <select
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div className="space-y-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 pl-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                  Paga
+                </span>
+                <CustomSelect
                   value={payerId}
-                  onChange={(e) => setPayerId(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  aria-label="Seleccionar pagador"
-                >
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setPayerId(val)}
+                  options={profiles.map((p) => ({
+                    value: p.id,
+                    label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+                  }))}
+                  size="sm"
+                />
               </div>
 
               {/* Swap Button */}
-              <div className="shrink-0">
+              <div className="pt-4 shrink-0">
                 <button
                   type="button"
                   onClick={handleSwapPayerReceiver}
@@ -469,49 +440,20 @@ export function SettleDebtModal({
                 </button>
               </div>
 
-              {/* Receiver Horizontal Card */}
-              <div className="relative flex-1 flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs hover:border-zinc-300 transition-all min-w-0 group cursor-pointer">
-                <div className="relative shrink-0">
-                  {receiverProfile?.avatar_url ? (
-                    <Image
-                      src={receiverProfile.avatar_url}
-                      alt="Receiver"
-                      width={36}
-                      height={36}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                      {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
-                    </div>
-                  )}
-                  <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                    RECIBE
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-extrabold text-zinc-900 truncate">
-                    {receiverProfile?.full_name?.split(' ')[0] || 'Receptor'}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 font-medium truncate">
-                    {receiverProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
-                  </div>
-                </div>
-
-                <select
+              <div className="space-y-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 pl-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  Recibe
+                </span>
+                <CustomSelect
                   value={receiverId}
-                  onChange={(e) => setReceiverId(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  aria-label="Seleccionar receptor"
-                >
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name} {p.id === currentProfile?.id ? '(Tú)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setReceiverId(val)}
+                  options={profiles.map((p) => ({
+                    value: p.id,
+                    label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+                  }))}
+                  size="sm"
+                />
               </div>
             </div>
 
