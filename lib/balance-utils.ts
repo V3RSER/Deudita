@@ -766,6 +766,8 @@ export interface ThirdPartyTriangulation {
   explanation: string;
   directDebtsWithDebtor: number;
   directDebtsWithCreditor: number;
+  simplifiedDebtsWithDebtor?: number;
+  simplifiedDebtsWithCreditor?: number;
   expenses: ThirdPartyTriangulationExpense[];
 }
 
@@ -815,6 +817,8 @@ export interface GroupOptimizationDetail {
   settlementLabel?: string;
   closingSummary?: string;
   newSuggestedPayments?: SuggestedPaymentItem[];
+  unsimplifiedNarrative?: string;
+  simplifiedNarrative?: string;
 }
 
 export interface SimplificationExpenseItem {
@@ -1292,49 +1296,78 @@ export function calculatePairwiseDebtDetail(
         const relevantRelations: RealCompensationRelation[] = [];
         const newSuggestedPayments: SuggestedPaymentItem[] = [];
 
-        // 1. Debtor's new suggested payments to third parties (only relevant when debt to this creditor is discounted/redirected)
-        if (isDiscount && debtorSimplifiedToOthers.length > 0) {
+        // Breakdown items specifically justifying the compensation amount (totalCompensated)
+        interface CompBreakdownItem {
+          party: Profile;
+          partyName: string;
+          amount: number;
+          directWithDebtor: number;
+          directWithCreditor: number;
+          simplifiedWithDebtor: number;
+          simplifiedWithCreditor: number;
+          role: string;
+        }
+        const compBreakdownItems: CompBreakdownItem[] = [];
+
+        if (isDiscount) {
+          // 1. Debtor's new suggested payments to third parties (debtor pays third party instead of this creditor)
           let remainingCompToAllocate = totalCompensated;
 
-          debtorSimplifiedToOthers.forEach((b) => {
-            if (remainingCompToAllocate <= 0.009) return;
-            // The redirected portion for this third party is bounded by totalCompensated and the third party's simplified debt
-            const allocatedAmount = Math.min(b.amount, Math.round(remainingCompToAllocate * 100) / 100);
+          if (debtorSimplifiedToOthers.length > 0) {
+            debtorSimplifiedToOthers.forEach((b) => {
+              if (remainingCompToAllocate <= 0.009) return;
+              const allocatedAmount = Math.min(b.amount, Math.round(remainingCompToAllocate * 100) / 100);
+              remainingCompToAllocate = Math.round((remainingCompToAllocate - allocatedAmount) * 100) / 100;
 
-            remainingCompToAllocate = Math.round((remainingCompToAllocate - allocatedAmount) * 100) / 100;
+              if (allocatedAmount > 0.009) {
+                newSuggestedPayments.push({
+                  from: debtor,
+                  to: b.creditor,
+                  amount: allocatedAmount,
+                  description: `En vez de pagarle a ${creditorDisplayName}, pagar directamente a ${b.creditor.full_name || 'Tercero'}`,
+                });
 
-            if (allocatedAmount > 0.009) {
-              newSuggestedPayments.push({
-                from: debtor,
-                to: b.creditor,
-                amount: allocatedAmount,
-                description: `En vez de pagarle a ${creditorDisplayName}, pagar directamente a ${b.creditor.full_name || 'Tercero'}`,
-              });
+                const directPair = allDirectDebts.find(
+                  (d) => d.debtor.id === debtor.id && d.creditor.id === b.creditor.id
+                );
+                const directAmount = directPair ? directPair.amount : 0;
+                const simplifiedAmount = b.amount;
+                const differs = Math.abs(directAmount - simplifiedAmount) > 0.01;
 
-              const directPair = allDirectDebts.find(
-                (d) => d.debtor.id === debtor.id && d.creditor.id === b.creditor.id
-              );
-              const directAmount = directPair ? directPair.amount : 0;
-              const simplifiedAmount = b.amount;
-              const differs = Math.abs(directAmount - simplifiedAmount) > 0.01;
+                const directToCreditorPair = allDirectDebts.find(
+                  (d) => d.debtor.id === b.creditor.id && d.creditor.id === creditor.id
+                );
+                const directDebtsWithCreditor = directToCreditorPair ? directToCreditorPair.amount : 0;
 
-              relevantRelations.push({
-                id: `d-pays-simplified-${b.creditor.id}`,
-                from: debtor,
-                to: b.creditor,
-                amount: allocatedAmount,
-                directAmount,
-                simplifiedAmount,
-                differs,
-                direction: 'debtor_owes_third',
-                roleDescription: `${debtorDisplayName} transfiere directamente a ${b.creditor.full_name || 'Tercero'}${
-                  differs && directAmount > 0 ? ` (deuda directa previa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-                }`,
-                operation: '+',
-                expenses: getExpensesForPair(b.creditor.id, debtor.id),
-              });
-            }
-          });
+                relevantRelations.push({
+                  id: `d-pays-simplified-${b.creditor.id}`,
+                  from: debtor,
+                  to: b.creditor,
+                  amount: allocatedAmount,
+                  directAmount,
+                  simplifiedAmount,
+                  differs,
+                  direction: 'debtor_owes_third',
+                  roleDescription: `${debtorDisplayName} transfiere directamente a ${b.creditor.full_name || 'Tercero'}${
+                    differs && directAmount > 0 ? ` (deuda directa previa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
+                  }`,
+                  operation: '+',
+                  expenses: getExpensesForPair(b.creditor.id, debtor.id),
+                });
+
+                compBreakdownItems.push({
+                  party: b.creditor,
+                  partyName: b.creditor.full_name || 'Tercero',
+                  amount: allocatedAmount,
+                  directWithDebtor: directAmount,
+                  directWithCreditor: directDebtsWithCreditor,
+                  simplifiedWithDebtor: simplifiedAmount,
+                  simplifiedWithCreditor: 0,
+                  role: 'debtor_pays_third_party',
+                });
+              }
+            });
+          }
 
           // If debtor was owed money by third parties, that direct balance also absorbed part of the compensation
           if (remainingCompToAllocate > 0.009 && othersDebtsToDebtor.length > 0) {
@@ -1357,110 +1390,170 @@ export function calculatePairwiseDebtDetail(
                   operation: '+',
                   expenses: getExpensesForPair(debtor.id, b.debtor.id),
                 });
+
+                compBreakdownItems.push({
+                  party: b.debtor,
+                  partyName: b.debtor.full_name || 'Tercero',
+                  amount: allocatedAmount,
+                  directWithDebtor: b.amount,
+                  directWithCreditor: 0,
+                  simplifiedWithDebtor: 0,
+                  simplifiedWithCreditor: 0,
+                  role: 'mutual_cross_compensation',
+                });
               }
             });
           }
 
-          if (debtorSimplifiedToOthers.length === 1) {
-            const rawOtherAmount = debtorSimplifiedToOthers[0].amount;
-            if (Math.abs(rawOtherAmount - totalCompensated) > 0.01) {
-              console.log(
-                `[PairwiseOptimization] Notice: Single third-party creditor ${debtorSimplifiedToOthers[0].creditor.full_name || 'Tercero'} has simplified debt of ${rawOtherAmount}. Redirection from ${creditorDisplayName} allocated ${newSuggestedPayments[0]?.amount ?? totalCompensated}.`
-              );
-            }
+          // Other third parties paying Creditor in simplified network
+          if (remainingCompToAllocate > 0.009 && othersSimplifiedToCreditor.length > 0) {
+            othersSimplifiedToCreditor.forEach((b) => {
+              if (remainingCompToAllocate <= 0.009) return;
+              const allocatedAmount = Math.min(b.amount, Math.round(remainingCompToAllocate * 100) / 100);
+              remainingCompToAllocate = Math.round((remainingCompToAllocate - allocatedAmount) * 100) / 100;
+
+              if (allocatedAmount > 0.009) {
+                const directPair = allDirectDebts.find(
+                  (d) => d.debtor.id === b.debtor.id && d.creditor.id === creditor.id
+                );
+                const directAmount = directPair ? directPair.amount : 0;
+
+                relevantRelations.push({
+                  id: `third-pays-c-${b.debtor.id}`,
+                  from: b.debtor,
+                  to: b.creditor,
+                  amount: allocatedAmount,
+                  directAmount,
+                  simplifiedAmount: b.amount,
+                  differs: Math.abs(directAmount - b.amount) > 0.01,
+                  direction: 'third_owes_creditor',
+                  roleDescription: `${b.debtor.full_name || 'Tercero'} transfiere a ${creditorDisplayName}`,
+                  operation: '-',
+                  expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+                });
+
+                compBreakdownItems.push({
+                  party: b.debtor,
+                  partyName: b.debtor.full_name || 'Tercero',
+                  amount: allocatedAmount,
+                  directWithDebtor: 0,
+                  directWithCreditor: directAmount,
+                  simplifiedWithDebtor: 0,
+                  simplifiedWithCreditor: b.amount,
+                  role: 'third_party_pays_creditor',
+                });
+              }
+            });
           }
-        }
+        } else {
+          // 2. CONSOLIDATION (!isDiscount): Debtor owes MORE to Creditor
+          // Because Debtor's direct debts to other members were absorbed by Creditor!
+          let remainingCompToAllocate = totalCompensated;
 
-        // 2. Creditor's debts to third parties (Creditor -> Third Party)
-        // Amount shown on graph is the effective portion that compensates the Debtor's obligation (bounded by totalCompensated)
-        if (creditorDebtsToOthers.length > 0) {
-          let remainingCreditorComp = totalCompensated;
-          creditorDebtsToOthers.forEach((b) => {
-            const directAmount = b.amount;
-            const simplifiedPair = allSimplifiedDebts.find(
-              (s) => s.debtor.id === creditor.id && s.creditor.id === b.creditor.id
-            );
-            const simplifiedAmount = simplifiedPair ? simplifiedPair.amount : 0;
-            const allocatedAmount = Math.min(b.amount, Math.max(0.01, remainingCreditorComp));
-            remainingCreditorComp = Math.max(0, Math.round((remainingCreditorComp - allocatedAmount) * 100) / 100);
-            const differs = Math.abs(directAmount - simplifiedAmount) > 0.01 || Math.abs(directAmount - allocatedAmount) > 0.01;
+          if (debtorDebtsToOthers.length > 0) {
+            debtorDebtsToOthers.forEach((b) => {
+              if (remainingCompToAllocate <= 0.009) return;
+              const directAmount = b.amount;
+              const simplifiedPair = allSimplifiedDebts.find(
+                (s) => s.debtor.id === debtor.id && s.creditor.id === b.creditor.id
+              );
+              const simplifiedAmount = simplifiedPair ? simplifiedPair.amount : 0;
+              const savedAmount = Math.max(0, directAmount - simplifiedAmount);
+              const allocatedAmount = Math.min(
+                savedAmount > 0.009 ? savedAmount : directAmount,
+                Math.round(remainingCompToAllocate * 100) / 100
+              );
 
-            relevantRelations.push({
-              id: `c-owes-${b.creditor.id}`,
-              from: b.debtor,
-              to: b.creditor,
-              amount: allocatedAmount,
-              directAmount,
-              simplifiedAmount,
-              differs,
-              direction: 'creditor_owes_third',
-              roleDescription: `${creditorDisplayName} le debe a ${b.creditor.full_name || 'Tercero'}${
-                differs ? ` (deuda directa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-              }`,
-              operation: '+',
-              expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+              if (allocatedAmount > 0.009) {
+                remainingCompToAllocate = Math.round((remainingCompToAllocate - allocatedAmount) * 100) / 100;
+
+                const directToCreditorPair = allDirectDebts.find(
+                  (d) => d.debtor.id === b.creditor.id && d.creditor.id === creditor.id
+                );
+                const directDebtsWithCreditor = directToCreditorPair ? directToCreditorPair.amount : 0;
+
+                const simplifiedToCreditorPair = allSimplifiedDebts.find(
+                  (s) => s.debtor.id === b.creditor.id && s.creditor.id === creditor.id
+                );
+                const simplifiedDebtsWithCreditor = simplifiedToCreditorPair ? simplifiedToCreditorPair.amount : 0;
+
+                relevantRelations.push({
+                  id: `consolidation-from-${b.creditor.id}`,
+                  from: debtor,
+                  to: b.creditor,
+                  amount: allocatedAmount,
+                  directAmount,
+                  simplifiedAmount,
+                  differs: true,
+                  direction: 'debtor_owes_third',
+                  roleDescription: `Deuda directa de ${debtorDisplayName} con ${b.creditor.full_name || 'Tercero'} (${formatCurrency(directAmount, currencyForFormatting)}) absorbida a favor de ${creditorDisplayName}`,
+                  operation: '+',
+                  expenses: getExpensesForPair(b.creditor.id, debtor.id),
+                });
+
+                compBreakdownItems.push({
+                  party: b.creditor,
+                  partyName: b.creditor.full_name || 'Tercero',
+                  amount: allocatedAmount,
+                  directWithDebtor: directAmount,
+                  directWithCreditor: directDebtsWithCreditor,
+                  simplifiedWithDebtor: simplifiedAmount,
+                  simplifiedWithCreditor: simplifiedDebtsWithCreditor,
+                  role: 'debt_consolidation',
+                });
+              }
             });
-          });
-        }
+          }
 
-        // 3. Other third parties paying Creditor in simplified network (or direct debts to Creditor)
-        // Amount shown on graph is the effective simplified/compensated amount (bounded by totalCompensated)
-        if (othersSimplifiedToCreditor.length > 0) {
-          let remainingThirdComp = totalCompensated;
-          othersSimplifiedToCreditor.forEach((b) => {
-            const simplifiedAmount = b.amount;
-            const directPair = allDirectDebts.find(
-              (d) => d.debtor.id === b.debtor.id && d.creditor.id === creditor.id
-            );
-            const directAmount = directPair ? directPair.amount : 0;
-            const allocatedAmount = Math.min(b.amount, Math.max(0.01, remainingThirdComp));
-            remainingThirdComp = Math.max(0, Math.round((remainingThirdComp - allocatedAmount) * 100) / 100);
-            const differs = Math.abs(directAmount - simplifiedAmount) > 0.01;
+          // If there is still remaining compensation (e.g. from debtor's credits or complex chains)
+          if (remainingCompToAllocate > 0.009 && othersDebtsToDebtor.length > 0) {
+            othersDebtsToDebtor.forEach((b) => {
+              if (remainingCompToAllocate <= 0.009) return;
+              const allocatedAmount = Math.min(b.amount, Math.round(remainingCompToAllocate * 100) / 100);
+              remainingCompToAllocate = Math.round((remainingCompToAllocate - allocatedAmount) * 100) / 100;
 
-            relevantRelations.push({
-              id: `third-pays-c-${b.debtor.id}`,
-              from: b.debtor,
-              to: b.creditor,
-              amount: allocatedAmount,
-              directAmount,
-              simplifiedAmount,
-              differs,
-              direction: 'third_owes_creditor',
-              roleDescription: `${b.debtor.full_name || 'Tercero'} transfiere a ${creditorDisplayName}${
-                differs ? ` (deuda directa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-              }`,
-              operation: '-',
-              expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+              if (allocatedAmount > 0.009) {
+                relevantRelations.push({
+                  id: `third-netted-${b.debtor.id}`,
+                  from: b.debtor,
+                  to: debtor,
+                  amount: allocatedAmount,
+                  directAmount: b.amount,
+                  simplifiedAmount: 0,
+                  differs: true,
+                  direction: 'third_owes_debtor',
+                  roleDescription: `${b.debtor.full_name || 'Tercero'} le debía directamente a ${debtorDisplayName}`,
+                  operation: '+',
+                  expenses: getExpensesForPair(debtor.id, b.debtor.id),
+                });
+
+                compBreakdownItems.push({
+                  party: b.debtor,
+                  partyName: b.debtor.full_name || 'Tercero',
+                  amount: allocatedAmount,
+                  directWithDebtor: b.amount,
+                  directWithCreditor: 0,
+                  simplifiedWithDebtor: 0,
+                  simplifiedWithCreditor: 0,
+                  role: 'mutual_cross_compensation',
+                });
+              }
             });
-          });
-        } else if (othersDebtsToCreditor.length > 0) {
-          let remainingThirdComp = totalCompensated;
-          othersDebtsToCreditor.forEach((b) => {
-            const directAmount = b.amount;
-            const simplifiedPair = allSimplifiedDebts.find(
-              (s) => s.debtor.id === b.debtor.id && s.creditor.id === creditor.id
-            );
-            const simplifiedAmount = simplifiedPair ? simplifiedPair.amount : 0;
-            const allocatedAmount = Math.min(b.amount, Math.max(0.01, remainingThirdComp));
-            remainingThirdComp = Math.max(0, Math.round((remainingThirdComp - allocatedAmount) * 100) / 100);
-            const differs = Math.abs(directAmount - simplifiedAmount) > 0.01 || Math.abs(directAmount - allocatedAmount) > 0.01;
+          }
 
-            relevantRelations.push({
-              id: `owes-c-${b.debtor.id}`,
-              from: b.debtor,
-              to: b.creditor,
-              amount: allocatedAmount,
-              directAmount,
-              simplifiedAmount,
-              differs,
-              direction: 'third_owes_creditor',
-              roleDescription: `lo que ${creditorDisplayName} recibe de ${b.debtor.full_name || 'Tercero'}${
-                differs ? ` (deuda directa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-              }`,
-              operation: '-',
-              expenses: getExpensesForPair(b.creditor.id, b.debtor.id),
+          // Fallback: If no direct debts found but consolidation difference exists
+          if (compBreakdownItems.length === 0 && totalCompensated > 0.009) {
+            compBreakdownItems.push({
+              party: creditor,
+              partyName: creditorDisplayName,
+              amount: totalCompensated,
+              directWithDebtor: netDirectBalance,
+              directWithCreditor: 0,
+              simplifiedWithDebtor: simplifiedAmount,
+              simplifiedWithCreditor: 0,
+              role: 'debt_consolidation',
             });
-          });
+          }
         }
 
         // Diagnostic verification and logging for all relevantRelations (Requirement 1)
@@ -1479,34 +1572,59 @@ export function calculatePairwiseDebtDetail(
           );
         });
 
-        // Consistency validation: sum of compensation elements in relevant relations vs totalCompensated (Requirement 3)
-        if (isDiscount && totalCompensated > 0.009) {
-          let compSum = 0;
-          const debtorCompRels = relevantRelations.filter(
-            (r) => r.direction === 'debtor_owes_third' || r.direction === 'third_owes_debtor'
-          );
-          if (debtorCompRels.length > 0) {
-            compSum = Math.round(debtorCompRels.reduce((acc, r) => acc + r.amount, 0) * 100) / 100;
+        // 1. COMPENSATION FORMULA & LABEL: Justifies ONLY the compensation amount (e.g. $53,500)
+        let compFormula = '';
+        let compLabel = '';
+
+        if (compBreakdownItems.length > 1) {
+          compFormula = `${compBreakdownItems
+            .map((item) => formatCurrency(item.amount, currencyForFormatting))
+            .join(' + ')} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+        } else if (compBreakdownItems.length === 1) {
+          compFormula = `${formatCurrency(
+            compBreakdownItems[0].amount,
+            currencyForFormatting
+          )} = ${formatCurrency(totalCompensated, currencyForFormatting)}`;
+        } else {
+          compFormula = `${formatCurrency(totalCompensated, currencyForFormatting)} = ${formatCurrency(
+            totalCompensated,
+            currencyForFormatting
+          )}`;
+        }
+
+        if (isDiscount) {
+          if (compBreakdownItems.length > 1) {
+            compLabel = `Transferencias a ${compBreakdownItems
+              .map((i) => `${i.partyName} (${formatCurrency(i.amount, currencyForFormatting)})`)
+              .join(' + ')} = Descuento aplicado (- ${formatCurrency(totalCompensated, currencyForFormatting)})`;
+          } else if (compBreakdownItems.length === 1) {
+            compLabel = `Transferencia redirigida a ${compBreakdownItems[0].partyName} = Descuento aplicado (- ${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )})`;
           } else {
-            const activeCompRels = relevantRelations.filter(
-              (r) =>
-                r.direction === 'third_owes_creditor' ||
-                r.direction === 'creditor_owes_third'
-            );
-            if (activeCompRels.length > 0) {
-              compSum = Math.round(activeCompRels.reduce((acc, r) => acc + r.amount, 0) * 100) / 100;
-            }
+            compLabel = `Descuento por compensación grupal (- ${formatCurrency(totalCompensated, currencyForFormatting)})`;
           }
-          const compDiff = Math.abs(compSum - totalCompensated);
-          if (compDiff > 0.01) {
-            console.warn(
-              `[PairwiseOptimization] Warning: Sum of graph compensation relations (${compSum}) does not match totalCompensated (${totalCompensated}) for ${debtorDisplayName} -> ${creditorDisplayName} (difference: ${compDiff})`
-            );
+        } else {
+          if (compBreakdownItems.length > 1) {
+            compLabel = `Deuda con ${compBreakdownItems
+              .map((i) => `${i.partyName} (${formatCurrency(i.amount, currencyForFormatting)})`)
+              .join(' + ')} = Consolidación aplicada (+ ${formatCurrency(totalCompensated, currencyForFormatting)})`;
+          } else if (compBreakdownItems.length === 1) {
+            compLabel = `Deuda con ${compBreakdownItems[0].partyName} absorbida = Consolidación aplicada (+ ${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )})`;
+          } else {
+            compLabel = `Consolidación de deudas grupales a favor de ${creditorDisplayName} (+ ${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )})`;
           }
         }
 
-        // Formulas & Labels - Standard arithmetic subtraction / addition equation using exactly this pair's numbers
-        const compFormula = isDiscount
+        // 2. SETTLEMENT FORMULA & LABEL: Shown in final modal settlement card (Net Direct +/- Compensation = Final Settlement)
+        const settlementFormula = isDiscount
           ? `${formatCurrency(netDirectBalance, currencyForFormatting)} − ${formatCurrency(
               totalCompensated,
               currencyForFormatting
@@ -1516,24 +1634,27 @@ export function calculatePairwiseDebtDetail(
               currencyForFormatting
             )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`;
 
-        let compLabel: string;
-        if (isDiscount) {
-          if (debtorSimplifiedToOthers.length > 0) {
-            compLabel = `Saldo directo − transferencias redirigidas a otros acreedores = saldo final a liquidar`;
-          } else if (othersSimplifiedToCreditor.length > 0) {
-            compLabel = `Saldo directo − transferencias de otros integrantes a ${creditorDisplayName} = saldo final a liquidar`;
-          } else if (creditorDebtsToOthers.length > 0) {
-            compLabel = `Saldo directo − obligaciones salientes de ${creditorDisplayName} compensadas = saldo final a liquidar`;
-          } else {
-            compLabel = `Saldo directo − descuento por compensación grupal = saldo final a liquidar`;
-          }
-        } else {
-          compLabel = `Saldo directo + redistribución / consolidación grupal = saldo final a liquidar`;
-        }
+        const settlementLabel = isDiscount
+          ? `Saldo directo (${formatCurrency(
+              netDirectBalance,
+              currencyForFormatting
+            )}) − Compensación grupal (- ${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )}) = Saldo restante a liquidar`
+          : `Saldo directo (${formatCurrency(
+              netDirectBalance,
+              currencyForFormatting
+            )}) + Consolidación grupal (+ ${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )}) = Saldo final a liquidar`;
 
         // Narratives
         let summaryNarrative = '';
         let closingSummary = '';
+        let unsimplifiedNarrative = '';
+        let simplifiedNarrative = '';
 
         if (isDiscount) {
           if (newSuggestedPayments.length > 0) {
@@ -1556,24 +1677,21 @@ export function calculatePairwiseDebtDetail(
                     totalCompensated,
                     currencyForFormatting
                   )} se transfieren a otros acreedores. Quedan ${formatCurrency(simplifiedAmount, currencyForFormatting)} a pagarle a ${creditorDisplayName}.`;
-          } else if (othersSimplifiedToCreditor.length > 0) {
-            summaryNarrative = `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
+
+            unsimplifiedNarrative = `Sin simplificación, ${debtorDisplayName} tendría que pagarle directamente ${formatCurrency(
               netDirectBalance,
               currencyForFormatting
-            )}. Como otros integrantes le transfieren directamente a ${creditorDisplayName} (${othersSimplifiedToCreditor
-              .map((b) => `${b.debtor.full_name || 'Tercero'}: ${formatCurrency(b.amount, currencyForFormatting)}`)
-              .join(', ')}), se descuentan -${formatCurrency(
+            )} a ${creditorDisplayName}, generando transferencias adicionales innecesarias en el grupo.`;
+
+            simplifiedNarrative = `Con simplificación, se descuentan -${formatCurrency(
               totalCompensated,
               currencyForFormatting
-            )} de la deuda de ${debtorDisplayName}. El saldo restante a liquidar es de ${formatCurrency(simplifiedAmount, currencyForFormatting)}.`;
-
-            closingSummary = `${debtorDisplayName} solo debe transferir ${formatCurrency(
+            )} al redirigir el pago directamente a ${newSuggestedPayments
+              .map((b) => b.to.full_name || 'Tercero')
+              .join(' y ')}. El saldo restante con ${creditorDisplayName} es de ${formatCurrency(
               simplifiedAmount,
               currencyForFormatting
-            )} a ${creditorDisplayName}, ya que los ${formatCurrency(
-              totalCompensated,
-              currencyForFormatting
-            )} restantes son cubiertos por transferencias de otros integrantes.`;
+            )}.`;
           } else {
             summaryNarrative = `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
               netDirectBalance,
@@ -1587,42 +1705,63 @@ export function calculatePairwiseDebtDetail(
               simplifiedAmount <= 0.009
                 ? `El saldo directo queda completamente saldado mediante la compensación del grupo (${formatCurrency(0, currencyForFormatting)} por transferir).`
                 : `Por esta compensación grupal, quedan ${formatCurrency(simplifiedAmount, currencyForFormatting)} por transferir a ${creditorDisplayName}.`;
+
+            unsimplifiedNarrative = `Sin simplificación, ${debtorDisplayName} tendría que transferir ${formatCurrency(
+              netDirectBalance,
+              currencyForFormatting
+            )} directamente a ${creditorDisplayName}.`;
+
+            simplifiedNarrative = `Con simplificación, la red grupal compensa -${formatCurrency(
+              totalCompensated,
+              currencyForFormatting
+            )}, dejando a liquidar únicamente ${formatCurrency(simplifiedAmount, currencyForFormatting)}.`;
           }
         } else {
+          const thirdPartyList = compBreakdownItems.map(
+            (i) => `${i.partyName} (${formatCurrency(i.amount, currencyForFormatting)})`
+          );
+
           summaryNarrative = `El saldo directo 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
             netDirectBalance,
             currencyForFormatting
-          )}. Al consolidar las transferencias optimizadas del grupo, el saldo final a transferir es de ${formatCurrency(
-            simplifiedAmount,
+          )}. Como ${compBreakdownItems.map((i) => i.partyName).join(' y ')} también tienen saldo en contra en el balance neto del grupo, ${debtorDisplayName} no les transfiere individualmente a ellos. Esas deudas directas (+${formatCurrency(
+            totalCompensated,
             currencyForFormatting
-          )} (+${formatCurrency(totalCompensated, currencyForFormatting)}).`;
+          )}) se triangulan y se unifican directamente a favor de ${creditorDisplayName}.`;
 
-          closingSummary = `Esta transferencia directa de ${formatCurrency(
+          closingSummary = `${debtorDisplayName} salda toda su deuda en el grupo con una única transferencia directa de ${formatCurrency(
             simplifiedAmount,
             currencyForFormatting
-          )} a ${creditorDisplayName} simplifica las obligaciones cruzadas en la red grupal.`;
+          )} a ${creditorDisplayName}, cancelando a la vez sus deudas con ${compBreakdownItems.map((i) => i.partyName).join(' y ')}.`;
+
+          unsimplifiedNarrative = `Sin simplificación, ${debtorDisplayName} tendría que hacer múltiples transferencias por separado: ${formatCurrency(
+            netDirectBalance,
+            currencyForFormatting
+          )} a ${creditorDisplayName}${
+            thirdPartyList.length > 0 ? `, además de ${thirdPartyList.join(' y ')}` : ''
+          }. En el grupo se acumularían pagos cruzados redundantes.`;
+
+          simplifiedNarrative = `Al activar la simplificación, las deudas con intermediarios (${compFormula}) se triangulan y se transfieren directamente a ${creditorDisplayName}. De este modo, en lugar de pagos cruzados dispersos, ${debtorDisplayName} salda todo en un solo pago directo de ${formatCurrency(
+            simplifiedAmount,
+            currencyForFormatting
+          )}.`;
         }
-
-        const settlementFormula = compFormula;
-        const settlementLabel = isDiscount
-          ? 'Deuda directa − compensado = saldo restante'
-          : 'Saldo directo + redistribución = saldo a liquidar';
 
         // Build Triangulations list
         const triangulations: ThirdPartyTriangulation[] = [];
-        relevantRelations.forEach((rel) => {
-          const thirdParty = rel.from.id === debtor.id || rel.from.id === creditor.id ? rel.to : rel.from;
-          const tpExpenses: ThirdPartyTriangulationExpense[] = (rel.expenses || []).map((exp) => ({
+        compBreakdownItems.forEach((item) => {
+          const relExpenses = getExpensesForPair(item.party.id, debtor.id);
+          const tpExpenses: ThirdPartyTriangulationExpense[] = relExpenses.map((exp) => ({
             expense: exp,
             description: exp.description,
             totalExpenseAmount: exp.total_amount,
             originalDebtAmount: exp.total_amount,
-            allocatedDiscountAmount: Math.min(rel.amount, exp.total_amount),
-            role: rel.direction === 'creditor_owes_third' ? 'creditor_owes_third_party' : 'third_party_owes_creditor',
-            payerName: rel.to.full_name || 'Integrante',
-            payerProfile: rel.to,
-            participantName: rel.from.full_name || 'Integrante',
-            participantProfile: rel.from,
+            allocatedDiscountAmount: Math.min(item.amount, exp.total_amount),
+            role: 'group_shared',
+            payerName: item.partyName,
+            payerProfile: item.party,
+            participantName: debtorDisplayName,
+            participantProfile: debtor,
             date: exp.expense_date || 'Reciente',
             groupName: groups.find((g) => g.id === exp.group_id)?.name,
             currency: groups.find((g) => g.id === exp.group_id)?.currency || currencyForFormatting,
@@ -1630,15 +1769,21 @@ export function calculatePairwiseDebtDetail(
           }));
 
           triangulations.push({
-            thirdParty,
-            thirdPartyName: thirdParty.full_name || 'Tercero',
-            amount: rel.amount,
+            thirdParty: item.party,
+            thirdPartyName: item.partyName,
+            amount: item.amount,
             isDiscount,
-            role: rel.direction === 'creditor_owes_third' ? 'creditor_owes_third_party' : 'third_party_pays_creditor',
-            shortSummary: rel.roleDescription,
-            explanation: `${rel.from.full_name || 'Integrante'} tiene una obligación de ${formatCurrency(rel.amount, currencyForFormatting)} con ${rel.to.full_name || 'Integrante'}.`,
-            directDebtsWithDebtor: 0,
-            directDebtsWithCreditor: rel.amount,
+            role: item.role as any,
+            shortSummary: isDiscount
+              ? `Transferencia redirigida de ${formatCurrency(item.amount, currencyForFormatting)} a ${item.partyName}`
+              : `Deuda directa de ${formatCurrency(item.directWithDebtor || item.amount, currencyForFormatting)} con ${item.partyName} absorbida por ${creditorDisplayName}`,
+            explanation: isDiscount
+              ? `En vez de transferirle a ${creditorDisplayName}, se transfiere directamente a ${item.partyName}.`
+              : `Como ${item.partyName} tiene saldo en contra en el grupo, ${debtorDisplayName} no le transfiere a ${item.partyName}; esa deuda se triangula y se paga directamente a ${creditorDisplayName}.`,
+            directDebtsWithDebtor: item.directWithDebtor,
+            directDebtsWithCreditor: item.directWithCreditor,
+            simplifiedDebtsWithDebtor: item.simplifiedWithDebtor,
+            simplifiedDebtsWithCreditor: item.simplifiedWithCreditor,
             expenses: tpExpenses,
           });
         });
@@ -1663,6 +1808,8 @@ export function calculatePairwiseDebtDetail(
           settlementLabel,
           closingSummary,
           newSuggestedPayments,
+          unsimplifiedNarrative,
+          simplifiedNarrative,
         };
       }
     }

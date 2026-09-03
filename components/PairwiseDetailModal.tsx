@@ -22,6 +22,7 @@ import {
   Sparkles,
   Users,
   CheckCircle2,
+  GitMerge,
 } from 'lucide-react';
 
 interface PairwiseDetailModalProps {
@@ -79,6 +80,7 @@ export function PairwiseDetailModal({
   });
 
   const [expandedTriangulationIndexes, setExpandedTriangulationIndexes] = useState<Set<number>>(new Set());
+  const [graphMode, setGraphMode] = useState<'simplified' | 'unsimplified'>('simplified');
 
   // Find creditor and debtor profiles
   const debtorProfile: Profile = useMemo(() => {
@@ -537,488 +539,596 @@ export function PairwiseDetailModal({
               {expandedSections.distribution && (
                 <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-4">
                   <div className="bg-white rounded-2xl p-4 sm:p-6 border border-zinc-200/90 shadow-2xs space-y-5">
-                    {/* SVG Visual Graph */}
+                    {/* Flow & Compensation Explanation Section */}
                     {(() => {
-                      const rels = detail.optimizationDetail?.relevantRelations || [];
-                      const relThirdIn = rels.find(
-                        (r) =>
-                          r.direction === 'third_owes_creditor' ||
-                          r.direction === 'consolidation'
-                      );
-                      const relThirdOut = rels.find(
-                        (r) => r.direction === 'creditor_owes_third'
-                      );
-                      const relDebtorOut = rels.find(
-                        (r) => r.direction === 'debtor_owes_third'
-                      );
+                      const triangulations = detail.optimizationDetail?.triangulations || [];
+                      const numTP = triangulations.length;
+                      const svgHeight = numTP > 0 ? 255 : 130;
 
-                      const thirdInProfile = relThirdIn?.from;
-                      const thirdOutProfile = relThirdOut?.to;
-                      const thirdDebtorProfile = relDebtorOut?.to;
-
-                      const thirdInName = thirdInProfile?.full_name || 'Tercero';
-                      const thirdOutName = thirdOutProfile?.full_name || 'Tercero';
-                      const thirdDebtorName = thirdDebtorProfile?.full_name || 'Tercero';
-
-                      const hasBottomLeft = !!(thirdInProfile || thirdDebtorProfile);
-                      const hasBottomRight = !!thirdOutProfile;
-                      const hasSecondary = hasBottomLeft || hasBottomRight;
-
-                      const svgHeight = hasSecondary ? 240 : 120;
+                      const tpPositions = triangulations.map((tp, i) => {
+                        let x = 270;
+                        if (numTP === 1) {
+                          x = 270;
+                        } else if (numTP === 2) {
+                          x = i === 0 ? 175 : 365;
+                        } else {
+                          x = 110 + i * (320 / (numTP - 1));
+                        }
+                        return { ...tp, x, y: 190 };
+                      });
 
                       return (
-                        <div className="w-full overflow-x-auto py-2">
-                          <div className="min-w-[420px] max-w-[540px] mx-auto">
-                            <svg
-                              viewBox={`0 0 540 ${svgHeight}`}
-                              className="w-full h-auto select-none"
-                            >
-                              <defs>
-                                <marker
-                                  id="arrow-blue"
-                                  markerWidth="8"
-                                  markerHeight="8"
-                                  refX="6"
-                                  refY="4"
-                                  orient="auto"
-                                >
-                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#2563eb" />
-                                </marker>
-                                <marker
-                                  id="arrow-amber"
-                                  markerWidth="8"
-                                  markerHeight="8"
-                                  refX="6"
-                                  refY="4"
-                                  orient="auto"
-                                >
-                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#d97706" />
-                                </marker>
-                                <marker
-                                  id="arrow-purple"
-                                  markerWidth="8"
-                                  markerHeight="8"
-                                  refX="6"
-                                  refY="4"
-                                  orient="auto"
-                                >
-                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#7c3aed" />
-                                </marker>
-                                <marker
-                                  id="arrow-emerald"
-                                  markerWidth="8"
-                                  markerHeight="8"
-                                  refX="6"
-                                  refY="4"
-                                  orient="auto"
-                                >
-                                  <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#059669" />
-                                </marker>
+                        <div className="space-y-4">
+                          {/* View Mode Toggle: Simplified vs Unsimplified */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1 border-b border-zinc-100">
+                            <div className="flex items-center space-x-2">
+                              <GitMerge className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span className="text-xs font-bold text-zinc-800">
+                                Visualización del flujo de deudas
+                              </span>
+                            </div>
 
-                                {debtorProfile.avatar_url && (
-                                  <clipPath id="clip-debtor">
-                                    <circle cx="70" cy="55" r="22" />
-                                  </clipPath>
-                                )}
-                                {creditorProfile.avatar_url && (
-                                  <clipPath id="clip-creditor">
-                                    <circle cx="450" cy="55" r="22" />
-                                  </clipPath>
-                                )}
-                                {thirdInProfile?.avatar_url && (
-                                  <clipPath id="clip-third-in">
-                                    <circle cx="70" cy="180" r="22" />
-                                  </clipPath>
-                                )}
-                                {thirdOutProfile?.avatar_url && (
-                                  <clipPath id="clip-third-out">
-                                    <circle cx="450" cy="180" r="22" />
-                                  </clipPath>
-                                )}
-                              </defs>
-
-                              {/* 1. Primary Arrow (Debtor -> Creditor) */}
-                              <line
-                                x1="98"
-                                y1="55"
-                                x2="420"
-                                y2="55"
-                                stroke="#2563eb"
-                                strokeWidth="2.5"
-                                markerEnd="url(#arrow-blue)"
-                              />
-                              <text
-                                x="260"
-                                y="34"
-                                fill="#2563eb"
-                                textAnchor="middle"
-                                fontWeight="800"
-                                fontSize="14px"
-                                className="font-mono"
+                            <div className="inline-flex p-0.5 bg-zinc-100 rounded-xl border border-zinc-200/80 text-xs font-semibold self-start sm:self-auto">
+                              <button
+                                type="button"
+                                onClick={() => setGraphMode('simplified')}
+                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${
+                                  graphMode === 'simplified'
+                                    ? 'bg-white text-emerald-800 shadow-2xs font-bold'
+                                    : 'text-zinc-500 hover:text-zinc-900'
+                                }`}
                               >
-                                {formatCurrency(detail.netDirectBalance, currency)}
-                              </text>
-                              <text
-                                x="260"
-                                y="48"
-                                fill="#64748b"
-                                textAnchor="middle"
-                                fontWeight="500"
-                                fontSize="11px"
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                <span>Con simplificación</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGraphMode('unsimplified')}
+                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${
+                                  graphMode === 'unsimplified'
+                                    ? 'bg-white text-rose-800 shadow-2xs font-bold'
+                                    : 'text-zinc-500 hover:text-zinc-900'
+                                }`}
                               >
-                                {debtorProfile.id === currentProfile?.id
-                                  ? `debías a ${creditorName}`
-                                  : `${debtorName} debe a ${creditorName}`}
-                              </text>
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                <span>Sin simplificación</span>
+                              </button>
+                            </div>
+                          </div>
 
-                              {/* 2. Secondary Arrow: Third In -> Creditor (e.g. Robado -> Mari) */}
-                              {relThirdIn && (
-                                <>
-                                  <line
-                                    x1="94"
-                                    y1="165"
-                                    x2="424"
-                                    y2="72"
-                                    stroke="#d97706"
-                                    strokeWidth="2"
-                                    markerEnd="url(#arrow-amber)"
-                                  />
-                                  <text
-                                    x="250"
-                                    y="136"
-                                    fill="#d97706"
-                                    textAnchor="middle"
-                                    fontWeight="800"
-                                    fontSize="13px"
-                                    className="font-mono"
+                          {/* SVG Flow Diagram */}
+                          <div className="w-full overflow-x-auto py-1">
+                            <div className="min-w-[440px] max-w-[540px] mx-auto">
+                              <svg
+                                viewBox={`0 0 540 ${svgHeight}`}
+                                className="w-full h-auto select-none"
+                              >
+                                <defs>
+                                  <marker
+                                    id="arrow-blue"
+                                    markerWidth="8"
+                                    markerHeight="8"
+                                    refX="6"
+                                    refY="4"
+                                    orient="auto"
                                   >
-                                    {formatCurrency(relThirdIn.amount, currency)}
-                                  </text>
-                                  <text
-                                    x="250"
-                                    y="150"
-                                    fill="#64748b"
-                                    textAnchor="middle"
-                                    fontWeight="500"
-                                    fontSize="10.5px"
+                                    <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#2563eb" />
+                                  </marker>
+                                  <marker
+                                    id="arrow-red"
+                                    markerWidth="8"
+                                    markerHeight="8"
+                                    refX="6"
+                                    refY="4"
+                                    orient="auto"
                                   >
-                                    {thirdInName} debe a {creditorName}
-                                  </text>
-                                </>
-                              )}
+                                    <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#e11d48" />
+                                  </marker>
+                                  <marker
+                                    id="arrow-amber"
+                                    markerWidth="8"
+                                    markerHeight="8"
+                                    refX="6"
+                                    refY="4"
+                                    orient="auto"
+                                  >
+                                    <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#d97706" />
+                                  </marker>
+                                  <marker
+                                    id="arrow-purple"
+                                    markerWidth="8"
+                                    markerHeight="8"
+                                    refX="6"
+                                    refY="4"
+                                    orient="auto"
+                                  >
+                                    <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#7c3aed" />
+                                  </marker>
+                                  <marker
+                                    id="arrow-emerald"
+                                    markerWidth="8"
+                                    markerHeight="8"
+                                    refX="6"
+                                    refY="4"
+                                    orient="auto"
+                                  >
+                                    <path d="M 0 1.5 L 6 4 L 0 6.5 z" fill="#059669" />
+                                  </marker>
 
-                              {/* 3. Secondary Arrow: Creditor -> Third Out (e.g. Mari -> Luis) */}
-                              {relThirdOut && (
-                                <>
-                                  <line
-                                    x1="450"
-                                    y1="102"
-                                    x2="450"
-                                    y2="152"
-                                    stroke="#7c3aed"
-                                    strokeWidth="2"
-                                    markerEnd="url(#arrow-purple)"
-                                  />
-                                  <text
-                                    x="480"
-                                    y="122"
-                                    fill="#7c3aed"
-                                    textAnchor="start"
-                                    fontWeight="800"
-                                    fontSize="13px"
-                                    className="font-mono"
-                                  >
-                                    {formatCurrency(relThirdOut.amount, currency)}
-                                  </text>
-                                  <text
-                                    x="480"
-                                    y="136"
-                                    fill="#64748b"
-                                    textAnchor="start"
-                                    fontWeight="500"
-                                    fontSize="10.5px"
-                                  >
-                                    {creditorName} debe
-                                  </text>
-                                  <text
-                                    x="480"
-                                    y="148"
-                                    fill="#64748b"
-                                    textAnchor="start"
-                                    fontWeight="500"
-                                    fontSize="10.5px"
-                                  >
-                                    a {thirdOutName}
-                                  </text>
-                                </>
-                              )}
+                                  <clipPath id="clip-debtor-modal">
+                                    <circle cx="75" cy="55" r="22" />
+                                  </clipPath>
+                                  <clipPath id="clip-creditor-modal">
+                                    <circle cx="465" cy="55" r="22" />
+                                  </clipPath>
+                                  {tpPositions.map((tp, idx) => (
+                                    <clipPath key={`clip-tp-${idx}`} id={`clip-tp-${idx}`}>
+                                      <circle cx={tp.x} cy={tp.y} r="22" />
+                                    </clipPath>
+                                  ))}
+                                </defs>
 
-                              {/* 4. Secondary Arrow: Debtor -> Third (e.g. Debtor transfer / redirected payment) */}
-                              {relDebtorOut && (
-                                <>
-                                  {thirdOutProfile && relDebtorOut.to.id === thirdOutProfile.id ? (
-                                    <>
-                                      <line
-                                        x1="94"
-                                        y1="72"
-                                        x2="424"
-                                        y2="165"
-                                        stroke="#059669"
-                                        strokeWidth="2.5"
-                                        strokeDasharray="4 3"
-                                        markerEnd="url(#arrow-emerald)"
-                                      />
-                                      <text
-                                        x="220"
-                                        y="102"
-                                        fill="#059669"
-                                        textAnchor="middle"
-                                        fontWeight="800"
-                                        fontSize="13px"
-                                        className="font-mono"
-                                      >
-                                        {formatCurrency(relDebtorOut.amount, currency)}
-                                      </text>
-                                      <text
-                                        x="220"
-                                        y="116"
-                                        fill="#047857"
-                                        textAnchor="middle"
-                                        fontWeight="600"
-                                        fontSize="10px"
-                                      >
-                                        {debtorName} transfiere directo a {thirdOutName}
-                                      </text>
-                                    </>
-                                  ) : (
-                                    !relThirdIn && (
-                                      <>
+                                {graphMode === 'unsimplified' ? (
+                                  /* === UN-SIMPLIFIED VIEW: ALL CROSSED DIRECT TRANSFERS === */
+                                  <>
+                                    {/* Direct debt: Debtor -> Creditor */}
+                                    <line
+                                      x1="102"
+                                      y1="55"
+                                      x2="438"
+                                      y2="55"
+                                      stroke="#2563eb"
+                                      strokeWidth="2.5"
+                                      markerEnd="url(#arrow-blue)"
+                                    />
+                                    <rect
+                                      x="200"
+                                      y="32"
+                                      width="140"
+                                      height="20"
+                                      rx="5"
+                                      fill="#eff6ff"
+                                      stroke="#bfdbfe"
+                                      strokeWidth="1"
+                                    />
+                                    <text
+                                      x="270"
+                                      y="46"
+                                      fill="#1d4ed8"
+                                      textAnchor="middle"
+                                      fontWeight="800"
+                                      fontSize="12px"
+                                      className="font-mono"
+                                    >
+                                      {formatCurrency(detail.netDirectBalance, currency)}
+                                    </text>
+                                    <text
+                                      x="270"
+                                      y="69"
+                                      fill="#64748b"
+                                      textAnchor="middle"
+                                      fontWeight="500"
+                                      fontSize="10px"
+                                    >
+                                      Deuda directa 1 a 1
+                                    </text>
+
+                                    {/* Debtor -> Intermediaries & Intermediaries -> Creditor */}
+                                    {tpPositions.map((tp, idx) => {
+                                      const debtorOwesAmount = tp.directDebtsWithDebtor || tp.amount;
+                                      const tpOwesCreditorAmount = tp.directDebtsWithCreditor || 0;
+
+                                      return (
+                                        <g key={`unsimp-tp-${idx}`}>
+                                          {/* Arrow: Debtor -> TP */}
+                                          {debtorOwesAmount > 0 && (
+                                            <>
+                                              <line
+                                                x1="90"
+                                                y1="75"
+                                                x2={tp.x - 18}
+                                                y2={tp.y - 18}
+                                                stroke="#e11d48"
+                                                strokeWidth="2"
+                                                markerEnd="url(#arrow-red)"
+                                              />
+                                              <rect
+                                                x={(75 + tp.x) / 2 - 45}
+                                                y={(55 + tp.y) / 2 - 18}
+                                                width="90"
+                                                height="18"
+                                                rx="4"
+                                                fill="#fff1f2"
+                                                stroke="#fecdd3"
+                                                strokeWidth="1"
+                                              />
+                                              <text
+                                                x={(75 + tp.x) / 2}
+                                                y={(55 + tp.y) / 2 - 5}
+                                                fill="#be123c"
+                                                textAnchor="middle"
+                                                fontWeight="800"
+                                                fontSize="11px"
+                                                className="font-mono"
+                                              >
+                                                {formatCurrency(debtorOwesAmount, currency)}
+                                              </text>
+                                            </>
+                                          )}
+
+                                          {/* Arrow: TP -> Creditor */}
+                                          {tpOwesCreditorAmount > 0 && (
+                                            <>
+                                              <line
+                                                x1={tp.x + 18}
+                                                y1={tp.y - 18}
+                                                x2="450"
+                                                y2="75"
+                                                stroke="#7c3aed"
+                                                strokeWidth="2"
+                                                markerEnd="url(#arrow-purple)"
+                                              />
+                                              <rect
+                                                x={(tp.x + 465) / 2 - 45}
+                                                y={(tp.y + 55) / 2 - 18}
+                                                width="90"
+                                                height="18"
+                                                rx="4"
+                                                fill="#f5f3ff"
+                                                stroke="#ddd6fe"
+                                                strokeWidth="1"
+                                              />
+                                              <text
+                                                x={(tp.x + 465) / 2}
+                                                y={(tp.y + 55) / 2 - 5}
+                                                fill="#6d28d9"
+                                                textAnchor="middle"
+                                                fontWeight="800"
+                                                fontSize="11px"
+                                                className="font-mono"
+                                              >
+                                                {formatCurrency(tpOwesCreditorAmount, currency)}
+                                              </text>
+                                            </>
+                                          )}
+                                        </g>
+                                      );
+                                    })}
+
+                                    {/* Cross transfer between intermediaries if there are 2 */}
+                                    {numTP === 2 && (
+                                      <g>
                                         <line
-                                          x1="70"
-                                          y1="102"
-                                          x2="70"
-                                          y2="152"
-                                          stroke="#059669"
-                                          strokeWidth="2"
-                                          markerEnd="url(#arrow-emerald)"
+                                          x1="340"
+                                          y1="190"
+                                          x2="202"
+                                          y2="190"
+                                          stroke="#d97706"
+                                          strokeWidth="1.75"
+                                          strokeDasharray="4 3"
+                                          markerEnd="url(#arrow-amber)"
                                         />
                                         <text
-                                          x="100"
-                                          y="126"
-                                          fill="#059669"
-                                          textAnchor="start"
+                                          x="270"
+                                          y="184"
+                                          fill="#b45309"
+                                          textAnchor="middle"
+                                          fontWeight="700"
+                                          fontSize="10px"
+                                        >
+                                          Transferencias cruzadas
+                                        </text>
+                                      </g>
+                                    )}
+                                  </>
+                                ) : (
+                                  /* === SIMPLIFIED VIEW: TRIANGULATED CONSOLIDATED FLOW === */
+                                  <>
+                                    {/* Main Unified Arrow: Debtor -> Creditor */}
+                                    <line
+                                      x1="102"
+                                      y1="55"
+                                      x2="438"
+                                      y2="55"
+                                      stroke="#059669"
+                                      strokeWidth="3.5"
+                                      markerEnd="url(#arrow-emerald)"
+                                    />
+                                    {/* Highlight badge for total simplified payment */}
+                                    <rect
+                                      x="185"
+                                      y="22"
+                                      width="170"
+                                      height="26"
+                                      rx="7"
+                                      fill="#ecfdf5"
+                                      stroke="#a7f3d0"
+                                      strokeWidth="1.5"
+                                    />
+                                    <text
+                                      x="270"
+                                      y="40"
+                                      fill="#047857"
+                                      textAnchor="middle"
+                                      fontWeight="900"
+                                      fontSize="14px"
+                                      className="font-mono"
+                                    >
+                                      {formatCurrency(finalSettlementAmount, currency)}
+                                    </text>
+                                    <text
+                                      x="270"
+                                      y="66"
+                                      fill="#065f46"
+                                      textAnchor="middle"
+                                      fontWeight="700"
+                                      fontSize="10px"
+                                    >
+                                      Único pago total simplificado
+                                    </text>
+                                    <text
+                                      x="270"
+                                      y="79"
+                                      fill="#64748b"
+                                      textAnchor="middle"
+                                      fontWeight="500"
+                                      fontSize="9.5px"
+                                    >
+                                      ({formatCurrency(detail.netDirectBalance, currency)} directo{' '}
+                                      {detail.optimizationDetail?.isDiscount ? '−' : '+'}{' '}
+                                      {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}{' '}
+                                      triangulado)
+                                    </text>
+
+                                    {/* Intermediaries Triangulation Curves Flowing In */}
+                                    {tpPositions.map((tp, idx) => (
+                                      <g key={`simp-tp-${idx}`}>
+                                        {/* Dashed curve converging into main transfer */}
+                                        <path
+                                          d={`M ${tp.x} ${tp.y - 24} Q ${tp.x} 115 270 70`}
+                                          stroke="#10b981"
+                                          strokeWidth="2"
+                                          strokeDasharray="4 3"
+                                          fill="none"
+                                          markerEnd="url(#arrow-emerald)"
+                                        />
+                                        <rect
+                                          x={tp.x - 55}
+                                          y={tp.y - 50}
+                                          width="110"
+                                          height="18"
+                                          rx="5"
+                                          fill="#f0fdf4"
+                                          stroke="#bbf7d0"
+                                          strokeWidth="1"
+                                        />
+                                        <text
+                                          x={tp.x}
+                                          y={tp.y - 37}
+                                          fill="#15803d"
+                                          textAnchor="middle"
                                           fontWeight="800"
-                                          fontSize="13px"
+                                          fontSize="10px"
                                           className="font-mono"
                                         >
-                                          {formatCurrency(relDebtorOut.amount, currency)}
+                                          {detail.optimizationDetail?.isDiscount ? '− ' : '+ '}
+                                          {formatCurrency(tp.amount, currency)}
                                         </text>
+                                      </g>
+                                    ))}
+                                  </>
+                                )}
+
+                                {/* Top Left Node: Debtor */}
+                                <circle
+                                  cx="75"
+                                  cy="55"
+                                  r="22"
+                                  fill="#eff6ff"
+                                  stroke="#bfdbfe"
+                                  strokeWidth="2"
+                                />
+                                {debtorProfile.avatar_url ? (
+                                  <image
+                                    href={debtorProfile.avatar_url}
+                                    x="53"
+                                    y="33"
+                                    width="44"
+                                    height="44"
+                                    clipPath="url(#clip-debtor-modal)"
+                                    preserveAspectRatio="xMidYMid slice"
+                                  />
+                                ) : (
+                                  <text
+                                    x="75"
+                                    y="60"
+                                    textAnchor="middle"
+                                    fill="#1d4ed8"
+                                    fontWeight="800"
+                                    fontSize="13px"
+                                  >
+                                    {getInitials(debtorName)}
+                                  </text>
+                                )}
+                                <text
+                                  x="75"
+                                  y="92"
+                                  textAnchor="middle"
+                                  fill="#18181b"
+                                  fontWeight="800"
+                                  fontSize="12px"
+                                >
+                                  {debtorName}
+                                </text>
+                                <text
+                                  x="75"
+                                  y="104"
+                                  textAnchor="middle"
+                                  fill="#64748b"
+                                  fontWeight="600"
+                                  fontSize="9.5px"
+                                >
+                                  (Deudor)
+                                </text>
+
+                                {/* Top Right Node: Creditor */}
+                                <circle
+                                  cx="465"
+                                  cy="55"
+                                  r="22"
+                                  fill="#fff1f2"
+                                  stroke="#fecdd3"
+                                  strokeWidth="2"
+                                />
+                                {creditorProfile.avatar_url ? (
+                                  <image
+                                    href={creditorProfile.avatar_url}
+                                    x="443"
+                                    y="33"
+                                    width="44"
+                                    height="44"
+                                    clipPath="url(#clip-creditor-modal)"
+                                    preserveAspectRatio="xMidYMid slice"
+                                  />
+                                ) : (
+                                  <text
+                                    x="465"
+                                    y="60"
+                                    textAnchor="middle"
+                                    fill="#e11d48"
+                                    fontWeight="800"
+                                    fontSize="13px"
+                                  >
+                                    {getInitials(creditorName)}
+                                  </text>
+                                )}
+                                <text
+                                  x="465"
+                                  y="92"
+                                  textAnchor="middle"
+                                  fill="#18181b"
+                                  fontWeight="800"
+                                  fontSize="12px"
+                                >
+                                  {creditorName}
+                                </text>
+                                <text
+                                  x="465"
+                                  y="104"
+                                  textAnchor="middle"
+                                  fill="#64748b"
+                                  fontWeight="600"
+                                  fontSize="9.5px"
+                                >
+                                  (Acreedor)
+                                </text>
+
+                                {/* Bottom Nodes: Third Parties */}
+                                {tpPositions.map((tp, idx) => {
+                                  const name = tp.thirdPartyName || tp.thirdParty?.full_name || 'Tercero';
+                                  const avatar = tp.thirdParty?.avatar_url;
+
+                                  return (
+                                    <g key={`tp-node-${idx}`}>
+                                      <circle
+                                        cx={tp.x}
+                                        cy={tp.y}
+                                        r="22"
+                                        fill={graphMode === 'simplified' ? '#f0fdf4' : '#fffbeb'}
+                                        stroke={graphMode === 'simplified' ? '#bbf7d0' : '#fde68a'}
+                                        strokeWidth="2"
+                                      />
+                                      {avatar ? (
+                                        <image
+                                          href={avatar}
+                                          x={tp.x - 22}
+                                          y={tp.y - 22}
+                                          width="44"
+                                          height="44"
+                                          clipPath={`url(#clip-tp-${idx})`}
+                                          preserveAspectRatio="xMidYMid slice"
+                                        />
+                                      ) : (
                                         <text
-                                          x="100"
-                                          y="140"
-                                          fill="#64748b"
-                                          textAnchor="start"
-                                          fontWeight="500"
-                                          fontSize="10.5px"
+                                          x={tp.x}
+                                          y={tp.y + 5}
+                                          textAnchor="middle"
+                                          fill={graphMode === 'simplified' ? '#15803d' : '#b45309'}
+                                          fontWeight="800"
+                                          fontSize="12px"
                                         >
-                                          {debtorName} debe a {thirdDebtorName}
+                                          {getInitials(name)}
                                         </text>
-                                      </>
-                                    )
-                                  )}
-                                </>
-                              )}
-
-                              {/* Top Left Node: Debtor (WD) */}
-                              <circle
-                                cx="70"
-                                cy="55"
-                                r="22"
-                                fill="#eff6ff"
-                                stroke="#bfdbfe"
-                                strokeWidth="2"
-                              />
-                              {debtorProfile.avatar_url ? (
-                                <image
-                                  href={debtorProfile.avatar_url}
-                                  x="48"
-                                  y="33"
-                                  width="44"
-                                  height="44"
-                                  clipPath="url(#clip-debtor)"
-                                  preserveAspectRatio="xMidYMid slice"
-                                />
-                              ) : (
-                                <text
-                                  x="70"
-                                  y="60"
-                                  textAnchor="middle"
-                                  fill="#1d4ed8"
-                                  fontWeight="800"
-                                  fontSize="13px"
-                                >
-                                  {getInitials(debtorName)}
-                                </text>
-                              )}
-                              <text
-                                x="70"
-                                y="93"
-                                textAnchor="middle"
-                                fill="#18181b"
-                                fontWeight="800"
-                                fontSize="12px"
-                              >
-                                {debtorName}
-                              </text>
-
-                              {/* Top Right Node: Creditor (M) */}
-                              <circle
-                                cx="450"
-                                cy="55"
-                                r="22"
-                                fill="#fff1f2"
-                                stroke="#fecdd3"
-                                strokeWidth="2"
-                              />
-                              {creditorProfile.avatar_url ? (
-                                <image
-                                  href={creditorProfile.avatar_url}
-                                  x="428"
-                                  y="33"
-                                  width="44"
-                                  height="44"
-                                  clipPath="url(#clip-creditor)"
-                                  preserveAspectRatio="xMidYMid slice"
-                                />
-                              ) : (
-                                <text
-                                  x="450"
-                                  y="60"
-                                  textAnchor="middle"
-                                  fill="#e11d48"
-                                  fontWeight="800"
-                                  fontSize="13px"
-                                >
-                                  {getInitials(creditorName)}
-                                </text>
-                              )}
-                              <text
-                                x="450"
-                                y="93"
-                                textAnchor="middle"
-                                fill="#18181b"
-                                fontWeight="800"
-                                fontSize="12px"
-                              >
-                                {creditorName}
-                              </text>
-
-                              {/* Bottom Left Node: Third In (RO) */}
-                              {hasBottomLeft && (
-                                <>
-                                  <circle
-                                    cx="70"
-                                    cy="180"
-                                    r="22"
-                                    fill="#fffbeb"
-                                    stroke="#fde68a"
-                                    strokeWidth="2"
-                                  />
-                                  {thirdInProfile?.avatar_url ? (
-                                    <image
-                                      href={thirdInProfile.avatar_url}
-                                      x="48"
-                                      y="158"
-                                      width="44"
-                                      height="44"
-                                      clipPath="url(#clip-third-in)"
-                                      preserveAspectRatio="xMidYMid slice"
-                                    />
-                                  ) : (
-                                    <text
-                                      x="70"
-                                      y="185"
-                                      textAnchor="middle"
-                                      fill="#b45309"
-                                      fontWeight="800"
-                                      fontSize="13px"
-                                    >
-                                      {getInitials(
-                                        thirdInProfile ? thirdInName : thirdDebtorName
                                       )}
-                                    </text>
-                                  )}
-                                  <text
-                                    x="70"
-                                    y="218"
-                                    textAnchor="middle"
-                                    fill="#18181b"
-                                    fontWeight="800"
-                                    fontSize="12px"
-                                  >
-                                    {thirdInProfile ? thirdInName : thirdDebtorName}
-                                  </text>
-                                </>
-                              )}
-
-                              {/* Bottom Right Node: Third Out (L) */}
-                              {hasBottomRight && (
-                                <>
-                                  <circle
-                                    cx="450"
-                                    cy="180"
-                                    r="22"
-                                    fill="#ecfdf5"
-                                    stroke="#a7f3d0"
-                                    strokeWidth="2"
-                                  />
-                                  {thirdOutProfile?.avatar_url ? (
-                                    <image
-                                      href={thirdOutProfile.avatar_url}
-                                      x="428"
-                                      y="158"
-                                      width="44"
-                                      height="44"
-                                      clipPath="url(#clip-third-out)"
-                                      preserveAspectRatio="xMidYMid slice"
-                                    />
-                                  ) : (
-                                    <text
-                                      x="450"
-                                      y="185"
-                                      textAnchor="middle"
-                                      fill="#047857"
-                                      fontWeight="800"
-                                      fontSize="13px"
-                                    >
-                                      {getInitials(thirdOutName)}
-                                    </text>
-                                  )}
-                                  <text
-                                    x="450"
-                                    y="218"
-                                    textAnchor="middle"
-                                    fill="#18181b"
-                                    fontWeight="800"
-                                    fontSize="12px"
-                                  >
-                                    {thirdOutName}
-                                  </text>
-                                </>
-                              )}
-                            </svg>
+                                      <text
+                                        x={tp.x}
+                                        y={tp.y + 32}
+                                        textAnchor="middle"
+                                        fill="#18181b"
+                                        fontWeight="800"
+                                        fontSize="11.5px"
+                                      >
+                                        {name}
+                                      </text>
+                                      <text
+                                        x={tp.x}
+                                        y={tp.y + 44}
+                                        textAnchor="middle"
+                                        fill={graphMode === 'simplified' ? '#15803d' : '#64748b'}
+                                        fontWeight="600"
+                                        fontSize="9px"
+                                      >
+                                        {graphMode === 'simplified'
+                                          ? '✓ Deuda triangulada'
+                                          : '(Intermediario)'}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+                              </svg>
+                            </div>
                           </div>
+
+                          {/* Explanatory Narrative Cards */}
+                          {graphMode === 'unsimplified' ? (
+                            <div className="p-3.5 sm:p-4 rounded-xl bg-rose-50/70 border border-rose-200/80 space-y-1.5">
+                              <div className="flex items-center space-x-2 text-rose-900 font-extrabold text-xs">
+                                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                                <span>Sin simplificación: Múltiples transferencias cruzadas</span>
+                              </div>
+                              <p className="text-xs text-rose-900/90 leading-relaxed font-normal">
+                                {detail.optimizationDetail?.unsimplifiedNarrative ||
+                                  `Sin simplificación, ${debtorName} tendría que transferir por separado a ${creditorName} (${formatCurrency(detail.netDirectBalance, currency)}), además de transferir a cada intermediario. En el grupo se acumularían pagos cruzados innecesarios.`}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 space-y-1.5">
+                              <div className="flex items-center space-x-2 text-emerald-900 font-extrabold text-xs">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                                <span>Cómo funciona la simplificación (Triangulación)</span>
+                              </div>
+                              <p className="text-xs text-emerald-900/90 leading-relaxed font-normal">
+                                {detail.optimizationDetail?.simplifiedNarrative ||
+                                  `Al activar la simplificación de deudas, como los intermediarios también tienen saldo neto en contra en el grupo, no tiene sentido transferirles a ellos. Esas deudas se triangulan y se transfieren directamente a ${creditorName}, saldando todo en un único pago.`}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
 
-                    {/* Calculation Justifying the Compensation */}
+                    {/* Calculation Justifying ONLY the Compensation Amount */}
                     {detail.optimizationDetail?.compensationFormula && (
-                      <div className="bg-zinc-50/90 rounded-2xl p-4 sm:p-5 border border-zinc-200/90 space-y-1 text-center sm:text-left">
+                      <div className="bg-zinc-50/90 rounded-2xl p-4 sm:p-5 border border-zinc-200/90 space-y-1.5 text-center sm:text-left">
+                        <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                          {detail.optimizationDetail.isDiscount
+                            ? 'Cálculo del descuento compensado'
+                            : 'Cálculo de la consolidación de deudas'}
+                        </div>
                         <div className="text-base sm:text-lg font-black text-zinc-900 tracking-tight font-mono">
                           {detail.optimizationDetail.compensationFormula}
                         </div>
-                        <div className="text-xs text-zinc-500 font-medium">
+                        <div className="text-xs text-zinc-600 font-medium">
                           {detail.optimizationDetail.compensationLabel}
                         </div>
                       </div>
