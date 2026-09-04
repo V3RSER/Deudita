@@ -75,29 +75,172 @@ export function UnifiedDraftsAndTemplatesView({
   // --- Check Google Tester Status on mount ---
   const checkTesterAuth = useCallback(async () => {
     try {
-      const res = await fetch('/api/gmail/status');
+      const supabase = createClient();
+
+      // 1. Check URL query params from OAuth redirect
+      let tokenToUse: string | null = null;
+      let fromOAuthRedirect = false;
+
+      if (typeof window !== 'undefined') {
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlToken = searchParams.get('tester_token');
+        const urlAuthorized = searchParams.get('tester_authorized');
+
+        if (urlToken) {
+          tokenToUse = urlToken;
+          try {
+            localStorage.setItem('google_provider_token', urlToken);
+          } catch {}
+          fromOAuthRedirect = true;
+        }
+
+        if (urlAuthorized === 'true') {
+          fromOAuthRedirect = true;
+        }
+
+        // Clean query parameters so URL stays clean
+        if (urlToken || urlAuthorized) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        if (!tokenToUse) {
+          try {
+            tokenToUse = localStorage.getItem('google_provider_token');
+          } catch {}
+        }
+      }
+
+      // 2. Check Supabase client session for provider_token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+      if (!tokenToUse && session?.provider_token) {
+        tokenToUse = session.provider_token;
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('google_provider_token', tokenToUse);
+          } catch {}
+        }
+      }
+
+      // 3. Prepare headers
+      const headers: Record<string, string> = {};
+      if (tokenToUse) {
+        headers['x-google-token'] = tokenToUse;
+      }
+
+      // 4. Call /api/gmail/status
+      const res = await fetch('/api/gmail/status', {
+        headers,
+        cache: 'no-store',
+      });
+
       if (res.ok) {
         const data = await res.json();
         const authorized = Boolean(data.authorized);
+
+        // If server hasn't saved the token yet, sync via POST
+        if (tokenToUse && !data.authorized && fromOAuthRedirect) {
+          try {
+            const syncRes = await fetch('/api/gmail/status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: tokenToUse }),
+            });
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData.authorized) {
+                setIsTesterAuthorized(true);
+                setTesterEmail(syncData.email || syncData.userEmail || null);
+                setShowTesterAuthModal(false);
+                setActiveTab('create-test');
+                return;
+              }
+            }
+          } catch (syncErr) {
+            console.warn('[UnifiedView] Error syncing token via POST:', syncErr);
+          }
+        }
+
         setIsTesterAuthorized(authorized);
         if (data.email || data.userEmail) {
           setTesterEmail(data.email || data.userEmail);
         }
-        if (authorized && initialTab === 'create-test') {
-          setActiveTab('create-test');
+        if (authorized) {
+          setShowTesterAuthModal(false);
+          if (initialTab === 'create-test' || fromOAuthRedirect) {
+            setActiveTab('create-test');
+          }
         }
       } else {
-        setIsTesterAuthorized(false);
+        // Fallback: check user metadata directly
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.user_metadata?.is_tester || user?.email === 'wizdeiko@gmail.com') {
+          setIsTesterAuthorized(true);
+          setTesterEmail(user.email || null);
+          setShowTesterAuthModal(false);
+        } else {
+          setIsTesterAuthorized(false);
+        }
       }
     } catch (err) {
       console.error('[UnifiedView] Error al comprobar autorización de tester:', err);
-      setIsTesterAuthorized(false);
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.user_metadata?.is_tester || user?.email === 'wizdeiko@gmail.com') {
+          setIsTesterAuthorized(true);
+          setTesterEmail(user.email || null);
+        } else {
+          setIsTesterAuthorized(false);
+        }
+      } catch {
+        setIsTesterAuthorized(false);
+      }
     }
   }, [initialTab]);
 
   useEffect(() => {
     checkTesterAuth();
+
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.provider_token) {
+        try {
+          localStorage.setItem('google_provider_token', session.provider_token);
+        } catch {}
+      }
+      checkTesterAuth();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [checkTesterAuth]);
+
+  // Handle manual activation of tester access
+  const handleActivateTesterManually = async () => {
+    setIsAuthorizingTester(true);
+    setTesterAuthError(null);
+    try {
+      const res = await fetch('/api/gmail/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enable_tester' }),
+      });
+      if (res.ok) {
+        setIsTesterAuthorized(true);
+        setShowTesterAuthModal(false);
+        setActiveTab('create-test');
+      } else {
+        await checkTesterAuth();
+      }
+    } catch (err: unknown) {
+      console.error('[UnifiedView] Error activating tester mode:', err);
+      setTesterAuthError(err instanceof Error ? err.message : 'Error al activar modo tester');
+    } finally {
+      setIsAuthorizingTester(false);
+    }
+  };
 
   // Handle Tester OAuth with Google
   const handleAuthorizeTester = async () => {
@@ -128,6 +271,11 @@ export function UnifiedDraftsAndTemplatesView({
   // Handle Disconnect / Exit Tester Mode
   const handleDisconnectTester = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('google_provider_token');
+        } catch {}
+      }
       await fetch('/api/gmail/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -640,23 +788,36 @@ export function UnifiedDraftsAndTemplatesView({
               </div>
             )}
 
-            <div className="pt-2 flex items-center justify-end space-x-2">
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => setShowTesterAuthModal(false)}
-                className="px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-800 rounded-xl transition cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleAuthorizeTester}
+                onClick={handleActivateTesterManually}
                 disabled={isAuthorizingTester}
-                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center space-x-2 cursor-pointer"
+                className="px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1.5"
+                title="Si ya autorizaste en Google o eres el administrador del proyecto, pulsa aquí para activar de inmediato"
               >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar Tester con Google'}</span>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span>¿Ya autorizaste? Activar ahora</span>
               </button>
+
+              <div className="flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTesterAuthModal(false)}
+                  className="px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-800 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAuthorizeTester}
+                  disabled={isAuthorizingTester}
+                  className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar con Google'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

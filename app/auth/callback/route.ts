@@ -47,15 +47,50 @@ export async function GET(request: Request) {
         redirectUrl = `${origin}/groups/${joinedGroupId}`;
       }
 
+      const isEmailTemplatesReturn = Boolean(returnTo && returnTo.includes('/email-templates'));
+
+      // If user came from tester auth flow, mark as tester in user metadata
+      if (user && (isEmailTemplatesReturn || sessionData?.session?.provider_token)) {
+        try {
+          const metaUpdates: Record<string, unknown> = { is_tester: true };
+          if (sessionData?.session?.provider_token) {
+            metaUpdates.google_provider_token = sessionData.session.provider_token;
+          }
+          await supabase.auth.updateUser({ data: metaUpdates });
+        } catch (metaErr) {
+          console.warn('[auth/callback] Error updating user metadata for tester:', metaErr);
+        }
+      }
+
+      // If redirecting to email-templates, append tester tokens/params so client captures them
+      if (isEmailTemplatesReturn) {
+        const sep = redirectUrl.includes('?') ? '&' : '?';
+        const params = new URLSearchParams();
+        params.set('tester_authorized', 'true');
+        if (sessionData?.session?.provider_token) {
+          params.set('tester_token', sessionData.session.provider_token);
+        }
+        redirectUrl = `${redirectUrl}${sep}${params.toString()}`;
+      }
+
       const response = NextResponse.redirect(redirectUrl);
       response.cookies.delete('deudita_invite_token');
+
+      // Ensure all Supabase session cookies from cookieStore are transferred to response
+      cookieStore.getAll().forEach((c) => {
+        response.cookies.set(c.name, c.value, {
+          path: '/',
+          secure: true,
+          sameSite: 'none',
+        });
+      });
 
       if (sessionData?.session?.provider_token) {
         response.cookies.set('google_provider_token', sessionData.session.provider_token, {
           path: '/',
           httpOnly: false,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          secure: true,
+          sameSite: 'none',
           maxAge: 3600 * 24 * 7,
         });
       }
@@ -64,8 +99,8 @@ export async function GET(request: Request) {
         response.cookies.set('google_refresh_token', sessionData.session.provider_refresh_token, {
           path: '/',
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          secure: true,
+          sameSite: 'none',
           maxAge: 3600 * 24 * 30,
         });
       }

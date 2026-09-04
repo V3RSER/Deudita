@@ -102,11 +102,12 @@ export async function GET(req: NextRequest) {
     const subjectSearch = (searchParams.get('subject') || searchParams.get('q') || '').trim();
     const entityFilter = (searchParams.get('entity') || 'all').trim();
 
-    // Obtener token de Google desde el encabezado o la cookie de sesión
+    // Obtener token de Google desde el encabezado, la cookie de sesión o los metadatos del usuario
     const cookieStore = await cookies();
     const googleToken =
       req.headers.get('x-google-token') ||
-      cookieStore.get('google_provider_token')?.value;
+      cookieStore.get('google_provider_token')?.value ||
+      (user.user_metadata?.google_provider_token as string | undefined);
 
     // Si no hay token de acceso a Gmail disponible
     if (!googleToken) {
@@ -294,11 +295,23 @@ export async function POST(req: NextRequest) {
       messagesTotal: profileData.messagesTotal,
     });
 
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          is_tester: true,
+          google_provider_token: token,
+          tester_email: profileData.emailAddress,
+        },
+      });
+    } catch (uErr) {
+      console.warn('[API /api/gmail/emails POST] Error updating user metadata:', uErr);
+    }
+
     response.cookies.set('google_provider_token', token, {
       path: '/',
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       maxAge: 3600 * 24 * 7,
     });
 
