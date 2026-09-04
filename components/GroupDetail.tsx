@@ -52,6 +52,7 @@ import { getGroupImage } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
 import { UserAvatar, AvatarBadge } from '@/components/UserAvatar';
+import { extractNotesAndConfig } from '@/lib/split-config-utils';
 
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GroupExpenseFilterSheet } from '@/components/GroupExpenseFilterSheet';
@@ -141,53 +142,51 @@ function parseTxDate(dateInput: string | Date) {
 
 function formatShortDateWithTime(dateStr?: string | null, timeStr?: string | null): string {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) {
-    const day = d.getDate();
-    const month = MONTH_SHORT_LOWER_ES[d.getMonth()] || '';
-    const hours = timeStr ? timeStr.split(':')[0] : String(d.getHours()).padStart(2, '0');
-    const minutes = timeStr ? timeStr.split(':')[1] : String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month}, ${hours}:${minutes}`;
-  }
-  const parts = dateStr.split('-');
-  if (parts.length >= 3) {
-    const day = parseInt(parts[2], 10);
-    const mIdx = Math.max(0, Math.min(11, (parseInt(parts[1], 10) || 1) - 1));
-    const month = MONTH_SHORT_LOWER_ES[mIdx] || '';
-    const time = timeStr && timeStr.trim() ? timeStr : '20:00';
-    return `${day} ${month}, ${time}`;
-  }
-  return dateStr;
-}
 
-function formatDayAndTime(dateStr?: string | null, timeStr?: string | null): string {
-  if (!dateStr) return '';
+  let day = 1;
+  let month = 'sep';
+  let hours = '20';
+  let minutes = '00';
+  let hasTime = false;
+
+  if (timeStr && timeStr.trim()) {
+    const cleanTime = timeStr.trim().slice(0, 5);
+    const parts = cleanTime.split(':');
+    if (parts.length >= 2) {
+      hours = parts[0].padStart(2, '0');
+      minutes = parts[1].padStart(2, '0');
+      hasTime = true;
+    }
+  }
+
+  if (dateStr.includes('T')) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      day = d.getDate();
+      month = MONTH_SHORT_LOWER_ES[d.getMonth()] || 'sep';
+      if (!hasTime) {
+        hours = String(d.getHours()).padStart(2, '0');
+        minutes = String(d.getMinutes()).padStart(2, '0');
+      }
+      return `${day} ${month}, ${hours}:${minutes}`;
+    }
+  }
+
   const cleanDate = dateStr.split('T')[0];
   const parts = cleanDate.split('-');
-  let day = '';
   if (parts.length >= 3) {
-    day = String(parseInt(parts[2], 10));
+    day = parseInt(parts[2], 10);
+    const mIdx = Math.max(0, Math.min(11, (parseInt(parts[1], 10) || 1) - 1));
+    month = MONTH_SHORT_LOWER_ES[mIdx] || 'sep';
   } else {
     const d = new Date(dateStr);
     if (!isNaN(d.getTime())) {
-      day = String(d.getDate());
+      day = d.getDate();
+      month = MONTH_SHORT_LOWER_ES[d.getMonth()] || 'sep';
     }
   }
 
-  let time = timeStr ? timeStr.slice(0, 5) : '';
-  if (!time) {
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime()) && dateStr.includes('T')) {
-      const hours = String(d.getHours()).padStart(2, '0');
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      time = `${hours}:${minutes}`;
-    }
-  }
-
-  if (day && time) {
-    return `${day}, ${time}`;
-  }
-  return day || time || dateStr;
+  return `${day} ${month}, ${hours}:${minutes}`;
 }
 
 function formatActivityDateTime(dateStr: string | null | undefined): string {
@@ -488,7 +487,7 @@ export function GroupDetail({
   const groupImageUrl = getGroupImage(group);
 
   return (
-    <div className="max-w-xl mx-auto space-y-3 font-sans pb-16">
+    <div className="w-full max-w-4xl mx-auto space-y-3 font-sans pb-16">
       {/* 1. Header: Group avatar, title, members count and right chevron */}
       <div className="flex items-center justify-between py-1 px-1">
         <div className="flex items-center space-x-3 min-w-0">
@@ -663,7 +662,7 @@ export function GroupDetail({
               <button
                 type="button"
                 onClick={() => onOpenNewExpense(group.id)}
-                className="h-10 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-xs cursor-pointer"
+                className="h-10 px-4 bg-[#c25737] hover:bg-[#b04d30] text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>Nuevo gasto</span>
@@ -686,7 +685,7 @@ export function GroupDetail({
 
           {/* Month Grouped Transaction List */}
           {groupedByMonth.map((mGroup) => (
-            <div key={mGroup.key} className="space-y-2 pt-1">
+            <div key={mGroup.key} className="space-y-1.5 pt-1">
               <div className="flex items-center space-x-2.5 px-1 py-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
                   <Calendar className="w-3 h-3 text-zinc-500" />
@@ -695,7 +694,7 @@ export function GroupDetail({
                 <div className="h-px bg-zinc-200/70 flex-1" />
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {mGroup.items.map((tx) => {
                   const parsed = parseTxDate(tx.dateObj);
 
@@ -784,24 +783,24 @@ export function GroupDetail({
                         {/* Collapsed/Header Row */}
                         <div
                           onClick={() => toggleExpenseExpand(exp.id)}
-                          className="p-3.5 sm:p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                          className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
                         >
-                          <div className="flex items-center space-x-3 min-w-0 flex-1">
+                          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                             {/* Date Box: Day on top, month below */}
-                            <div className="w-9 text-center shrink-0 flex flex-col items-center justify-center">
-                              <span className="text-base font-bold text-zinc-900 leading-none">
+                            <div className="w-8 text-center shrink-0 flex flex-col items-center justify-center">
+                              <span className="text-sm sm:text-base font-bold text-zinc-900 leading-none">
                                 {parsed.dayStr}
                               </span>
-                              <span className="text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
+                              <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
                                 {parsed.monthAbbr}
                               </span>
                             </div>
 
                             {/* Category Icon Box (Soft pastel background) */}
                             <div
-                              className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${catConfig.bgClass} ${catConfig.textClass}`}
+                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${catConfig.bgClass} ${catConfig.textClass}`}
                             >
-                              <CategoryIcon className="w-5 h-5" />
+                              <CategoryIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                             </div>
 
                             {/* Description & Payer */}
@@ -816,9 +815,9 @@ export function GroupDetail({
                           </div>
 
                           {/* Right side: Amount & Personal Status & Chevron */}
-                          <div className="flex items-center gap-2.5 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             <div className="text-right">
-                              <div className="text-sm font-bold text-zinc-900 leading-tight">
+                              <div className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
                                 {formatCurrency(exp.total_amount, currency)}
                               </div>
                               <div className={`text-xs mt-0.5 leading-none ${badgeColorClass}`}>
@@ -845,23 +844,27 @@ export function GroupDetail({
                           return (
                           <div className="border-t border-zinc-100 bg-white">
                             {/* Metadata Row */}
-                            <div className="px-4 py-2.5 flex items-center justify-between text-xs text-zinc-500">
+                            <div className="px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-zinc-500">
                               <div className="space-y-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-zinc-700 font-semibold">
-                                    {formatDayAndTime(exp.expense_date, exp.expense_time)}
+                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                  <span className="w-20 sm:w-24 shrink-0 text-zinc-600 font-normal">
+                                    {formatShortDateWithTime(exp.expense_date, exp.expense_time)}
                                   </span>
-                                  <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                                  <span className="text-zinc-500">Fecha del gasto</span>
+                                  <div className="flex items-center gap-1.5 text-zinc-500">
+                                    <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                    <span>Fecha del gasto</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-zinc-700 font-semibold">
-                                    {formatDayAndTime(entryInfo.timestamp)}
+                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                  <span className="w-20 sm:w-24 shrink-0 text-zinc-600 font-normal">
+                                    {formatShortDateWithTime(entryInfo.timestamp)}
                                   </span>
-                                  <Pencil className="w-3 h-3 text-zinc-400" />
-                                  <span className="text-zinc-500">
-                                    {isEdited ? `Actualizado por ${actionUserName}` : `Registrado por ${actionUserName}`}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 text-zinc-500">
+                                    <Pencil className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                    <span>
+                                      {isEdited ? `Actualizado por ${actionUserName}` : `Registrado por ${actionUserName}`}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -931,31 +934,31 @@ export function GroupDetail({
                             <div className="border-t border-zinc-100" />
 
                             {/* Section: Distribución entre participantes */}
-                            <div className="px-4 pt-3 pb-2 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+                            <div className="px-3.5 sm:px-4 pt-2.5 pb-1.5 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
                               <Share2 className="w-3.5 h-3.5 text-zinc-400" />
                               <span>Distribución entre participantes</span>
                             </div>
 
-                            <div className="px-4 pb-3 space-y-2.5">
+                            <div className="px-3.5 sm:px-4 pb-2.5 space-y-2">
                               {participants.map((part) => (
                                 <div
                                   key={part.id}
-                                  className="flex items-center justify-between text-sm"
+                                  className="flex items-center justify-between text-sm py-0.5"
                                 >
-                                  <div className="flex items-center space-x-3 min-w-0">
+                                  <div className="flex items-center space-x-2.5 min-w-0">
                                     <UserAvatar
                                       profile={part.profile}
                                       name={part.name}
                                       badge={part.badgeType as AvatarBadge}
-                                      size="md"
+                                      size="sm"
                                     />
 
-                                    <span className="font-medium text-zinc-800 truncate">
+                                    <span className="font-medium text-zinc-800 truncate text-xs sm:text-sm">
                                       {part.name}
                                     </span>
                                   </div>
 
-                                  <span className="font-semibold text-zinc-800 text-sm shrink-0">
+                                  <span className="font-semibold text-zinc-800 text-xs sm:text-sm shrink-0">
                                     {formatCurrency(part.amount, currency)}
                                   </span>
                                 </div>
@@ -966,15 +969,15 @@ export function GroupDetail({
                             {items.length > 0 && (
                               <>
                                 <div className="border-t border-zinc-100" />
-                                <div className="px-4 pt-3 pb-2 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+                                <div className="px-3.5 sm:px-4 pt-2.5 pb-1.5 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
                                   <List className="w-3.5 h-3.5 text-zinc-400" />
                                   <span>Desglose de artículos</span>
                                 </div>
-                                <div className="px-4 pb-3 space-y-2">
+                                <div className="px-3.5 sm:px-4 pb-2.5 space-y-1.5">
                                   {items.map((it, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-sm">
-                                      <span className="font-medium text-zinc-800">{it.description}</span>
-                                      <span className="font-semibold text-zinc-800">
+                                    <div key={idx} className="flex items-center justify-between text-xs sm:text-sm py-0.5">
+                                      <span className="font-medium text-zinc-800 truncate mr-2">{it.description}</span>
+                                      <span className="font-semibold text-zinc-800 shrink-0">
                                         {formatCurrency(it.amount, currency)}
                                       </span>
                                     </div>
@@ -984,15 +987,19 @@ export function GroupDetail({
                             )}
 
                             {/* Optional: Notes if present */}
-                            {exp.notes && (
-                              <>
-                                <div className="border-t border-zinc-100" />
-                                <div className="px-4 py-2.5 text-xs text-zinc-500">
-                                  <span className="font-semibold text-zinc-600 mr-1">Notas:</span>
-                                  <span>{exp.notes}</span>
-                                </div>
-                              </>
-                            )}
+                            {(() => {
+                              const cleanUserNote = extractNotesAndConfig(exp.notes).userNote;
+                              if (!cleanUserNote) return null;
+                              return (
+                                <>
+                                  <div className="border-t border-zinc-100" />
+                                  <div className="px-3.5 sm:px-4 py-2 text-xs text-zinc-500">
+                                    <span className="font-semibold text-zinc-600 mr-1">Notas:</span>
+                                    <span>{cleanUserNote}</span>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                           );
                         })()}
@@ -1014,20 +1021,20 @@ export function GroupDetail({
                     >
                       <div
                         onClick={() => togglePaymentExpand(pay.id)}
-                        className="p-3.5 sm:p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                        className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
                       >
-                        <div className="flex items-center space-x-3 min-w-0 flex-1">
-                          <div className="w-9 text-center shrink-0 flex flex-col items-center justify-center">
-                            <span className="text-base font-bold text-zinc-900 leading-none">
+                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                          <div className="w-8 text-center shrink-0 flex flex-col items-center justify-center">
+                            <span className="text-sm sm:text-base font-bold text-zinc-900 leading-none">
                               {parsed.dayStr}
                             </span>
-                            <span className="text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
+                            <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
                               {parsed.monthAbbr}
                             </span>
                           </div>
 
-                          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700">
-                            <HandCoins className="w-5 h-5" />
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700">
+                            <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
 
                           <div className="min-w-0 flex-1">
@@ -1040,9 +1047,9 @@ export function GroupDetail({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <div className="text-right">
-                            <div className="text-sm font-bold text-zinc-900 leading-tight">
+                            <div className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
                               {formatCurrency(pay.amount, currency)}
                             </div>
                             <div className="text-xs font-semibold text-emerald-600 mt-0.5 leading-none">

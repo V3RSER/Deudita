@@ -14,48 +14,61 @@ export function extractNotesAndConfig(rawNotes?: string | null): {
     return { userNote: '', splitConfig: null };
   }
 
-  const match = rawNotes.match(SPLIT_CONFIG_REGEX);
-  if (!match) {
-    return { userNote: rawNotes.trim(), splitConfig: null };
+  const trimmed = rawNotes.trim();
+
+  // If rawNotes is a raw JSON string of splitConfig
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && (parsed.splitType || parsed.version || parsed.selectedMembers)) {
+        return { userNote: '', splitConfig: parsed as ExpenseSplitConfig };
+      }
+    } catch {
+      // not JSON
+    }
   }
 
+  const match = rawNotes.match(SPLIT_CONFIG_REGEX);
   let splitConfig: ExpenseSplitConfig | null = null;
-  try {
-    const parsed = JSON.parse(match[1]);
-    if (parsed && typeof parsed === 'object' && parsed.splitType) {
-      splitConfig = parsed as ExpenseSplitConfig;
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object' && parsed.splitType) {
+        splitConfig = parsed as ExpenseSplitConfig;
+      }
+    } catch (err) {
+      console.warn('[split-config-utils] Error parsing embedded split config:', err);
     }
-  } catch (err) {
-    console.warn('[split-config-utils] Error parsing embedded split config:', err);
   }
 
   // Remove the comment and trim whitespace
-  const userNote = rawNotes.replace(SPLIT_CONFIG_REGEX, '').trim();
+  let userNote = rawNotes.replace(SPLIT_CONFIG_REGEX, '').trim();
+
+  // Safeguard: if userNote is still a JSON string, clear it so user never sees JSON in notes
+  if (userNote.startsWith('{') && userNote.endsWith('}')) {
+    userNote = '';
+  }
 
   return { userNote, splitConfig };
 }
 
 /**
  * Combines a user-visible note with a serialized split configuration tag
- * to persist reliably in database text columns.
+ * without polluting notes with raw JSON if there's no note.
  */
 export function serializeNotesWithConfig(
   userNote: string | undefined | null,
-  splitConfig: ExpenseSplitConfig | null
+  _splitConfig?: ExpenseSplitConfig | null
 ): string | undefined {
-  const cleanNote = (userNote || '').replace(SPLIT_CONFIG_REGEX, '').trim();
+  const cleanNote = (userNote || '')
+    .replace(SPLIT_CONFIG_REGEX, '')
+    .trim();
 
-  if (!splitConfig) {
-    return cleanNote || undefined;
+  if (cleanNote.startsWith('{') && cleanNote.endsWith('}')) {
+    return undefined;
   }
 
-  const configTag = `<!--SPLIT_CONFIG:${JSON.stringify(splitConfig)}-->`;
-
-  if (cleanNote) {
-    return `${cleanNote}\n\n${configTag}`;
-  }
-
-  return configTag;
+  return cleanNote || undefined;
 }
 
 /**

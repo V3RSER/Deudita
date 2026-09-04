@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  output: 'standalone',
+  serverExternalPackages: ['@opentelemetry/api', '@opentelemetry/core'],
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // Suppress non-critical webpack cache serialization warnings

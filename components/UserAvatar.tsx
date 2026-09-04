@@ -10,7 +10,7 @@ interface UserAvatarProps {
   profile?: Partial<Profile> | null;
   name?: string | null;
   email?: string | null;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   badge?: AvatarBadge;
   className?: string;
 }
@@ -32,6 +32,7 @@ export function UserAvatar({
     sm: 'w-7 h-7 text-xs',
     md: 'w-9 h-9 text-sm',
     lg: 'w-10 h-10 text-base',
+    xl: 'w-12 h-12 text-lg',
   };
 
   const imageSizes = {
@@ -39,12 +40,13 @@ export function UserAvatar({
     sm: 28,
     md: 36,
     lg: 40,
+    xl: 48,
   };
 
   return (
     <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
       <div
-        className={`${sizeStyles[size]} rounded-full bg-zinc-100 border border-zinc-200/70 overflow-hidden flex items-center justify-center font-bold text-zinc-800 select-none shadow-2xs`}
+        className={`${sizeStyles[size]} rounded-full bg-white border border-zinc-300 overflow-hidden flex items-center justify-center font-bold text-zinc-900 select-none shadow-2xs`}
       >
         {avatarUrl ? (
           <Image
@@ -61,14 +63,14 @@ export function UserAvatar({
       </div>
 
       {badge === 'debe' && (
-        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-[#f43f5e] text-white text-[8.5px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full leading-tight shadow-xs whitespace-nowrap">
-          DEBE
+        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#dc2626] sm:bg-[#e11d48] text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-tight shadow-xs whitespace-nowrap lowercase">
+          debe
         </span>
       )}
 
       {(badge === 'aportó' || badge === 'pago') && (
-        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8.5px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full leading-tight shadow-xs whitespace-nowrap">
-          {badge === 'pago' ? 'PAGÓ' : 'APORTÓ'}
+        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-tight shadow-xs whitespace-nowrap lowercase">
+          {badge === 'pago' ? 'pagó' : 'aportó'}
         </span>
       )}
     </div>

@@ -181,9 +181,10 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         setReceiptUrl(expenseToEdit.receipt_url ?? '');
         // Extract real user notes and persisted/inferred split configuration
         const { userNote, splitConfig } = getExpenseSplitConfig(expenseToEdit);
-        setNotes(userNote);
-        setShowNoteInput(Boolean(userNote));
-        setShowAdditional(Boolean(userNote || expenseToEdit.receipt_url));
+        const safeNote = userNote.startsWith('{') && userNote.endsWith('}') ? '' : userNote;
+        setNotes(safeNote);
+        setShowNoteInput(Boolean(safeNote));
+        setShowAdditional(Boolean(safeNote || expenseToEdit.receipt_url));
 
         if (isItemized && expenseToEdit.items && expenseToEdit.items.length > 0) {
           if (splitConfig.items && splitConfig.items.length > 0) {

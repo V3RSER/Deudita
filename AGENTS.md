@@ -1,18 +1,26 @@
 # Optimization & Execution Guidelines for this Next.js App
 
-## 1. Performance: Avoid Latency & Timeouts
+## 1. Build & Compilation Policy (ABSOLUTE RULE: ZERO MANUAL BUILDS)
 
-- **Exclude build/dependency folders from searches**: always exclude `.next`, `dist`, and `node_modules` (e.g. `--exclude-dir={.next,node_modules,dist}`). Searching minified build chunks locks the execution buffer with megabyte-long single strings.
-- **Atomic single-pass edits**: read the target file once and perform all edits in that same turn. Avoid reading/editing the same file 3+ times across separate turns.
-- **Verify fast, compile last**: use `lint_applet` for quick syntax/import checks during development. Reserve full compilation for the end of the task to avoid 80+ second build locks.
+- **DEV SERVER IS ALWAYS RUNNING**: The container already runs `npm run dev` continuously in the background. Edits to any file are hot-reloaded automatically by Next.js in ~1-2 seconds (just like in a local terminal: `✓ Compiled in 1358ms`).
+- **NEVER RUN `compile_applet`**: `compile_applet` triggers a full production `npm run build` from scratch, which wipes caches, freezes the container for minutes, and is completely unnecessary during development. It is STRICTLY FORBIDDEN to call `compile_applet` unless the user literally types "compila el proyecto", "haz un build", or "ejecuta compile_applet".
+- **NEVER RUN MANUAL BUILD COMMANDS**: Never run `npm run build`, `next build`, or background compilation tasks via `run_command`.
+- **Fast validation only**: If you need to verify imports or syntax, only use `lint_applet` (completes in < 2 seconds without building).
+- **Instant Turn Completion**: Once file edits are saved, END the turn immediately. Do not call any build tools, timers, or background checks. The dev server handles compilation automatically.
 
-## 2. Routing Conventions (App Router)
+## 2. Performance: Avoid Latency & Timeouts
+
+- **Exclude build/dependency folders from searches**: Always exclude `.next`, `dist`, and `node_modules` (e.g. `--exclude-dir={.next,node_modules,dist}`).
+- **Atomic single-pass edits**: Read the target file once and perform all edits in that same turn.
+- **No background command loops**: Never spawn long-running background tasks or timers to check build processes.
+
+## 3. Routing Conventions (App Router)
 
 - This project uses route groups `(dashboard)` and dynamic segments `[id]`, `[groupId]`.
 - Never URL-encode these paths (no `%28dashboard%29`, no `%5Bid%5D`). Use literal paths: `app/(dashboard)/...`, `app/api/groups/[id]/...`.
 - Do not rename these routing folders.
 
-## 3. Security: Fail-Fast, No Privilege Escalation
+## 4. Security: Fail-Fast, No Privilege Escalation
 
 - **No placeholder/dummy credentials**: never hardcode fallback URLs, keys, or JWTs (e.g. `'https://placeholder-project.supabase.co'`, `'eyJhbGci...placeholder'`).
 - **No silent fallback to lower privileges**: never fall back from a service/admin key to an anon key (`SUPABASE_SERVICE_ROLE_KEY || NEXT_PUBLIC_SUPABASE_ANON_KEY`). Admin/service clients must never silently degrade to public permissions.
@@ -21,7 +29,7 @@
 - **Never bypass RLS with admin/service-role clients** (`adminDb`, `createAdminClient`, `lib/supabase/admin.ts`) to work around access restrictions or patch design flaws.
 - **For public/pre-auth flows** (invite links, group previews, etc.), solve access properly — store the necessary metadata on the invite/record itself or configure correct RLS policies — instead of escalating privileges.
 
-## 4. Frontend UX & Copy
+## 5. Frontend UX & Copy
 
 - Keep user-facing copy natural, polished, and human-centered.
 - Never leak internal implementation details, stack traces, or backend jargon into the UI.
