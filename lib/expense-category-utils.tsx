@@ -27,7 +27,6 @@ import {
   HeartPulse,
   Tag,
   Layers,
-  Bed,
   LucideIcon
 } from 'lucide-react';
 
@@ -87,11 +86,8 @@ export function getCategoryConfig(category?: string): CategoryConfig {
   if (cat.includes('internet') || cat.includes('cable') || cat.includes('wifi')) {
     return { icon: Wifi, bgClass: 'bg-cyan-100', textClass: 'text-cyan-800' };
   }
-  if (cat.includes('alojamiento') || cat.includes('hotel') || cat.includes('airbnb') || cat.includes('hospedaje')) {
-    return { icon: Bed, bgClass: 'bg-purple-100', textClass: 'text-purple-600' };
-  }
-  if (cat.includes('factura') || cat.includes('cuenta') || cat.includes('recibo') || cat.includes('boleta')) {
-    return { icon: Receipt, bgClass: 'bg-emerald-100', textClass: 'text-emerald-700' };
+  if (cat.includes('alojamiento') || cat.includes('hotel') || cat.includes('airbnb')) {
+    return { icon: Building, bgClass: 'bg-blue-100', textClass: 'text-blue-800' };
   }
   if (cat.includes('combustible') || cat.includes('bencina') || cat.includes('gasolina')) {
     return { icon: Fuel, bgClass: 'bg-red-100', textClass: 'text-red-700' };
@@ -103,7 +99,7 @@ export function getCategoryConfig(category?: string): CategoryConfig {
     return { icon: Ticket, bgClass: 'bg-blue-100', textClass: 'text-blue-700' };
   }
   if (cat.includes('transporte') || cat.includes('auto') || cat.includes('taxi') || cat.includes('uber')) {
-    return { icon: Car, bgClass: 'bg-sky-100', textClass: 'text-sky-600' };
+    return { icon: Car, bgClass: 'bg-slate-100', textClass: 'text-slate-800' };
   }
   if (cat.includes('cine') || cat.includes('entretenimiento') || cat.includes('evento')) {
     return { icon: Film, bgClass: 'bg-purple-100', textClass: 'text-purple-800' };
@@ -120,9 +116,9 @@ export function getCategoryConfig(category?: string): CategoryConfig {
   if (cat.includes('compra') || cat.includes('tienda')) {
     return { icon: ShoppingBag, bgClass: 'bg-indigo-100', textClass: 'text-indigo-700' };
   }
-  if (cat.includes('general') || cat.includes('otros') || cat.includes('varios') || cat.includes('gasto')) {
-    return { icon: Receipt, bgClass: 'bg-emerald-100', textClass: 'text-emerald-700' };
+  if (cat.includes('general') || cat.includes('otros') || cat.includes('varios')) {
+    return { icon: Tag, bgClass: 'bg-zinc-100', textClass: 'text-zinc-800' };
   }
 
-  return { icon: Receipt, bgClass: 'bg-emerald-100', textClass: 'text-emerald-700' };
+  return { icon: DollarSign, bgClass: 'bg-zinc-100', textClass: 'text-zinc-700' };
 }
