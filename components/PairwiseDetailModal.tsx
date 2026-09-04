@@ -518,7 +518,7 @@ export function PairwiseDetailModal({
                     <span
                       className={`text-sm sm:text-base font-black ${detail.optimizationDetail?.isDiscount
                           ? 'text-emerald-600'
-                          : 'text-[#581c87]'
+                          : 'text-rose-600'
                         }`}
                     >
                       {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
@@ -886,11 +886,11 @@ export function PairwiseDetailModal({
                                         {/* Dashed curve converging into main transfer */}
                                         <path
                                           d={`M ${tp.x} ${tp.y - 24} Q ${tp.x} 115 270 70`}
-                                          stroke="#10b981"
+                                          stroke={detail.optimizationDetail?.isDiscount ? '#10b981' : '#e11d48'}
                                           strokeWidth="2"
                                           strokeDasharray="4 3"
                                           fill="none"
-                                          markerEnd="url(#arrow-emerald)"
+                                          markerEnd={detail.optimizationDetail?.isDiscount ? 'url(#arrow-emerald)' : 'url(#arrow-red)'}
                                         />
                                         <rect
                                           x={tp.x - 55}
@@ -898,14 +898,14 @@ export function PairwiseDetailModal({
                                           width="110"
                                           height="18"
                                           rx="5"
-                                          fill="#f0fdf4"
-                                          stroke="#bbf7d0"
+                                          fill={detail.optimizationDetail?.isDiscount ? '#f0fdf4' : '#fff1f2'}
+                                          stroke={detail.optimizationDetail?.isDiscount ? '#bbf7d0' : '#fecdd3'}
                                           strokeWidth="1"
                                         />
                                         <text
                                           x={tp.x}
                                           y={tp.y - 37}
-                                          fill="#15803d"
+                                          fill={detail.optimizationDetail?.isDiscount ? '#15803d' : '#be123c'}
                                           textAnchor="middle"
                                           fontWeight="800"
                                           fontSize="10px"
@@ -1297,7 +1297,7 @@ export function PairwiseDetailModal({
                       <User className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span className="font-semibold text-zinc-900">Total consumos directos de {debtorName} con {creditorName}</span>
                     </div>
-                    <span className="font-black text-rose-600 shrink-0">
+                    <span className="font-black text-rose-600 shrink-0 font-mono">
                       + {formatCurrency(totalDirectConsumption, currency)}
                     </span>
                   </div>
@@ -1308,35 +1308,26 @@ export function PairwiseDetailModal({
                       <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span className="font-semibold text-zinc-900">Total aportes y pagos directos aplicados</span>
                     </div>
-                    <span className="font-black text-emerald-600 shrink-0">
+                    <span className="font-black text-emerald-600 shrink-0 font-mono">
                       - {formatCurrency(totalActiveRecoverable, currency)}
                     </span>
                   </div>
 
-                  {/* Saldo directo intermedio solo si hay compensaciones que cambian el valor */}
-                  {hasCompensations && (
-                    <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-zinc-800 font-bold">
-                      <span>Saldo directo 1 a 1 entre ambos</span>
-                      <span className="text-zinc-900 font-black">
-                        {formatCurrency(detail.netDirectBalance, currency)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Descuento o consolidación de triangulaciones si aplica */}
+                  {/* Descuento o aumento por compensación con integrantes */}
                   {hasCompensations && (
                     <div className="flex items-center justify-between text-zinc-700">
                       <div className="flex items-center space-x-2">
                         <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span>
+                        <span className="font-semibold text-zinc-900">
                           {detail.optimizationDetail?.isDiscount
                             ? 'Descuento por compensación con integrantes'
                             : 'Consolidación de cuentas del grupo'}
                         </span>
                       </div>
                       <span
-                        className={`font-black ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-[#581c87]'
-                          }`}
+                        className={`font-black font-mono shrink-0 ${
+                          detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                        }`}
                       >
                         {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                         {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
@@ -1345,12 +1336,15 @@ export function PairwiseDetailModal({
                   )}
                 </div>
 
-                {/* Total Final Line */}
-                <div className="pt-3 border-t border-purple-200/80 flex items-center justify-between">
-                  <span className="text-sm sm:text-base font-black text-[#581c87]">
-                    Saldo final a liquidar con {creditorName}
-                  </span>
-                  <span className="text-xl sm:text-2xl font-black text-[#581c87] tracking-tight">
+                {/* Total Final Line - Estilo ecuación matemática */}
+                <div className="pt-3 border-t-2 border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg font-black text-zinc-500 font-mono select-none">=</span>
+                    <span className="text-sm sm:text-base font-black text-zinc-900">
+                      Saldo final a liquidar
+                    </span>
+                  </div>
+                  <span className="text-xl sm:text-2xl font-black text-[#581c87] tracking-tight font-mono border-b-2 border-double border-[#581c87] pb-0.5">
                     {formatCurrency(finalSettlementAmount, currency)}
                   </span>
                 </div>
