@@ -20,6 +20,7 @@ import {
   Search,
   SlidersHorizontal,
   Receipt,
+  Wallet,
   Plus,
   ChevronDown,
   ChevronUp,
@@ -50,6 +51,7 @@ import {
 import { getGroupImage } from '@/lib/group-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { formatDisplayEmail, isTempProfile } from '@/lib/utils';
+import { UserAvatar, AvatarBadge } from '@/components/UserAvatar';
 
 import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { GroupExpenseFilterSheet } from '@/components/GroupExpenseFilterSheet';
@@ -58,6 +60,7 @@ import {
   getEffectiveTransactionDate,
   isDateMatchingFilter,
   getAvailableTransactionMonths,
+  getRecordEntryDateInfo,
 } from '@/lib/transaction-date-utils';
 import { EditGroupModal } from '@/components/EditGroupModal';
 import { GroupSettingsModal } from '@/components/GroupSettingsModal';
@@ -155,6 +158,36 @@ function formatShortDateWithTime(dateStr?: string | null, timeStr?: string | nul
     return `${day} ${month}, ${time}`;
   }
   return dateStr;
+}
+
+function formatDayAndTime(dateStr?: string | null, timeStr?: string | null): string {
+  if (!dateStr) return '';
+  const cleanDate = dateStr.split('T')[0];
+  const parts = cleanDate.split('-');
+  let day = '';
+  if (parts.length >= 3) {
+    day = String(parseInt(parts[2], 10));
+  } else {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      day = String(d.getDate());
+    }
+  }
+
+  let time = timeStr ? timeStr.slice(0, 5) : '';
+  if (!time) {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime()) && dateStr.includes('T')) {
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      time = `${hours}:${minutes}`;
+    }
+  }
+
+  if (day && time) {
+    return `${day}, ${time}`;
+  }
+  return day || time || dateStr;
 }
 
 function formatActivityDateTime(dateStr: string | null | undefined): string {
@@ -577,7 +610,7 @@ export function GroupDetail({
             <button
               type="button"
               onClick={() => setIsFiltersOpen(true)}
-              className={`h-11 w-11 rounded-xl border transition flex items-center justify-center cursor-pointer shadow-2xs shrink-0 ${
+              className={`relative h-11 w-11 rounded-xl border transition flex items-center justify-center cursor-pointer shadow-2xs shrink-0 ${
                 activeFiltersCount > 0
                   ? 'border-zinc-300 bg-white text-zinc-900'
                   : 'border-zinc-200/90 bg-white text-zinc-700 hover:bg-zinc-50'
@@ -585,7 +618,7 @@ export function GroupDetail({
               aria-label="Abrir filtros"
               title="Filtros"
             >
-              <SlidersHorizontal className="w-4 h-4 text-zinc-700" />
+              <SlidersHorizontal className="w-4 h-4 text-zinc-700 rotate-90" />
               {activeFiltersCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                   {activeFiltersCount}
@@ -596,8 +629,8 @@ export function GroupDetail({
 
           {/* Row 2: Balance Status & Action Buttons (Saldar + Nuevo gasto) */}
           <div className="flex items-center justify-between gap-3 pt-1 pb-1 px-0.5">
-            <div>
-              <p className="text-xs text-zinc-500 font-medium">
+            <div className="flex flex-col justify-center">
+              <p className="text-xs sm:text-[13px] font-semibold text-zinc-500 leading-tight">
                 {myNetBalance > 0.01
                   ? 'Tú recuperas'
                   : myNetBalance < -0.01
@@ -605,11 +638,11 @@ export function GroupDetail({
                   : 'Estás al día'}
               </p>
               <p
-                className={`text-2xl font-bold tracking-tight ${
+                className={`text-2xl sm:text-[28px] font-extrabold tracking-tight leading-tight mt-0.5 ${
                   myNetBalance > 0.01
-                    ? 'text-emerald-700'
+                    ? 'text-emerald-600'
                     : myNetBalance < -0.01
-                    ? 'text-[#c25a3a]'
+                    ? 'text-rose-600'
                     : 'text-zinc-800'
                 }`}
               >
@@ -621,16 +654,16 @@ export function GroupDetail({
               <button
                 type="button"
                 onClick={() => onOpenSettleModal(group.id)}
-                className="h-10 px-3.5 bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-300 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-2xs cursor-pointer"
+                className="h-10 px-3.5 bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200/90 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-2xs cursor-pointer"
               >
-                <Receipt className="w-4 h-4 text-zinc-600" />
+                <Wallet className="w-4 h-4 text-zinc-700" />
                 <span>Saldar</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => onOpenNewExpense(group.id)}
-                className="h-10 px-4 bg-[#c25a3a] hover:bg-[#b04f32] text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-2xs cursor-pointer"
+                className="h-10 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>Nuevo gasto</span>
@@ -654,9 +687,13 @@ export function GroupDetail({
           {/* Month Grouped Transaction List */}
           {groupedByMonth.map((mGroup) => (
             <div key={mGroup.key} className="space-y-2 pt-1">
-              <h2 className="text-sm font-medium text-zinc-500 px-1">
-                {mGroup.label}
-              </h2>
+              <div className="flex items-center space-x-2.5 px-1 py-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
+                  <Calendar className="w-3 h-3 text-zinc-500" />
+                  <span>{mGroup.label}</span>
+                </span>
+                <div className="h-px bg-zinc-200/70 flex-1" />
+              </div>
 
               <div className="space-y-2.5">
                 {mGroup.items.map((tx) => {
@@ -740,7 +777,7 @@ export function GroupDetail({
 
                     return (
                       <div
-                        id={`expense-card-${exp.id}`}
+                        id={`expense-${exp.id}`}
                         key={`exp-${exp.id}`}
                         className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden transition-all"
                       >
@@ -798,25 +835,32 @@ export function GroupDetail({
                         </div>
 
                         {/* Expanded Content Section */}
-                        {isExpanded && (
+                        {isExpanded && (() => {
+                          const entryInfo = getRecordEntryDateInfo(exp);
+                          const isEdited = entryInfo.isUpdated || Boolean(exp.updated_by && exp.updated_by !== exp.created_by);
+                          const updatedByProfile = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
+                          const actionUser = isEdited ? (updatedByProfile || createdBy) : createdBy;
+                          const actionUserName = actionUser?.full_name?.split(' ')[0] || actionUser?.full_name || 'Luis';
+
+                          return (
                           <div className="border-t border-zinc-100 bg-white">
                             {/* Metadata Row */}
                             <div className="px-4 py-2.5 flex items-center justify-between text-xs text-zinc-500">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-zinc-600 font-medium">
-                                    {formatShortDateWithTime(exp.expense_date, exp.expense_time)}
+                                  <span className="text-zinc-700 font-semibold">
+                                    {formatDayAndTime(exp.expense_date, exp.expense_time)}
                                   </span>
                                   <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                                   <span className="text-zinc-500">Fecha del gasto</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-zinc-600 font-medium">
-                                    {formatShortDateWithTime(exp.created_at)}
+                                  <span className="text-zinc-700 font-semibold">
+                                    {formatDayAndTime(entryInfo.timestamp)}
                                   </span>
                                   <Pencil className="w-3 h-3 text-zinc-400" />
                                   <span className="text-zinc-500">
-                                    Registrado por {createdBy ? createdBy.full_name : 'Luis'}
+                                    {isEdited ? `Actualizado por ${actionUserName}` : `Registrado por ${actionUserName}`}
                                   </span>
                                 </div>
                               </div>
@@ -899,33 +943,12 @@ export function GroupDetail({
                                   className="flex items-center justify-between text-sm"
                                 >
                                   <div className="flex items-center space-x-3 min-w-0">
-                                    {/* Avatar initial with bottom badge */}
-                                    <div className="relative shrink-0">
-                                      <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-800">
-                                        {part.profile?.avatar_url ? (
-                                          <Image
-                                            src={part.profile.avatar_url}
-                                            alt={part.name}
-                                            width={32}
-                                            height={32}
-                                            className="w-full h-full rounded-full object-cover"
-                                            unoptimized
-                                          />
-                                        ) : (
-                                          part.initial
-                                        )}
-                                      </div>
-                                      {part.badgeType === 'debe' && (
-                                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#c25a3a] text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-none shadow-2xs">
-                                          debe
-                                        </span>
-                                      )}
-                                      {part.badgeType === 'aportó' && (
-                                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-700 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-none shadow-2xs">
-                                          aportó
-                                        </span>
-                                      )}
-                                    </div>
+                                    <UserAvatar
+                                      profile={part.profile}
+                                      name={part.name}
+                                      badge={part.badgeType as AvatarBadge}
+                                      size="md"
+                                    />
 
                                     <span className="font-medium text-zinc-800 truncate">
                                       {part.name}
@@ -971,7 +994,8 @@ export function GroupDetail({
                               </>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     );
                   }
@@ -1135,12 +1159,18 @@ export function GroupDetail({
                   >
                     <div className="flex items-center space-x-3 min-w-0">
                       <div className="flex items-center -space-x-2 shrink-0">
-                        <div className="w-9 h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                          {debtorName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white">
-                          {creditorName.charAt(0).toUpperCase()}
-                        </div>
+                        <UserAvatar
+                          profile={p.debtor}
+                          name={debtorName}
+                          size="md"
+                          className="ring-2 ring-white rounded-full"
+                        />
+                        <UserAvatar
+                          profile={p.creditor}
+                          name={creditorName}
+                          size="md"
+                          className="ring-2 ring-white rounded-full"
+                        />
                       </div>
 
                       <div className="min-w-0">
@@ -1209,9 +1239,12 @@ export function GroupDetail({
                   className="bg-white hover:bg-zinc-50 rounded-2xl p-3.5 border border-zinc-200/80 flex items-center justify-between shadow-2xs cursor-pointer transition"
                 >
                   <div className="flex items-center space-x-3 overflow-hidden">
-                    <div className="w-10 h-10 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                      {p.full_name ? p.full_name.charAt(0).toUpperCase() : 'U'}
-                    </div>
+                    <UserAvatar
+                      profile={p}
+                      name={p.full_name}
+                      size="lg"
+                      className="shrink-0"
+                    />
                     <div className="min-w-0">
                       <div className="flex items-center space-x-2">
                         <h4 className="font-semibold text-zinc-900 text-sm truncate">{p.full_name}</h4>
@@ -1247,28 +1280,91 @@ export function GroupDetail({
               {sortedGroupAuditLogs.map((log) => {
                 const user = profiles.find((p) => p.id === log.user_id);
                 const userName = user?.full_name ?? 'Usuario';
-                const actionLabel =
-                  log.action === 'create'
-                    ? 'agregó un gasto'
-                    : log.action === 'update'
-                    ? 'editó un gasto'
-                    : 'eliminó un gasto';
+                const associatedExpense = groupExpenses.find((e) => e.id === log.expense_id);
+                const expenseTitle = associatedExpense?.description || log.changes?.description || 'Gasto';
+                const expenseAmount = associatedExpense?.total_amount ?? log.changes?.total_amount;
+                const isClickable = Boolean(associatedExpense);
 
                 return (
-                  <div key={log.id} className="p-3 sm:p-3.5 flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-700 shrink-0 mt-0.5">
-                      {userName.charAt(0).toUpperCase()}
+                  <div
+                    key={log.id}
+                    onClick={() => {
+                      if (associatedExpense) {
+                        setActiveTab('expenses');
+                        setExpandedExpenseIds((prev) => {
+                          const next = new Set(prev);
+                          next.add(associatedExpense.id);
+                          return next;
+                        });
+                        setTimeout(() => {
+                          const el = document.getElementById(`expense-${associatedExpense.id}`);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                        }, 100);
+                      }
+                    }}
+                    className={`p-3.5 sm:p-4 flex items-start justify-between gap-3 transition ${
+                      isClickable ? 'cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/70' : ''
+                    }`}
+                  >
+                    <div className="flex items-start space-x-3 min-w-0 flex-1">
+                      <UserAvatar
+                        profile={user}
+                        name={userName}
+                        size="md"
+                        className="mt-0.5 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs sm:text-sm text-zinc-800 leading-snug">
+                          <strong className="font-semibold text-zinc-900">{userName}</strong>{' '}
+                          {log.action === 'create' && (
+                            <span className="text-zinc-600">
+                              agregó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                            </span>
+                          )}
+                          {log.action === 'update' && (
+                            <span className="text-zinc-600">
+                              editó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                            </span>
+                          )}
+                          {log.action === 'delete' && (
+                            <span className="text-zinc-600">
+                              eliminó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                            </span>
+                          )}
+                        </p>
+
+                        <div className="flex items-center gap-2 flex-wrap text-xs pt-0.5">
+                          {expenseAmount !== undefined && expenseAmount !== null && (
+                            <span className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md text-[11px]">
+                              {formatCurrency(expenseAmount, effectiveCurrency)}
+                            </span>
+                          )}
+                          {associatedExpense?.category && (
+                            <span className="text-zinc-500 bg-zinc-50 border border-zinc-200/60 px-2 py-0.5 rounded-md text-[11px]">
+                              {associatedExpense.category}
+                            </span>
+                          )}
+                          {log.changes && log.action === 'update' && (
+                            <span className="text-[11px] text-zinc-500">
+                              {Object.keys(log.changes).length} cambio(s)
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-[10px] text-zinc-400 flex items-center gap-1 pt-0.5">
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>{formatActivityDateTime(log.created_at)}</span>
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm text-zinc-800 leading-snug">
-                        <strong className="font-semibold text-zinc-900">{userName}</strong>{' '}
-                        <span className="text-zinc-500">{actionLabel}</span>
-                      </p>
-                      <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" />
-                        <span>{formatActivityDateTime(log.created_at)}</span>
-                      </p>
-                    </div>
+
+                    {isClickable && (
+                      <div className="shrink-0 text-zinc-400 self-center pl-1">
+                        <ChevronRight className="w-4 h-4 text-zinc-400" />
+                      </div>
+                    )}
                   </div>
                 );
               })}
