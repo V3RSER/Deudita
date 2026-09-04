@@ -188,7 +188,7 @@ export function SettleDebtModal({
   const memberOptions = useMemo(() => {
     return profiles.map((p) => ({
       value: p.id,
-      label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+      label: p.full_name,
       icon: p.avatar_url ? (
         <Image
           src={p.avatar_url}
@@ -204,7 +204,7 @@ export function SettleDebtModal({
         </div>
       ),
     }));
-  }, [profiles, currentProfile?.id]);
+  }, [profiles]);
 
   if (!isOpen) return null;
 
@@ -471,7 +471,7 @@ export function SettleDebtModal({
                           {payerProfile?.full_name?.split(' ')[0] || 'Pagador'}
                         </div>
                         <div className="text-[10px] text-zinc-400 font-medium truncate">
-                          {payerProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                          Integrante
                         </div>
                       </div>
 
@@ -536,7 +536,7 @@ export function SettleDebtModal({
                           {receiverProfile?.full_name?.split(' ')[0] || 'Receptor'}
                         </div>
                         <div className="text-[10px] text-zinc-400 font-medium truncate">
-                          {receiverProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                          Integrante
                         </div>
                       </div>
 

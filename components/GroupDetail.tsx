@@ -879,7 +879,7 @@ export function GroupDetail({
             <div className="text-xs sm:text-sm font-medium text-zinc-600">
               {myNetBalance > 0.01 ? (
                 <span>
-                  Tú recuperas <span className="text-emerald-600 font-bold ml-1">{formatCurrency(myNetBalance, effectiveCurrency)}</span>
+                  Recuperas <span className="text-emerald-600 font-bold ml-1">{formatCurrency(myNetBalance, effectiveCurrency)}</span>
                 </span>
               ) : myNetBalance < -0.01 ? (
                 <span>

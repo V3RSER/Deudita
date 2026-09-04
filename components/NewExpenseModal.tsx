@@ -741,7 +741,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         onChange={setPaidById}
                         options={activeProfiles.map((p) => ({
                           value: p.id,
-                          label: `${p.full_name || p.email}${p.id === currentProfile?.id ? ' (Tú)' : ''}`,
+                          label: p.full_name || p.email || 'Integrante',
                           icon: p.avatar_url ? (
                             <Image
                               src={p.avatar_url}
@@ -1389,7 +1389,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                               )}
                               <span className="text-xs font-semibold text-zinc-800 truncate">
                                 {p.full_name?.split(' ')[0] || p.email}
-                                {p.id === currentProfile?.id && <span className="text-zinc-400 font-medium ml-1">(Tú)</span>}
                               </span>
                             </div>
 
@@ -1650,7 +1649,6 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                               )}
                                               <span className="text-xs font-bold text-zinc-800 truncate">
                                                 {p.full_name?.split(' ')[0] || p.email}
-                                                {p.id === currentProfile?.id && <span className="text-emerald-600 font-semibold ml-1">(Tú)</span>}
                                               </span>
                                             </div>
 

@@ -13,7 +13,7 @@ import {
   formatHumanDate,
   extractTimeFromISO,
 } from '@/lib/transaction-date-utils';
-import { ExpenseParticipantSummary, ParticipantSummaryData, ParticipantItemBreakdown } from '@/components/ExpenseParticipantSummary';
+import { ExpenseMoneyFlow, ParticipantSummaryData, ParticipantItemBreakdown } from '@/components/ExpenseParticipantSummary';
 import { getExpenseSplitConfig, extractNotesAndConfig } from '@/lib/split-config-utils';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import {
@@ -24,7 +24,6 @@ import {
   Trash2,
   ExternalLink,
   ArrowRight,
-  ArrowRightLeft,
   CheckCircle2,
   X,
   ChevronDown,
@@ -121,20 +120,6 @@ function formatFullDateTime(dateStr: string | null | undefined): string {
     hour12: false,
   });
   return `${dateFormatted}, ${timeFormatted}`;
-}
-
-function getInitials(name?: string, email?: string): string {
-  if (name?.trim()) {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    }
-    return parts[0].charAt(0).toUpperCase();
-  }
-  if (email?.trim()) {
-    return email.charAt(0).toUpperCase();
-  }
-  return 'U';
 }
 
 export function GenericExpenseList({
@@ -270,15 +255,12 @@ export function GenericExpenseList({
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {groupedByMonth.map((group) => (
-        <div
-          key={group.key}
-          className="bg-white border border-zinc-200/90 shadow-2xs overflow-hidden rounded-none"
-        >
+        <div key={group.key} className="space-y-2">
           {/* Monthly Section Header Cut */}
-          <div className="flex items-center space-x-2.5 px-3.5 py-2.5 bg-zinc-50/80 border-b border-zinc-200/80">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-600 bg-white px-2.5 py-0.5 border border-zinc-200/90 flex items-center space-x-1.5 shadow-2xs rounded-none">
+          <div className="flex items-center space-x-2.5 px-1 py-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
               {dateFilterMode === 'entry_date' ? (
                 <Clock className="w-3 h-3 text-indigo-600" />
               ) : (
@@ -286,10 +268,10 @@ export function GenericExpenseList({
               )}
               <span>{group.label}</span>
             </span>
-            <div className="h-px bg-zinc-200/80 flex-1" />
+            <div className="h-px bg-zinc-200/70 flex-1" />
           </div>
 
-          <div className="divide-y divide-zinc-100">
+          <div className="">
             {group.items.map((tx) => {
               const parsed = parseTxDate(tx.dateObj);
 
@@ -384,11 +366,11 @@ export function GenericExpenseList({
                   <div
                     id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
-                    className={`transition-colors overflow-hidden ${isTargeted
-                      ? 'bg-emerald-50/20'
+                    className={`bg-white border transition-all overflow-hidden ${isTargeted
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
                       : isExpanded
-                        ? 'bg-zinc-50/40'
-                        : 'bg-white hover:bg-zinc-50/30'
+                        ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
+                        : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
                       }`}
                   >
                     <div
@@ -455,9 +437,6 @@ export function GenericExpenseList({
                             )}
                             <span className="truncate">
                               Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
-                              {isPayer && (
-                                <span className="ml-1 text-xs text-emerald-600 font-semibold">(Tú)</span>
-                              )}
                             </span>
                           </div>
                         </div>
@@ -520,22 +499,42 @@ export function GenericExpenseList({
                           const hasReceipt = Boolean(exp.receipt_url);
                           const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
 
-                          const splitTypeLabel = splitConfig.splitType === 'shares'
-                            ? 'Por cuotas'
-                            : splitConfig.splitType === 'exact'
-                              ? 'Monto exacto'
-                              : splitConfig.splitType === 'percentage'
-                                ? 'Por porcentaje'
-                                : splitConfig.splitType === 'itemized'
-                                  ? 'Por artículos'
-                                  : 'Partes iguales';
-
                           const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
                             const profile = profiles.find((p) => p.id === split.user_id);
                             const userAmt = split.amount_owed;
                             const breakdown: ParticipantItemBreakdown[] = [];
 
-                            if (exp.items && exp.items.length > 0 && exp.total_amount > 0) {
+                            // Accurate item breakdown: use splitConfig.items if present, else fallback to exp.items
+                            const cfgItems = splitConfig?.items;
+                            if (cfgItems && Array.isArray(cfgItems) && cfgItems.length > 0) {
+                              const allParticipantIds = (exp.splits || []).map((s) => s.user_id);
+                              cfgItems.forEach((item, idx) => {
+                                const qty = parseFloat(item.quantity) || 1;
+                                const amt = parseFloat(item.amount) || 0;
+                                const itemTotal = item.amountType === 'each' ? qty * amt : amt;
+                                const val = item.shares?.[split.user_id] !== undefined
+                                  ? parseFloat(item.shares[split.user_id] as string) || 0
+                                  : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(split.user_id) ? 1 : 0);
+
+                                if (val > 0) {
+                                  let sumShares = 0;
+                                  allParticipantIds.forEach((id) => {
+                                    sumShares += item.shares?.[id] !== undefined
+                                      ? parseFloat(item.shares[id] as string) || 0
+                                      : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                                  });
+                                  if (sumShares > 0 && itemTotal > 0) {
+                                    const userItemQty = qty * (val / sumShares);
+                                    const userItemCost = itemTotal * (val / sumShares);
+                                    breakdown.push({
+                                      desc: item.desc || `Artículo ${idx + 1}`,
+                                      qty: userItemQty,
+                                      cost: userItemCost,
+                                    });
+                                  }
+                                }
+                              });
+                            } else if (exp.items && exp.items.length > 0 && exp.total_amount > 0) {
                               exp.items.forEach((item) => {
                                 const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
                                 const totalQty = match ? parseFloat(match[1]) || 1 : 1;
@@ -563,145 +562,16 @@ export function GenericExpenseList({
                             };
                           });
 
-                          const moneyFlowCard = (
-                            <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden p-3 sm:p-3.5 space-y-3">
-                              <div className="flex items-center justify-between pb-1 border-b border-zinc-100">
-                                <div className="flex items-center gap-1.5">
-                                  <ArrowRightLeft className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                                    Flujo del dinero
-                                  </span>
-                                </div>
-                                <span className="text-[10px] font-bold text-zinc-600 bg-zinc-100 border border-zinc-200/80 px-2 py-0.5 rounded-full">
-                                  {splitTypeLabel}
-                                </span>
-                              </div>
-
-                              {/* Payer Summary */}
-                              <div className="flex items-center justify-between gap-2 p-2.5 bg-zinc-50/80 rounded-xl border border-zinc-200/80">
-                                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                  <div className="relative shrink-0">
-                                    {paidBy?.avatar_url ? (
-                                      <Image
-                                        src={paidBy.avatar_url}
-                                        alt="Payer"
-                                        width={36}
-                                        height={36}
-                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-emerald-100"
-                                        unoptimized
-                                      />
-                                    ) : (
-                                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                                        {getInitials(paidBy?.full_name, paidBy?.email)}
-                                      </div>
-                                    )}
-                                    <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[7px] font-black px-1 rounded-full ring-1 ring-white">
-                                      PAGÓ
-                                    </span>
-                                  </div>
-
-                                  <div className="min-w-0 flex-1 text-left">
-                                    <div className="text-xs font-extrabold text-zinc-900 truncate">
-                                      {paidBy?.full_name || paidBy?.email || 'Pagador'}
-                                    </div>
-                                    <div className="text-[10px] text-zinc-500 font-medium truncate">
-                                      {isPayer ? '(Tú) Pagaste el gasto' : 'Pagó el total del gasto'}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="text-right shrink-0">
-                                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">
-                                    Total pagado
-                                  </span>
-                                  <span className="text-xs sm:text-sm font-black text-zinc-900 font-mono">
-                                    {formatCurrency(exp.total_amount, currency)}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Distribution between members */}
-                              <div className="space-y-1.5">
-                                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider pl-0.5">
-                                  Distribución entre participantes ({participantSummaryList.length})
-                                </div>
-                                <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200/80 overflow-hidden bg-white">
-                                  {participantSummaryList.map((p) => {
-                                    const profile = p.profile;
-                                    const isSplitPayer = p.userId === exp.paid_by;
-                                    const isCurrent = currentProfile ? p.userId === currentProfile.id : false;
-
-                                    return (
-                                      <div
-                                        key={p.userId}
-                                        className="p-2 sm:p-2.5 flex items-center justify-between gap-2 hover:bg-zinc-50/50 transition-colors"
-                                      >
-                                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                          <div className="relative shrink-0">
-                                            {profile?.avatar_url ? (
-                                              <Image
-                                                src={profile.avatar_url}
-                                                alt=""
-                                                width={30}
-                                                height={30}
-                                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-1 ring-zinc-200"
-                                                unoptimized
-                                              />
-                                            ) : (
-                                              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-100 text-zinc-800 flex items-center justify-center text-[10px] font-bold border border-zinc-200">
-                                                {getInitials(profile?.full_name, profile?.email)}
-                                              </div>
-                                            )}
-                                            <span
-                                              className={`absolute -bottom-1 -right-1 text-white text-[7px] font-black px-1 rounded-full ring-1 ring-white ${
-                                                isSplitPayer ? 'bg-zinc-800' : 'bg-rose-500'
-                                              }`}
-                                            >
-                                              {isSplitPayer ? 'APORTE' : 'DEBE'}
-                                            </span>
-                                          </div>
-
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className="text-xs font-bold text-zinc-900 truncate">
-                                                {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
-                                              </span>
-                                              {isCurrent && (
-                                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded shrink-0">
-                                                  (Tú)
-                                                </span>
-                                              )}
-                                              {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
-                                                <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
-                                                  {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className="text-[10px] text-zinc-400 truncate">
-                                              {isSplitPayer
-                                                ? 'Aporte propio en este gasto'
-                                                : `Le debe a ${paidBy?.full_name?.split(' ')[0] || 'pagador'}`}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="text-right shrink-0">
-                                          <span className={`text-xs sm:text-sm font-black font-mono ${isSplitPayer ? 'text-zinc-900' : 'text-rose-600'}`}>
-                                            {formatCurrency(p.amount, currency)}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          );
-
                           if (hasSecondaryDetails) {
                             return (
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
-                                {moneyFlowCard}
+                                {/* Money Flow: Total pagado & Distribución de participantes */}
+                                <ExpenseMoneyFlow
+                                  totalAmount={exp.total_amount}
+                                  currency={currency}
+                                  payerProfile={paidBy}
+                                  participants={participantSummaryList}
+                                />
 
                                 {/* Items, Notes and Receipt (right col) */}
                                 <div className="space-y-2">
@@ -785,7 +655,15 @@ export function GenericExpenseList({
                             );
                           }
 
-                          return moneyFlowCard;
+                          // Full-width balanced splits card when there are no extra notes/items
+                          return (
+                            <ExpenseMoneyFlow
+                              totalAmount={exp.total_amount}
+                              currency={currency}
+                              payerProfile={paidBy}
+                              participants={participantSummaryList}
+                            />
+                          );
                         })()}
 
                         {/* Dedicated Detailed Date & Timestamp Metadata Footer */}
@@ -828,23 +706,9 @@ export function GenericExpenseList({
               const groupObj = userGroups.find((g) => g.id === payment.group_id);
               const currency = groupCurrency || groupObj?.currency || currentProfile?.currency;
 
-              const managedIds = isSimplified
-                ? (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id)
-                : [];
-              const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
-              const isIpaid = Boolean(currentProfile && myEffectiveIds.includes(payment.paid_by));
-              const isIreceived = Boolean(currentProfile && myEffectiveIds.includes(payment.paid_to));
+              const isIpaid = payment.paid_by === currentProfile?.id;
+              const isIreceived = payment.paid_to === currentProfile?.id;
               const isExpanded = isPaymentExpanded(payment.id);
-
-              let payBadgeText = 'no participas';
-              let payBadgeColorClass = 'text-zinc-400';
-              if (isIreceived) {
-                payBadgeText = `recuperas ${formatCurrency(payment.amount, currency)}`;
-                payBadgeColorClass = 'text-emerald-600';
-              } else if (isIpaid) {
-                payBadgeText = `pagaste ${formatCurrency(payment.amount, currency)}`;
-                payBadgeColorClass = 'text-rose-600';
-              }
 
               const eventInfo = getRecordEventDateInfo(payment);
               const explicitPayTime = payment.payment_time ? extractTimeFromISO(payment.payment_time) : '';
@@ -857,9 +721,9 @@ export function GenericExpenseList({
                 <div
                   key={`pay-${payment.id}`}
                   id={`payment-card-${payment.id}`}
-                  className={`transition-colors overflow-hidden ${isExpanded
-                    ? 'bg-zinc-50/40'
-                    : 'bg-white hover:bg-zinc-50/30'
+                  className={`bg-white border transition-all overflow-hidden ${isExpanded
+                    ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
+                    : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
                     }`}
                 >
                   {/* Collapsed / Summary Header (Click toggles expansion) */}
@@ -896,25 +760,36 @@ export function GenericExpenseList({
 
                       {/* Payment Description & Details */}
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-zinc-900 text-sm flex items-center flex-wrap truncate">
-                          <span>{payer ? payer.full_name : 'Usuario'}</span>
-                          <span className="font-normal text-zinc-500 mx-1">pagó a</span>
-                          <span>{receiver ? receiver.full_name : 'Usuario'}</span>
+                        <h3 className="font-semibold text-zinc-900 text-sm flex items-center space-x-1 flex-wrap truncate">
+                          <span className={isIpaid ? 'text-emerald-700 font-bold' : ''}>
+                            {payer ? payer.full_name : 'Usuario'}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span className={isIreceived ? 'text-emerald-700 font-bold' : ''}>
+                            {receiver ? receiver.full_name : 'Usuario'}
+                          </span>
                           {dateFilterMode === 'entry_date' && tx.isUpdated && (
-                            <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1.5">
+                            <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
                               Editado
                             </span>
                           )}
                         </h3>
 
-                        {/* Subtitle row (group badge only) */}
-                        {showGroupBadge && groupObj && (
-                          <div className="flex items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
-                            <span className="font-medium text-zinc-700 bg-zinc-100 px-1.5 py-0.5 rounded text-[10px]">
-                              {groupObj.name}
-                            </span>
-                          </div>
-                        )}
+                        {/* Subtitle row */}
+                        <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
+                          {showGroupBadge && groupObj && (
+                            <>
+                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
+                                {groupObj.name}
+                              </span>
+                              <span>•</span>
+                            </>
+                          )}
+                          <span className="truncate">
+                            {isIpaid ? 'Transferiste a ' : 'Pagó a '}
+                            <span className="font-medium text-zinc-700">{receiver ? receiver.full_name : 'Usuario'}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -925,9 +800,14 @@ export function GenericExpenseList({
                           {formatCurrency(payment.amount, currency)}
                         </span>
                         <span
-                          className={`text-xs font-semibold leading-tight mt-0.5 ${payBadgeColorClass}`}
+                          className={`text-xs font-semibold leading-tight mt-0.5 ${isIpaid
+                            ? 'text-emerald-600'
+                            : isIreceived
+                              ? 'text-emerald-600'
+                              : 'text-zinc-400'
+                            }`}
                         >
-                          {payBadgeText}
+                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'no participas'}
                         </span>
                       </div>
 
@@ -994,7 +874,7 @@ export function GenericExpenseList({
                                   Pagó
                                 </span>
                                 <span className="text-xs font-bold text-zinc-900 truncate block">
-                                  {payer ? payer.full_name : 'Usuario'} {isIpaid && '(Tú)'}
+                                  {payer ? payer.full_name : 'Usuario'}
                                 </span>
                               </div>
                             </div>
@@ -1031,7 +911,7 @@ export function GenericExpenseList({
                                   Recibió
                                 </span>
                                 <span className="text-xs font-bold text-zinc-900 truncate block">
-                                  {receiver ? receiver.full_name : 'Usuario'} {isIreceived && '(Tú)'}
+                                  {receiver ? receiver.full_name : 'Usuario'}
                                 </span>
                               </div>
                             </div>

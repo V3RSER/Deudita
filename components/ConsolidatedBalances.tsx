@@ -247,7 +247,7 @@ function UnifiedBalanceCard({
                       key={bIdx}
                       className="inline-flex items-center space-x-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium shadow-2xs"
                     >
-                      <span>{b.isSelf ? (isDebtor ? 'Tu consumo' : b.profile.full_name) : b.profile.full_name}:</span>
+                      <span>{b.profile.full_name}:</span>
                       <strong className="text-zinc-900">{formatCurrency(b.amount)}</strong>
                     </span>
                   ))}

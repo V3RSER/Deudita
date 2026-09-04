@@ -278,7 +278,7 @@ export function ConfirmDraftModal({
               onChange={(val) => setPaidBy(val)}
               options={memberProfiles.map((p) => ({
                 value: p.id,
-                label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+                label: p.full_name,
                 icon: p.avatar_url ? (
                   <Image
                     src={p.avatar_url}
