@@ -41,21 +41,21 @@ import {
 
 type UnifiedTransaction =
   | {
-      type: 'expense';
-      date: string;
-      dateObj: Date;
-      isUpdated: boolean;
-      hasExplicitTime: boolean;
-      data: Expense;
-    }
+    type: 'expense';
+    date: string;
+    dateObj: Date;
+    isUpdated: boolean;
+    hasExplicitTime: boolean;
+    data: Expense;
+  }
   | {
-      type: 'payment';
-      date: string;
-      dateObj: Date;
-      isUpdated: boolean;
-      hasExplicitTime: boolean;
-      data: Payment;
-    };
+    type: 'payment';
+    date: string;
+    dateObj: Date;
+    isUpdated: boolean;
+    hasExplicitTime: boolean;
+    data: Payment;
+  };
 
 interface GenericExpenseListProps {
   expenses: Expense[];
@@ -271,7 +271,7 @@ export function GenericExpenseList({
             <div className="h-px bg-zinc-200/70 flex-1" />
           </div>
 
-          <div className="space-y-2.5">
+          <div className="">
             {group.items.map((tx) => {
               const parsed = parseTxDate(tx.dateObj);
 
@@ -366,40 +366,36 @@ export function GenericExpenseList({
                   <div
                     id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
-                    className={`bg-white rounded-2xl border transition-all overflow-hidden mb-2.5 ${
-                      isTargeted
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
-                        : isExpanded
+                    className={`bg-white border transition-all overflow-hidden ${isTargeted
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                      : isExpanded
                         ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
                         : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${
-                        isExpanded
-                          ? 'bg-zinc-50/80 border-b border-zinc-200/70'
-                          : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
-                      }`}
+                      className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${isExpanded
+                        ? 'bg-zinc-50/80 border-b border-zinc-200/70'
+                        : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
+                        }`}
                       onClick={() => toggleExpenseExpanded(exp.id)}
                     >
-                      <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                         {/* Date Block: Only Month & Day (e.g. 24 AGO) */}
                         <div
-                          className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
-                            dateFilterMode === 'entry_date'
-                              ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                              : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
-                          }`}
-                        >
-                          <span className="text-sm font-bold text-zinc-900 leading-none">
-                            {parsed.dayStr}
-                          </span>
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${
-                              dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                          className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                            ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
+                            : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
                             }`}
+                        >
+                          <span
+                            className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                              }`}
                           >
                             {parsed.monthAbbr}
+                          </span>
+                          <span className="text-sm font-bold text-zinc-900 leading-none">
+                            {parsed.dayStr}
                           </span>
                         </div>
 
@@ -412,9 +408,8 @@ export function GenericExpenseList({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-1.5">
                             <h3
-                              className={`font-semibold text-zinc-900 text-sm transition-colors truncate ${
-                                !isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
-                              }`}
+                              className={`font-semibold text-zinc-900 text-sm transition-colors truncate ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
+                                }`}
                             >
                               {exp.description}
                             </h3>
@@ -490,9 +485,8 @@ export function GenericExpenseList({
                         )}
 
                         <ChevronRight
-                          className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${
-                            isExpanded ? 'rotate-90 text-emerald-600' : ''
-                          }`}
+                          className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${isExpanded ? 'rotate-90 text-emerald-600' : ''
+                            }`}
                         />
                       </div>
                     </div>
@@ -511,12 +505,12 @@ export function GenericExpenseList({
                           const splitTypeLabel = splitConfig.splitType === 'shares'
                             ? 'Por cuotas'
                             : splitConfig.splitType === 'exact'
-                            ? 'Monto exacto'
-                            : splitConfig.splitType === 'percentage'
-                            ? 'Por porcentaje'
-                            : splitConfig.splitType === 'itemized'
-                            ? 'Por artículos'
-                            : 'Partes iguales';
+                              ? 'Monto exacto'
+                              : splitConfig.splitType === 'percentage'
+                                ? 'Por porcentaje'
+                                : splitConfig.splitType === 'itemized'
+                                  ? 'Por artículos'
+                                  : 'Partes iguales';
 
                           const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
                             const profile = profiles.find((p) => p.id === split.user_id);
@@ -697,7 +691,7 @@ export function GenericExpenseList({
               const payer = profiles.find((p) => p.id === payment.paid_by);
               const receiver = profiles.find((p) => p.id === payment.paid_to);
               const groupObj = userGroups.find((g) => g.id === payment.group_id);
-              const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
+              const currency = groupCurrency || groupObj?.currency || currentProfile?.currency;
 
               const isIpaid = payment.paid_by === currentProfile?.id;
               const isIreceived = payment.paid_to === currentProfile?.id;
@@ -714,39 +708,35 @@ export function GenericExpenseList({
                 <div
                   key={`pay-${payment.id}`}
                   id={`payment-card-${payment.id}`}
-                  className={`bg-white rounded-2xl border transition-all overflow-hidden mb-2.5 ${
-                    isExpanded
-                      ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
-                      : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
-                  }`}
+                  className={`bg-white border transition-all overflow-hidden ${isExpanded
+                    ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
+                    : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
+                    }`}
                 >
                   {/* Collapsed / Summary Header (Click toggles expansion) */}
                   <div
                     onClick={() => togglePaymentExpanded(payment.id)}
-                    className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 transition-colors cursor-pointer select-none ${
-                      isExpanded
-                        ? 'bg-zinc-50/80 border-b border-zinc-200/70'
-                        : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
-                    }`}
+                    className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 transition-colors cursor-pointer select-none ${isExpanded
+                      ? 'bg-zinc-50/80 border-b border-zinc-200/70'
+                      : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
+                      }`}
                   >
-                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                       {/* Date Block: Day on top, Month below */}
                       <div
-                        className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${
-                          dateFilterMode === 'entry_date'
-                            ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                            : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
-                        }`}
-                      >
-                        <span className="text-sm font-bold text-zinc-900 leading-none">
-                          {parsed.dayStr}
-                        </span>
-                        <span
-                          className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${
-                            dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                        className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                          ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
+                          : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
                           }`}
+                      >
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                            }`}
                         >
                           {parsed.monthAbbr}
+                        </span>
+                        <span className="text-sm font-bold text-zinc-900 leading-none">
+                          {parsed.dayStr}
                         </span>
                       </div>
 
@@ -797,13 +787,12 @@ export function GenericExpenseList({
                           {formatCurrency(payment.amount, currency)}
                         </span>
                         <span
-                          className={`text-xs font-semibold leading-tight mt-0.5 ${
-                            isIpaid
-                              ? 'text-emerald-600'
-                              : isIreceived
+                          className={`text-xs font-semibold leading-tight mt-0.5 ${isIpaid
+                            ? 'text-emerald-600'
+                            : isIreceived
                               ? 'text-emerald-600'
                               : 'text-zinc-400'
-                          }`}
+                            }`}
                         >
                           {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'no participas'}
                         </span>
@@ -838,9 +827,8 @@ export function GenericExpenseList({
                       )}
 
                       <ChevronRight
-                        className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${
-                          isExpanded ? 'rotate-90 text-emerald-600' : ''
-                        }`}
+                        className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${isExpanded ? 'rotate-90 text-emerald-600' : ''
+                          }`}
                       />
                     </div>
                   </div>
