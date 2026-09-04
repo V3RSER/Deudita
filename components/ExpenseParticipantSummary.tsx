@@ -247,6 +247,7 @@ interface ExpenseMoneyFlowProps {
   currency: string;
   payerProfile?: Profile | null;
   participants: ParticipantSummaryData[];
+  defaultExpanded?: boolean;
 }
 
 export function ExpenseMoneyFlow({
@@ -254,14 +255,37 @@ export function ExpenseMoneyFlow({
   currency,
   payerProfile,
   participants,
+  defaultExpanded = false,
 }: ExpenseMoneyFlowProps) {
-  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    participants.forEach((p) => {
+      initial[p.userId] = Boolean(defaultExpanded && p.breakdown && p.breakdown.length > 0);
+    });
+    return initial;
+  });
 
   const toggleUser = (userId: string) => {
     setExpandedUsers((prev) => ({
       ...prev,
       [userId]: !prev[userId],
     }));
+  };
+
+  const hasAnyBreakdown = participants.some((p) => p.breakdown && p.breakdown.length > 0);
+  const allBreakdownsExpanded =
+    hasAnyBreakdown &&
+    participants.every((p) => !p.breakdown?.length || Boolean(expandedUsers[p.userId]));
+
+  const toggleAllBreakdowns = () => {
+    const nextState = !allBreakdownsExpanded;
+    const next: Record<string, boolean> = {};
+    participants.forEach((p) => {
+      if (p.breakdown && p.breakdown.length > 0) {
+        next[p.userId] = nextState;
+      }
+    });
+    setExpandedUsers((prev) => ({ ...prev, ...next }));
   };
 
   const payerAvatarColor = getParticipantAvatarColor(payerProfile?.id || payerProfile?.full_name || 'payer');
@@ -310,10 +334,29 @@ export function ExpenseMoneyFlow({
 
       {/* Participants Distribution */}
       <div className="p-2 sm:p-2.5 space-y-1">
-        <div className="px-2 pt-1 pb-1 flex items-center justify-between">
+        <div className="px-2 pt-1 pb-1 flex items-center justify-between gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
             Distribución de participantes ({participants.length})
           </span>
+          {hasAnyBreakdown && (
+            <button
+              type="button"
+              onClick={toggleAllBreakdowns}
+              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 border border-emerald-200/60 shadow-2xs"
+            >
+              {allBreakdownsExpanded ? (
+                <>
+                  <ChevronUp className="w-3 h-3 text-emerald-700" />
+                  <span>Colapsar artículos</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3 h-3 text-emerald-700" />
+                  <span>Desplegar artículos</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200/70 overflow-hidden bg-white">

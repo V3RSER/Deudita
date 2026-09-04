@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
 import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
-import { GmailIntegrationModal } from '@/components/GmailIntegrationModal';
+import Link from 'next/link';
 import {
   getEffectiveTransactionDate,
   isDateMatchingFilter,
@@ -66,7 +66,6 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
 
   const [activeTab, setActiveTab] = useState<'transactions' | 'detected'>('transactions');
   const [selectedDraftToConfirm, setSelectedDraftToConfirm] = useState<ExpenseDraft | null>(null);
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
   const [gmailStatus, setGmailStatus] = useState<{ connected: boolean; apps_script_url?: string } | null>(null);
 
@@ -442,13 +441,12 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
                 Cuando recibas notificaciones bancarias en tu correo conectado, aparecerán aquí para que los asignes a un grupo.
               </p>
               <div className="pt-2 flex justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsTemplatesOpen(true)}
+                <Link
+                  href="/drafts"
                   className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
                 >
-                  Ver bancos compatibles
-                </button>
+                  Ver tickets y bancos
+                </Link>
               </div>
             </div>
           ) : (
@@ -538,13 +536,6 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         isOpen={Boolean(selectedDraftToConfirm)}
         onClose={() => setSelectedDraftToConfirm(null)}
         draft={selectedDraftToConfirm}
-      />
-
-      {/* Email & Bank Formats Settings Modal */}
-      <GmailIntegrationModal
-        isOpen={isTemplatesOpen}
-        onClose={() => setIsTemplatesOpen(false)}
-        initialTab="templates"
       />
     </div>
   );

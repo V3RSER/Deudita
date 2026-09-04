@@ -486,47 +486,218 @@ export function GroupDetail({
 
   const groupImageUrl = getGroupImage(group);
 
+  const renderLogChanges = (log: ExpenseAuditLog) => {
+    if (log.action !== 'update' || !log.changes) return null;
+    const changes = log.changes as Record<string, any>;
+    const detailsList: React.ReactNode[] = [];
+
+    // 1. Array of string details from rich audit logging
+    if (Array.isArray(changes.details) && changes.details.length > 0) {
+      return (
+        <div className="flex flex-col gap-1 pt-1">
+          {changes.details.map((detail: string, idx: number) => (
+            <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span>{detail}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // 2. Specific change properties
+    if (changes.amount_before !== undefined && changes.amount_after !== undefined && Number(changes.amount_before) !== Number(changes.amount_after)) {
+      detailsList.push(
+        <span key="amount" className="inline-flex items-center gap-1">
+          <span className="text-zinc-500">Monto:</span>
+          <span className="line-through text-zinc-400">{formatCurrency(changes.amount_before, effectiveCurrency)}</span>
+          <span className="font-semibold text-zinc-800">➔ {formatCurrency(changes.amount_after, effectiveCurrency)}</span>
+        </span>
+      );
+    }
+
+    if (changes.payer_name_before && changes.payer_name_after && changes.payer_name_before !== changes.payer_name_after) {
+      detailsList.push(
+        <span key="payer" className="inline-flex items-center gap-1">
+          <span className="text-zinc-500">Pagador:</span>
+          <span className="line-through text-zinc-400">{changes.payer_name_before}</span>
+          <span className="font-semibold text-zinc-800">➔ {changes.payer_name_after}</span>
+        </span>
+      );
+    }
+
+    if (changes.description_before && changes.description_after && changes.description_before !== changes.description_after) {
+      detailsList.push(
+        <span key="desc" className="inline-flex items-center gap-1">
+          <span className="text-zinc-500">Concepto:</span>
+          <span className="line-through text-zinc-400">&ldquo;{changes.description_before}&rdquo;</span>
+          <span className="font-semibold text-zinc-800">➔ &ldquo;{changes.description_after}&rdquo;</span>
+        </span>
+      );
+    }
+
+    if (Array.isArray(changes.added_names) && changes.added_names.length > 0) {
+      detailsList.push(
+        <span key="added" className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
+          + Agregó a: {changes.added_names.join(', ')}
+        </span>
+      );
+    }
+
+    if (Array.isArray(changes.removed_names) && changes.removed_names.length > 0) {
+      detailsList.push(
+        <span key="removed" className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
+          - Quitó a: {changes.removed_names.join(', ')}
+        </span>
+      );
+    }
+
+    // 3. PostgreSQL trigger old/new structures
+    if (changes.old && changes.new && typeof changes.old === 'object' && typeof changes.new === 'object') {
+      const oldObj = changes.old;
+      const newObj = changes.new;
+
+      if (oldObj.total_amount !== undefined && newObj.total_amount !== undefined && Number(oldObj.total_amount) !== Number(newObj.total_amount)) {
+        detailsList.push(
+          <span key="pg_amount" className="inline-flex items-center gap-1">
+            <span className="text-zinc-500">Monto:</span>
+            <span className="line-through text-zinc-400">{formatCurrency(Number(oldObj.total_amount), effectiveCurrency)}</span>
+            <span className="font-semibold text-zinc-800">➔ {formatCurrency(Number(newObj.total_amount), effectiveCurrency)}</span>
+          </span>
+        );
+      }
+      if (oldObj.description && newObj.description && oldObj.description !== newObj.description) {
+        detailsList.push(
+          <span key="pg_desc" className="inline-flex items-center gap-1">
+            <span className="text-zinc-500">Concepto:</span>
+            <span className="line-through text-zinc-400">&ldquo;{oldObj.description}&rdquo;</span>
+            <span className="font-semibold text-zinc-800">➔ &ldquo;{newObj.description}&rdquo;</span>
+          </span>
+        );
+      }
+      if (oldObj.category && newObj.category && oldObj.category !== newObj.category) {
+        detailsList.push(
+          <span key="pg_cat" className="inline-flex items-center gap-1">
+            <span className="text-zinc-500">Categoría:</span>
+            <span className="line-through text-zinc-400">{oldObj.category}</span>
+            <span className="font-semibold text-zinc-800">➔ {newObj.category}</span>
+          </span>
+        );
+      }
+    }
+
+    if (detailsList.length === 0 && changes.summary) {
+      return (
+        <p className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-200/60 rounded-lg p-2 mt-1">
+          {changes.summary}
+        </p>
+      );
+    }
+
+    if (detailsList.length === 0) {
+      const keys = Object.keys(changes).filter((k) => !['old', 'new', 'summary', 'details'].includes(k));
+      if (keys.length > 0) {
+        return (
+          <div className="flex flex-wrap gap-1 pt-1 text-[11px] text-zinc-600">
+            {keys.map((k) => (
+              <span key={k} className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-md font-medium">
+                {k === 'paid_by' ? 'Pagador modificado' : k === 'category' ? 'Categoría modificada' : k === 'splits' ? 'Reparto modificado' : `Modificado: ${k}`}
+              </span>
+            ))}
+          </div>
+        );
+      }
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col gap-1 pt-1 text-xs text-zinc-700">
+        {detailsList.map((node, i) => (
+          <div key={i} className="flex items-center gap-1.5 flex-wrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+            {node}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3 font-sans pb-16">
-      {/* 1. Header: Group avatar, title, members count and right chevron */}
-      <div className="flex items-center justify-between py-1 px-1">
-        <div className="flex items-center space-x-3 min-w-0">
-          <div className="w-12 h-12 rounded-2xl overflow-hidden relative shadow-2xs border border-zinc-100 shrink-0 bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex items-center justify-center">
-            {group.image_url ? (
-              <Image
-                src={groupImageUrl}
-                alt={group.name}
-                fill
-                className="object-cover"
-                unoptimized
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="font-bold text-base text-amber-800 tracking-tight">
-                {group.name.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-          </div>
+      {/* 1. Header: Group Banner with Background Photo, Blur, and Contrast Gradient */}
+      <div className="relative w-full h-36 sm:h-44 md:h-48 rounded-3xl overflow-hidden shadow-xs border border-zinc-200/80 bg-zinc-900">
+        {/* Background photo with subtle blur */}
+        {group.image_url ? (
+          <Image
+            src={groupImageUrl}
+            alt={group.name}
+            fill
+            className="object-cover scale-105 blur-[3px] brightness-[0.6] contrast-[1.05]"
+            unoptimized
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-tr from-zinc-900 via-zinc-800 to-zinc-700" />
+        )}
 
-          <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight truncate leading-snug">
-              {group.name}
-            </h1>
-            <p className="text-xs text-zinc-500 font-normal leading-none mt-0.5">
-              {memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}
-            </p>
-          </div>
+        {/* Gradient overlay to ensure sharp contrast with foreground elements */}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-black/25" />
+
+        {/* Top-right actions (Settings button) */}
+        <div className="absolute top-3.5 right-3.5 z-10">
+          <button
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white backdrop-blur-md border border-white/20 flex items-center justify-center transition cursor-pointer shadow-sm active:scale-95"
+            title="Opciones del grupo"
+            aria-label="Opciones del grupo"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Right chevron to open Group Settings */}
-        <button
-          onClick={() => setIsSettingsModalOpen(true)}
-          className="w-9 h-9 rounded-full hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-zinc-700 transition cursor-pointer shrink-0"
-          title="Opciones del grupo"
-          aria-label="Opciones del grupo"
-        >
-          <ChevronRight className="w-5 h-5 text-zinc-400" />
-        </button>
+        {/* Banner content: Group avatar badge + Title + Metadata */}
+        <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex items-end justify-between gap-3 z-10">
+          <div className="flex items-center space-x-3.5 sm:space-x-4 min-w-0">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden relative shadow-md border-2 border-white/90 shrink-0 bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex items-center justify-center">
+              {group.image_url ? (
+                <Image
+                  src={groupImageUrl}
+                  alt={group.name}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="font-bold text-lg sm:text-xl text-amber-900 tracking-tight">
+                  {group.name.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+
+            <div className="min-w-0 text-white">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight truncate drop-shadow-sm">
+                {group.name}
+              </h1>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="text-xs text-white/85 font-medium flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5 text-white/70" />
+                  {memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}
+                </span>
+                {group.currency && (
+                  <span className="bg-white/20 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
+                    {group.currency}
+                  </span>
+                )}
+                {group.category && (
+                  <span className="bg-black/35 backdrop-blur-md border border-white/10 text-white/80 text-[10px] font-medium px-2 py-0.5 rounded-md capitalize">
+                    {group.category}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 2. Top Navigation Tabs: Gastos | Balances | Miembros | Actividad */}
@@ -1353,12 +1524,10 @@ export function GroupDetail({
                               {associatedExpense.category}
                             </span>
                           )}
-                          {log.changes && log.action === 'update' && (
-                            <span className="text-[11px] text-zinc-500">
-                              {Object.keys(log.changes).length} cambio(s)
-                            </span>
-                          )}
                         </div>
+
+                        {/* Detailed change items without raw counter */}
+                        {renderLogChanges(log)}
 
                         <p className="text-[10px] text-zinc-400 flex items-center gap-1 pt-0.5">
                           <Clock className="w-2.5 h-2.5" />

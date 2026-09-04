@@ -8,11 +8,16 @@
 - **Fast validation only**: If you need to verify imports or syntax, only use `lint_applet` (completes in < 2 seconds without building).
 - **Instant Turn Completion**: Once file edits are saved, END the turn immediately. Do not call any build tools, timers, or background checks. The dev server handles compilation automatically.
 
-## 2. Performance: Avoid Latency & Timeouts
+## 2. Performance & Token Economy: Avoid Latency, Timeouts & Token Floods
 
-- **Exclude build/dependency folders from searches**: Always exclude `.next`, `dist`, and `node_modules` (e.g. `--exclude-dir={.next,node_modules,dist}`).
+- **FORBIDDEN: Root directory (`.`) searches (`grep`, `find`, `ls -R`)**: NEVER run `grep ... .` or `find . ...` targeting the root directory without strictly pruning ignored folders. Scanning the root traverses `.next`, `node_modules`, `.git`, or build caches, dumping tens of thousands of characters of minified code, vendor scripts, and source maps into the token context.
+- **Source-directed searches only**: All searches (`grep`, `find`) must explicitly target application source directories:
+  `grep -rn "pattern" app/ components/ lib/ supabase/` or `find app components lib supabase ...`
+- **Prioritize native file reading tools**: Use `view_file` and `list_dir` instead of shell commands.
+- **When directory exclusions are required**: If you must exclude directories in shell tools, explicitly prune `node_modules`, `.next`, `dist`, and `.git` (e.g. in `grep`: `--exclude-dir=.next --exclude-dir=node_modules --exclude-dir=dist`, NEVER brace expansion `{...}`).
+- **No generic wildcards**: Avoid broad patterns like `*script*` or `*test*` that match hundreds of vendor files.
 - **Atomic single-pass edits**: Read the target file once and perform all edits in that same turn.
-- **No background command loops**: Never spawn long-running background tasks or timers to check build processes.
+- **No background command loops**: Never spawn background loops or timers waiting on compilation processes.
 
 ## 3. Routing Conventions (App Router)
 

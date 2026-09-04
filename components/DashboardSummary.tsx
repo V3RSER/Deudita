@@ -19,6 +19,7 @@ import {
   Sparkles,
   CheckCircle2,
   ChevronRight,
+  Inbox,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -26,13 +27,11 @@ interface DashboardSummaryProps {
   onOpenNewExpense: () => void;
   onOpenNewGroup: () => void;
   onOpenSettleModal: () => void;
-  onOpenScanReceiptModal: () => void;
 }
 
 export function DashboardSummary({
   onOpenNewExpense,
   onOpenSettleModal,
-  onOpenScanReceiptModal,
 }: DashboardSummaryProps) {
   const router = useRouter();
   const {
@@ -212,17 +211,17 @@ export function DashboardSummary({
           </div>
         </button>
 
-        <button
-          onClick={onOpenScanReceiptModal}
-          className="p-4 sm:p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px] cursor-pointer"
+        <Link
+          href="/drafts"
+          className="p-4 sm:p-5 bg-white hover:bg-zinc-50 rounded-2xl ring-1 ring-zinc-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-left flex flex-col justify-between space-y-3 group min-h-[90px]"
         >
           <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Sparkles className="w-5 h-5" />
+            <Inbox className="w-5 h-5" />
           </div>
           <div>
-            <p className="font-semibold text-zinc-900 text-sm">Escanear Ticket</p>
+            <p className="font-semibold text-zinc-900 text-sm">Tickets y Borradores</p>
           </div>
-        </button>
+        </Link>
 
         <Link
           href="/balances"

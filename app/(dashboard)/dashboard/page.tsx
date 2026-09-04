@@ -5,13 +5,11 @@ import { DashboardSummary } from '@/components/DashboardSummary';
 import { CreateGroupModal } from '@/components/CreateGroupModal';
 import { NewExpenseModal } from '@/components/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
-import { ScanReceiptModal } from '@/components/ScanReceiptModal';
 
 export default function DashboardPage() {
   const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
-  const [isScanReceiptOpen, setIsScanReceiptOpen] = useState(false);
 
   return (
     <>
@@ -19,7 +17,6 @@ export default function DashboardPage() {
         onOpenNewGroup={() => setIsNewGroupOpen(true)}
         onOpenNewExpense={() => setIsNewExpenseOpen(true)}
         onOpenSettleModal={() => setIsSettleModalOpen(true)}
-        onOpenScanReceiptModal={() => setIsScanReceiptOpen(true)}
       />
 
       <CreateGroupModal
@@ -35,11 +32,6 @@ export default function DashboardPage() {
       <SettleDebtModal
         isOpen={isSettleModalOpen}
         onClose={() => setIsSettleModalOpen(false)}
-      />
-
-      <ScanReceiptModal
-        isOpen={isScanReceiptOpen}
-        onClose={() => setIsScanReceiptOpen(false)}
       />
     </>
   );

@@ -436,13 +436,23 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
   const executeSave = async (amountToSave: number, splitsToSave: any[]) => {
     setIsSubmitting(true);
     try {
+      // Filtrar participantes con monto mayor a 0 (si tiene monto 0, se quita del gasto)
+      const activeSplits = (splitsToSave || []).filter(s => (s.amount_owed ?? 0) > 0.001);
+      if (activeSplits.length === 0) {
+        throw new Error('El gasto debe tener al menos un participante con monto mayor a 0.');
+      }
+
+      // Normalizar la distribución entre los participantes activos
+      const normalizedSplits = normalizeSplitsToTotal(amountToSave, activeSplits, paidById);
+      const effectiveSelectedMembers = normalizedSplits.map(s => s.user_id);
+
       const expenseTimeISO = combineDateAndTimeToISO(date, time);
 
       const splitConfig: ExpenseSplitConfig = {
         version: 1,
         splitType,
         mode,
-        selectedMembers,
+        selectedMembers: effectiveSelectedMembers,
         splits,
         items: mode === 'itemized' ? items : undefined,
         isItemizedVerticalView: mode === 'itemized' ? isItemizedVerticalView : undefined,
@@ -476,9 +486,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
       if (expenseToEdit) {
         saveLocalSplitConfig(expenseToEdit.id, splitConfig);
-        await updateExpense(expenseToEdit.id, payload, finalItems, splitsToSave);
+        await updateExpense(expenseToEdit.id, payload, finalItems, normalizedSplits);
       } else {
-        const created = await addExpense(payload, finalItems, splitsToSave);
+        const created = await addExpense(payload, finalItems, normalizedSplits);
         if (created && (created as any).id) {
           saveLocalSplitConfig((created as any).id, splitConfig);
         }
@@ -557,12 +567,18 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
       let sum = 0;
       selectedMembers.forEach(id => {
-        const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
+        const raw = splits[id]?.shares;
+        const val = raw !== undefined && String(raw).trim() !== ''
+          ? (parseFloat(String(raw).replace(/[^0-9.]/g, '')) || 0)
+          : 1;
         sum += val;
       });
-      if (sum <= 0) return setError('La suma de cuotas debe ser mayor a 0.');
+      if (sum <= 0) return setError('Al menos un participante debe tener cuotas mayores a 0.');
       const rawSplits = selectedMembers.map(id => {
-        const val = parseFloat(String(splits[id]?.shares ?? '1').replace(/[^0-9.]/g, '')) || 1;
+        const raw = splits[id]?.shares;
+        const val = raw !== undefined && String(raw).trim() !== ''
+          ? (parseFloat(String(raw).replace(/[^0-9.]/g, '')) || 0)
+          : 1;
         return { user_id: id, amount_owed: totalAmount * (val / sum) };
       });
       finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
@@ -570,6 +586,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
       const shares = calculateItemizedShares();
       const rawSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
       finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
+    }
+
+    const nonZeroSplits = finalSplits.filter(s => (s.amount_owed ?? 0) > 0.001);
+    if (nonZeroSplits.length === 0) {
+      return setError('El gasto debe tener al menos un participante con monto mayor a 0.');
     }
 
     await executeSave(totalAmount, finalSplits);
@@ -1373,8 +1394,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                         let liveAmountShares = 0;
                         if (splitType === 'shares') {
-                          const totalShares = selectedMembers.reduce((acc, memId) => acc + (parseFloat(splits[memId]?.shares) || 1), 0);
-                          const userShares = parseFloat(splits[p.id]?.shares) || 1;
+                          const totalShares = selectedMembers.reduce((acc, memId) => {
+                            const raw = splits[memId]?.shares;
+                            const val = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
+                            return acc + val;
+                          }, 0);
+                          const rawUser = splits[p.id]?.shares;
+                          const userShares = rawUser !== undefined && String(rawUser).trim() !== '' ? (parseFloat(rawUser) || 0) : 1;
                           liveAmountShares = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
                         }
 
@@ -1398,8 +1424,9 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const cur = parseFloat(splits[p.id]?.shares || '1') || 1;
-                                    setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: String(Math.max(1, cur - 1)) } });
+                                    const raw = splits[p.id]?.shares;
+                                    const cur = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
+                                    setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: String(Math.max(0, cur - 1)) } });
                                   }}
                                   className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs"
                                 >
@@ -1407,16 +1434,17 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                 </button>
                                 <input
                                   type="number"
-                                  min="1"
+                                  min="0"
                                   placeholder="1"
-                                  value={splits[p.id]?.shares || '1'}
+                                  value={splits[p.id]?.shares !== undefined ? splits[p.id].shares : '1'}
                                   onChange={e => setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: e.target.value } })}
                                   className="w-9 h-6 px-1 bg-zinc-50 border border-zinc-200 rounded-lg text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const cur = parseFloat(splits[p.id]?.shares || '1') || 1;
+                                    const raw = splits[p.id]?.shares;
+                                    const cur = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
                                     setSplits({ ...splits, [p.id]: { ...splits[p.id], shares: String(cur + 1) } });
                                   }}
                                   className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs"

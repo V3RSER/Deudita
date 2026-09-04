@@ -16,7 +16,7 @@ export async function GET() {
       .select('group_id')
       .eq('user_id', user.id);
 
-    console.log('[API GET /api/groups] memberships select result:', { data: memberships, error: memberErr });
+    console.log(`[API GET /api/groups] memberships select result: ${JSON.stringify({ data: memberships, error: memberErr })}`);
 
     if (memberErr) {
       console.error('[API GET /api/groups] Error selecting group_members:', memberErr);
@@ -36,7 +36,7 @@ export async function GET() {
       .in('id', groupIds)
       .order('created_at', { ascending: false });
 
-    console.log('[API GET /api/groups] groups select result:', { data: groups, error: groupsErr });
+    console.log(`[API GET /api/groups] groups select result: ${JSON.stringify({ data: groups, error: groupsErr })}`);
 
     if (groupsErr) {
       console.error('[API GET /api/groups] Error selecting groups:', groupsErr);

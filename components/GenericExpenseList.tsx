@@ -562,6 +562,8 @@ export function GenericExpenseList({
                             };
                           });
 
+                          const isItemizedExpense = Boolean(hasItems || splitConfig?.mode === 'itemized' || splitConfig?.splitType === 'itemized');
+
                           if (hasSecondaryDetails) {
                             return (
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
@@ -571,6 +573,7 @@ export function GenericExpenseList({
                                   currency={currency}
                                   payerProfile={paidBy}
                                   participants={participantSummaryList}
+                                  defaultExpanded={isItemizedExpense}
                                 />
 
                                 {/* Items, Notes and Receipt (right col) */}
@@ -662,6 +665,7 @@ export function GenericExpenseList({
                               currency={currency}
                               payerProfile={paidBy}
                               participants={participantSummaryList}
+                              defaultExpanded={isItemizedExpense}
                             />
                           );
                         })()}
@@ -849,73 +853,97 @@ export function GenericExpenseList({
                   {/* EXPANDED PAYMENT CONTENT */}
                   {isExpanded && (
                     <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
-                      {/* Transfer Summary Card */}
-                      <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                        <div className="p-3.5 sm:p-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            {/* Payer Side */}
-                            <div className="flex items-center space-x-3 p-2.5 rounded-xl bg-zinc-50 border border-zinc-100">
-                              <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 bg-emerald-100 flex items-center justify-center border border-emerald-200">
+                      {/* Transfer Flow Graphic: Matching SettleDebtModal style */}
+                      <div className="bg-zinc-50/90 border border-zinc-200/90 rounded-2xl p-3 sm:p-3.5 relative shadow-2xs">
+                        <div className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-2.5">
+                          Flujo del dinero
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                          {/* Payer Card with Round Avatar */}
+                          <div className="flex-1 min-w-0">
+                            <div className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
+                              <div className="relative shrink-0">
                                 {payer?.avatar_url ? (
                                   <Image
                                     src={payer.avatar_url}
                                     alt={payer.full_name}
-                                    fill
-                                    className="object-cover"
+                                    width={36}
+                                    height={36}
+                                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
                                     unoptimized
                                     referrerPolicy="no-referrer"
                                   />
                                 ) : (
-                                  <User className="w-5 h-5 text-emerald-700" />
+                                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                                    {payer?.full_name?.charAt(0).toUpperCase() || 'U'}
+                                  </div>
                                 )}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
-                                  Pagó
-                                </span>
-                                <span className="text-xs font-bold text-zinc-900 truncate block">
-                                  {payer ? payer.full_name : 'Usuario'}
+                                <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                                  PAGA
                                 </span>
                               </div>
-                            </div>
 
-                            {/* Center Amount Transfer Display */}
-                            <div className="flex flex-col items-center justify-center text-center p-2">
-                              <div className="inline-flex items-center space-x-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/80 mb-1">
-                                <span>Monto pagado</span>
-                                <ArrowRight className="w-3.5 h-3.5 text-emerald-600" />
+                              <div className="min-w-0 flex-1 text-left">
+                                <div className="text-xs font-extrabold text-zinc-900 truncate">
+                                  {payer?.full_name?.split(' ')[0] || 'Pagador'}
+                                </div>
+                                <div className="text-[10px] text-zinc-400 font-medium truncate">
+                                  {payer?.full_name || 'Integrante'}
+                                </div>
                               </div>
-                              <span className="text-lg sm:text-xl font-black text-zinc-900 tracking-tight">
-                                {formatCurrency(payment.amount, currency)}
-                              </span>
                             </div>
+                          </div>
 
-                            {/* Receiver Side */}
-                            <div className="flex items-center space-x-3 p-2.5 rounded-xl bg-zinc-50 border border-zinc-100">
-                              <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 bg-blue-100 flex items-center justify-center border border-blue-200">
+                          {/* Center Flow Connector */}
+                          <div className="shrink-0 flex items-center justify-center px-1">
+                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shadow-2xs">
+                              <ArrowRight className="w-4 h-4 text-emerald-600" />
+                            </div>
+                          </div>
+
+                          {/* Receiver Card with Round Avatar */}
+                          <div className="flex-1 min-w-0">
+                            <div className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
+                              <div className="relative shrink-0">
                                 {receiver?.avatar_url ? (
                                   <Image
                                     src={receiver.avatar_url}
                                     alt={receiver.full_name}
-                                    fill
-                                    className="object-cover"
+                                    width={36}
+                                    height={36}
+                                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
                                     unoptimized
                                     referrerPolicy="no-referrer"
                                   />
                                 ) : (
-                                  <User className="w-5 h-5 text-blue-700" />
+                                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                                    {receiver?.full_name?.charAt(0).toUpperCase() || 'U'}
+                                  </div>
                                 )}
+                                <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                                  RECIBE
+                                </span>
                               </div>
-                              <div className="min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">
-                                  Recibió
-                                </span>
-                                <span className="text-xs font-bold text-zinc-900 truncate block">
-                                  {receiver ? receiver.full_name : 'Usuario'}
-                                </span>
+
+                              <div className="min-w-0 flex-1 text-left">
+                                <div className="text-xs font-extrabold text-zinc-900 truncate">
+                                  {receiver?.full_name?.split(' ')[0] || 'Receptor'}
+                                </div>
+                                <div className="text-[10px] text-zinc-400 font-medium truncate">
+                                  {receiver?.full_name || 'Integrante'}
+                                </div>
                               </div>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Central Amount Stage inside flow */}
+                        <div className="mt-3 pt-2.5 border-t border-dashed border-zinc-200 flex items-center justify-between px-1">
+                          <span className="text-[11px] font-semibold text-zinc-500">Monto transferido</span>
+                          <span className="text-sm sm:text-base font-black text-zinc-900 tracking-tight">
+                            {formatCurrency(payment.amount, currency)}
+                          </span>
                         </div>
                       </div>
 

@@ -17,6 +17,7 @@ export async function PATCH(req: Request) {
       timezone,
       currency,
       currency_symbol,
+      country,
       payment_instructions,
       onboarding_completed,
       managed_user_ids,
@@ -28,6 +29,7 @@ export async function PATCH(req: Request) {
     if (timezone !== undefined) updates.timezone = timezone;
     if (currency !== undefined) updates.currency = currency;
     if (currency_symbol !== undefined) updates.currency_symbol = currency_symbol;
+    if (country !== undefined) updates.country = country;
     if (payment_instructions !== undefined) updates.payment_instructions = payment_instructions;
     if (onboarding_completed !== undefined) updates.onboarding_completed = Boolean(onboarding_completed);
     if (managed_user_ids !== undefined) updates.managed_user_ids = Array.isArray(managed_user_ids) ? managed_user_ids : [];
@@ -42,13 +44,14 @@ export async function PATCH(req: Request) {
     if (err1) {
       // If error is about custom column not existing in schema cache, retry without non-standard columns
       if (
+        err1.message?.includes('country') ||
         err1.message?.includes('payment_instructions') ||
         err1.message?.includes('onboarding_completed') ||
         err1.message?.includes('managed_user_ids') ||
         err1.message?.includes('schema cache') ||
         err1.message?.includes('column')
       ) {
-        const { payment_instructions: _, onboarding_completed: __, managed_user_ids: ___, ...safeUpdates } = updates;
+        const { country: _, payment_instructions: __, onboarding_completed: ___, managed_user_ids: ____, ...safeUpdates } = updates;
         if (Object.keys(safeUpdates).length > 0) {
           const { error: err2 } = await supabase
             .from('profiles')
@@ -70,6 +73,7 @@ export async function PATCH(req: Request) {
 
     // 2. Also update user_metadata in auth so custom data and onboarding status are safely preserved
     if (
+      country !== undefined ||
       payment_instructions !== undefined ||
       full_name !== undefined ||
       avatar_url !== undefined ||
@@ -79,6 +83,7 @@ export async function PATCH(req: Request) {
       try {
         await supabase.auth.updateUser({
           data: {
+            ...(country !== undefined ? { country } : {}),
             ...(full_name !== undefined ? { full_name } : {}),
             ...(avatar_url !== undefined ? { avatar_url } : {}),
             ...(payment_instructions !== undefined ? { payment_instructions } : {}),

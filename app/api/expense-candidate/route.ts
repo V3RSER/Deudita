@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,18 +16,24 @@ function getDirectClient() {
 /**
  * POST /api/expense-candidate
  * Ingesta un candidato a gasto desde el Google Apps Script del usuario.
- * Recibe Authorization: Bearer <webhook_token>
+ * Recibe Authorization: Bearer <webhook_token> o sesión de usuario activa.
  */
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
     const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
+    let authenticatedUserId: string | null = null;
     if (!bearerToken) {
-      return NextResponse.json(
-        { error: 'Encabezado de autorización Bearer <webhook_token> requerido' },
-        { status: 401 }
-      );
+      const userSupabase = await createClient();
+      const { data: { user } } = await userSupabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Encabezado de autorización Bearer <webhook_token> o sesión de usuario activa requerida' },
+          { status: 401 }
+        );
+      }
+      authenticatedUserId = user.id;
     }
 
     const body = await req.json().catch(() => ({}));
@@ -71,6 +78,45 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getDirectClient();
+
+    // If authenticated via user session (from in-app tester simulation)
+    if (authenticatedUserId) {
+      const rawSnippet = `${entity || 'Simulación'}: ${merchant || 'Gasto'} por ${finalCurrency} ${numericAmount}`;
+
+      const { data: insertedDraft, error: insertErr } = await db
+        .from('expense_drafts')
+        .insert({
+          user_id: authenticatedUserId,
+          source_type: 'gmail_ingest',
+          status: 'pending',
+          detected_amount: numericAmount,
+          currency: finalCurrency,
+          detected_merchant: merchant || null,
+          concept: merchant || entity || 'Gasto detectado',
+          entity: entity || null,
+          source_account: finalSourceAccount,
+          transaction_date: date || new Date().toISOString().split('T')[0],
+          transaction_time: time || null,
+          email_template_id: finalTemplateId,
+          gmail_message_id: finalMessageId,
+          raw_snippet: rawSnippet,
+          received_at: finalReceivedAt,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        console.error('[API /api/expense-candidate] Insert error for user session:', insertErr);
+        return NextResponse.json({ error: insertErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        candidate_id: insertedDraft.id,
+        status: insertedDraft.status,
+        message: 'Borrador creado exitosamente desde la simulación',
+      });
+    }
 
     // 1. Intentar primero vía RPC segura de Postgres (SECURITY DEFINER)
     try {

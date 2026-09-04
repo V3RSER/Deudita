@@ -5,7 +5,7 @@ import { UnifiedDraftsAndTemplatesView } from '@/components/UnifiedDraftsAndTemp
 import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
 import { ExpenseDraft } from '@/lib/types';
 
-export default function DraftsPage() {
+export default function EmailTemplatesPage() {
   const [isConfirmDraftOpen, setIsConfirmDraftOpen] = useState(false);
   const [selectedDraft, setSelectedDraft] = useState<ExpenseDraft | null>(null);
 
@@ -17,7 +17,7 @@ export default function DraftsPage() {
   return (
     <>
       <UnifiedDraftsAndTemplatesView
-        initialTab="drafts"
+        initialTab="catalog"
         onOpenConfirmDraft={handleOpenConfirmDraft}
       />
 

@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useExpense } from '@/lib/expense-context';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
-import { GmailIntegrationModal } from '@/components/GmailIntegrationModal';
 import {
   X,
   Camera,
@@ -42,6 +42,14 @@ export const COMMON_TIMEZONES = [
   { value: 'America/Santiago', label: 'América/Santiago (GMT-3)' },
   { value: 'America/Buenos_Aires', label: 'América/Buenos Aires (GMT-3)' },
   { value: 'America/Caracas', label: 'América/Caracas (GMT-4)' },
+  { value: 'America/Guayaquil', label: 'América/Guayaquil (GMT-5)' },
+  { value: 'America/Montevideo', label: 'América/Montevideo (GMT-3)' },
+  { value: 'America/Asuncion', label: 'América/Asunción (GMT-3)' },
+  { value: 'America/La_Paz', label: 'América/La Paz (GMT-4)' },
+  { value: 'America/Costa_Rica', label: 'América/Costa Rica (GMT-6)' },
+  { value: 'America/Panama', label: 'América/Panamá (GMT-5)' },
+  { value: 'America/Santo_Domingo', label: 'América/Santo Domingo (GMT-4)' },
+  { value: 'America/Guatemala', label: 'América/Guatemala (GMT-6)' },
   { value: 'America/New_York', label: 'América/Nueva York (GMT-5)' },
   { value: 'Europe/Madrid', label: 'Europa/Madrid (GMT+1)' },
   { value: 'UTC', label: 'Tiempo Universal Coordinado (UTC)' },
@@ -55,6 +63,39 @@ export const CURRENCY_OPTIONS = [
   { currency: 'USD', symbol: '$', label: 'USD - Dólar Estadounidense ($)' },
   { currency: 'EUR', symbol: '€', label: 'EUR - Euro (€)' },
   { currency: 'PEN', symbol: 'S/', label: 'PEN - Sol Peruano (S/)' },
+  { currency: 'UYU', symbol: '$', label: 'UYU - Peso Uruguayo ($)' },
+  { currency: 'PYG', symbol: 'Gs', label: 'PYG - Guaraní Paraguayo (Gs)' },
+  { currency: 'BOB', symbol: 'Bs', label: 'BOB - Boliviano (Bs)' },
+  { currency: 'CRC', symbol: '₡', label: 'CRC - Colón Costarricense (₡)' },
+  { currency: 'DOP', symbol: 'RD$', label: 'DOP - Peso Dominicano (RD$)' },
+  { currency: 'GTQ', symbol: 'Q', label: 'GTQ - Quetzal Guatemalteco (Q)' },
+];
+
+export interface CountryConfig {
+  code: string;
+  name: string;
+  flag: string;
+  defaultTimezone: string;
+  defaultCurrency: string;
+}
+
+export const COUNTRIES: CountryConfig[] = [
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', defaultTimezone: 'America/Bogota', defaultCurrency: 'COP' },
+  { code: 'MX', name: 'México', flag: '🇲🇽', defaultTimezone: 'America/Mexico_City', defaultCurrency: 'MXN' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱', defaultTimezone: 'America/Santiago', defaultCurrency: 'CLP' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', defaultTimezone: 'America/Buenos_Aires', defaultCurrency: 'ARS' },
+  { code: 'PE', name: 'Perú', flag: '🇵🇪', defaultTimezone: 'America/Lima', defaultCurrency: 'PEN' },
+  { code: 'ES', name: 'España', flag: '🇪🇸', defaultTimezone: 'Europe/Madrid', defaultCurrency: 'EUR' },
+  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', defaultTimezone: 'America/New_York', defaultCurrency: 'USD' },
+  { code: 'EC', name: 'Ecuador', flag: '🇪🇨', defaultTimezone: 'America/Guayaquil', defaultCurrency: 'USD' },
+  { code: 'VE', name: 'Venezuela', flag: '🇻🇪', defaultTimezone: 'America/Caracas', defaultCurrency: 'USD' },
+  { code: 'UY', name: 'Uruguay', flag: '🇺🇾', defaultTimezone: 'America/Montevideo', defaultCurrency: 'UYU' },
+  { code: 'PY', name: 'Paraguay', flag: '🇵🇾', defaultTimezone: 'America/Asuncion', defaultCurrency: 'PYG' },
+  { code: 'BO', name: 'Bolivia', flag: '🇧🇴', defaultTimezone: 'America/La_Paz', defaultCurrency: 'BOB' },
+  { code: 'CR', name: 'Costa Rica', flag: '🇨🇷', defaultTimezone: 'America/Costa_Rica', defaultCurrency: 'CRC' },
+  { code: 'PA', name: 'Panamá', flag: '🇵🇦', defaultTimezone: 'America/Panama', defaultCurrency: 'USD' },
+  { code: 'DO', name: 'República Dominicana', flag: '🇩🇴', defaultTimezone: 'America/Santo_Domingo', defaultCurrency: 'DOP' },
+  { code: 'GT', name: 'Guatemala', flag: '🇬🇹', defaultTimezone: 'America/Guatemala', defaultCurrency: 'GTQ' },
 ];
 
 export function ProfileSettingsModal({
@@ -63,9 +104,11 @@ export function ProfileSettingsModal({
   isOnboarding = false,
   onCompleted,
 }: ProfileSettingsModalProps) {
+  const router = useRouter();
   const { currentProfile, updateProfile } = useExpense();
 
   const [fullName, setFullName] = useState(currentProfile?.full_name ?? '');
+  const [country, setCountry] = useState(currentProfile?.country ?? 'CO');
   const [timezone, setTimezone] = useState(currentProfile?.timezone ?? 'America/Bogota');
   const [selectedCurrency, setSelectedCurrency] = useState(currentProfile?.currency ?? 'COP');
   const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions ?? '');
@@ -79,7 +122,6 @@ export function ProfileSettingsModal({
     last_sync_at?: string | null;
   } | null>(null);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
-  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -111,6 +153,8 @@ export function ProfileSettingsModal({
     if (!prevIsOpenRef.current) {
       prevIsOpenRef.current = true;
       setFullName(currentProfile.full_name ?? '');
+      const userCountry = currentProfile.country ?? 'CO';
+      setCountry(userCountry);
       setTimezone(currentProfile.timezone ?? 'America/Bogota');
       setSelectedCurrency(currentProfile.currency ?? 'COP');
       setPaymentInstructions(currentProfile.payment_instructions ?? '');
@@ -122,6 +166,15 @@ export function ProfileSettingsModal({
       fetchGmailStatus();
     }
   }, [isOpen, currentProfile]);
+
+  const handleCountryChange = (newCountryCode: string) => {
+    setCountry(newCountryCode);
+    const targetCountry = COUNTRIES.find((c) => c.code === newCountryCode);
+    if (targetCountry) {
+      setTimezone(targetCountry.defaultTimezone);
+      setSelectedCurrency(targetCountry.defaultCurrency);
+    }
+  };
 
   const handleConnectGmail = async () => {
     setIsConnectingGmail(true);
@@ -227,6 +280,7 @@ export function ProfileSettingsModal({
 
       await updateProfile({
         full_name: trimmedName,
+        country,
         timezone,
         currency: currObj.currency,
         currency_symbol: currObj.symbol,
@@ -435,7 +489,36 @@ export function ProfileSettingsModal({
             </div>
 
             <div className="bg-zinc-50/70 border border-zinc-200/90 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Country Selection */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="profile-country-select" className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-zinc-400" />
+                    <span>País de origen</span>
+                  </label>
+                  {isOnboarding && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded">
+                      Configura tu zona y moneda
+                    </span>
+                  )}
+                </div>
+                <CustomSelect
+                  id="profile-country-select"
+                  value={country}
+                  onChange={(val) => handleCountryChange(val)}
+                  options={COUNTRIES.map((c) => ({
+                    value: c.code,
+                    label: `${c.flag} ${c.name}`,
+                  }))}
+                  size="sm"
+                  searchable
+                />
+                <p className="text-[11px] text-zinc-500">
+                  Asigna por defecto tu zona horaria y moneda, adaptando los correos y transacciones a tu horario local.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1 border-t border-zinc-200/60">
                 <div className="space-y-1.5">
                   <label htmlFor="profile-timezone-select" className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
                     <Globe className="w-3 h-3 text-zinc-400" />
@@ -570,7 +653,10 @@ export function ProfileSettingsModal({
 
                   <button
                     type="button"
-                    onClick={() => setIsTemplatesModalOpen(true)}
+                    onClick={() => {
+                      onClose();
+                      router.push('/drafts');
+                    }}
                     className="bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer ml-auto"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-500" />
@@ -616,16 +702,6 @@ export function ProfileSettingsModal({
           </button>
         </div>
       </div>
-
-      {/* Gmail Integration & Bank Formats Modal */}
-      <GmailIntegrationModal
-        isOpen={isTemplatesModalOpen}
-        onClose={() => {
-          setIsTemplatesModalOpen(false);
-          fetchGmailStatus();
-        }}
-        initialTab="templates"
-      />
     </div>
   );
 }

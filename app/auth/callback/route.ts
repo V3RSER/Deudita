@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser();
@@ -40,21 +40,36 @@ export async function GET(request: Request) {
         }
       }
 
-      // If user joined a group from an invite link, direct them straight to their new group
-      if (joinedGroupId) {
-        const response = NextResponse.redirect(`${origin}/groups/${joinedGroupId}`);
-        response.cookies.delete('deudita_invite_token');
-        return response;
-      }
-
+      let redirectUrl = `${origin}/groups`;
       if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('/join')) {
-        const response = NextResponse.redirect(`${origin}${returnTo}`);
-        response.cookies.delete('deudita_invite_token');
-        return response;
+        redirectUrl = `${origin}${returnTo}`;
+      } else if (joinedGroupId) {
+        redirectUrl = `${origin}/groups/${joinedGroupId}`;
       }
 
-      const response = NextResponse.redirect(`${origin}/groups`);
+      const response = NextResponse.redirect(redirectUrl);
       response.cookies.delete('deudita_invite_token');
+
+      if (sessionData?.session?.provider_token) {
+        response.cookies.set('google_provider_token', sessionData.session.provider_token, {
+          path: '/',
+          httpOnly: false,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 3600 * 24 * 7,
+        });
+      }
+
+      if (sessionData?.session?.provider_refresh_token) {
+        response.cookies.set('google_refresh_token', sessionData.session.provider_refresh_token, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 3600 * 24 * 30,
+        });
+      }
+
       return response;
     }
   }

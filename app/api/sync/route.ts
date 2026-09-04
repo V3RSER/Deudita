@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
       .select('group_id')
       .eq('user_id', user.id);
 
-    console.log('[API /api/sync] group_members select result for user', user.id, ':', { data: userMemberships, error: memSelectErr });
+    console.log(`[API /api/sync] group_members select result for user ${user.id}: ${JSON.stringify({ data: userMemberships, error: memSelectErr })}`);
 
     const userGroupIds = Array.from(new Set((userMemberships || []).map((m) => m.group_id)));
 
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
         .in('id', userGroupIds)
         .order('created_at', { ascending: false });
 
-      console.log('[API /api/sync] groups select result:', { data: groupData, error: groupSelectErr });
+      console.log(`[API /api/sync] groups select result: ${JSON.stringify({ data: groupData, error: groupSelectErr })}`);
       if (groupSelectErr) {
         console.error('[API /api/sync] Error selecting groups:', groupSelectErr);
       }

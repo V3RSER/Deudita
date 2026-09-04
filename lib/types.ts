@@ -21,6 +21,7 @@ export interface Profile {
   timezone?: string;
   currency?: string;
   currency_symbol?: string;
+  country?: string;
   payment_instructions?: string;
   onboarding_completed?: boolean;
   managed_user_ids?: string[];
@@ -189,13 +190,14 @@ export interface ExpenseDraft {
   detected_merchant: string;
   detected_date: string;
   confidence: number;
-  status: 'pending' | 'confirmed' | 'discarded';
+  status: 'pending' | 'confirmed' | 'discarded' | 'dismissed';
   confirmed_expense_id?: string;
   template_id?: string | null;
-  currency?: string;
+  currency?: string | null;
   entity?: string | null;
   source_account?: string | null;
   detected_time?: string | null;
+  concept?: string | null;
   created_at: string;
   extracted_items?: Array<{ description: string; amount: number }>;
 }

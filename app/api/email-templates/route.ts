@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
@@ -128,16 +129,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    // Verificar que el usuario tenga autorización de tester con Google
+    const cookieStore = await cookies();
+    const token =
+      req.headers.get('x-google-token') ||
+      cookieStore.get('google_provider_token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Acceso restringido: Solo los testers autorizados con Google pueden registrar o modificar plantillas en la base de datos.' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const {
       name,
       sender_pattern,
       subject_pattern,
+      match_pattern,
       amount_regex,
       merchant_regex,
       date_regex,
       date_format,
       entity_name,
+      entity_id,
+      expense_type_id,
       default_currency = 'COP',
       currency_regex,
       source_account_regex,
@@ -156,11 +173,14 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       sender_pattern: sender_pattern?.trim() || null,
       subject_pattern: subject_pattern?.trim() || null,
+      match_pattern: match_pattern?.trim() || null,
       amount_regex: amount_regex.trim(),
       merchant_regex: merchant_regex?.trim() || null,
       date_regex: date_regex?.trim() || null,
       date_format: date_format?.trim() || 'DD/MM/YYYY',
       entity_name: entity_name?.trim() || null,
+      entity_id: entity_id?.trim() || null,
+      expense_type_id: expense_type_id?.trim() || null,
       default_currency: default_currency?.trim() || 'COP',
       currency_regex: currency_regex?.trim() || null,
       source_account_regex: source_account_regex?.trim() || null,

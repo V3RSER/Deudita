@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import {
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
   SplitSquareHorizontal,
   Menu,
   X,
+  Sparkles,
 } from 'lucide-react';
 
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -201,6 +203,15 @@ export function Navbar({
                     </div>
 
                     <div className="p-1.5 space-y-0.5">
+                      <Link
+                        href="/drafts"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
+                      >
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                        <span>Tickets y Plantillas</span>
+                      </Link>
+
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
