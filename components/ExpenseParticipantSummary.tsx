@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
 import { ChevronDown, ChevronUp, Users, ArrowRightLeft } from 'lucide-react';
+import { UserAvatar } from '@/components/UserAvatar';
 
 export interface ParticipantItemBreakdown {
   desc: string;
@@ -165,22 +166,11 @@ export function ExpenseParticipantSummary({
               >
                 {/* Avatar and Name */}
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center border shadow-2xs ${avatarColorStyle}`}>
-                    {profile?.avatar_url ? (
-                      <Image
-                        src={profile.avatar_url}
-                        alt={profile.full_name || 'Avatar'}
-                        width={32}
-                        height={32}
-                        className="w-full h-full object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <span className="text-[10px] sm:text-[11px] font-extrabold tracking-tight">
-                        {initials}
-                      </span>
-                    )}
-                  </div>
+                  <UserAvatar
+                    profile={profile}
+                    name={profile?.full_name}
+                    size="sm"
+                  />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -292,22 +282,11 @@ export function ExpenseMoneyFlow({
       {/* Payer Row (Total pagado) */}
       <div className="p-3 border-b border-zinc-100 bg-zinc-50/40 flex items-center justify-between gap-2">
         <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-          <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center border shadow-2xs ${payerAvatarColor}`}>
-            {payerProfile?.avatar_url ? (
-              <Image
-                src={payerProfile.avatar_url}
-                alt={payerProfile.full_name || 'Pagador'}
-                width={32}
-                height={32}
-                className="w-full h-full object-cover"
-                unoptimized
-              />
-            ) : (
-              <span className="text-[11px] font-extrabold tracking-tight">
-                {payerInitials}
-              </span>
-            )}
-          </div>
+          <UserAvatar
+            profile={payerProfile}
+            name={payerProfile?.full_name}
+            size="sm"
+          />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold text-zinc-900 truncate">
               {payerProfile?.full_name || (payerProfile?.email || 'Usuario').split('@')[0]}
@@ -355,22 +334,11 @@ export function ExpenseMoneyFlow({
                 >
                   {/* Avatar and Name */}
                   <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center border shadow-2xs ${avatarColorStyle}`}>
-                      {profile?.avatar_url ? (
-                        <Image
-                          src={profile.avatar_url}
-                          alt={profile.full_name || 'Avatar'}
-                          width={32}
-                          height={32}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <span className="text-[10px] sm:text-[11px] font-extrabold tracking-tight">
-                          {initials}
-                        </span>
-                      )}
-                    </div>
+                    <UserAvatar
+                      profile={profile}
+                      name={profile?.full_name}
+                      size="sm"
+                    />
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
