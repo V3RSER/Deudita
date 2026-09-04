@@ -16,6 +16,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { CustomSelect, SelectItem } from '@/components/ui/CustomSelect';
+import { getCategoryConfig } from '@/lib/expense-category-utils';
 
 export interface TransactionFilterState {
   scope: 'all' | 'mine';
@@ -319,8 +320,28 @@ export function TransactionFilterBar({
                   value={filters.category}
                   onChange={(val) => onFilterChange({ category: val })}
                   options={[
-                    { value: 'all', label: 'Todas las categorías' },
-                    ...categories.map((cat) => ({ value: cat, label: cat })),
+                    {
+                      value: 'all',
+                      label: 'Todas las categorías',
+                      icon: (
+                        <div className="w-5 h-5 rounded-full bg-zinc-100 text-zinc-600 flex items-center justify-center shrink-0">
+                          <Tag className="w-3 h-3" />
+                        </div>
+                      ),
+                    },
+                    ...categories.map((cat) => {
+                      const config = getCategoryConfig(cat);
+                      const CatIcon = config.icon;
+                      return {
+                        value: cat,
+                        label: cat,
+                        icon: (
+                          <div className={`w-5 h-5 rounded-full ${config.bgClass} ${config.textClass} flex items-center justify-center shrink-0`}>
+                            <CatIcon className="w-3 h-3" />
+                          </div>
+                        ),
+                      };
+                    }),
                   ]}
                   size="sm"
                 />

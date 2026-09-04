@@ -6,6 +6,7 @@ import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
 import { formatCurrency, distributeAmountEqually } from '@/lib/balance-utils';
 import { X, MailCheck, CheckCircle2, Loader2, Trash2, Edit3, DollarSign, Calendar, Users } from 'lucide-react';
+import Image from 'next/image';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface ConfirmDraftModalProps {
@@ -277,7 +278,21 @@ export function ConfirmDraftModal({
               onChange={(val) => setPaidBy(val)}
               options={memberProfiles.map((p) => ({
                 value: p.id,
-                label: p.full_name,
+                label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+                icon: p.avatar_url ? (
+                  <Image
+                    src={p.avatar_url}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                    {(p.full_name || 'U').charAt(0).toUpperCase()}
+                  </div>
+                ),
               }))}
               size="md"
               placeholder="Seleccionar pagador..."

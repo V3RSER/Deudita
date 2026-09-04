@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { TransactionFilterState } from '@/components/TransactionFilterBar';
 import { DatePreset, DateFilterMode } from '@/lib/transaction-date-utils';
+import { getCategoryConfig } from '@/lib/expense-category-utils';
 
 interface GroupExpenseFilterSheetProps {
   isOpen: boolean;
@@ -267,7 +268,19 @@ function GroupExpenseFilterSheetModal({
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <Tag className="w-5 h-5 text-zinc-600 shrink-0" />
+                {stagedFilters.category !== 'all' ? (
+                  (() => {
+                    const catConfig = getCategoryConfig(stagedFilters.category);
+                    const CatIcon = catConfig.icon;
+                    return (
+                      <div className={`w-5 h-5 rounded-full ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}>
+                        <CatIcon className="w-3 h-3" />
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <Tag className="w-5 h-5 text-zinc-600 shrink-0" />
+                )}
                 <div className="min-w-0">
                   <span className="block text-[11px] font-medium text-zinc-400 leading-tight">
                     Categoría
@@ -297,7 +310,12 @@ function GroupExpenseFilterSheetModal({
                         : 'text-zinc-700 hover:bg-zinc-100/80'
                     }`}
                   >
-                    <span className="truncate">Todas las categorías</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-zinc-100 text-zinc-600 flex items-center justify-center shrink-0">
+                        <Tag className="w-3 h-3" />
+                      </div>
+                      <span className="truncate">Todas las categorías</span>
+                    </div>
                     {stagedFilters.category === 'all' && (
                       <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 ml-2" />
                     )}
@@ -305,6 +323,8 @@ function GroupExpenseFilterSheetModal({
 
                   {categories.map((cat) => {
                     const isSelected = stagedFilters.category === cat;
+                    const catConfig = getCategoryConfig(cat);
+                    const CatIcon = catConfig.icon;
                     return (
                       <button
                         key={cat}
@@ -316,7 +336,12 @@ function GroupExpenseFilterSheetModal({
                             : 'text-zinc-700 hover:bg-zinc-100/80'
                         }`}
                       >
-                        <span className="truncate">{cat}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`w-5 h-5 rounded-full ${catConfig.bgClass} ${catConfig.textClass} flex items-center justify-center shrink-0`}>
+                            <CatIcon className="w-3 h-3" />
+                          </div>
+                          <span className="truncate">{cat}</span>
+                        </div>
                         {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 ml-2" />}
                       </button>
                     );

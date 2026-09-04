@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
@@ -23,7 +23,8 @@ import {
   Layers,
   Image as ImageIcon,
   Calendar,
-  Clock
+  Clock,
+  ChevronDown
 } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import Image from 'next/image';
@@ -183,6 +184,27 @@ export function SettleDebtModal({
     setPayerId(receiverId);
     setReceiverId(temp);
   };
+
+  const memberOptions = useMemo(() => {
+    return profiles.map((p) => ({
+      value: p.id,
+      label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
+      icon: p.avatar_url ? (
+        <Image
+          src={p.avatar_url}
+          alt={p.full_name}
+          width={24}
+          height={24}
+          className="w-6 h-6 rounded-full object-cover ring-1 ring-zinc-200 shrink-0"
+          unoptimized
+        />
+      ) : (
+        <div className="w-6 h-6 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+          {p.full_name?.charAt(0).toUpperCase() || 'U'}
+        </div>
+      ),
+    }));
+  }, [profiles, currentProfile?.id]);
 
   if (!isOpen) return null;
 
@@ -410,25 +432,61 @@ export function SettleDebtModal({
               Flujo del dinero
             </div>
 
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <div className="space-y-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 pl-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                  Paga
-                </span>
+            <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+              {/* Payer Custom Card with Round Avatar */}
+              <div className="flex-1 min-w-0">
                 <CustomSelect
                   value={payerId}
                   onChange={(val) => setPayerId(val)}
-                  options={profiles.map((p) => ({
-                    value: p.id,
-                    label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
-                  }))}
-                  size="sm"
+                  options={memberOptions}
+                  ariaLabel="Seleccionar pagador"
+                  renderTrigger={(_, isOpen) => (
+                    <div className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${
+                      isOpen
+                        ? 'border-rose-400 ring-2 ring-rose-500/20 shadow-xs'
+                        : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
+                    }`}>
+                      <div className="relative shrink-0">
+                        {payerProfile?.avatar_url ? (
+                          <Image
+                            src={payerProfile.avatar_url}
+                            alt="Payer"
+                            width={36}
+                            height={36}
+                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-rose-200 transition-all"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                            {payerProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                          PAGA
+                        </span>
+                      </div>
+
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="text-xs font-extrabold text-zinc-900 truncate">
+                          {payerProfile?.full_name?.split(' ')[0] || 'Pagador'}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 font-medium truncate">
+                          {payerProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                        </div>
+                      </div>
+
+                      <ChevronDown
+                        className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
+                          isOpen ? 'rotate-180 text-rose-600' : ''
+                        }`}
+                      />
+                    </div>
+                  )}
                 />
               </div>
 
               {/* Swap Button */}
-              <div className="pt-4 shrink-0">
+              <div className="shrink-0">
                 <button
                   type="button"
                   onClick={handleSwapPayerReceiver}
@@ -440,19 +498,55 @@ export function SettleDebtModal({
                 </button>
               </div>
 
-              <div className="space-y-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 pl-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  Recibe
-                </span>
+              {/* Receiver Custom Card with Round Avatar */}
+              <div className="flex-1 min-w-0">
                 <CustomSelect
                   value={receiverId}
                   onChange={(val) => setReceiverId(val)}
-                  options={profiles.map((p) => ({
-                    value: p.id,
-                    label: p.id === currentProfile?.id ? `${p.full_name} (Tú)` : p.full_name,
-                  }))}
-                  size="sm"
+                  options={memberOptions}
+                  ariaLabel="Seleccionar receptor"
+                  renderTrigger={(_, isOpen) => (
+                    <div className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${
+                      isOpen
+                        ? 'border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
+                    }`}>
+                      <div className="relative shrink-0">
+                        {receiverProfile?.avatar_url ? (
+                          <Image
+                            src={receiverProfile.avatar_url}
+                            alt="Receiver"
+                            width={36}
+                            height={36}
+                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100 group-hover:ring-emerald-200 transition-all"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                            {receiverProfile?.full_name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                          RECIBE
+                        </span>
+                      </div>
+
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="text-xs font-extrabold text-zinc-900 truncate">
+                          {receiverProfile?.full_name?.split(' ')[0] || 'Receptor'}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 font-medium truncate">
+                          {receiverProfile?.id === currentProfile?.id ? '(Tú)' : 'Integrante'}
+                        </div>
+                      </div>
+
+                      <ChevronDown
+                        className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
+                          isOpen ? 'rotate-180 text-emerald-600' : ''
+                        }`}
+                      />
+                    </div>
+                  )}
                 />
               </div>
             </div>

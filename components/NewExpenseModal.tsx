@@ -742,6 +742,20 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         options={activeProfiles.map((p) => ({
                           value: p.id,
                           label: `${p.full_name || p.email}${p.id === currentProfile?.id ? ' (Tú)' : ''}`,
+                          icon: p.avatar_url ? (
+                            <Image
+                              src={p.avatar_url}
+                              alt=""
+                              width={20}
+                              height={20}
+                              className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                              {(p.full_name || p.email || 'U').charAt(0).toUpperCase()}
+                            </div>
+                          ),
                         }))}
                         size="sm"
                       />
@@ -755,10 +769,34 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         options={[
                           ...Object.entries(EXPENSE_CATEGORY_GROUPS).map(([main, subs]) => ({
                             group: main,
-                            options: subs.map((sub) => ({ value: sub, label: sub })),
+                            options: subs.map((sub) => {
+                              const config = getCategoryConfig(sub);
+                              const IconComponent = config.icon;
+                              return {
+                                value: sub,
+                                label: sub,
+                                icon: (
+                                  <div className={`w-5 h-5 rounded-full ${config.bgClass} ${config.textClass} flex items-center justify-center shrink-0`}>
+                                    <IconComponent className="w-3 h-3" />
+                                  </div>
+                                ),
+                              };
+                            }),
                           })),
                           ...(!Object.values(EXPENSE_CATEGORY_GROUPS).flat().includes(subCategory)
-                            ? [{ value: subCategory, label: subCategory }]
+                            ? (() => {
+                                const config = getCategoryConfig(subCategory);
+                                const IconComponent = config.icon;
+                                return [{
+                                  value: subCategory,
+                                  label: subCategory,
+                                  icon: (
+                                    <div className={`w-5 h-5 rounded-full ${config.bgClass} ${config.textClass} flex items-center justify-center shrink-0`}>
+                                      <IconComponent className="w-3 h-3" />
+                                    </div>
+                                  ),
+                                }];
+                              })()
                             : []),
                         ]}
                         size="sm"

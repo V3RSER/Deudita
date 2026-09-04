@@ -65,7 +65,7 @@ export function getCategoryConfig(category?: string): CategoryConfig {
   if (cat.includes('mascota') || cat.includes('perro') || cat.includes('gato') || cat.includes('vet')) {
     return { icon: Dog, bgClass: 'bg-amber-100', textClass: 'text-amber-800' };
   }
-  if (cat.includes('hogar') || cat.includes('vivienda') || cat.includes('arriendo')) {
+  if (cat.includes('hogar') || cat.includes('vivienda') || cat.includes('arriendo') || cat.includes('alquiler')) {
     return { icon: Home, bgClass: 'bg-emerald-100', textClass: 'text-emerald-700' };
   }
   if (cat.includes('restaurante') || cat.includes('comida') || cat.includes('almuerzo') || cat.includes('cena')) {

@@ -228,7 +228,18 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
                   <CustomSelect
                     value={category}
                     onChange={val => setCategory(val as GroupCategory)}
-                    options={GROUP_CATEGORY_OPTIONS.map(cat => ({ value: cat.id, label: cat.label }))}
+                    options={GROUP_CATEGORY_OPTIONS.map(cat => {
+                      const IconComponent = cat.icon;
+                      return {
+                        value: cat.id,
+                        label: cat.label,
+                        icon: (
+                          <div className={`w-5 h-5 rounded-full ${cat.bgColor} ${cat.textColor} flex items-center justify-center shrink-0`}>
+                            <IconComponent className="w-3 h-3" />
+                          </div>
+                        ),
+                      };
+                    })}
                     size="sm"
                   />
                 </div>

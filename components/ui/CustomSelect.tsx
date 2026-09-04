@@ -32,6 +32,7 @@ export interface CustomSelectProps {
   dropdownClassName?: string;
   size?: 'sm' | 'md' | 'lg';
   ariaLabel?: string;
+  renderTrigger?: (selected: SelectOption | undefined, isOpen: boolean) => React.ReactNode;
 }
 
 function isGroup(item: SelectItem): item is SelectGroup {
@@ -51,6 +52,7 @@ export function CustomSelect({
   dropdownClassName = '',
   size = 'md',
   ariaLabel,
+  renderTrigger,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
@@ -220,42 +222,58 @@ export function CustomSelect({
       className={`relative inline-block w-full text-left select-none ${className}`}
       onKeyDown={handleKeyDown}
     >
-      {/* Trigger Button */}
-      <button
-        type="button"
-        id={selectId}
-        ref={triggerRef}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-label={ariaLabel || placeholder}
-        disabled={disabled}
-        onClick={() => !disabled && (isOpen ? closeDropdown() : openDropdown())}
-        className={`w-full flex items-center justify-between gap-2 border bg-white text-zinc-900 shadow-2xs transition-all duration-150 cursor-pointer ${
-          sizeStyles[size]
-        } ${
-          isOpen
-            ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-            : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/50'
-        } ${disabled ? 'opacity-50 cursor-not-allowed bg-zinc-100' : ''} ${triggerClassName}`}
-      >
-        <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
-          {selectedOption?.icon && (
-            <span className="shrink-0 text-zinc-500">{selectedOption.icon}</span>
-          )}
-          <span
-            className={`truncate font-semibold ${
-              selectedOption ? 'text-zinc-900' : 'text-zinc-400 font-normal'
-            }`}
-          >
-            {selectedOption ? selectedOption.label : placeholder}
-          </span>
+      {/* Trigger Button or Custom Trigger */}
+      {renderTrigger ? (
+        <div
+          id={selectId}
+          ref={triggerRef as any}
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-label={ariaLabel || placeholder}
+          onClick={() => !disabled && (isOpen ? closeDropdown() : openDropdown())}
+          className={`cursor-pointer ${disabled ? 'opacity-50 pointer-events-none' : ''} ${triggerClassName}`}
+        >
+          {renderTrigger(selectedOption, isOpen)}
         </div>
-        <ChevronDown
-          className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-emerald-600' : ''
-          }`}
-        />
-      </button>
+      ) : (
+        <button
+          type="button"
+          id={selectId}
+          ref={triggerRef}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-label={ariaLabel || placeholder}
+          disabled={disabled}
+          onClick={() => !disabled && (isOpen ? closeDropdown() : openDropdown())}
+          className={`w-full flex items-center justify-between gap-2 border bg-white text-zinc-900 shadow-2xs transition-all duration-150 cursor-pointer ${
+            sizeStyles[size]
+          } ${
+            isOpen
+              ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+              : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/50'
+          } ${disabled ? 'opacity-50 cursor-not-allowed bg-zinc-100' : ''} ${triggerClassName}`}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
+            {selectedOption?.icon && (
+              <span className="shrink-0 text-zinc-500">{selectedOption.icon}</span>
+            )}
+            <span
+              className={`truncate font-semibold ${
+                selectedOption ? 'text-zinc-900' : 'text-zinc-400 font-normal'
+              }`}
+            >
+              {selectedOption ? selectedOption.label : placeholder}
+            </span>
+          </div>
+          <ChevronDown
+            className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
+              isOpen ? 'rotate-180 text-emerald-600' : ''
+            }`}
+          />
+        </button>
+      )}
 
       {/* Floating Custom Dropdown */}
       <AnimatePresence>
