@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { claimAndJoinGroupInvite, claimAllTempProfilesForUser } from '@/lib/invite-utils';
+import { verifyGoogleToken } from '@/lib/google-auth';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -53,14 +54,10 @@ export async function GET(request: Request) {
 
       if (providerToken) {
         try {
-          const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-            headers: { Authorization: `Bearer ${providerToken}` },
-            cache: 'no-store',
-          });
-          if (profileRes.ok) {
-            hasGmailScope = true;
-            const profile = await profileRes.json();
-            profileEmail = profile.emailAddress;
+          const verification = await verifyGoogleToken(providerToken);
+          if (verification.valid) {
+            hasGmailScope = verification.hasGmailScope;
+            profileEmail = verification.email;
           }
         } catch (e) {
           console.warn('[auth/callback] Error verifying Gmail scope:', e);

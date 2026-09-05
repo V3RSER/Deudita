@@ -150,7 +150,32 @@ export async function GET(req: NextRequest) {
       const errText = await listRes.text();
       console.error('[API /api/gmail/emails] Error al consultar Gmail API:', listRes.status, errText);
 
-      if (listRes.status === 401 || listRes.status === 403) {
+      // Si la API de Gmail no está habilitada en el proyecto de Google Cloud
+      if (
+        errText.includes('SERVICE_DISABLED') ||
+        errText.includes('Gmail API has not been used in project') ||
+        errText.includes('is disabled')
+      ) {
+        const match = errText.match(/project (\d+)/i) || errText.match(/project=(\d+)/i);
+        const projectId = match ? match[1] : '50652631364';
+        const activationUrl = `https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=${projectId}`;
+
+        return NextResponse.json({
+          connected: true,
+          live: false,
+          requiresAuth: false,
+          serviceDisabled: true,
+          activationUrl,
+          projectId,
+          userEmail: user.email,
+          emails: [],
+          count: 0,
+          totalAvailable: 0,
+          notice: `Tu cuenta de Google (${user.email}) está autorizada, pero la biblioteca "Gmail API" está desactivada en tu proyecto de Google Cloud (${projectId}). Haz clic en el enlace para habilitarla con un solo clic.`,
+        });
+      }
+
+      if (listRes.status === 401) {
         return NextResponse.json(
           {
             connected: false,

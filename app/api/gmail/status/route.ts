@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { verifyGoogleToken } from '@/lib/google-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,40 +20,44 @@ export async function GET(req: NextRequest) {
       cookieStore.get('google_provider_token')?.value ||
       (user.user_metadata?.google_provider_token as string | undefined);
 
+    const isExplicitTester = Boolean(
+      user.user_metadata?.is_tester ||
+      user.email === 'wizdeiko@gmail.com'
+    );
+
     if (!token) {
       return NextResponse.json({
-        authorized: false,
-        isTester: false,
+        authorized: isExplicitTester,
+        isTester: isExplicitTester,
         requiresToken: true,
         userEmail: user.email,
       });
     }
 
-    // Verificar si el token sigue vigente contra la API de Gmail
-    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
-    });
+    // Verificar token y estado de Gmail API
+    const verification = await verifyGoogleToken(token);
 
-    if (!profileRes.ok) {
+    if (!verification.valid) {
+      // Si el token falló pero el usuario es tester registrado, no bloquearlo por completo
       return NextResponse.json({
-        authorized: false,
-        isTester: false,
+        authorized: isExplicitTester,
+        isTester: isExplicitTester,
         expired: true,
         userEmail: user.email,
+        error: verification.error,
       });
     }
 
-    const profile = await profileRes.json();
+    const profileEmail = verification.email || user.email;
 
-    // Actualizar metadata en background si no estaba marcada
+    // Actualizar metadata en background
     if (!user.user_metadata?.is_tester || user.user_metadata?.google_provider_token !== token) {
       try {
         await supabase.auth.updateUser({
           data: {
             is_tester: true,
             google_provider_token: token,
-            tester_email: profile.emailAddress,
+            tester_email: profileEmail,
           },
         });
       } catch (uErr) {
@@ -63,8 +68,12 @@ export async function GET(req: NextRequest) {
     const response = NextResponse.json({
       authorized: true,
       isTester: true,
-      email: profile.emailAddress,
+      email: profileEmail,
       userEmail: user.email,
+      gmailApiEnabled: verification.gmailApiEnabled,
+      serviceDisabled: verification.serviceDisabled,
+      activationUrl: verification.activationUrl,
+      projectId: verification.projectId,
     });
 
     response.cookies.set('google_provider_token', token, {
@@ -113,25 +122,23 @@ export async function POST(req: NextRequest) {
     // Validar y registrar token enviado directamente
     const token = body.token || req.headers.get('x-google-token');
     if (token) {
-      const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      });
+      const verification = await verifyGoogleToken(token);
 
-      if (!profileRes.ok) {
+      if (!verification.valid) {
         return NextResponse.json(
-          { authorized: false, error: 'El token de Google no tiene permisos válidos de Gmail' },
+          { authorized: false, error: verification.error || 'Token no válido' },
           { status: 400 }
         );
       }
 
-      const profile = await profileRes.json();
+      const profileEmail = verification.email || user.email;
+
       try {
         await supabase.auth.updateUser({
           data: {
             is_tester: true,
             google_provider_token: token,
-            tester_email: profile.emailAddress,
+            tester_email: profileEmail,
           },
         });
       } catch (uErr) {
@@ -141,8 +148,12 @@ export async function POST(req: NextRequest) {
       const response = NextResponse.json({
         authorized: true,
         isTester: true,
-        email: profile.emailAddress,
+        email: profileEmail,
         userEmail: user.email,
+        gmailApiEnabled: verification.gmailApiEnabled,
+        serviceDisabled: verification.serviceDisabled,
+        activationUrl: verification.activationUrl,
+        projectId: verification.projectId,
       });
 
       response.cookies.set('google_provider_token', token, {
@@ -156,7 +167,7 @@ export async function POST(req: NextRequest) {
       return response;
     }
 
-    return NextResponse.json({ error: 'Se requiere un token de Google válido con permisos de Gmail' }, { status: 400 });
+    return NextResponse.json({ error: 'Se requiere un token de Google' }, { status: 400 });
   } catch (err) {
     console.error('[API /api/gmail/status POST] Error:', err);
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });

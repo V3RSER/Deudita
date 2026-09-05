@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   AlertCircle,
   X,
+  ExternalLink,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useExpense } from '@/lib/expense-context';
@@ -44,11 +45,12 @@ export function UnifiedDraftsAndTemplatesView({
   const [showTesterAuthModal, setShowTesterAuthModal] = useState<boolean>(false);
   const [isAuthorizingTester, setIsAuthorizingTester] = useState<boolean>(false);
   const [testerAuthError, setTesterAuthError] = useState<string | null>(null);
+  const [gmailApiDisabled, setGmailApiDisabled] = useState<boolean>(false);
+  const [activationUrl, setActivationUrl] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
-  // 2. Navigation tab state (defaults to 'drafts')
-  const [activeTab, setActiveTab] = useState<'drafts' | 'catalog' | 'create-test'>(
-    initialTab === 'create-test' ? 'drafts' : initialTab
-  );
+  // 2. Navigation tab state
+  const [activeTab, setActiveTab] = useState<'drafts' | 'catalog' | 'create-test'>(initialTab);
 
   // 3. Drafts filtering & search
   const [statusFilter, setStatusFilter] = useState<'pending' | 'confirmed' | 'discarded' | 'all'>('pending');
@@ -136,10 +138,18 @@ export function UnifiedDraftsAndTemplatesView({
 
       if (res.ok) {
         const data = await res.json();
-        const authorized = Boolean(data.authorized);
+        const authorized = Boolean(data.authorized || data.isTester);
+
+        if (data.serviceDisabled) {
+          setGmailApiDisabled(true);
+          setActivationUrl(data.activationUrl || null);
+          setProjectId(data.projectId || null);
+        } else if (data.gmailApiEnabled) {
+          setGmailApiDisabled(false);
+        }
 
         // If server hasn't saved the token yet, sync via POST
-        if (tokenToUse && !data.authorized && fromOAuthRedirect) {
+        if (tokenToUse && (!data.authorized || fromOAuthRedirect)) {
           try {
             const syncRes = await fetch('/api/gmail/status', {
               method: 'POST',
@@ -148,11 +158,18 @@ export function UnifiedDraftsAndTemplatesView({
             });
             if (syncRes.ok) {
               const syncData = await syncRes.json();
-              if (syncData.authorized) {
+              if (syncData.authorized || syncData.isTester) {
                 setIsTesterAuthorized(true);
                 setTesterEmail(syncData.email || syncData.userEmail || null);
+                if (syncData.serviceDisabled) {
+                  setGmailApiDisabled(true);
+                  setActivationUrl(syncData.activationUrl || null);
+                  setProjectId(syncData.projectId || null);
+                }
                 setShowTesterAuthModal(false);
-                setActiveTab('create-test');
+                if (initialTab === 'create-test' || fromOAuthRedirect) {
+                  setActiveTab('create-test');
+                }
                 return;
               }
             }
@@ -171,7 +188,7 @@ export function UnifiedDraftsAndTemplatesView({
             setActiveTab('create-test');
           }
         } else {
-          if (data.expired) {
+          if (data.expired && !fromOAuthRedirect) {
             try {
               localStorage.removeItem('google_provider_token');
             } catch {}
@@ -705,18 +722,58 @@ export function UnifiedDraftsAndTemplatesView({
       {/* Tab 3: Crear y Probar Plantilla (Exclusivo para Testers Autorizados) */}
       {activeTab === 'create-test' && (
         isTesterAuthorized ? (
-          <CreateAndTestTemplateSection
-            entities={entities}
-            expenseTypes={expenseTypes}
-            existingTemplates={templates}
-            drafts={drafts}
-            initialTemplateToTest={templateToTest}
-            initialDraftToTest={draftToTest}
-            onTemplateCreated={() => {
-              fetchCatalogData();
-              setActiveTab('catalog');
-            }}
-          />
+          <div className="space-y-4">
+            {gmailApiDisabled && (
+              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide flex items-center gap-2">
+                      <span>Falta habilitar la API de Gmail en Google Cloud Console</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200/80 text-amber-900">
+                        Paso único
+                      </span>
+                    </h4>
+                    <p className="text-xs text-amber-900 leading-relaxed max-w-xl">
+                      Tu cuenta ({testerEmail || 'Google'}) ya otorgó los permisos de lectura. Sin embargo, la biblioteca <strong>Gmail API</strong> no está activada en el proyecto de Google Cloud (<strong>{projectId || '50652631364'}</strong>). Haz clic en el botón para activarla en la consola y luego pulsa Reintentar.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
+                  <a
+                    href={activationUrl || `https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=${projectId || '50652631364'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition shadow-2xs cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Habilitar Gmail API</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={checkTesterAuth}
+                    className="px-3 py-2 text-xs font-medium text-amber-900 hover:text-zinc-900 bg-white border border-amber-200 hover:bg-amber-100/50 rounded-xl transition cursor-pointer"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              </div>
+            )}
+            <CreateAndTestTemplateSection
+              entities={entities}
+              expenseTypes={expenseTypes}
+              existingTemplates={templates}
+              drafts={drafts}
+              initialTemplateToTest={templateToTest}
+              initialDraftToTest={draftToTest}
+              onTemplateCreated={() => {
+                fetchCatalogData();
+                setActiveTab('catalog');
+              }}
+            />
+          </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-200/80 p-8 sm:p-12 text-center max-w-xl mx-auto my-8 space-y-6 shadow-xs">
             <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50">

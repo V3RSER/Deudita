@@ -48,6 +48,9 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
     connected: boolean;
     live: boolean;
     requiresAuth?: boolean;
+    serviceDisabled?: boolean;
+    activationUrl?: string;
+    projectId?: string;
     userEmail?: string;
     notice?: string;
   } | null>(null);
@@ -123,7 +126,10 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
       setServerInfo({
         connected: Boolean(data.connected),
         live: Boolean(data.live),
-        requiresAuth: Boolean(data.requiresAuth || res.status === 401),
+        requiresAuth: Boolean(data.requiresAuth || (res.status === 401 && !data.serviceDisabled)),
+        serviceDisabled: Boolean(data.serviceDisabled),
+        activationUrl: data.activationUrl,
+        projectId: data.projectId,
         userEmail: data.userEmail || currentUserEmail || undefined,
         notice: data.notice,
       });
@@ -305,7 +311,9 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
     setLimit(10);
   };
 
-  const isGmailConnected = Boolean(serverInfo?.connected && !serverInfo?.requiresAuth);
+  const isGmailConnected = Boolean(
+    serverInfo?.connected && !serverInfo?.requiresAuth && !serverInfo?.serviceDisabled
+  );
 
   return (
     <div className="space-y-4" id="probador-email-feed">
@@ -319,7 +327,12 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
                 <Mail className="w-4 h-4" />
               </div>
               <h3 className="text-base font-semibold text-zinc-900">Bandeja de Gmail del Usuario</h3>
-              {isGmailConnected ? (
+              {serverInfo?.serviceDisabled ? (
+                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-900 border border-amber-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span>Requiere activar Gmail API</span>
+                </span>
+              ) : isGmailConnected ? (
                 <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   <span>Conectado: {currentUserEmail || serverInfo?.userEmail}</span>
@@ -337,7 +350,28 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
           </div>
 
           <div className="flex items-center space-x-2 self-start sm:self-auto">
-            {isGmailConnected ? (
+            {serverInfo?.serviceDisabled ? (
+              <div className="flex items-center space-x-2">
+                <a
+                  href={serverInfo.activationUrl || `https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=${serverInfo.projectId || '50652631364'}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition shadow-2xs cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Activar Gmail API</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={fetchEmails}
+                  disabled={isLoading}
+                  className="inline-flex items-center space-x-1.5 px-3 py-2 text-xs font-medium bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl transition cursor-pointer"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                  <span>{isLoading ? 'Verificando...' : 'Reintentar'}</span>
+                </button>
+              </div>
+            ) : isGmailConnected ? (
               <button
                 type="button"
                 id="btn-cargar-correos"
@@ -363,8 +397,53 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
           </div>
         </div>
 
-        {/* Authorization Banner if not connected */}
-        {!isGmailConnected && hasLoadedOnce && (
+        {/* Banner if Gmail API is disabled in Google Cloud Console */}
+        {serverInfo?.serviceDisabled && (
+          <div className="p-4 bg-amber-50/90 border border-amber-300 rounded-xl space-y-3">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide flex items-center gap-2">
+                  <span>Gmail API pendiente de activación en Google Cloud</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-900">
+                    Proyecto {serverInfo.projectId || '50652631364'}
+                  </span>
+                </h4>
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  Tu cuenta ({currentUserEmail || serverInfo?.userEmail}) está completamente autorizada. Para que Google permita extraer los correos, solo debes habilitar la biblioteca <strong>Gmail API</strong> en tu consola de Google Cloud.
+                </p>
+                <p className="text-[11px] text-amber-800">
+                  Haz clic en el botón a continuación, presiona <strong>Habilitar</strong> (Enable) en Google Cloud, y luego pulsa &ldquo;Reintentar / Sincronizar&rdquo;.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/80">
+              <a
+                href={serverInfo.activationUrl || `https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=${serverInfo.projectId || '50652631364'}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 px-3.5 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition shadow-2xs cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Activar Gmail API en Google Cloud Console</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={fetchEmails}
+                disabled={isLoading}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-xl transition cursor-pointer"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>{isLoading ? 'Verificando...' : 'Reintentar / Sincronizar'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Authorization Banner if not connected and not serviceDisabled */}
+        {!isGmailConnected && !serverInfo?.serviceDisabled && hasLoadedOnce && (
           <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
             <div className="flex items-start space-x-3">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
