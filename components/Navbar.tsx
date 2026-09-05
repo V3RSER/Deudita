@@ -208,8 +208,17 @@ export function Navbar({
                         onClick={() => setProfileDropdownOpen(false)}
                         className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
                       >
+                        <Receipt className="w-4 h-4 text-zinc-500" />
+                        <span>Tickets y Borradores</span>
+                      </Link>
+
+                      <Link
+                        href="/email-templates"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
+                      >
                         <Sparkles className="w-4 h-4 text-indigo-600" />
-                        <span>Tickets y Plantillas</span>
+                        <span>Plantillas de Correos</span>
                       </Link>
 
                       <button

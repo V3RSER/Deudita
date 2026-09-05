@@ -25,6 +25,7 @@ import {
   ExternalLink,
   SlidersHorizontal,
   RefreshCw,
+  ArrowRight,
 } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 
@@ -670,6 +671,31 @@ export function ProfileSettingsModal({
                     <span>Última verificación: {new Date(gmailConnection.last_sync_at).toLocaleString('es-CO')}</span>
                   </p>
                 )}
+
+                {/* Email Templates Access requested by user */}
+                <div className="pt-3 border-t border-zinc-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/70 p-3 rounded-xl border border-zinc-200/50">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Plantillas de Correos</span>
+                    </p>
+                    <p className="text-[11px] text-zinc-500 leading-normal">
+                      Crea y administra reglas para reconocer notificaciones bancarias de tus correos y registrar gastos automáticamente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    id="profile-manage-templates-btn"
+                    onClick={() => {
+                      onClose();
+                      router.push('/email-templates');
+                    }}
+                    className="shrink-0 inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl transition shadow-2xs cursor-pointer"
+                  >
+                    <span>Gestionar Plantillas</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           )}

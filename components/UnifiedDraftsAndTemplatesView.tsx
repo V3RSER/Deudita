@@ -2,6 +2,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Inbox,
   Layers,
@@ -14,22 +16,16 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  KeyRound,
-  ShieldCheck,
-  AlertCircle,
-  X,
-  ExternalLink,
+  ArrowRight,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft } from '@/lib/types';
 import { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
 import { TemplatesCatalogSection } from '@/components/email-templates/TemplatesCatalogSection';
-import { CreateAndTestTemplateSection } from '@/components/email-templates/CreateAndTestTemplateSection';
 
 interface UnifiedDraftsAndTemplatesViewProps {
-  initialTab?: 'drafts' | 'catalog' | 'create-test';
+  initialTab?: 'drafts' | 'catalog';
   onOpenConfirmDraft: (draft: ExpenseDraft) => void;
 }
 
@@ -37,28 +33,19 @@ export function UnifiedDraftsAndTemplatesView({
   initialTab = 'drafts',
   onOpenConfirmDraft,
 }: UnifiedDraftsAndTemplatesViewProps) {
+  const router = useRouter();
   const { drafts, discardDraft } = useExpense();
 
-  // 1. Tester authorization state (Google development mode check)
-  const [isTesterAuthorized, setIsTesterAuthorized] = useState<boolean>(false);
-  const [testerEmail, setTesterEmail] = useState<string | null>(null);
-  const [showTesterAuthModal, setShowTesterAuthModal] = useState<boolean>(false);
-  const [isAuthorizingTester, setIsAuthorizingTester] = useState<boolean>(false);
-  const [testerAuthError, setTesterAuthError] = useState<string | null>(null);
-  const [gmailApiDisabled, setGmailApiDisabled] = useState<boolean>(false);
-  const [activationUrl, setActivationUrl] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  // Navigation tab state
+  const [activeTab, setActiveTab] = useState<'drafts' | 'catalog'>(initialTab);
 
-  // 2. Navigation tab state
-  const [activeTab, setActiveTab] = useState<'drafts' | 'catalog' | 'create-test'>(initialTab);
-
-  // 3. Drafts filtering & search
+  // Drafts filtering & search
   const [statusFilter, setStatusFilter] = useState<'pending' | 'confirmed' | 'discarded' | 'all'>('pending');
   const [draftSearchQuery, setDraftSearchQuery] = useState('');
   const [expandedSnippetId, setExpandedSnippetId] = useState<string | null>(null);
   const [isDiscardingId, setIsDiscardingId] = useState<string | null>(null);
 
-  // 4. Catalog state
+  // Catalog state
   const [templates, setTemplates] = useState<(CatalogTemplate & { enabled?: boolean })[]>([]);
   const [entities, setEntities] = useState<CatalogEntity[]>([]);
   const [expenseTypes, setExpenseTypes] = useState<Array<{ id: string; name?: string; label?: string }>>([]);
@@ -69,217 +56,6 @@ export function UnifiedDraftsAndTemplatesView({
     template_names: string[];
   }>>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
-
-  // 5. Cross-tab testing targets
-  const [draftToTest, setDraftToTest] = useState<ExpenseDraft | null>(null);
-  const [templateToTest, setTemplateToTest] = useState<CatalogTemplate | null>(null);
-
-  // --- Check Google Tester Status on mount ---
-  const checkTesterAuth = useCallback(async () => {
-    try {
-      const supabase = createClient();
-
-      // 1. Check URL query params from OAuth redirect
-      let tokenToUse: string | null = null;
-      let fromOAuthRedirect = false;
-
-      if (typeof window !== 'undefined') {
-        const searchParams = new URLSearchParams(window.location.search);
-        const urlToken = searchParams.get('tester_token');
-        const urlAuthorized = searchParams.get('tester_authorized');
-
-        if (urlToken) {
-          tokenToUse = urlToken;
-          try {
-            localStorage.setItem('google_provider_token', urlToken);
-          } catch {}
-          fromOAuthRedirect = true;
-        }
-
-        if (urlAuthorized === 'true') {
-          fromOAuthRedirect = true;
-        }
-
-        // Clean query parameters so URL stays clean
-        if (urlToken || urlAuthorized) {
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-
-        if (!tokenToUse) {
-          try {
-            tokenToUse = localStorage.getItem('google_provider_token');
-          } catch {}
-        }
-      }
-
-      // 2. Check Supabase client session for provider_token
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData?.session;
-      if (!tokenToUse && session?.provider_token) {
-        tokenToUse = session.provider_token;
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem('google_provider_token', tokenToUse);
-          } catch {}
-        }
-      }
-
-      // 3. Prepare headers
-      const headers: Record<string, string> = {};
-      if (tokenToUse) {
-        headers['x-google-token'] = tokenToUse;
-      }
-
-      // 4. Call /api/gmail/status
-      const res = await fetch('/api/gmail/status', {
-        headers,
-        cache: 'no-store',
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const authorized = Boolean(data.authorized || data.isTester);
-
-        if (data.serviceDisabled) {
-          setGmailApiDisabled(true);
-          setActivationUrl(data.activationUrl || null);
-          setProjectId(data.projectId || null);
-        } else if (data.gmailApiEnabled) {
-          setGmailApiDisabled(false);
-        }
-
-        // If server hasn't saved the token yet, sync via POST
-        if (tokenToUse && (!data.authorized || fromOAuthRedirect)) {
-          try {
-            const syncRes = await fetch('/api/gmail/status', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: tokenToUse }),
-            });
-            if (syncRes.ok) {
-              const syncData = await syncRes.json();
-              if (syncData.authorized || syncData.isTester) {
-                setIsTesterAuthorized(true);
-                setTesterEmail(syncData.email || syncData.userEmail || null);
-                if (syncData.serviceDisabled) {
-                  setGmailApiDisabled(true);
-                  setActivationUrl(syncData.activationUrl || null);
-                  setProjectId(syncData.projectId || null);
-                }
-                setShowTesterAuthModal(false);
-                if (initialTab === 'create-test' || fromOAuthRedirect) {
-                  setActiveTab('create-test');
-                }
-                return;
-              }
-            }
-          } catch (syncErr) {
-            console.warn('[UnifiedView] Error syncing token via POST:', syncErr);
-          }
-        }
-
-        setIsTesterAuthorized(authorized);
-        if (data.email || data.userEmail) {
-          setTesterEmail(data.email || data.userEmail);
-        }
-        if (authorized) {
-          setShowTesterAuthModal(false);
-          if (initialTab === 'create-test' || fromOAuthRedirect) {
-            setActiveTab('create-test');
-          }
-        } else {
-          if (data.expired && !fromOAuthRedirect) {
-            try {
-              localStorage.removeItem('google_provider_token');
-            } catch {}
-          }
-          setIsTesterAuthorized(false);
-        }
-      } else {
-        setIsTesterAuthorized(false);
-      }
-    } catch (err) {
-      console.error('[UnifiedView] Error al comprobar autorización de tester:', err);
-      setIsTesterAuthorized(false);
-    }
-  }, [initialTab]);
-
-  useEffect(() => {
-    checkTesterAuth();
-
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.provider_token) {
-        try {
-          localStorage.setItem('google_provider_token', session.provider_token);
-        } catch {}
-      }
-      checkTesterAuth();
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [checkTesterAuth]);
-
-  // Handle Tester OAuth with Google
-  const handleAuthorizeTester = async () => {
-    setIsAuthorizingTester(true);
-    setTesterAuthError(null);
-    try {
-      const targetReturn = '/email-templates?tab=create-test';
-      if (typeof window !== 'undefined') {
-        document.cookie = `auth_return_to=${encodeURIComponent(targetReturn)}; path=/; max-age=1800; SameSite=Lax`;
-        document.cookie = `pending_tester_auth=true; path=/; max-age=1800; SameSite=Lax`;
-        try {
-          localStorage.setItem('auth_return_to', targetReturn);
-          localStorage.setItem('pending_tester_auth', 'true');
-        } catch {}
-      }
-
-      const supabase = createClient();
-      const returnUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(targetReturn)}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: returnUrl,
-          scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-      if (error) throw error;
-    } catch (err: unknown) {
-      console.error('[UnifiedView] Error al conectar con Google:', err);
-      setTesterAuthError(err instanceof Error ? err.message : 'Error al conectar con Google');
-      setIsAuthorizingTester(false);
-    }
-  };
-
-  // Handle Disconnect / Exit Tester Mode
-  const handleDisconnectTester = async () => {
-    try {
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.removeItem('google_provider_token');
-        } catch {}
-      }
-      await fetch('/api/gmail/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect' }),
-      });
-      setIsTesterAuthorized(false);
-      setTesterEmail(null);
-      if (activeTab === 'create-test') {
-        setActiveTab('drafts');
-      }
-    } catch (err) {
-      console.error('[UnifiedView] Error al desconectar tester:', err);
-    }
-  };
 
   // --- Fetch Catalog & Preferences ---
   const fetchCatalogData = useCallback(async () => {
@@ -386,14 +162,6 @@ export function UnifiedDraftsAndTemplatesView({
     () => drafts.filter((d) => !d.status || d.status === 'pending').length,
     [drafts]
   );
-  const confirmedCount = useMemo(
-    () => drafts.filter((d) => d.status === 'confirmed').length,
-    [drafts]
-  );
-  const discardedCount = useMemo(
-    () => drafts.filter((d) => d.status === 'discarded').length,
-    [drafts]
-  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-16">
@@ -404,11 +172,11 @@ export function UnifiedDraftsAndTemplatesView({
             Tickets y Borradores
           </h1>
           <p className="text-sm text-zinc-500 mt-0.5">
-            Comprobantes bancarios detectados automáticamente y catálogo de formatos.
+            Comprobantes bancarios detectados automáticamente y catálogo de formatos admitidos.
           </p>
         </div>
 
-        {/* Tab Switcher & Tester Access */}
+        {/* Tab Switcher & Link to dedicated Email Templates view */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center p-1 bg-zinc-100 rounded-2xl w-fit">
             <button
@@ -442,51 +210,16 @@ export function UnifiedDraftsAndTemplatesView({
                 {templates.length}
               </span>
             </button>
-
-            {/* Solo se muestra si el usuario ya logró autorizarse como Tester con Google */}
-            {isTesterAuthorized && (
-              <button
-                onClick={() => setActiveTab('create-test')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                  activeTab === 'create-test'
-                    ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Probador</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Tester Autorizado" />
-              </button>
-            )}
           </div>
 
-          {/* Badge o Botón discreto de acceso tester */}
-          {isTesterAuthorized ? (
-            <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-medium text-emerald-900">
-                Tester activo: <span className="font-semibold">{testerEmail}</span>
-              </span>
-              <button
-                type="button"
-                onClick={handleDisconnectTester}
-                className="text-[11px] text-emerald-800 hover:text-rose-700 font-semibold underline ml-1 cursor-pointer transition"
-                title="Cerrar sesión de tester y ocultar probador para usuarios normales"
-              >
-                Ocultar
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowTesterAuthModal(true)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer border border-transparent hover:border-zinc-200"
-              title="Acceso restringido para desarrolladores y testers aprobados"
-            >
-              <KeyRound className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Acceso Tester</span>
-            </button>
-          )}
+          <Link
+            href="/email-templates"
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-950 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl transition shadow-2xs cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Gestor de Plantillas</span>
+            <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+          </Link>
         </div>
       </div>
 
@@ -499,40 +232,43 @@ export function UnifiedDraftsAndTemplatesView({
             <div className="flex items-center space-x-1.5 overflow-x-auto">
               <button
                 onClick={() => setStatusFilter('pending')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                   statusFilter === 'pending'
-                    ? 'bg-zinc-900 text-white shadow-2xs'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
+                    ? 'bg-zinc-900 text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
-                Pendientes ({pendingCount})
+                Pendientes {pendingCount > 0 && `(${pendingCount})`}
               </button>
+
               <button
                 onClick={() => setStatusFilter('confirmed')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                   statusFilter === 'confirmed'
-                    ? 'bg-zinc-900 text-white shadow-2xs'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
+                    ? 'bg-zinc-900 text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
-                Confirmados ({confirmedCount})
+                Confirmados
               </button>
+
               <button
                 onClick={() => setStatusFilter('discarded')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                   statusFilter === 'discarded'
-                    ? 'bg-zinc-900 text-white shadow-2xs'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
+                    ? 'bg-zinc-900 text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
-                Descartados ({discardedCount})
+                Descartados
               </button>
+
               <button
                 onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                   statusFilter === 'all'
-                    ? 'bg-zinc-900 text-white shadow-2xs'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200/70'
+                    ? 'bg-zinc-900 text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
                 }`}
               >
                 Todos ({drafts.length})
@@ -544,51 +280,54 @@ export function UnifiedDraftsAndTemplatesView({
               <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Buscar por comercio o concepto..."
                 value={draftSearchQuery}
                 onChange={(e) => setDraftSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-zinc-400"
+                placeholder="Buscar en borradores..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-zinc-50 border border-zinc-200/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 transition"
               />
             </div>
           </div>
 
           {/* Drafts List */}
           {filteredDrafts.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-zinc-200/80 p-8 space-y-3 shadow-2xs">
-              <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
+            <div className="bg-white border border-zinc-200/80 rounded-2xl p-12 text-center space-y-3 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto">
                 <Inbox className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-bold text-zinc-900">
-                No hay borradores en esta sección
-              </h3>
-              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                Los gastos extraídos automáticamente de tus correos bancarios aparecerán aquí para que los confirmes con un solo clic.
-              </p>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-zinc-900">
+                  {draftSearchQuery
+                    ? 'No hay resultados para la búsqueda'
+                    : statusFilter === 'pending'
+                    ? 'No tienes gastos pendientes por confirmar'
+                    : 'No hay borradores en este estado'}
+                </h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  {statusFilter === 'pending'
+                    ? 'Cuando recibas correos de compras de tus bancos, aparecerán aquí como borradores listos para registrarse.'
+                    : 'Filtra por otro estado o limpia la búsqueda para ver más borradores.'}
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredDrafts.map((draft) => {
+                const isExpanded = expandedSnippetId === draft.id;
                 const isPending = !draft.status || draft.status === 'pending';
                 const isConfirmed = draft.status === 'confirmed';
                 const isDiscarded = draft.status === 'discarded';
-                const isExpanded = expandedSnippetId === draft.id;
 
                 return (
                   <div
                     key={draft.id}
-                    className={`bg-white rounded-2xl border transition-all p-4 flex flex-col justify-between space-y-3.5 ${
-                      isPending
-                        ? 'border-amber-200/80 shadow-xs hover:border-amber-300'
-                        : isConfirmed
-                        ? 'border-emerald-200/80 bg-emerald-50/20'
-                        : 'border-zinc-200/80 opacity-60'
+                    className={`bg-white border rounded-2xl p-4 space-y-3 shadow-2xs hover:border-zinc-300 transition ${
+                      isPending ? 'border-zinc-200' : 'border-zinc-200/60 opacity-80'
                     }`}
                   >
-                    {/* Header: Entity + Status */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center space-x-2">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700 border border-zinc-200">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
                             {draft.entity || 'Banco'}
                           </span>
                           {draft.source_account && (
@@ -699,196 +438,20 @@ export function UnifiedDraftsAndTemplatesView({
 
       {/* Tab 2: Catálogo de Formatos Bancarios */}
       {activeTab === 'catalog' && (
-        <TemplatesCatalogSection
-          templates={templates}
-          entities={entities}
-          expenseTypes={expenseTypes}
-          ambiguousTemplates={ambiguousTemplates}
-          isLoading={isLoadingCatalog}
-          isTesterAuthorized={isTesterAuthorized}
-          onRefresh={fetchCatalogData}
-          onTogglePreference={handleTogglePreference}
-          onTestTemplate={(tmpl) => {
-            if (isTesterAuthorized) {
-              setTemplateToTest(tmpl);
-              setActiveTab('create-test');
-            } else {
-              setShowTesterAuthModal(true);
-            }
-          }}
-        />
-      )}
-
-      {/* Tab 3: Crear y Probar Plantilla (Exclusivo para Testers Autorizados) */}
-      {activeTab === 'create-test' && (
-        isTesterAuthorized ? (
-          <div className="space-y-4">
-            {gmailApiDisabled && (
-              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
-                    <AlertCircle className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide flex items-center gap-2">
-                      <span>Falta habilitar la API de Gmail en Google Cloud Console</span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200/80 text-amber-900">
-                        Paso único
-                      </span>
-                    </h4>
-                    <p className="text-xs text-amber-900 leading-relaxed max-w-xl">
-                      Tu cuenta ({testerEmail || 'Google'}) ya otorgó los permisos de lectura. Sin embargo, la biblioteca <strong>Gmail API</strong> no está activada en el proyecto de Google Cloud (<strong>{projectId || '50652631364'}</strong>). Haz clic en el botón para activarla en la consola y luego pulsa Reintentar.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
-                  <a
-                    href={activationUrl || `https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=${projectId || '50652631364'}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition shadow-2xs cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Habilitar Gmail API</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={checkTesterAuth}
-                    className="px-3 py-2 text-xs font-medium text-amber-900 hover:text-zinc-900 bg-white border border-amber-200 hover:bg-amber-100/50 rounded-xl transition cursor-pointer"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              </div>
-            )}
-            <CreateAndTestTemplateSection
-              entities={entities}
-              expenseTypes={expenseTypes}
-              existingTemplates={templates}
-              drafts={drafts}
-              initialTemplateToTest={templateToTest}
-              initialDraftToTest={draftToTest}
-              onTemplateCreated={() => {
-                fetchCatalogData();
-                setActiveTab('catalog');
-              }}
-            />
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-zinc-200/80 p-8 sm:p-12 text-center max-w-xl mx-auto my-8 space-y-6 shadow-xs">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50">
-              <KeyRound className="w-7 h-7" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-zinc-900">
-                Acceso Restringido a Modo Tester
-              </h3>
-              <p className="text-sm text-zinc-500 leading-relaxed max-w-md mx-auto">
-                Para acceder a la consola de pruebas y extraer correos en vivo de tu cuenta, primero debes autenticarte con tu cuenta de Google y otorgar permisos de lectura de Gmail.
-              </p>
-            </div>
-
-            <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/80 text-left space-y-2 text-xs text-zinc-600">
-              <div className="flex items-center space-x-2 font-semibold text-zinc-900">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Solo usuarios autorizados en Google Cloud Console</span>
-              </div>
-              <p className="text-zinc-500 text-[11px] leading-relaxed">
-                Al hacer clic a continuación, Google te solicitará permiso para leer tus correos. Tras aceptar, se verificará tu identidad y se desbloqueará este entorno.
-              </p>
-            </div>
-
-            {testerAuthError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center space-x-2 text-left">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{testerAuthError}</span>
-              </div>
-            )}
-
-            <div className="pt-2 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab('drafts')}
-                className="px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition cursor-pointer"
-              >
-                Volver a Borradores
-              </button>
-              <button
-                type="button"
-                onClick={handleAuthorizeTester}
-                disabled={isAuthorizingTester}
-                className="px-5 py-2.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center space-x-2 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar Gmail con Google'}</span>
-              </button>
-            </div>
-          </div>
-        )
-      )}
-
-      {/* Modal para Autorización de Tester con Google */}
-      {showTesterAuthModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-zinc-200 shadow-2xl p-6 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center shadow-xs">
-                <KeyRound className="w-5 h-5 text-amber-400" />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowTesterAuthModal(false)}
-                className="p-1.5 text-zinc-400 hover:text-zinc-600 rounded-lg transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-zinc-900">
-                Acceso a Modo Tester y Probador
-              </h3>
-              <p className="text-xs text-zinc-500 leading-relaxed">
-                Esta aplicación opera con la capa gratuita de Google Cloud (en modo desarrollo). Por políticas estrictas de Google, <strong>únicamente los correos que hayas agregado a la lista de Test Users en Google Cloud Console</strong> pueden autorizar el acceso de lectura de Gmail.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 space-y-1.5">
-              <div className="flex items-center space-x-1.5 font-semibold text-amber-950">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Protección para usuarios finales</span>
-              </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                El probador de correos y la edición de expresiones regulares están protegidos para evitar modificaciones indebidas en la base de datos de plantillas.
-              </p>
-            </div>
-
-            {testerAuthError && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{testerAuthError}</span>
-              </div>
-            )}
-
-            <div className="pt-2 flex items-center justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => setShowTesterAuthModal(false)}
-                className="px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-800 rounded-xl transition cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleAuthorizeTester}
-                disabled={isAuthorizingTester}
-                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar con Google'}</span>
-              </button>
-            </div>
-          </div>
+        <div className="space-y-4">
+          <TemplatesCatalogSection
+            templates={templates}
+            entities={entities}
+            expenseTypes={expenseTypes}
+            ambiguousTemplates={ambiguousTemplates}
+            isLoading={isLoadingCatalog}
+            isTesterAuthorized={false}
+            onRefresh={fetchCatalogData}
+            onTogglePreference={handleTogglePreference}
+            onTestTemplate={() => {
+              router.push('/email-templates');
+            }}
+          />
         </div>
       )}
     </div>
