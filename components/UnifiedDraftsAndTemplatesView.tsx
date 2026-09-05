@@ -1,13 +1,8 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import React, { useState, useMemo } from 'react';
 import {
   Inbox,
-  Layers,
-  Sparkles,
   Search,
   Building2,
   Trash2,
@@ -16,13 +11,10 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  ArrowRight,
 } from 'lucide-react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft } from '@/lib/types';
-import { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
-import { TemplatesCatalogSection } from '@/components/email-templates/TemplatesCatalogSection';
 
 interface UnifiedDraftsAndTemplatesViewProps {
   initialTab?: 'drafts' | 'catalog';
@@ -30,14 +22,9 @@ interface UnifiedDraftsAndTemplatesViewProps {
 }
 
 export function UnifiedDraftsAndTemplatesView({
-  initialTab = 'drafts',
   onOpenConfirmDraft,
 }: UnifiedDraftsAndTemplatesViewProps) {
-  const router = useRouter();
   const { drafts, discardDraft } = useExpense();
-
-  // Navigation tab state
-  const [activeTab, setActiveTab] = useState<'drafts' | 'catalog'>(initialTab);
 
   // Drafts filtering & search
   const [statusFilter, setStatusFilter] = useState<'pending' | 'confirmed' | 'discarded' | 'all'>('pending');
@@ -45,93 +32,7 @@ export function UnifiedDraftsAndTemplatesView({
   const [expandedSnippetId, setExpandedSnippetId] = useState<string | null>(null);
   const [isDiscardingId, setIsDiscardingId] = useState<string | null>(null);
 
-  // Catalog state
-  const [templates, setTemplates] = useState<(CatalogTemplate & { enabled?: boolean })[]>([]);
-  const [entities, setEntities] = useState<CatalogEntity[]>([]);
-  const [expenseTypes, setExpenseTypes] = useState<Array<{ id: string; name?: string; label?: string }>>([]);
-  const [ambiguousTemplates, setAmbiguousTemplates] = useState<Array<{
-    entity_id: string;
-    subject_pattern: string;
-    template_ids: string[];
-    template_names: string[];
-  }>>([]);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
 
-  // --- Fetch Catalog & Preferences ---
-  const fetchCatalogData = useCallback(async () => {
-    setIsLoadingCatalog(true);
-    try {
-      const [catalogRes, prefsRes] = await Promise.all([
-        fetch('/api/email-templates/catalog'),
-        fetch('/api/user-template-preferences'),
-      ]);
-
-      let templatesList: CatalogTemplate[] = [];
-      let entitiesList: CatalogEntity[] = [];
-      let expenseTypesList: Array<{ id: string; name?: string; label?: string }> = [];
-      let ambList: typeof ambiguousTemplates = [];
-
-      if (catalogRes.ok) {
-        const catData = await catalogRes.json();
-        templatesList = catData.templates || [];
-        entitiesList = catData.entities || [];
-        expenseTypesList = catData.expense_types || [];
-        ambList = catData.ambiguous_templates || [];
-      }
-
-      const prefMap = new Map<string, boolean>();
-      if (prefsRes.ok) {
-        const prefsData = await prefsRes.json();
-        if (prefsData.templates && Array.isArray(prefsData.templates)) {
-          prefsData.templates.forEach((t: { id: string; enabled: boolean }) => {
-            prefMap.set(t.id, t.enabled);
-          });
-        }
-      }
-
-      const merged = templatesList.map((tmpl) => ({
-        ...tmpl,
-        enabled: prefMap.has(tmpl.id) ? prefMap.get(tmpl.id)! : true,
-      }));
-
-      setTemplates(merged);
-      setEntities(entitiesList);
-      setExpenseTypes(expenseTypesList);
-      setAmbiguousTemplates(ambList);
-    } catch (err) {
-      console.error('[UnifiedView] Error al consultar catálogo:', err);
-    } finally {
-      setIsLoadingCatalog(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCatalogData();
-  }, [fetchCatalogData]);
-
-  // --- Toggle template preference ---
-  const handleTogglePreference = async (templateId: string, enabled: boolean) => {
-    setTemplates((prev) =>
-      prev.map((t) => (t.id === templateId ? { ...t, enabled } : t))
-    );
-
-    try {
-      const res = await fetch('/api/user-template-preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_id: templateId,
-          enabled,
-        }),
-      });
-
-      if (!res.ok) {
-        console.error('Error al guardar preferencia');
-      }
-    } catch (err) {
-      console.error('Error guardando preferencia de plantilla:', err);
-    }
-  };
 
   // --- Filtered Drafts ---
   const filteredDrafts = useMemo(() => {
@@ -172,60 +73,13 @@ export function UnifiedDraftsAndTemplatesView({
             Tickets y Borradores
           </h1>
           <p className="text-sm text-zinc-500 mt-0.5">
-            Comprobantes bancarios detectados automáticamente y catálogo de formatos admitidos.
+            Comprobantes bancarios detectados automáticamente desde tus correos.
           </p>
-        </div>
-
-        {/* Tab Switcher & Link to dedicated Email Templates view */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center p-1 bg-zinc-100 rounded-2xl w-fit">
-            <button
-              onClick={() => setActiveTab('drafts')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                activeTab === 'drafts'
-                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Inbox className="w-3.5 h-3.5" />
-              <span>Borradores</span>
-              {pendingCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('catalog')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                activeTab === 'catalog'
-                  ? 'bg-white text-zinc-900 shadow-xs ring-1 ring-zinc-200'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Formatos Bancarios</span>
-              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-200 text-zinc-700">
-                {templates.length}
-              </span>
-            </button>
-          </div>
-
-          <Link
-            href="/email-templates"
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-950 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl transition shadow-2xs cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Gestor de Plantillas</span>
-            <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
-          </Link>
         </div>
       </div>
 
-      {/* Tab 1: Borradores y Tickets */}
-      {activeTab === 'drafts' && (
-        <div className="space-y-4">
+      {/* Borradores y Tickets */}
+      <div className="space-y-4">
           {/* Controls Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-zinc-200/80 shadow-2xs">
             {/* Status Pills */}
@@ -434,26 +288,6 @@ export function UnifiedDraftsAndTemplatesView({
             </div>
           )}
         </div>
-      )}
-
-      {/* Tab 2: Catálogo de Formatos Bancarios */}
-      {activeTab === 'catalog' && (
-        <div className="space-y-4">
-          <TemplatesCatalogSection
-            templates={templates}
-            entities={entities}
-            expenseTypes={expenseTypes}
-            ambiguousTemplates={ambiguousTemplates}
-            isLoading={isLoadingCatalog}
-            isTesterAuthorized={false}
-            onRefresh={fetchCatalogData}
-            onTogglePreference={handleTogglePreference}
-            onTestTemplate={() => {
-              router.push('/email-templates');
-            }}
-          />
-        </div>
-      )}
-    </div>
+      </div>
   );
 }

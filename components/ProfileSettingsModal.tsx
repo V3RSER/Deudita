@@ -23,7 +23,6 @@ import {
   MailCheck,
   CheckCircle2,
   ExternalLink,
-  SlidersHorizontal,
   RefreshCw,
   ArrowRight,
 } from 'lucide-react';
@@ -650,18 +649,6 @@ export function ProfileSettingsModal({
                       <MailCheck className="w-3.5 h-3.5 text-amber-400" />
                     )}
                     <span>{gmailConnected ? 'Reconectar o cambiar cuenta' : 'Conectar con Google'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      router.push('/drafts');
-                    }}
-                    className="bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer ml-auto"
-                  >
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-500" />
-                    <span>Ajustes y Bancos Admitidos</span>
                   </button>
                 </div>
 

@@ -212,15 +212,6 @@ export function Navbar({
                         <span>Tickets y Borradores</span>
                       </Link>
 
-                      <Link
-                        href="/email-templates"
-                        onClick={() => setProfileDropdownOpen(false)}
-                        className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
-                      >
-                        <Sparkles className="w-4 h-4 text-indigo-600" />
-                        <span>Plantillas de Correos</span>
-                      </Link>
-
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
