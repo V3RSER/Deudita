@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (listRes.status === 401) {
-        return NextResponse.json(
+        const res = NextResponse.json(
           {
             connected: false,
             live: false,
@@ -185,10 +185,12 @@ export async function GET(req: NextRequest) {
             emails: [],
             count: 0,
             error: 'AUTH_REQUIRED',
-            notice: `El permiso de acceso a Gmail para ${user.email} ha caducado o requiere autorización. Haz clic en Autorizar Gmail para renovarlo.`,
+            notice: `El permiso de acceso a Gmail para ${user.email} ha caducado (los tokens de Google duran 60 min). Haz clic en "Renovar acceso a Gmail" para reactivarlo al instante en 1 clic.`,
           },
           { status: 401 }
         );
+        res.cookies.delete('google_provider_token');
+        return res;
       }
 
       return NextResponse.json(

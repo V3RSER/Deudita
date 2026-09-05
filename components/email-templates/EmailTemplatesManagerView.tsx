@@ -13,6 +13,7 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
   RefreshCw,
   Sparkles,
@@ -36,10 +37,18 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
+  Play,
+  ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cleanEmailBody, buildTemplatePrompt, parseAITemplateResponse } from '@/lib/email-cleaning';
-import { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
+import {
+  CatalogEntity,
+  CatalogTemplate,
+  diagnoseEmailMatching,
+  DiagnosisResult,
+} from '@/lib/email-matching';
+import { formatCurrency } from '@/lib/balance-utils';
 
 interface EmailTemplatesManagerViewProps {
   initialMode?: 'catalog' | 'editor' | 'inbox';
@@ -62,7 +71,14 @@ export function EmailTemplatesManagerView({
   const searchParams = useSearchParams();
 
   // Mode navigation: 'catalog' (list of templates), 'editor' (create/edit), 'inbox' (read emails)
-  const [activeMode, setActiveMode] = useState<'catalog' | 'editor' | 'inbox'>(initialMode);
+  const modeParam = searchParams.get('mode') || searchParams.get('tab');
+  const resolvedInitialMode =
+    modeParam === 'inbox' || searchParams.get('tester_authorized') === 'true'
+      ? 'inbox'
+      : modeParam === 'editor' || modeParam === 'create-test'
+      ? 'editor'
+      : initialMode;
+  const [activeMode, setActiveMode] = useState<'catalog' | 'editor' | 'inbox'>(resolvedInitialMode);
 
   // Authentication & Access state
   const [authChecking, setAuthChecking] = useState<boolean>(true);
@@ -85,6 +101,11 @@ export function EmailTemplatesManagerView({
   const [isLoadingEmails, setIsLoadingEmails] = useState<boolean>(false);
   const [emailSearchQuery, setEmailSearchQuery] = useState<string>('');
   const [emailsError, setEmailsError] = useState<string | null>(null);
+
+  // Testing & Diagnosis modal state (Evaluating email against all catalog templates)
+  const [testingEmail, setTestingEmail] = useState<IngestedEmail | null>(null);
+  const [emailDiagnosis, setEmailDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [isTestModalOpen, setIsTestModalOpen] = useState<boolean>(false);
 
   // Expense types catalog
   const [expenseTypes, setExpenseTypes] = useState<Array<{ id: string; name: string; label: string }>>([]);
@@ -125,6 +146,10 @@ export function EmailTemplatesManagerView({
   const [aiParseWarnings, setAiParseWarnings] = useState<string[]>([]);
   const [aiParseSuccess, setAiParseSuccess] = useState<string | null>(null);
 
+  // Aliases for AI modal backwards compatibility
+  const aiPromptCopied = aiCopied;
+  const aiGeneratedPrompt = aiPromptText;
+
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
@@ -153,11 +178,19 @@ export function EmailTemplatesManagerView({
         setServiceDisabled(true);
         setActivationUrl(data.activationUrl || 'https://console.cloud.google.com/apis/library/gmail.googleapis.com');
         setIsAuthorized(false);
-      } else if (data.authorized || data.authenticated || searchParams.get('tester_authorized') === 'true' || Boolean(storedToken)) {
+      } else if (data.authorized || data.authenticated) {
+        setIsAuthorized(true);
+        setUserEmail(data.email || data.userEmail || null);
+        setServiceDisabled(false);
+      } else if (searchParams.get('tester_authorized') === 'true' && urlToken) {
         setIsAuthorized(true);
         setUserEmail(data.email || data.userEmail || null);
         setServiceDisabled(false);
       } else {
+        // Token is invalid or expired: clear from localStorage so stale token doesn't persist
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('google_provider_token');
+        }
         setIsAuthorized(false);
       }
     } catch (err: unknown) {
@@ -165,6 +198,9 @@ export function EmailTemplatesManagerView({
       if (searchParams.get('tester_authorized') === 'true') {
         setIsAuthorized(true);
       } else {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('google_provider_token');
+        }
         setIsAuthorized(false);
       }
     } finally {
@@ -217,6 +253,16 @@ export function EmailTemplatesManagerView({
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 401 || data.error === 'AUTH_REQUIRED' || data.requiresAuth) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('google_provider_token');
+          }
+          setIsAuthorized(false);
+          setEmailsError(
+            'Tu autorización de Gmail ha caducado (los tokens de Google duran 60 min). Haz clic en "Renovar acceso a Gmail" para reactivarla al instante en 1 clic.'
+          );
+          return;
+        }
         throw new Error(data.error || 'No se pudieron consultar los correos');
       }
 
@@ -249,13 +295,13 @@ export function EmailTemplatesManagerView({
     try {
       const supabase = createClient();
       if (typeof window !== 'undefined') {
-        localStorage.setItem('auth_return_to', '/email-templates');
+        localStorage.setItem('auth_return_to', '/email-templates?mode=inbox');
       }
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback?returnTo=/email-templates?mode=inbox`,
           scopes: 'https://www.googleapis.com/auth/gmail.readonly',
           queryParams: {
             access_type: 'offline',
@@ -466,6 +512,49 @@ export function EmailTemplatesManagerView({
     setAiParseSuccess(null);
     setAiCopied(false);
     setIsAIAssistantOpen(true);
+  };
+
+  // Open Test & Diagnosis Modal for a selected email against all templates
+  const handleOpenTestModal = (email: IngestedEmail) => {
+    setTestingEmail(email);
+    const diagnosis = diagnoseEmailMatching(
+      email.sender,
+      email.subject,
+      email.body,
+      templates,
+      entities
+    );
+    setEmailDiagnosis(diagnosis);
+    setIsTestModalOpen(true);
+  };
+
+  // Switch to editor with a specific template and pre-load this email as sample
+  const handleEditTemplateWithSample = (tmpl: CatalogTemplate) => {
+    if (testingEmail) {
+      setSampleSender(testingEmail.sender);
+      setSampleSubject(testingEmail.subject);
+      setSampleBody(testingEmail.body);
+    }
+    handleEditTemplate(tmpl);
+    setIsTestModalOpen(false);
+  };
+
+  // Open AI Assistant from Test Modal
+  const handleOpenAIFromTest = () => {
+    if (testingEmail) {
+      const target = testingEmail;
+      setIsTestModalOpen(false);
+      handleOpenAIAssistant(target);
+    }
+  };
+
+  // Create new manual template from Test Modal
+  const handleCreateNewFromTest = () => {
+    if (testingEmail) {
+      const target = testingEmail;
+      setIsTestModalOpen(false);
+      handleCreateTemplateFromEmail(target);
+    }
   };
 
   // Copy AI Prompt
@@ -1677,7 +1766,28 @@ export function EmailTemplatesManagerView({
             </button>
           </div>
 
-          {emailsError && (
+          {/* Auth expired or required notification */}
+          {(!isAuthorized || emailsError?.includes('caducado') || emailsError?.includes('expirado') || emailsError?.includes('AUTH_REQUIRED')) && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 text-xs">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Tu sesión de Gmail necesita renovación (Google expira tokens cada 60 min). Haz clic para renovarla al instante en 1 clic.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleConnectGoogle}
+                disabled={isConnecting}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition cursor-pointer shrink-0 inline-flex items-center space-x-1.5 active:scale-95"
+              >
+                {isConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                <span>Renovar acceso a Gmail</span>
+              </button>
+            </div>
+          )}
+
+          {emailsError && !emailsError.includes('caducado') && !emailsError.includes('expirado') && !emailsError.includes('AUTH_REQUIRED') && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center space-x-2 text-rose-800 text-xs">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{emailsError}</span>
@@ -1710,7 +1820,17 @@ export function EmailTemplatesManagerView({
                       <p className="text-[11px] text-zinc-500">{email.sender}</p>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-center">
+                    <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenTestModal(email)}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                        title="Probar plantillas contra este correo y evaluar los 3 pasos de filtrado"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Probar Plantillas</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleOpenAIAssistant(email)}
@@ -1725,6 +1845,7 @@ export function EmailTemplatesManagerView({
                         type="button"
                         onClick={() => handleCreateTemplateFromEmail(email)}
                         className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-xl transition cursor-pointer"
+                        title="Crear plantilla manual a partir de este correo"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                         <span>Manual</span>
@@ -1883,6 +2004,338 @@ export function EmailTemplatesManagerView({
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                 <span>Analizar y Cargar en la Plantilla</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: PROBAR PLANTILLAS (DIAGNÓSTICO 3 PASOS) ================= */}
+      {isTestModalOpen && testingEmail && emailDiagnosis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-zinc-200 shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-zinc-100 flex items-start justify-between gap-4 bg-zinc-50/70">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shadow-2xs">
+                  <Play className="w-5 h-5 fill-current" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900">
+                    Prueba y Diagnóstico de Plantillas
+                  </h3>
+                  <p className="text-xs text-zinc-500 line-clamp-1">
+                    <span className="font-semibold text-zinc-700">{testingEmail.subject}</span>
+                    <span className="mx-1.5">•</span>
+                    <span>{testingEmail.sender}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsTestModalOpen(false)}
+                className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 text-xs text-zinc-700">
+              {/* Top Result Banner */}
+              {emailDiagnosis.matched ? (
+                emailDiagnosis.level3.survivingTemplates.length > 1 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2 text-amber-950">
+                    <div className="flex items-center space-x-2 font-bold text-sm text-amber-900">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <span>¡Atención: Conflicto de coincidencia múltiple ({emailDiagnosis.level3.survivingTemplates.length} plantillas coinciden)!</span>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Hay <strong>{emailDiagnosis.level3.survivingTemplates.length} plantillas</strong> que superaron los 3 pasos con este mismo correo. En Google Apps Script esto puede provocar que se elija la primera encontrada de forma arbitraria. Te recomendamos usar el botón <strong>&quot;Editar y Afinar&quot;</strong> abajo para agregar un <code>match_pattern</code> (patrón de desempate en el cuerpo) o afinar el patrón de asunto.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start space-x-3 text-emerald-950">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold text-sm text-emerald-900">
+                        ¡Coincidencia única exitosa!
+                      </p>
+                      <p className="text-xs text-emerald-800 leading-relaxed">
+                        La plantilla <strong>&quot;{emailDiagnosis.winner?.template.name}&quot;</strong> es la única que coincide en los 3 pasos de filtrado. Extraerá un monto de <strong>$ {formatCurrency(emailDiagnosis.winner?.extractedAmount || 0)} COP</strong>.
+                      </p>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="p-4 bg-zinc-100 border border-zinc-200 rounded-2xl flex items-start space-x-3 text-zinc-800">
+                  <AlertCircle className="w-5 h-5 text-zinc-500 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-sm text-zinc-900">
+                      Ninguna plantilla superó los 3 pasos de coincidencia
+                    </p>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Este correo no coincide completamente con ninguna de tus plantillas actuales. Puedes consultar en qué paso fueron descartadas abajo o usar el <strong>Asistente IA</strong> para crear una plantilla adaptada en segundos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 3-Step Pipeline Visualizer */}
+              <div className="space-y-2">
+                <span className="font-bold text-zinc-900 uppercase tracking-wider text-[11px]">
+                  Flujo de Evaluación en 3 Pasos (Google Apps Script)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Step 1 */}
+                  <div className={`p-3.5 rounded-2xl border ${
+                    emailDiagnosis.level1.matchingEntities.length > 0
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                  } space-y-1`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider">
+                        Paso 1: Entidad
+                      </span>
+                      {emailDiagnosis.level1.matchingEntities.length > 0 ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <X className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold">
+                      {emailDiagnosis.level1.matchingEntities.length > 0
+                        ? emailDiagnosis.level1.matchingEntities.map((e) => e.name).join(', ')
+                        : 'No identificada'}
+                    </p>
+                    <p className="text-[11px] opacity-75">
+                      {emailDiagnosis.level1.survivingTemplates.length} de {templates.length} plantillas pasaron
+                    </p>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className={`p-3.5 rounded-2xl border ${
+                    emailDiagnosis.level2.survivingTemplates.length > 0
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                  } space-y-1`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider">
+                        Paso 2: Asunto
+                      </span>
+                      {emailDiagnosis.level2.survivingTemplates.length > 0 ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <X className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold">
+                      {emailDiagnosis.level2.survivingTemplates.length > 0
+                        ? `${emailDiagnosis.level2.survivingTemplates.length} coincidieron`
+                        : 'Ninguna coincidió'}
+                    </p>
+                    <p className="text-[11px] opacity-75">
+                      Coincidencia con el asunto del correo
+                    </p>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className={`p-3.5 rounded-2xl border ${
+                    emailDiagnosis.level3.survivingTemplates.length > 0
+                      ? emailDiagnosis.level3.survivingTemplates.length > 1
+                        ? 'bg-amber-50 border-amber-300 text-amber-950'
+                        : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                  } space-y-1`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider">
+                        Paso 3: Desempate & Monto
+                      </span>
+                      {emailDiagnosis.level3.survivingTemplates.length > 0 ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <X className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold">
+                      {emailDiagnosis.level3.survivingTemplates.length > 0
+                        ? `${emailDiagnosis.level3.survivingTemplates.length} coincidencia(s)`
+                        : 'Monto no extraído'}
+                    </p>
+                    <p className="text-[11px] opacity-75">
+                      match_pattern + amount_regex
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Candidates & Matches List */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-zinc-900 uppercase tracking-wider text-[11px]">
+                    Plantillas evaluadas para este correo
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
+                    {emailDiagnosis.reports.length} plantillas analizadas
+                  </span>
+                </div>
+
+                {emailDiagnosis.reports.length === 0 ? (
+                  <p className="text-xs text-zinc-400 italic bg-zinc-50 p-4 rounded-xl text-center">
+                    No hay plantillas registradas para la entidad de este correo.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {emailDiagnosis.reports.map((report) => {
+                      const isCompleteMatch = report.level3Passed;
+                      const hasConflict = emailDiagnosis.level3.survivingTemplates.length > 1 && isCompleteMatch;
+
+                      return (
+                        <div
+                          key={report.template.id}
+                          className={`p-4 rounded-2xl border transition ${
+                            hasConflict
+                              ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300'
+                              : isCompleteMatch
+                              ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300'
+                              : 'bg-white border-zinc-200 hover:border-zinc-300'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                <span className="font-bold text-zinc-900 text-sm">
+                                  {report.template.name}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 font-medium text-[10px]">
+                                  {report.template.entity?.name || 'Sin entidad'}
+                                </span>
+                                {report.template.expense_type?.name && (
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-medium text-[10px]">
+                                    {report.template.expense_type.name}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-500">
+                                Asunto regex: <code className="bg-zinc-100 px-1 py-0.5 rounded text-zinc-700 font-mono">{report.template.subject_pattern || '(vacío)'}</code>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-center">
+                              {hasConflict && (
+                                <span className="px-2.5 py-1 bg-amber-100 text-amber-800 font-bold rounded-lg text-[10px] inline-flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                  Conflicto
+                                </span>
+                              )}
+                              {isCompleteMatch && !hasConflict && (
+                                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg text-[10px] inline-flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  Match Completo
+                                </span>
+                              )}
+                              {!isCompleteMatch && (
+                                <span className="px-2.5 py-1 bg-zinc-100 text-zinc-600 font-semibold rounded-lg text-[10px]">
+                                  Descartada en Paso {report.failureReason?.includes('Entidad') ? '1' : report.failureReason?.includes('Asunto') ? '2' : '3'}
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleEditTemplateWithSample(report.template)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                title="Editar esta plantilla usando este correo como ejemplo"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-zinc-300" />
+                                <span>Editar y Afinar</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Extractions Preview */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-100 text-[11px]">
+                            <div className="bg-white/80 p-2 rounded-xl border border-zinc-100">
+                              <span className="text-zinc-400 block text-[10px]">Monto Extraído</span>
+                              <span className={`font-bold ${report.extractedAmount ? 'text-emerald-700' : 'text-zinc-400'}`}>
+                                {report.extractedAmount ? `$ ${formatCurrency(report.extractedAmount)}` : 'No detectado'}
+                              </span>
+                            </div>
+
+                            <div className="bg-white/80 p-2 rounded-xl border border-zinc-100">
+                              <span className="text-zinc-400 block text-[10px]">Comercio Extraído</span>
+                              <span className="font-semibold text-zinc-700 truncate block">
+                                {report.extractedMerchant || 'No detectado'}
+                              </span>
+                            </div>
+
+                            <div className="bg-white/80 p-2 rounded-xl border border-zinc-100">
+                              <span className="text-zinc-400 block text-[10px]">Cuenta Origen</span>
+                              <span className="font-semibold text-zinc-700 truncate block">
+                                {report.extractedSourceAccount || 'Por defecto'}
+                              </span>
+                            </div>
+
+                            <div className="bg-white/80 p-2 rounded-xl border border-zinc-100">
+                              <span className="text-zinc-400 block text-[10px]">Patrón Desempate</span>
+                              <span className={`font-semibold truncate block ${report.template.match_pattern ? 'text-indigo-700' : 'text-zinc-400'}`}>
+                                {report.template.match_pattern ? `"${report.template.match_pattern}"` : 'Sin desempate'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {report.failureReason && (
+                            <p className="mt-2 text-[11px] text-rose-600 bg-rose-50/70 px-2.5 py-1 rounded-lg">
+                              Motivo de descarte: {report.failureReason}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Email Body Preview */}
+              <div className="space-y-2 pt-2 border-t border-zinc-100">
+                <span className="font-bold text-zinc-900 uppercase tracking-wider text-[11px]">
+                  Cuerpo del correo analizado
+                </span>
+                <div className="bg-zinc-900 text-zinc-100 p-3.5 rounded-2xl font-mono text-[11px] max-h-36 overflow-y-auto leading-relaxed border border-zinc-800 select-all">
+                  {cleanEmailBody(testingEmail.body)}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-zinc-50 border-t border-zinc-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAIFromTest}
+                  className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  <Bot className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Asistente IA con este Correo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCreateNewFromTest}
+                  className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Crear Nueva Plantilla</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsTestModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60 rounded-xl transition cursor-pointer"
+              >
+                Cerrar
               </button>
             </div>
           </div>
