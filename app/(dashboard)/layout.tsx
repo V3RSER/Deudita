@@ -33,6 +33,31 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [loading, currentProfile, router]);
 
+  // Check for pending tester OAuth return or tokens in URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      // Check hash params (e.g. from OAuth redirect)
+      if (window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const providerToken = hashParams.get('provider_token');
+        if (providerToken) {
+          localStorage.setItem('google_provider_token', providerToken);
+        }
+      }
+
+      // Check if user was waiting for tester auth and got bounced to dashboard/groups
+      const pendingTester = localStorage.getItem('pending_tester_auth');
+      const returnTo = localStorage.getItem('auth_return_to') || '/email-templates?tab=create-test';
+      if (pendingTester === 'true' && (pathname === '/dashboard' || pathname === '/groups')) {
+        localStorage.removeItem('pending_tester_auth');
+        localStorage.removeItem('auth_return_to');
+        router.replace(returnTo);
+      }
+    } catch {}
+  }, [pathname, router]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">

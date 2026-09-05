@@ -6,8 +6,12 @@ import { claimAndJoinGroupInvite, claimAllTempProfilesForUser } from '@/lib/invi
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const returnTo = searchParams.get('returnTo');
   const cookieStore = await cookies();
+  const cookieReturnTo = cookieStore.get('auth_return_to')?.value;
+  const pendingTesterAuth = cookieStore.get('pending_tester_auth')?.value === 'true';
+  const paramReturnTo = searchParams.get('returnTo');
+  const returnTo = paramReturnTo || cookieReturnTo || (pendingTesterAuth ? '/email-templates?tab=create-test' : null);
+
   const cookieToken = cookieStore.get('deudita_invite_token')?.value;
   const token = searchParams.get('token') ?? searchParams.get('invite_token') ?? cookieToken;
 
@@ -40,21 +44,41 @@ export async function GET(request: Request) {
         }
       }
 
-      let redirectUrl = `${origin}/groups`;
-      if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('/join')) {
-        redirectUrl = `${origin}${returnTo}`;
-      } else if (joinedGroupId) {
-        redirectUrl = `${origin}/groups/${joinedGroupId}`;
+      const providerToken = sessionData?.session?.provider_token;
+      const providerRefreshToken = sessionData?.session?.provider_refresh_token;
+
+      // Check if the token has active Gmail permissions
+      let hasGmailScope = false;
+      let profileEmail: string | null = null;
+
+      if (providerToken) {
+        try {
+          const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+            headers: { Authorization: `Bearer ${providerToken}` },
+            cache: 'no-store',
+          });
+          if (profileRes.ok) {
+            hasGmailScope = true;
+            const profile = await profileRes.json();
+            profileEmail = profile.emailAddress;
+          }
+        } catch (e) {
+          console.warn('[auth/callback] Error verifying Gmail scope:', e);
+        }
       }
 
-      const isEmailTemplatesReturn = Boolean(returnTo && returnTo.includes('/email-templates'));
-
-      // If user came from tester auth flow, mark as tester in user metadata
-      if (user && (isEmailTemplatesReturn || sessionData?.session?.provider_token)) {
+      // If user came from tester auth flow or got Gmail scope, mark metadata
+      if (user && (hasGmailScope || pendingTesterAuth || providerToken)) {
         try {
-          const metaUpdates: Record<string, unknown> = { is_tester: true };
-          if (sessionData?.session?.provider_token) {
-            metaUpdates.google_provider_token = sessionData.session.provider_token;
+          const metaUpdates: Record<string, unknown> = {
+            is_tester: true,
+            gmail_authorized_at: new Date().toISOString(),
+          };
+          if (providerToken) {
+            metaUpdates.google_provider_token = providerToken;
+          }
+          if (profileEmail) {
+            metaUpdates.tester_email = profileEmail;
           }
           await supabase.auth.updateUser({ data: metaUpdates });
         } catch (metaErr) {
@@ -62,45 +86,63 @@ export async function GET(request: Request) {
         }
       }
 
-      // If redirecting to email-templates, append tester tokens/params so client captures them
-      if (isEmailTemplatesReturn) {
+      const isEmailTemplatesReturn = Boolean(
+        (returnTo && (returnTo.includes('/email-templates') || returnTo.includes('/drafts'))) ||
+        pendingTesterAuth ||
+        hasGmailScope
+      );
+
+      let redirectUrl = `${origin}/groups`;
+      if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('/join')) {
+        redirectUrl = `${origin}${returnTo}`;
+      } else if (hasGmailScope || pendingTesterAuth) {
+        redirectUrl = `${origin}/email-templates?tab=create-test`;
+      } else if (joinedGroupId) {
+        redirectUrl = `${origin}/groups/${joinedGroupId}`;
+      }
+
+      // If redirecting to email-templates or user is tester, append tester tokens/params so client captures them immediately
+      if (isEmailTemplatesReturn || hasGmailScope) {
         const sep = redirectUrl.includes('?') ? '&' : '?';
         const params = new URLSearchParams();
         params.set('tester_authorized', 'true');
-        if (sessionData?.session?.provider_token) {
-          params.set('tester_token', sessionData.session.provider_token);
+        params.set('tab', 'create-test');
+        if (providerToken) {
+          params.set('tester_token', providerToken);
         }
         redirectUrl = `${redirectUrl}${sep}${params.toString()}`;
       }
 
       const response = NextResponse.redirect(redirectUrl);
       response.cookies.delete('deudita_invite_token');
+      response.cookies.delete('auth_return_to');
+      response.cookies.delete('pending_tester_auth');
 
       // Ensure all Supabase session cookies from cookieStore are transferred to response
       cookieStore.getAll().forEach((c) => {
         response.cookies.set(c.name, c.value, {
           path: '/',
           secure: true,
-          sameSite: 'none',
+          sameSite: 'lax',
         });
       });
 
-      if (sessionData?.session?.provider_token) {
-        response.cookies.set('google_provider_token', sessionData.session.provider_token, {
+      if (providerToken) {
+        response.cookies.set('google_provider_token', providerToken, {
           path: '/',
           httpOnly: false,
           secure: true,
-          sameSite: 'none',
+          sameSite: 'lax',
           maxAge: 3600 * 24 * 7,
         });
       }
 
-      if (sessionData?.session?.provider_refresh_token) {
-        response.cookies.set('google_refresh_token', sessionData.session.provider_refresh_token, {
+      if (providerRefreshToken) {
+        response.cookies.set('google_refresh_token', providerRefreshToken, {
           path: '/',
           httpOnly: true,
           secure: true,
-          sameSite: 'none',
+          sameSite: 'lax',
           maxAge: 3600 * 24 * 30,
         });
       }

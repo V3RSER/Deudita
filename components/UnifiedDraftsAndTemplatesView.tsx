@@ -170,32 +170,20 @@ export function UnifiedDraftsAndTemplatesView({
           if (initialTab === 'create-test' || fromOAuthRedirect) {
             setActiveTab('create-test');
           }
-        }
-      } else {
-        // Fallback: check user metadata directly
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata?.is_tester || user?.email === 'wizdeiko@gmail.com') {
-          setIsTesterAuthorized(true);
-          setTesterEmail(user.email || null);
-          setShowTesterAuthModal(false);
         } else {
+          if (data.expired) {
+            try {
+              localStorage.removeItem('google_provider_token');
+            } catch {}
+          }
           setIsTesterAuthorized(false);
         }
+      } else {
+        setIsTesterAuthorized(false);
       }
     } catch (err) {
       console.error('[UnifiedView] Error al comprobar autorización de tester:', err);
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata?.is_tester || user?.email === 'wizdeiko@gmail.com') {
-          setIsTesterAuthorized(true);
-          setTesterEmail(user.email || null);
-        } else {
-          setIsTesterAuthorized(false);
-        }
-      } catch {
-        setIsTesterAuthorized(false);
-      }
+      setIsTesterAuthorized(false);
     }
   }, [initialTab]);
 
@@ -217,38 +205,23 @@ export function UnifiedDraftsAndTemplatesView({
     };
   }, [checkTesterAuth]);
 
-  // Handle manual activation of tester access
-  const handleActivateTesterManually = async () => {
-    setIsAuthorizingTester(true);
-    setTesterAuthError(null);
-    try {
-      const res = await fetch('/api/gmail/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'enable_tester' }),
-      });
-      if (res.ok) {
-        setIsTesterAuthorized(true);
-        setShowTesterAuthModal(false);
-        setActiveTab('create-test');
-      } else {
-        await checkTesterAuth();
-      }
-    } catch (err: unknown) {
-      console.error('[UnifiedView] Error activating tester mode:', err);
-      setTesterAuthError(err instanceof Error ? err.message : 'Error al activar modo tester');
-    } finally {
-      setIsAuthorizingTester(false);
-    }
-  };
-
   // Handle Tester OAuth with Google
   const handleAuthorizeTester = async () => {
     setIsAuthorizingTester(true);
     setTesterAuthError(null);
     try {
+      const targetReturn = '/email-templates?tab=create-test';
+      if (typeof window !== 'undefined') {
+        document.cookie = `auth_return_to=${encodeURIComponent(targetReturn)}; path=/; max-age=1800; SameSite=Lax`;
+        document.cookie = `pending_tester_auth=true; path=/; max-age=1800; SameSite=Lax`;
+        try {
+          localStorage.setItem('auth_return_to', targetReturn);
+          localStorage.setItem('pending_tester_auth', 'true');
+        } catch {}
+      }
+
       const supabase = createClient();
-      const returnUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent('/email-templates')}`;
+      const returnUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(targetReturn)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -730,19 +703,71 @@ export function UnifiedDraftsAndTemplatesView({
       )}
 
       {/* Tab 3: Crear y Probar Plantilla (Exclusivo para Testers Autorizados) */}
-      {activeTab === 'create-test' && isTesterAuthorized && (
-        <CreateAndTestTemplateSection
-          entities={entities}
-          expenseTypes={expenseTypes}
-          existingTemplates={templates}
-          drafts={drafts}
-          initialTemplateToTest={templateToTest}
-          initialDraftToTest={draftToTest}
-          onTemplateCreated={() => {
-            fetchCatalogData();
-            setActiveTab('catalog');
-          }}
-        />
+      {activeTab === 'create-test' && (
+        isTesterAuthorized ? (
+          <CreateAndTestTemplateSection
+            entities={entities}
+            expenseTypes={expenseTypes}
+            existingTemplates={templates}
+            drafts={drafts}
+            initialTemplateToTest={templateToTest}
+            initialDraftToTest={draftToTest}
+            onTemplateCreated={() => {
+              fetchCatalogData();
+              setActiveTab('catalog');
+            }}
+          />
+        ) : (
+          <div className="bg-white rounded-2xl border border-zinc-200/80 p-8 sm:p-12 text-center max-w-xl mx-auto my-8 space-y-6 shadow-xs">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50">
+              <KeyRound className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-zinc-900">
+                Acceso Restringido a Modo Tester
+              </h3>
+              <p className="text-sm text-zinc-500 leading-relaxed max-w-md mx-auto">
+                Para acceder a la consola de pruebas y extraer correos en vivo de tu cuenta, primero debes autenticarte con tu cuenta de Google y otorgar permisos de lectura de Gmail.
+              </p>
+            </div>
+
+            <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200/80 text-left space-y-2 text-xs text-zinc-600">
+              <div className="flex items-center space-x-2 font-semibold text-zinc-900">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Solo usuarios autorizados en Google Cloud Console</span>
+              </div>
+              <p className="text-zinc-500 text-[11px] leading-relaxed">
+                Al hacer clic a continuación, Google te solicitará permiso para leer tus correos. Tras aceptar, se verificará tu identidad y se desbloqueará este entorno.
+              </p>
+            </div>
+
+            {testerAuthError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center space-x-2 text-left">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{testerAuthError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('drafts')}
+                className="px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition cursor-pointer"
+              >
+                Volver a Borradores
+              </button>
+              <button
+                type="button"
+                onClick={handleAuthorizeTester}
+                disabled={isAuthorizingTester}
+                className="px-5 py-2.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center space-x-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar Gmail con Google'}</span>
+              </button>
+            </div>
+          </div>
+        )
       )}
 
       {/* Modal para Autorización de Tester con Google */}
@@ -788,36 +813,23 @@ export function UnifiedDraftsAndTemplatesView({
               </div>
             )}
 
-            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div className="pt-2 flex items-center justify-end space-x-2">
               <button
                 type="button"
-                onClick={handleActivateTesterManually}
-                disabled={isAuthorizingTester}
-                className="px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1.5"
-                title="Si ya autorizaste en Google o eres el administrador del proyecto, pulsa aquí para activar de inmediato"
+                onClick={() => setShowTesterAuthModal(false)}
+                className="px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-800 rounded-xl transition cursor-pointer"
               >
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span>¿Ya autorizaste? Activar ahora</span>
+                Cancelar
               </button>
-
-              <div className="flex items-center justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTesterAuthModal(false)}
-                  className="px-3.5 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-800 rounded-xl transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAuthorizeTester}
-                  disabled={isAuthorizingTester}
-                  className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar con Google'}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleAuthorizeTester}
+                disabled={isAuthorizingTester}
+                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white disabled:bg-zinc-300 rounded-xl transition shadow-2xs flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>{isAuthorizingTester ? 'Conectando con Google...' : 'Autorizar con Google'}</span>
+              </button>
             </div>
           </div>
         </div>

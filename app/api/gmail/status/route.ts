@@ -19,15 +19,10 @@ export async function GET(req: NextRequest) {
       cookieStore.get('google_provider_token')?.value ||
       (user.user_metadata?.google_provider_token as string | undefined);
 
-    const isExplicitTester = Boolean(
-      user.user_metadata?.is_tester ||
-      user.email === 'wizdeiko@gmail.com'
-    );
-
     if (!token) {
       return NextResponse.json({
-        authorized: isExplicitTester,
-        isTester: isExplicitTester,
+        authorized: false,
+        isTester: false,
         requiresToken: true,
         userEmail: user.email,
       });
@@ -41,8 +36,8 @@ export async function GET(req: NextRequest) {
 
     if (!profileRes.ok) {
       return NextResponse.json({
-        authorized: isExplicitTester,
-        isTester: isExplicitTester,
+        authorized: false,
+        isTester: false,
         expired: true,
         userEmail: user.email,
       });
@@ -51,7 +46,7 @@ export async function GET(req: NextRequest) {
     const profile = await profileRes.json();
 
     // Actualizar metadata en background si no estaba marcada
-    if (!user.user_metadata?.is_tester) {
+    if (!user.user_metadata?.is_tester || user.user_metadata?.google_provider_token !== token) {
       try {
         await supabase.auth.updateUser({
           data: {
@@ -76,7 +71,7 @@ export async function GET(req: NextRequest) {
       path: '/',
       httpOnly: false,
       secure: true,
-      sameSite: 'none',
+      sameSite: 'lax',
       maxAge: 3600 * 24 * 7,
     });
 
@@ -154,21 +149,14 @@ export async function POST(req: NextRequest) {
         path: '/',
         httpOnly: false,
         secure: true,
-        sameSite: 'none',
+        sameSite: 'lax',
         maxAge: 3600 * 24 * 7,
       });
 
       return response;
     }
 
-    if (body.action === 'enable_tester') {
-      await supabase.auth.updateUser({
-        data: { is_tester: true },
-      });
-      return NextResponse.json({ authorized: true, userEmail: user.email });
-    }
-
-    return NextResponse.json({ error: 'Acción no reconocida' }, { status: 400 });
+    return NextResponse.json({ error: 'Se requiere un token de Google válido con permisos de Gmail' }, { status: 400 });
   } catch (err) {
     console.error('[API /api/gmail/status POST] Error:', err);
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });

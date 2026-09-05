@@ -88,9 +88,16 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session;
 
+      let token = session?.provider_token;
+      if (!token && typeof window !== 'undefined') {
+        try {
+          token = localStorage.getItem('google_provider_token');
+        } catch {}
+      }
+
       const headers: Record<string, string> = {};
-      if (session?.provider_token) {
-        headers['x-google-token'] = session.provider_token;
+      if (token) {
+        headers['x-google-token'] = token;
       }
 
       const params = new URLSearchParams();
@@ -148,8 +155,18 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
     setIsAuthorizing(true);
     setError(null);
     try {
+      const targetReturn = '/email-templates?tab=create-test';
+      if (typeof window !== 'undefined') {
+        document.cookie = `auth_return_to=${encodeURIComponent(targetReturn)}; path=/; max-age=1800; SameSite=Lax`;
+        document.cookie = `pending_tester_auth=true; path=/; max-age=1800; SameSite=Lax`;
+        try {
+          localStorage.setItem('auth_return_to', targetReturn);
+          localStorage.setItem('pending_tester_auth', 'true');
+        } catch {}
+      }
+
       const supabase = createClient();
-      const returnUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(window.location.pathname)}`;
+      const returnUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(targetReturn)}`;
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

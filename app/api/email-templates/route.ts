@@ -136,11 +136,7 @@ export async function POST(req: NextRequest) {
       cookieStore.get('google_provider_token')?.value ||
       (user.user_metadata?.google_provider_token as string | undefined);
 
-    const isAuthorizedTester = Boolean(
-      token ||
-      user.user_metadata?.is_tester ||
-      user.email === 'wizdeiko@gmail.com'
-    );
+    const isAuthorizedTester = Boolean(token);
 
     if (!isAuthorizedTester) {
       return NextResponse.json(
