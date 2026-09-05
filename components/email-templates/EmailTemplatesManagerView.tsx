@@ -59,6 +59,8 @@ interface IngestedEmail {
   sender: string;
   subject: string;
   body: string;
+  plainBody?: string;
+  snippet?: string;
   date?: string;
   matchedTemplateName?: string;
   matchedAmount?: string;
@@ -267,7 +269,21 @@ export function EmailTemplatesManagerView({
       }
 
       const rawEmails = Array.isArray(data.emails) ? data.emails : [];
-      setEmails(rawEmails);
+      const normalizedEmails: IngestedEmail[] = rawEmails.map((e: any) => {
+        const bodyContent = e.body || e.plainBody || e.snippet || '';
+        return {
+          id: e.id,
+          sender: e.sender || '',
+          subject: e.subject || '',
+          body: bodyContent,
+          plainBody: bodyContent,
+          snippet: e.snippet || bodyContent.substring(0, 160),
+          date: e.date,
+          matchedTemplateName: e.matchedTemplateName,
+          matchedAmount: e.matchedAmount,
+        };
+      });
+      setEmails(normalizedEmails);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al cargar correos';
       setEmailsError(msg);
@@ -449,9 +465,10 @@ export function EmailTemplatesManagerView({
   // Load an email from inbox directly into the editor
   const handleCreateTemplateFromEmail = (email: IngestedEmail) => {
     setEditingTemplateId(null);
-    setSampleSender(email.sender);
-    setSampleSubject(email.subject);
-    setSampleBody(email.body);
+    setSampleSender(email.sender || '');
+    setSampleSubject(email.subject || '');
+    const bodyContent = email.body || email.plainBody || email.snippet || '';
+    setSampleBody(bodyContent);
 
     // Auto-detect entity name from sender or subject
     const lowerSender = (email.sender || '').toLowerCase();
@@ -491,14 +508,16 @@ export function EmailTemplatesManagerView({
 
   // Open AI Assistant Modal
   const handleOpenAIAssistant = (customEmail?: IngestedEmail) => {
-    const sender = customEmail ? customEmail.sender : sampleSender;
-    const subject = customEmail ? customEmail.subject : sampleSubject;
-    const rawBody = customEmail ? customEmail.body : sampleBody;
+    const sender = customEmail ? (customEmail.sender || '') : sampleSender;
+    const subject = customEmail ? (customEmail.subject || '') : sampleSubject;
+    const rawBody = customEmail
+      ? (customEmail.body || customEmail.plainBody || customEmail.snippet || '')
+      : sampleBody;
 
     if (customEmail) {
-      setSampleSender(customEmail.sender);
-      setSampleSubject(customEmail.subject);
-      setSampleBody(customEmail.body);
+      setSampleSender(sender);
+      setSampleSubject(subject);
+      setSampleBody(rawBody);
     }
 
     const cleanBody = cleanEmailBody(rawBody);
@@ -517,10 +536,11 @@ export function EmailTemplatesManagerView({
   // Open Test & Diagnosis Modal for a selected email against all templates
   const handleOpenTestModal = (email: IngestedEmail) => {
     setTestingEmail(email);
+    const bodyContent = email.body || email.plainBody || email.snippet || '';
     const diagnosis = diagnoseEmailMatching(
-      email.sender,
-      email.subject,
-      email.body,
+      email.sender || '',
+      email.subject || '',
+      bodyContent,
       templates,
       entities
     );
@@ -531,9 +551,10 @@ export function EmailTemplatesManagerView({
   // Switch to editor with a specific template and pre-load this email as sample
   const handleEditTemplateWithSample = (tmpl: CatalogTemplate) => {
     if (testingEmail) {
-      setSampleSender(testingEmail.sender);
-      setSampleSubject(testingEmail.subject);
-      setSampleBody(testingEmail.body);
+      setSampleSender(testingEmail.sender || '');
+      setSampleSubject(testingEmail.subject || '');
+      const bodyContent = testingEmail.body || testingEmail.plainBody || testingEmail.snippet || '';
+      setSampleBody(bodyContent);
     }
     handleEditTemplate(tmpl);
     setIsTestModalOpen(false);
@@ -770,9 +791,9 @@ export function EmailTemplatesManagerView({
       if (!emailSearchQuery) return true;
       const q = emailSearchQuery.toLowerCase();
       return (
-        e.subject.toLowerCase().includes(q) ||
-        e.sender.toLowerCase().includes(q) ||
-        e.body.toLowerCase().includes(q)
+        (e.subject || '').toLowerCase().includes(q) ||
+        (e.sender || '').toLowerCase().includes(q) ||
+        (e.body || e.plainBody || '').toLowerCase().includes(q)
       );
     });
   }, [emails, emailSearchQuery]);
@@ -1236,7 +1257,7 @@ export function EmailTemplatesManagerView({
                           onClick={() => {
                             setSampleSender(m.sender);
                             setSampleSubject(m.subject);
-                            setSampleBody(m.body);
+                            setSampleBody(m.body || m.plainBody || m.snippet || '');
                             setShowSampleSelector(false);
                             if (!formSubjectPattern) {
                               setFormSubjectPattern(m.subject.replace(/([.*+?^${}()|[\]\\])/g, '\\$1'));
@@ -1853,8 +1874,8 @@ export function EmailTemplatesManagerView({
                     </div>
                   </div>
 
-                  <p className="text-xs text-zinc-600 line-clamp-2 bg-zinc-50 p-2.5 rounded-xl font-mono text-[11px] leading-relaxed">
-                    {cleanEmailBody(email.body)}
+                  <p className="text-xs text-zinc-600 line-clamp-2 bg-zinc-50 p-2.5 rounded-xl font-mono text-[11px] leading-relaxed break-all">
+                    {cleanEmailBody(email.body || email.plainBody || email.snippet) || '(Cuerpo vacío)'}
                   </p>
                 </div>
               ))}
@@ -2044,15 +2065,15 @@ export function EmailTemplatesManagerView({
             {/* Modal Body */}
             <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 text-xs text-zinc-700">
               {/* Top Result Banner */}
-              {emailDiagnosis.matched ? (
-                emailDiagnosis.level3.survivingTemplates.length > 1 ? (
+              {Boolean(emailDiagnosis.matched ?? (emailDiagnosis.level3?.survivingTemplates?.length ?? 0) > 0) ? (
+                (emailDiagnosis.level3?.survivingTemplates?.length ?? 0) > 1 ? (
                   <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2 text-amber-950">
                     <div className="flex items-center space-x-2 font-bold text-sm text-amber-900">
                       <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                      <span>¡Atención: Conflicto de coincidencia múltiple ({emailDiagnosis.level3.survivingTemplates.length} plantillas coinciden)!</span>
+                      <span>¡Atención: Conflicto de coincidencia múltiple ({(emailDiagnosis.level3?.survivingTemplates?.length ?? 0)} plantillas coinciden)!</span>
                     </div>
                     <p className="text-xs text-amber-800 leading-relaxed">
-                      Hay <strong>{emailDiagnosis.level3.survivingTemplates.length} plantillas</strong> que superaron los 3 pasos con este mismo correo. En Google Apps Script esto puede provocar que se elija la primera encontrada de forma arbitraria. Te recomendamos usar el botón <strong>&quot;Editar y Afinar&quot;</strong> abajo para agregar un <code>match_pattern</code> (patrón de desempate en el cuerpo) o afinar el patrón de asunto.
+                      Hay <strong>{(emailDiagnosis.level3?.survivingTemplates?.length ?? 0)} plantillas</strong> que superaron los 3 pasos con este mismo correo. En Google Apps Script esto puede provocar que se elija la primera encontrada de forma arbitraria. Te recomendamos usar el botón <strong>&quot;Editar y Afinar&quot;</strong> abajo para agregar un <code>match_pattern</code> (patrón de desempate en el cuerpo) o afinar el patrón de asunto.
                     </p>
                   </div>
                 ) : (
@@ -2063,7 +2084,7 @@ export function EmailTemplatesManagerView({
                         ¡Coincidencia única exitosa!
                       </p>
                       <p className="text-xs text-emerald-800 leading-relaxed">
-                        La plantilla <strong>&quot;{emailDiagnosis.winner?.template.name}&quot;</strong> es la única que coincide en los 3 pasos de filtrado. Extraerá un monto de <strong>$ {formatCurrency(emailDiagnosis.winner?.extractedAmount || 0)} COP</strong>.
+                        La plantilla <strong>&quot;{emailDiagnosis.winner?.template.name}&quot;</strong> es la única que coincide en los 3 pasos de filtrado. Extraerá un monto de <strong>$ {formatCurrency(emailDiagnosis.winner?.extractedAmount || (emailDiagnosis.winner?.fields?.amount?.cleanedValue as number | null) || 0)} COP</strong>.
                       </p>
                     </div>
                   </div>
@@ -2090,84 +2111,104 @@ export function EmailTemplatesManagerView({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Step 1 */}
-                  <div className={`p-3.5 rounded-2xl border ${
-                    emailDiagnosis.level1.matchingEntities.length > 0
-                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
-                  } space-y-1`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider">
-                        Paso 1: Entidad
-                      </span>
-                      {emailDiagnosis.level1.matchingEntities.length > 0 ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <X className="w-4 h-4 text-zinc-400" />
-                      )}
-                    </div>
-                    <p className="text-xs font-semibold">
-                      {emailDiagnosis.level1.matchingEntities.length > 0
-                        ? emailDiagnosis.level1.matchingEntities.map((e) => e.name).join(', ')
-                        : 'No identificada'}
-                    </p>
-                    <p className="text-[11px] opacity-75">
-                      {emailDiagnosis.level1.survivingTemplates.length} de {templates.length} plantillas pasaron
-                    </p>
-                  </div>
+                  {(() => {
+                    const hasPassedL1 = (emailDiagnosis.level1?.passedEntities?.length ?? 0) > 0 || (emailDiagnosis.level1?.matchingEntities?.length ?? 0) > 0;
+                    const entityNames = emailDiagnosis.level1?.matchingEntities && emailDiagnosis.level1.matchingEntities.length > 0
+                      ? emailDiagnosis.level1.matchingEntities.map((e) => e.name).join(', ')
+                      : emailDiagnosis.level1?.passedEntities && emailDiagnosis.level1.passedEntities.length > 0
+                      ? emailDiagnosis.level1.passedEntities.map((e) => e.entityName).join(', ')
+                      : 'No identificada';
+                    const survivingL1Count = emailDiagnosis.level1?.survivingTemplates?.length ?? emailDiagnosis.level1?.passedEntities?.reduce((acc, e) => acc + e.templatesCount, 0) ?? 0;
+
+                    return (
+                      <div className={`p-3.5 rounded-2xl border ${
+                        hasPassedL1
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                      } space-y-1`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            Paso 1: Entidad
+                          </span>
+                          {hasPassedL1 ? (
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <X className="w-4 h-4 text-zinc-400" />
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold">
+                          {entityNames}
+                        </p>
+                        <p className="text-[11px] opacity-75">
+                          {survivingL1Count} de {templates.length} plantillas pasaron
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Step 2 */}
-                  <div className={`p-3.5 rounded-2xl border ${
-                    emailDiagnosis.level2.survivingTemplates.length > 0
-                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
-                  } space-y-1`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider">
-                        Paso 2: Asunto
-                      </span>
-                      {emailDiagnosis.level2.survivingTemplates.length > 0 ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <X className="w-4 h-4 text-zinc-400" />
-                      )}
-                    </div>
-                    <p className="text-xs font-semibold">
-                      {emailDiagnosis.level2.survivingTemplates.length > 0
-                        ? `${emailDiagnosis.level2.survivingTemplates.length} coincidieron`
-                        : 'Ninguna coincidió'}
-                    </p>
-                    <p className="text-[11px] opacity-75">
-                      Coincidencia con el asunto del correo
-                    </p>
-                  </div>
+                  {(() => {
+                    const survivingL2Count = emailDiagnosis.level2?.survivingTemplates?.length ?? emailDiagnosis.level2?.passedGroups?.reduce((acc, g) => acc + g.templatesCount, 0) ?? 0;
+                    const hasPassedL2 = survivingL2Count > 0;
+
+                    return (
+                      <div className={`p-3.5 rounded-2xl border ${
+                        hasPassedL2
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                      } space-y-1`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            Paso 2: Asunto
+                          </span>
+                          {hasPassedL2 ? (
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <X className="w-4 h-4 text-zinc-400" />
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold">
+                          {hasPassedL2 ? `${survivingL2Count} coincidieron` : 'Ninguna coincidió'}
+                        </p>
+                        <p className="text-[11px] opacity-75">
+                          Coincidencia con el asunto del correo
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Step 3 */}
-                  <div className={`p-3.5 rounded-2xl border ${
-                    emailDiagnosis.level3.survivingTemplates.length > 0
-                      ? emailDiagnosis.level3.survivingTemplates.length > 1
-                        ? 'bg-amber-50 border-amber-300 text-amber-950'
-                        : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                      : 'bg-zinc-50 border-zinc-200 text-zinc-700'
-                  } space-y-1`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider">
-                        Paso 3: Desempate & Monto
-                      </span>
-                      {emailDiagnosis.level3.survivingTemplates.length > 0 ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <X className="w-4 h-4 text-zinc-400" />
-                      )}
-                    </div>
-                    <p className="text-xs font-semibold">
-                      {emailDiagnosis.level3.survivingTemplates.length > 0
-                        ? `${emailDiagnosis.level3.survivingTemplates.length} coincidencia(s)`
-                        : 'Monto no extraído'}
-                    </p>
-                    <p className="text-[11px] opacity-75">
-                      match_pattern + amount_regex
-                    </p>
-                  </div>
+                  {(() => {
+                    const survivingL3Count = emailDiagnosis.level3?.survivingTemplates?.length ?? 0;
+                    const hasPassedL3 = survivingL3Count > 0;
+
+                    return (
+                      <div className={`p-3.5 rounded-2xl border ${
+                        hasPassedL3
+                          ? survivingL3Count > 1
+                            ? 'bg-amber-50 border-amber-300 text-amber-950'
+                            : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                      } space-y-1`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            Paso 3: Desempate & Monto
+                          </span>
+                          {hasPassedL3 ? (
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <X className="w-4 h-4 text-zinc-400" />
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold">
+                          {hasPassedL3 ? `${survivingL3Count} coincidencia(s)` : 'Monto no extraído'}
+                        </p>
+                        <p className="text-[11px] opacity-75">
+                          match_pattern + amount_regex
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -2178,19 +2219,19 @@ export function EmailTemplatesManagerView({
                     Plantillas evaluadas para este correo
                   </span>
                   <span className="text-[11px] text-zinc-500">
-                    {emailDiagnosis.reports.length} plantillas analizadas
+                    {(emailDiagnosis.reports?.length ?? 0)} plantillas analizadas
                   </span>
                 </div>
 
-                {emailDiagnosis.reports.length === 0 ? (
+                {(!emailDiagnosis.reports || emailDiagnosis.reports.length === 0) ? (
                   <p className="text-xs text-zinc-400 italic bg-zinc-50 p-4 rounded-xl text-center">
-                    No hay plantillas registradas para la entidad de este correo.
+                    No hay plantillas registradas para evaluar contra este correo.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {emailDiagnosis.reports.map((report) => {
                       const isCompleteMatch = report.level3Passed;
-                      const hasConflict = emailDiagnosis.level3.survivingTemplates.length > 1 && isCompleteMatch;
+                      const hasConflict = (emailDiagnosis.level3?.survivingTemplates?.length ?? 0) > 1 && isCompleteMatch;
 
                       return (
                         <div
@@ -2210,11 +2251,11 @@ export function EmailTemplatesManagerView({
                                   {report.template.name}
                                 </span>
                                 <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 font-medium text-[10px]">
-                                  {report.template.entity?.name || 'Sin entidad'}
+                                  {report.template.entity?.name || report.template.entity_name || 'Sin entidad'}
                                 </span>
-                                {report.template.expense_type?.name && (
+                                {(report.template.expense_type?.name || report.template.expense_type_label) && (
                                   <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-medium text-[10px]">
-                                    {report.template.expense_type.name}
+                                    {report.template.expense_type?.name || report.template.expense_type_label}
                                   </span>
                                 )}
                               </div>
@@ -2238,7 +2279,7 @@ export function EmailTemplatesManagerView({
                               )}
                               {!isCompleteMatch && (
                                 <span className="px-2.5 py-1 bg-zinc-100 text-zinc-600 font-semibold rounded-lg text-[10px]">
-                                  Descartada en Paso {report.failureReason?.includes('Entidad') ? '1' : report.failureReason?.includes('Asunto') ? '2' : '3'}
+                                  Descartada en Paso {!report.level1Passed ? '1' : !report.level2Passed ? '2' : '3'}
                                 </span>
                               )}
 
@@ -2302,8 +2343,8 @@ export function EmailTemplatesManagerView({
                 <span className="font-bold text-zinc-900 uppercase tracking-wider text-[11px]">
                   Cuerpo del correo analizado
                 </span>
-                <div className="bg-zinc-900 text-zinc-100 p-3.5 rounded-2xl font-mono text-[11px] max-h-36 overflow-y-auto leading-relaxed border border-zinc-800 select-all">
-                  {cleanEmailBody(testingEmail.body)}
+                <div className="bg-zinc-900 text-zinc-100 p-3.5 rounded-2xl font-mono text-[11px] max-h-36 overflow-y-auto leading-relaxed border border-zinc-800 select-all whitespace-pre-wrap">
+                  {cleanEmailBody(testingEmail.body || testingEmail.plainBody || testingEmail.snippet) || '(Cuerpo vacío)'}
                 </div>
               </div>
             </div>

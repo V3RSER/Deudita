@@ -11,6 +11,7 @@ export interface EmailItem {
   date: string;
   snippet: string;
   plainBody: string;
+  body: string;
   entityName?: string;
 }
 
@@ -27,20 +28,36 @@ function decodeBase64Url(data: string): string {
 }
 
 /**
- * Limpia etiquetas HTML para obtener texto plano legible
+ * Convierte HTML a texto plano legible respetando saltos de línea de bloques,
+ * reproduciendo fielmente el comportamiento de GmailMessage.getPlainBody() en Google Apps Script.
  */
-function stripHtml(html: string): string {
+function htmlToPlainBody(html: string): string {
+  if (!html) return '';
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+    // Reemplaza elementos de bloque y saltos por saltos de línea
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n')
+    .replace(/<(td|th)[^>]*>/gi, ' ')
+    // Elimina el resto de etiquetas HTML
+    .replace(/<[^>]+>/g, '')
+    // Entidades HTML comunes
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    // Normaliza espacios sin destruir saltos de línea
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+\n/g, '\n\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -51,24 +68,29 @@ interface GmailPart {
 }
 
 /**
- * Extrae de forma recursiva el cuerpo en texto plano o HTML limpio de un mensaje de Gmail
+ * Extrae de forma recursiva y fiel el cuerpo en texto plano o HTML limpio de un mensaje de Gmail
  */
 function extractBody(payload?: GmailPart): string {
   if (!payload) return '';
 
-  if (payload.mimeType === 'text/plain' && payload.body?.data) {
-    return decodeBase64Url(payload.body.data);
-  }
-
-  let plainContent = '';
-  let htmlContent = '';
+  let plainText = '';
+  let htmlText = '';
 
   function traverse(part: GmailPart) {
-    if (part.mimeType === 'text/plain' && part.body?.data && !plainContent) {
-      plainContent = decodeBase64Url(part.body.data);
-    } else if (part.mimeType === 'text/html' && part.body?.data && !htmlContent) {
-      htmlContent = stripHtml(decodeBase64Url(part.body.data));
+    if (!part) return;
+
+    if (part.mimeType === 'text/plain' && part.body?.data) {
+      const decoded = decodeBase64Url(part.body.data);
+      if (decoded.trim()) {
+        plainText = (plainText ? plainText + '\n' : '') + decoded;
+      }
+    } else if (part.mimeType === 'text/html' && part.body?.data) {
+      const decoded = decodeBase64Url(part.body.data);
+      if (decoded.trim()) {
+        htmlText = (htmlText ? htmlText + '\n' : '') + decoded;
+      }
     }
+
     if (part.parts && Array.isArray(part.parts)) {
       for (const subPart of part.parts) {
         traverse(subPart);
@@ -78,7 +100,20 @@ function extractBody(payload?: GmailPart): string {
 
   traverse(payload);
 
-  return plainContent || htmlContent || (payload.body?.data ? decodeBase64Url(payload.body.data) : '');
+  if (plainText.trim()) {
+    return plainText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  }
+
+  if (htmlText.trim()) {
+    return htmlToPlainBody(htmlText);
+  }
+
+  if (payload.body?.data) {
+    const raw = decodeBase64Url(payload.body.data);
+    return payload.mimeType === 'text/html' ? htmlToPlainBody(raw) : raw;
+  }
+
+  return '';
 }
 
 /**
@@ -254,6 +289,7 @@ export async function GET(req: NextRequest) {
           date: new Date(dateHeader).toISOString(),
           snippet: detail.snippet || plainText.substring(0, 160),
           plainBody: plainText,
+          body: plainText,
         };
 
         return item;

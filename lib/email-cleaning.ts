@@ -4,7 +4,33 @@
  */
 export function cleanEmailBody(body: string | null | undefined): string {
   if (!body) return '';
-  return body
+  let text = String(body);
+
+  // Si el texto contiene fragmentos o etiquetas HTML (p. ej. correos sin procesar o pegados directos),
+  // los convertimos a texto plano respetando saltos de línea, idéntico a GmailMessage.getPlainBody() de Google Apps Script.
+  if (/<[a-z][\s\S]*>/i.test(text)) {
+    text = text
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+      .replace(/<br\s*[\/]?>/gi, '\n')
+      .replace(/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n')
+      .replace(/<(td|th)[^>]*>/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+  }
+
+  // Exactas 6 reglas de cleanEmailBody de Google Apps Script:
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
     .replace(/\[image:[^\]]*\]/gi, '')       // [image: BBVA Logo]
     .replace(/<https?:\/\/[^\s>]+>/g, '')    // <https://...> (links envueltos)
     .replace(/https?:\/\/\S+/g, '')          // URLs sueltas

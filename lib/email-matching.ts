@@ -27,6 +27,8 @@ export interface CatalogTemplate {
   active: boolean;
   created_at?: string;
   entity_email_patterns?: string[];
+  entity?: { name?: string };
+  expense_type?: { name?: string };
 }
 
 export interface Level1EntityReport {
@@ -90,15 +92,31 @@ export interface TemplateExtractionReport {
   hasErrors: boolean;
 }
 
+export interface DiagnosisTemplateReport {
+  template: CatalogTemplate;
+  level1Passed: boolean;
+  level2Passed: boolean;
+  level3Passed: boolean;
+  failureReason?: string;
+  extractedAmount?: number | null;
+  extractedMerchant?: string | null;
+  extractedSourceAccount?: string | null;
+  isWinner: boolean;
+}
+
 export interface DiagnosisResult {
   cleanedBody: string;
+  matched: boolean;
   level1: {
     passedEntities: Level1EntityReport[];
+    matchingEntities: Array<{ id: string; name: string }>;
+    survivingTemplates: CatalogTemplate[];
     discardedEntities: Level1EntityReport[];
     totalTemplatesDiscarded: number;
   };
   level2: {
     passedGroups: Level2SubjectGroupReport[];
+    survivingTemplates: CatalogTemplate[];
     discardedGroups: Level2SubjectGroupReport[];
     totalTemplatesDiscarded: number;
   };
@@ -109,7 +127,12 @@ export interface DiagnosisResult {
     ambiguityIssuesCount: number;
   };
   extractions: TemplateExtractionReport[];
-  winner: TemplateExtractionReport | null;
+  winner: (TemplateExtractionReport & {
+    extractedAmount?: number | null;
+    extractedMerchant?: string | null;
+    extractedSourceAccount?: string | null;
+  }) | null;
+  reports: DiagnosisTemplateReport[];
 }
 
 function parseAmountValue(rawAmount: string | null): number | null {
@@ -626,15 +649,107 @@ export function diagnoseEmailMatching(
     winner.isWinner = true;
   }
 
+  const l1SurvivingTemplates: CatalogTemplate[] = [];
+  for (const pe of passedEntities) {
+    const data = entityMap.get(pe.entityId);
+    if (data) {
+      l1SurvivingTemplates.push(...data.templates);
+    }
+  }
+
+  const l2SurvivingTemplates: CatalogTemplate[] = [];
+  for (const pg of passedGroups) {
+    l2SurvivingTemplates.push(...pg.templates);
+  }
+
+  const templateReports: DiagnosisTemplateReport[] = templates.map((tpl) => {
+    const passedL1 = l1SurvivingTemplates.some((t) => t.id === tpl.id);
+    if (!passedL1) {
+      const entName = tpl.entity_name || tpl.entity?.name || 'Entidad';
+      return {
+        template: tpl,
+        level1Passed: false,
+        level2Passed: false,
+        level3Passed: false,
+        failureReason: `Descartada en Paso 1: El remitente/cuerpo no coincide con la entidad "${entName}".`,
+        isWinner: false,
+      };
+    }
+
+    const passedL2 = l2SurvivingTemplates.some((t) => t.id === tpl.id);
+    if (!passedL2) {
+      return {
+        template: tpl,
+        level1Passed: true,
+        level2Passed: false,
+        level3Passed: false,
+        failureReason: `Descartada en Paso 2: El asunto no coincide con el patrón /${tpl.subject_pattern || ''}/i.`,
+        isWinner: false,
+      };
+    }
+
+    const surviving = survivingTemplates.some((t) => t.id === tpl.id);
+    if (!surviving) {
+      const disc = discardedCandidates.find((c) => c.template.id === tpl.id);
+      return {
+        template: tpl,
+        level1Passed: true,
+        level2Passed: true,
+        level3Passed: false,
+        failureReason: disc?.discardReason || `Descartada en Paso 3: Patrón de desempate /${tpl.match_pattern || ''}/i no encontrado.`,
+        isWinner: false,
+      };
+    }
+
+    const ext = extractions.find((e) => e.template.id === tpl.id);
+    const isWinner = winner?.template.id === tpl.id;
+    return {
+      template: tpl,
+      level1Passed: true,
+      level2Passed: true,
+      level3Passed: true,
+      extractedAmount: (ext?.fields.amount.cleanedValue as number | null) ?? null,
+      extractedMerchant: (ext?.fields.merchant.cleanedValue as string | null) ?? null,
+      extractedSourceAccount: (ext?.fields.source_account.cleanedValue as string | null) ?? null,
+      isWinner,
+    };
+  });
+
+  // Sort reports: Winners/Complete matches first, then level 2, then level 1
+  templateReports.sort((a, b) => {
+    if (a.isWinner) return -1;
+    if (b.isWinner) return 1;
+    if (a.level3Passed && !b.level3Passed) return -1;
+    if (!a.level3Passed && b.level3Passed) return 1;
+    if (a.level2Passed && !b.level2Passed) return -1;
+    if (!a.level2Passed && b.level2Passed) return 1;
+    if (a.level1Passed && !b.level1Passed) return -1;
+    if (!a.level1Passed && b.level1Passed) return 1;
+    return 0;
+  });
+
+  const winnerWithFields = winner
+    ? {
+        ...winner,
+        extractedAmount: (winner.fields.amount.cleanedValue as number | null) ?? null,
+        extractedMerchant: (winner.fields.merchant.cleanedValue as string | null) ?? null,
+        extractedSourceAccount: (winner.fields.source_account.cleanedValue as string | null) ?? null,
+      }
+    : null;
+
   return {
     cleanedBody: cleanBody,
+    matched: survivingTemplates.length > 0,
     level1: {
       passedEntities,
+      matchingEntities: passedEntities.map((e) => ({ id: e.entityId, name: e.entityName })),
+      survivingTemplates: l1SurvivingTemplates,
       discardedEntities,
       totalTemplatesDiscarded: l1DiscardedTemplatesCount,
     },
     level2: {
       passedGroups,
+      survivingTemplates: l2SurvivingTemplates,
       discardedGroups,
       totalTemplatesDiscarded: l2DiscardedTemplatesCount,
     },
@@ -645,7 +760,8 @@ export function diagnoseEmailMatching(
       ambiguityIssuesCount,
     },
     extractions,
-    winner,
+    winner: winnerWithFields,
+    reports: templateReports,
   };
 }
 
