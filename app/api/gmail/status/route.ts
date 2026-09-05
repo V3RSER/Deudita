@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     if (!token) {
       return NextResponse.json({
         authorized: isExplicitTester,
+        authenticated: isExplicitTester,
         isTester: isExplicitTester,
         requiresToken: true,
         userEmail: user.email,
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
 
     const response = NextResponse.json({
       authorized: true,
+      authenticated: true,
       isTester: true,
       email: profileEmail,
       userEmail: user.email,

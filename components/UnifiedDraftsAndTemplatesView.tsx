@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Inbox,
   Search,
@@ -11,6 +11,10 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  MailCheck,
+  Loader2,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft } from '@/lib/types';
@@ -32,7 +36,71 @@ export function UnifiedDraftsAndTemplatesView({
   const [expandedSnippetId, setExpandedSnippetId] = useState<string | null>(null);
   const [isDiscardingId, setIsDiscardingId] = useState<string | null>(null);
 
+  // Gmail connection state (Google Apps Script)
+  const [isCheckingGmail, setIsCheckingGmail] = useState(true);
+  const [isGmailConnected, setIsGmailConnected] = useState(false);
+  const [gmailConnection, setGmailConnection] = useState<{
+    status?: string;
+    apps_script_url?: string;
+    last_sync_at?: string | null;
+  } | null>(null);
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+  const [connectNotice, setConnectNotice] = useState<string | null>(null);
 
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/gmail-connections');
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setIsGmailConnected(Boolean(data.connected));
+          setGmailConnection(data.connection || null);
+        }
+      } catch (err) {
+        console.warn('[UnifiedDraftsAndTemplatesView] Error fetching connection status:', err);
+      } finally {
+        if (isMounted) {
+          setIsCheckingGmail(false);
+        }
+      }
+    };
+
+    fetchStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleConnectGmail = async () => {
+    setIsConnectingGmail(true);
+    setConnectNotice(null);
+    try {
+      const res = await fetch('/api/gmail-connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al conectar');
+      }
+
+      setIsGmailConnected(true);
+      setGmailConnection(data.connection);
+      setConnectNotice('¡Enlace de Google Apps Script generado!');
+
+      const scriptUrl = data.connection?.apps_script_url || data.apps_script_url;
+      if (scriptUrl) {
+        window.open(scriptUrl, '_blank');
+      }
+    } catch (err: unknown) {
+      console.error('[UnifiedDraftsAndTemplatesView] Error connecting Gmail:', err);
+      setConnectNotice('No se pudo generar el enlace de conexión.');
+    } finally {
+      setIsConnectingGmail(false);
+    }
+  };
 
   // --- Filtered Drafts ---
   const filteredDrafts = useMemo(() => {
@@ -76,7 +144,79 @@ export function UnifiedDraftsAndTemplatesView({
             Comprobantes bancarios detectados automáticamente desde tus correos.
           </p>
         </div>
+
+        {/* Connection status in header (only rendered once check finishes to prevent false positives) */}
+        {!isCheckingGmail && isGmailConnected && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Sincronización activa</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleConnectGmail}
+              disabled={isConnectingGmail}
+              title="Reconectar o cambiar cuenta de Google"
+              className="text-xs text-zinc-500 hover:text-zinc-900 font-medium px-2.5 py-1.5 rounded-xl hover:bg-zinc-100 transition cursor-pointer"
+            >
+              Reconectar
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Google Apps Script Connection Banner: Shown ONLY when check finished and not connected (no false positives during DB delay) */}
+      {!isCheckingGmail && !isGmailConnected && (
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+              <MailCheck className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                <span>Sincronización de correos no conectada</span>
+                <span className="text-[10px] font-semibold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
+                  Acción requerida
+                </span>
+              </h3>
+              <p className="text-xs text-zinc-600 leading-relaxed max-w-xl">
+                Conecta tu cuenta de Google mediante Google Apps Script para detectar comprobantes bancarios automáticamente y generar tickets listos para dividir.
+              </p>
+              {connectNotice && (
+                <p className="text-xs text-emerald-700 font-medium pt-0.5">{connectNotice}</p>
+              )}
+              {gmailConnection?.apps_script_url && (
+                <a
+                  href={gmailConnection.apps_script_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1 text-xs text-amber-800 hover:text-amber-950 font-semibold underline pt-0.5"
+                >
+                  <span>Abrir enlace de autorización de Google</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <button
+              type="button"
+              id="connect-gmail-script-btn"
+              onClick={handleConnectGmail}
+              disabled={isConnectingGmail}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+            >
+              {isConnectingGmail ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <MailCheck className="w-3.5 h-3.5 text-amber-400" />
+              )}
+              <span>Conectar con Google</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Borradores y Tickets */}
       <div className="space-y-4">

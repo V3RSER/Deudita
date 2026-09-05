@@ -38,12 +38,23 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
 
     try {
+      // Check query params (e.g. from /auth/callback redirect)
+      if (window.location.search) {
+        const queryParams = new URLSearchParams(window.location.search);
+        const queryToken = queryParams.get('tester_token') || queryParams.get('provider_token') || queryParams.get('token');
+        if (queryToken) {
+          localStorage.setItem('google_provider_token', queryToken);
+          document.cookie = `google_provider_token=${encodeURIComponent(queryToken)}; path=/; max-age=604800; SameSite=Lax`;
+        }
+      }
+
       // Check hash params (e.g. from OAuth redirect)
       if (window.location.hash) {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const providerToken = hashParams.get('provider_token');
+        const providerToken = hashParams.get('provider_token') || hashParams.get('access_token');
         if (providerToken) {
           localStorage.setItem('google_provider_token', providerToken);
+          document.cookie = `google_provider_token=${encodeURIComponent(providerToken)}; path=/; max-age=604800; SameSite=Lax`;
         }
       }
 
