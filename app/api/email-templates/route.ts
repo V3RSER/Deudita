@@ -354,6 +354,33 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
+    // Link entity_email_pattern if provided
+    const targetEntityId = updates.entity_id || updatedTemplate.entity_id;
+    if (
+      targetEntityId &&
+      updates.entity_email_pattern &&
+      typeof updates.entity_email_pattern === 'string' &&
+      updates.entity_email_pattern.trim()
+    ) {
+      const patternTrimmed = updates.entity_email_pattern.trim();
+      try {
+        const { data: existingPatterns } = await supabase
+          .from('entity_email_patterns')
+          .select('id, pattern')
+          .eq('entity_id', targetEntityId)
+          .eq('pattern', patternTrimmed);
+
+        if (!existingPatterns || existingPatterns.length === 0) {
+          await supabase.from('entity_email_patterns').insert({
+            entity_id: targetEntityId,
+            pattern: patternTrimmed,
+          });
+        }
+      } catch (patErr) {
+        console.warn('[API PUT /api/email-templates] Notice: could not link entity pattern:', patErr);
+      }
+    }
+
     return NextResponse.json(updatedTemplate);
   } catch (err: unknown) {
     console.error('[API PUT /api/email-templates] Error:', err);

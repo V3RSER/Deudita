@@ -25,7 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { cleanEmailBody, buildTemplatePrompt } from '@/lib/email-cleaning';
+import { cleanEmailBody, buildTemplatePrompt, sanitizeRegexPattern } from '@/lib/email-cleaning';
 import { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
 import { ExpenseDraft } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
@@ -71,7 +71,8 @@ function testFieldRegex(
   pattern: string | null | undefined,
   fieldLabel: string
 ): { success: boolean; rawExtracted: string | null; reason?: string; hasCaptureGroup: boolean } {
-  if (!pattern || !pattern.trim()) {
+  const cleanPat = sanitizeRegexPattern(pattern);
+  if (!cleanPat) {
     return {
       success: false,
       rawExtracted: null,
@@ -81,7 +82,7 @@ function testFieldRegex(
   }
 
   try {
-    const regex = new RegExp(pattern, 'i');
+    const regex = new RegExp(cleanPat, 'i');
     const match = regex.exec(text);
 
     if (!match) {
@@ -170,7 +171,7 @@ export function CreateAndTestTemplateSection({
   ) => {
     setSenderInput(email.sender);
     setSubjectInput(email.subject);
-    setRawBodyInput(email.plainBody);
+    setRawBodyInput(cleanEmailBody(email.plainBody));
     if (template) {
       handleLoadTemplate(template.id);
     }
@@ -306,9 +307,10 @@ export function CreateAndTestTemplateSection({
     // Level 1: Entity / Sender
     let level1Matched = false;
     let level1Reason = 'Sin remitente o entidad ingresada';
-    if (senderPattern && senderPattern.trim()) {
+    const cleanSenderPat = sanitizeRegexPattern(senderPattern);
+    if (cleanSenderPat) {
       try {
-        const regex = new RegExp(senderPattern.trim(), 'i');
+        const regex = new RegExp(cleanSenderPat, 'i');
         level1Matched = regex.test(senderInput) || regex.test(targetText);
         level1Reason = level1Matched ? 'Coincide con sender_pattern' : 'No coincide con sender_pattern';
       } catch {
@@ -318,8 +320,10 @@ export function CreateAndTestTemplateSection({
       const ent = entities.find((e) => e.id === selectedEntityId);
       if (ent && ent.patterns && ent.patterns.length > 0) {
         level1Matched = ent.patterns.some((p) => {
+          const cleanP = sanitizeRegexPattern(p);
+          if (!cleanP) return false;
           try {
-            return new RegExp(p, 'i').test(senderInput) || new RegExp(p, 'i').test(targetText);
+            return new RegExp(cleanP, 'i').test(senderInput) || new RegExp(cleanP, 'i').test(targetText);
           } catch {
             return false;
           }
@@ -337,9 +341,10 @@ export function CreateAndTestTemplateSection({
     // Level 2: Subject pattern
     let level2Matched = false;
     let level2Reason = 'Sin subject_pattern configurado';
-    if (subjectPattern && subjectPattern.trim()) {
+    const cleanSubjPat = sanitizeRegexPattern(subjectPattern);
+    if (cleanSubjPat) {
       try {
-        const regex = new RegExp(subjectPattern.trim(), 'i');
+        const regex = new RegExp(cleanSubjPat, 'i');
         level2Matched = regex.test(subjectInput) || regex.test(targetText);
         level2Reason = level2Matched ? 'Coincide con subject_pattern' : 'No coincide con subject_pattern';
       } catch {
@@ -353,9 +358,10 @@ export function CreateAndTestTemplateSection({
     // Level 3: Match pattern (desempate)
     let level3Matched = true;
     let level3Reason = 'Sin match_pattern de desempate (no requerido)';
-    if (matchPattern && matchPattern.trim()) {
+    const cleanMatchPat = sanitizeRegexPattern(matchPattern);
+    if (cleanMatchPat) {
       try {
-        const regex = new RegExp(matchPattern.trim(), 'i');
+        const regex = new RegExp(cleanMatchPat, 'i');
         level3Matched = regex.test(targetText);
         level3Reason = level3Matched ? 'Coincide con el patrón de desempate' : 'No coincide con match_pattern';
       } catch {

@@ -41,7 +41,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { cleanEmailBody, buildTemplatePrompt, parseAITemplateResponse } from '@/lib/email-cleaning';
+import { cleanEmailBody, buildTemplatePrompt, parseAITemplateResponse, sanitizeRegexPattern } from '@/lib/email-cleaning';
 import {
   CatalogEntity,
   CatalogTemplate,
@@ -618,12 +618,19 @@ export function EmailTemplatesManagerView({
     if (matchedEntity) {
       setFormEntityId(matchedEntity.id);
       setFormIsNewEntity(false);
-      setFormEntityEmailPattern('');
+      // Ensure pattern is kept so it gets linked to entity if not already present
+      if (d.entity_email_pattern) {
+        setFormEntityEmailPattern(d.entity_email_pattern);
+      } else if (d.sender_pattern) {
+        setFormEntityEmailPattern(d.sender_pattern);
+      }
     } else {
       setFormEntityId(null);
       setFormIsNewEntity(true);
       if (d.entity_email_pattern) {
         setFormEntityEmailPattern(d.entity_email_pattern);
+      } else if (d.sender_pattern) {
+        setFormEntityEmailPattern(d.sender_pattern);
       }
     }
 
@@ -684,22 +691,24 @@ export function EmailTemplatesManagerView({
         headers['x-google-token'] = storedToken;
       }
 
+      const patternToLink = sanitizeRegexPattern(formEntityEmailPattern.trim()) || sanitizeRegexPattern(formSenderPattern.trim()) || null;
+
       const payload = {
         id: editingTemplateId,
         name: formName.trim(),
         entity_name: formEntityName.trim() || null,
         entity_id: formEntityId || null,
-        entity_email_pattern: formIsNewEntity ? formEntityEmailPattern.trim() || null : null,
-        subject_pattern: formSubjectPattern.trim() || null,
-        sender_pattern: formSenderPattern.trim() || null,
-        match_pattern: formMatchPattern.trim() || null,
-        amount_regex: formAmountRegex.trim(),
-        merchant_regex: formMerchantRegex.trim() || null,
-        source_account_regex: formSourceAccountRegex.trim() || null,
-        date_regex: formDateRegex.trim() || null,
+        entity_email_pattern: patternToLink,
+        subject_pattern: sanitizeRegexPattern(formSubjectPattern.trim()) || null,
+        sender_pattern: sanitizeRegexPattern(formSenderPattern.trim()) || null,
+        match_pattern: sanitizeRegexPattern(formMatchPattern.trim()) || null,
+        amount_regex: sanitizeRegexPattern(formAmountRegex.trim()) || formAmountRegex.trim(),
+        merchant_regex: sanitizeRegexPattern(formMerchantRegex.trim()) || null,
+        source_account_regex: sanitizeRegexPattern(formSourceAccountRegex.trim()) || null,
+        date_regex: sanitizeRegexPattern(formDateRegex.trim()) || null,
         date_format: formDateFormat.trim() || 'DD/MM/YYYY',
-        time_regex: formTimeRegex.trim() || null,
-        currency_regex: formCurrencyRegex.trim() || null,
+        time_regex: sanitizeRegexPattern(formTimeRegex.trim()) || null,
+        currency_regex: sanitizeRegexPattern(formCurrencyRegex.trim()) || null,
         default_currency: formCurrency.trim() || 'COP',
         expense_type: formExpenseType || null,
         expense_type_id: formExpenseTypeId || null,

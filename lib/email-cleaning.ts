@@ -40,6 +40,25 @@ export function cleanEmailBody(body: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * Sanitizes regex strings by removing leading/trailing forward slashes (/.../i)
+ * and accidental outer quotes that LLMs or users might introduce.
+ */
+export function sanitizeRegexPattern(pattern: string | null | undefined): string | null {
+  if (!pattern || typeof pattern !== 'string') return null;
+  let p = pattern.trim();
+  // Strip surrounding quotes if present
+  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+    p = p.slice(1, -1).trim();
+  }
+  // Strip enclosing regex slashes: e.g. /pattern/i or /pattern/
+  const slashMatch = p.match(/^\/([\s\S]*)\/([gimsuy]*)$/);
+  if (slashMatch) {
+    p = slashMatch[1];
+  }
+  return p.trim() || null;
+}
+
 export interface ParsedAITemplateResult {
   success: boolean;
   data?: {
@@ -222,14 +241,16 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
   ];
 
   for (const { key, label, reqGroup } of regexFields) {
-    const pattern = parsed[key];
-    if (pattern && typeof pattern === 'string' && pattern.trim()) {
+    const rawPattern = parsed[key];
+    const pattern = sanitizeRegexPattern(rawPattern);
+    if (pattern) {
+      parsed[key] = pattern;
       try {
         new RegExp(pattern, 'i');
         if (reqGroup && !/\([^?].*?\)/.test(pattern)) {
           warnings.push(`El patrón de "${label}" (${pattern}) parece no contener un grupo de captura (...).`);
         }
-      } catch (regexErr: unknown) {
+      } catch {
         warnings.push(`El patrón de "${label}" (${pattern}) contiene una expresión regular con errores de sintaxis.`);
       }
     }
@@ -241,18 +262,18 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
       name: String(parsed.name).trim(),
       entity_name: parsed.entity_name ? String(parsed.entity_name).trim() : null,
       is_new_entity: Boolean(parsed.is_new_entity),
-      entity_email_pattern: parsed.entity_email_pattern ? String(parsed.entity_email_pattern).trim() : null,
-      sender_pattern: parsed.sender_pattern ? String(parsed.sender_pattern).trim() : null,
-      subject_pattern: parsed.subject_pattern ? String(parsed.subject_pattern).trim() : null,
-      match_pattern: parsed.match_pattern ? String(parsed.match_pattern).trim() : null,
-      amount_regex: String(parsed.amount_regex).trim(),
-      merchant_regex: parsed.merchant_regex ? String(parsed.merchant_regex).trim() : null,
-      date_regex: parsed.date_regex ? String(parsed.date_regex).trim() : null,
+      entity_email_pattern: sanitizeRegexPattern(parsed.entity_email_pattern),
+      sender_pattern: sanitizeRegexPattern(parsed.sender_pattern),
+      subject_pattern: sanitizeRegexPattern(parsed.subject_pattern),
+      match_pattern: sanitizeRegexPattern(parsed.match_pattern),
+      amount_regex: sanitizeRegexPattern(parsed.amount_regex) || String(parsed.amount_regex).trim(),
+      merchant_regex: sanitizeRegexPattern(parsed.merchant_regex),
+      date_regex: sanitizeRegexPattern(parsed.date_regex),
       date_format: parsed.date_format ? String(parsed.date_format).trim() : 'DD/MM/YYYY',
-      time_regex: parsed.time_regex ? String(parsed.time_regex).trim() : null,
-      currency_regex: parsed.currency_regex ? String(parsed.currency_regex).trim() : null,
+      time_regex: sanitizeRegexPattern(parsed.time_regex),
+      currency_regex: sanitizeRegexPattern(parsed.currency_regex),
       default_currency: parsed.default_currency ? String(parsed.default_currency).trim() : 'COP',
-      source_account_regex: parsed.source_account_regex ? String(parsed.source_account_regex).trim() : null,
+      source_account_regex: sanitizeRegexPattern(parsed.source_account_regex),
       expense_type: parsed.expense_type ? String(parsed.expense_type).toLowerCase().trim() : null,
     },
     warnings: warnings.length > 0 ? warnings : undefined,

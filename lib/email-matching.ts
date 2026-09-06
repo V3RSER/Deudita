@@ -1,4 +1,4 @@
-import { cleanEmailBody } from './email-cleaning';
+import { cleanEmailBody, sanitizeRegexPattern } from './email-cleaning';
 
 export interface CatalogEntity {
   id: string;
@@ -161,7 +161,8 @@ function extractWithCaptureGroup(
   regexPattern: string | null | undefined,
   fieldLabel: string
 ): { success: boolean; rawExtracted: string | null; reason?: string; hasCaptureGroup: boolean } {
-  if (!regexPattern || !regexPattern.trim()) {
+  const sanitized = sanitizeRegexPattern(regexPattern);
+  if (!sanitized) {
     return {
       success: false,
       rawExtracted: null,
@@ -171,15 +172,15 @@ function extractWithCaptureGroup(
   }
 
   try {
-    const regex = new RegExp(regexPattern, 'i');
+    const regex = new RegExp(sanitized, 'i');
     const match = text.match(regex);
-    const hasCapture = regexPattern.includes('(') && regexPattern.includes(')');
+    const hasCapture = sanitized.includes('(') && sanitized.includes(')');
 
     if (!match) {
       return {
         success: false,
         rawExtracted: null,
-        reason: `No coincidió con el patrón en el cuerpo: /${regexPattern}/i`,
+        reason: `No coincidió con el patrón en el cuerpo: /${sanitized}/i`,
         hasCaptureGroup: hasCapture,
       };
     }
@@ -203,7 +204,7 @@ function extractWithCaptureGroup(
     return {
       success: false,
       rawExtracted: null,
-      reason: `Error de sintaxis en expresión regular /${regexPattern}/: ${errMessage}`,
+      reason: `Error de sintaxis en expresión regular: /${sanitized}/: ${errMessage}`,
       hasCaptureGroup: false,
     };
   }
@@ -270,16 +271,36 @@ export function diagnoseEmailMatching(
     // If entity has no templates, skip reporting to avoid noise
     if (entTemplates.length === 0) continue;
 
-    // Compile patterns to test for this entity
-    const patternsToTest = [...entity.patterns];
+    // Compile patterns to test for this entity:
+    // 1. Registered patterns in entity_email_patterns
+    const patternsToTest: string[] = [];
+    for (const p of entity.patterns) {
+      const cleanP = sanitizeRegexPattern(p);
+      if (cleanP && !patternsToTest.includes(cleanP)) {
+        patternsToTest.push(cleanP);
+      }
+    }
 
-    // If entity has no registered patterns in entity_email_patterns, check template sender_pattern
-    if (patternsToTest.length === 0) {
-      for (const t of entTemplates) {
-        if (t.sender_pattern && !patternsToTest.includes(t.sender_pattern)) {
-          patternsToTest.push(t.sender_pattern);
+    // 2. Plus template sender_pattern and entity_email_patterns from any template in this group
+    for (const t of entTemplates) {
+      const cleanSp = sanitizeRegexPattern(t.sender_pattern);
+      if (cleanSp && !patternsToTest.includes(cleanSp)) {
+        patternsToTest.push(cleanSp);
+      }
+      if (t.entity_email_patterns && Array.isArray(t.entity_email_patterns)) {
+        for (const ep of t.entity_email_patterns) {
+          const cleanEp = sanitizeRegexPattern(ep);
+          if (cleanEp && !patternsToTest.includes(cleanEp)) {
+            patternsToTest.push(cleanEp);
+          }
         }
       }
+    }
+
+    // 3. Fallback: if no patterns registered, check if sender or body mentions entity name
+    if (patternsToTest.length === 0 && entity.name && entity.name !== 'Sin entidad asignada') {
+      const escapedName = entity.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      patternsToTest.push(escapedName);
     }
 
     if (patternsToTest.length === 0) {
@@ -369,7 +390,8 @@ export function diagnoseEmailMatching(
     }
 
     for (const [key, groupTemplates] of subjectGroups.entries()) {
-      const subjectPattern = key === '__NO_SUBJECT_PATTERN__' ? null : key;
+      const rawSubjectPattern = key === '__NO_SUBJECT_PATTERN__' ? null : key;
+      const subjectPattern = sanitizeRegexPattern(rawSubjectPattern);
 
       if (!subjectPattern) {
         // Null subject_pattern matches any subject
@@ -450,7 +472,8 @@ export function diagnoseEmailMatching(
     const isAmbiguous = group.templates.length > 1;
 
     for (const tpl of group.templates) {
-      const matchPattern = tpl.match_pattern?.trim() || null;
+      const rawMatchPattern = tpl.match_pattern?.trim() || null;
+      const matchPattern = sanitizeRegexPattern(rawMatchPattern);
 
       // Ambiguity Check per requirement:
       // "Si hay ambigüedad y alguna candidata no tiene match_pattern definido,
@@ -871,8 +894,10 @@ export function buildConcept(
 }
 
 export function matchesEitherSource(pattern: string, directText: string, body: string): boolean {
+  const cleanPat = sanitizeRegexPattern(pattern);
+  if (!cleanPat) return false;
   try {
-    const regex = new RegExp(pattern, 'i');
+    const regex = new RegExp(cleanPat, 'i');
     return regex.test(directText) || regex.test(body);
   } catch {
     return false;
@@ -929,8 +954,7 @@ export function simulateGoogleAppsScriptProcess(
     }
 
     if (!matchedEntId) {
-      logs.push(`⚠️ Plantilla "${t.name}" no tiene entidad vinculada. En Apps Script nunca matcheará ningún correo.`);
-      continue;
+      matchedEntId = t.entity_name ? `virtual-${t.entity_name}` : 'sin-entidad';
     }
 
     if (!entityMap.has(matchedEntId)) {
@@ -942,7 +966,22 @@ export function simulateGoogleAppsScriptProcess(
       });
     }
 
-    entityMap.get(matchedEntId)!.templates.push(t);
+    const grp = entityMap.get(matchedEntId)!;
+    grp.templates.push(t);
+    if (t.sender_pattern) {
+      const cleanSp = sanitizeRegexPattern(t.sender_pattern);
+      if (cleanSp && !grp.emailPatterns.includes(cleanSp)) {
+        grp.emailPatterns.push(cleanSp);
+      }
+    }
+    if (t.entity_email_patterns && Array.isArray(t.entity_email_patterns)) {
+      for (const ep of t.entity_email_patterns) {
+        const cleanEp = sanitizeRegexPattern(ep);
+        if (cleanEp && !grp.emailPatterns.includes(cleanEp)) {
+          grp.emailPatterns.push(cleanEp);
+        }
+      }
+    }
   }
 
   const entityGroups = Array.from(entityMap.values()).filter((g) => g.templates.length > 0);
@@ -982,15 +1021,16 @@ export function simulateGoogleAppsScriptProcess(
       const toEvaluate =
         candidates.length > 1
           ? candidates.filter((t) => {
-              if (!t.match_pattern) {
+              const cleanMatchPat = sanitizeRegexPattern(t.match_pattern);
+              if (!cleanMatchPat) {
                 logs.push(`  ⚠️ Plantilla "${t.name}": ambigua con otra del mismo asunto y SIN match_pattern — descartada.`);
                 return false;
               }
               try {
-                const regex = new RegExp(t.match_pattern, 'i');
+                const regex = new RegExp(cleanMatchPat, 'i');
                 const matched = regex.test(body) || regex.test(subject);
                 if (!matched) {
-                  logs.push(`  → Plantilla "${t.name}": match_pattern "${t.match_pattern}" no encontrado en el mensaje.`);
+                  logs.push(`  → Plantilla "${t.name}": match_pattern "${cleanMatchPat}" no encontrado en el mensaje.`);
                 }
                 return matched;
               } catch {
@@ -1006,29 +1046,43 @@ export function simulateGoogleAppsScriptProcess(
             continue;
           }
 
-          const amountRegex = new RegExp(t.amount_regex, 'i');
+          const cleanAmtRegex = sanitizeRegexPattern(t.amount_regex) || t.amount_regex;
+          const amountRegex = new RegExp(cleanAmtRegex, 'i');
           const amountMatch = body.match(amountRegex);
           if (!amountMatch) {
             logs.push(`  → Plantilla "${t.name}": pasó filtros de asunto y entidad, pero amount_regex no encontró ningún monto.`);
             continue;
           }
 
-          const merchantMatch = t.merchant_regex ? body.match(new RegExp(t.merchant_regex, 'i')) : null;
-          const dateMatch = t.date_regex ? body.match(new RegExp(t.date_regex, 'i')) : null;
-          const timeMatch = t.time_regex ? body.match(new RegExp(t.time_regex, 'i')) : null;
-          const currencyMatch = t.currency_regex ? body.match(new RegExp(t.currency_regex, 'i')) : null;
-          const sourceAccountMatch = t.source_account_regex
-            ? body.match(new RegExp(t.source_account_regex, 'i'))
+          const rawAmt = amountMatch[1] !== undefined ? amountMatch[1] : amountMatch[0];
+          const normalizedAmt = normalizeAmount(rawAmt);
+          const numericAmount = Number(normalizedAmt);
+          if (isNaN(numericAmount)) {
+            logs.push(`  → Plantilla "${t.name}": amount_regex extrajo "${rawAmt}" pero no se pudo convertir a número.`);
+            continue;
+          }
+
+          const cleanMerchRegex = sanitizeRegexPattern(t.merchant_regex);
+          const merchantMatch = cleanMerchRegex ? body.match(new RegExp(cleanMerchRegex, 'i')) : null;
+          const cleanDateRegex = sanitizeRegexPattern(t.date_regex);
+          const dateMatch = cleanDateRegex ? body.match(new RegExp(cleanDateRegex, 'i')) : null;
+          const cleanTimeRegex = sanitizeRegexPattern(t.time_regex);
+          const timeMatch = cleanTimeRegex ? body.match(new RegExp(cleanTimeRegex, 'i')) : null;
+          const cleanCurrRegex = sanitizeRegexPattern(t.currency_regex);
+          const currencyMatch = cleanCurrRegex ? body.match(new RegExp(cleanCurrRegex, 'i')) : null;
+          const cleanSourceRegex = sanitizeRegexPattern(t.source_account_regex);
+          const sourceAccountMatch = cleanSourceRegex
+            ? body.match(new RegExp(cleanSourceRegex, 'i'))
             : null;
 
-          const merchant = merchantMatch && merchantMatch[1] ? merchantMatch[1].trim() : null;
-          const currency = currencyMatch && currencyMatch[1] ? currencyMatch[1] : t.default_currency || 'COP';
+          const merchant = merchantMatch ? (merchantMatch[1] !== undefined ? merchantMatch[1].trim() : merchantMatch[0]?.trim()) : null;
+          const currency = currencyMatch ? (currencyMatch[1] !== undefined ? currencyMatch[1] : currencyMatch[0]) : t.default_currency || 'COP';
 
           let dtDate: string | null = null;
           let dtTime: string | null = null;
-          if (dateMatch && dateMatch[1]) {
-            const rawD = dateMatch[1];
-            const rawT = timeMatch && timeMatch[1] ? timeMatch[1] : null;
+          if (dateMatch) {
+            const rawD = dateMatch[1] !== undefined ? dateMatch[1] : dateMatch[0];
+            const rawT = timeMatch ? (timeMatch[1] !== undefined ? timeMatch[1] : timeMatch[0]) : null;
             const combined = rawT ? `${rawD} ${rawT}` : rawD;
             const parsed = parseDateWithFormat(combined, t.date_format);
             if (parsed) {

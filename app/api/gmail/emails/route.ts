@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { cleanEmailBody } from '@/lib/email-cleaning';
 
 export const dynamic = 'force-dynamic';
 
@@ -280,16 +281,17 @@ export async function GET(req: NextRequest) {
           headers.find((h: { name: string; value: string }) => h.name.toLowerCase() === 'date')?.value ||
           new Date().toISOString();
 
-        const plainText = extractBody(detail.payload) || detail.snippet || '';
+        const rawText = extractBody(detail.payload) || detail.snippet || '';
+        const cleanBody = cleanEmailBody(rawText);
 
         const item: EmailItem = {
           id: detail.id,
           subject: subjectHeader,
           sender: fromHeader,
           date: new Date(dateHeader).toISOString(),
-          snippet: detail.snippet || plainText.substring(0, 160),
-          plainBody: plainText,
-          body: plainText,
+          snippet: cleanBody.substring(0, 160) || detail.snippet || '',
+          plainBody: cleanBody,
+          body: cleanBody,
         };
 
         return item;
