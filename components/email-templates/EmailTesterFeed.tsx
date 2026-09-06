@@ -73,14 +73,20 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
   const [manualTokenMsg, setManualTokenMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 1. Check logged-in user on mount
+
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user?.email) {
-        setCurrentUserEmail(data.user.email);
+    const supabase = createClient()
+
+    const loadUser = async () => {
+      const { data: { user }, } = await supabase.auth.getUser()
+
+      if (user?.email) {
+        setCurrentUserEmail(user.email)
       }
-    });
-  }, []);
+    }
+
+    loadUser()
+  }, [])
 
   // 2. Fetch real emails from logged-in user's Gmail
   const fetchEmails = useCallback(async () => {
@@ -95,7 +101,7 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
       if (!token && typeof window !== 'undefined') {
         try {
           token = localStorage.getItem('google_provider_token');
-        } catch {}
+        } catch { }
       }
 
       const headers: Record<string, string> = {};
@@ -168,7 +174,7 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
         try {
           localStorage.setItem('auth_return_to', targetReturn);
           localStorage.setItem('pending_tester_auth', 'true');
-        } catch {}
+        } catch { }
       }
 
       const supabase = createClient();
@@ -507,9 +513,8 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
                 </div>
                 {manualTokenMsg && (
                   <p
-                    className={`text-[11px] font-medium ${
-                      manualTokenMsg.type === 'success' ? 'text-emerald-700' : 'text-rose-700'
-                    }`}
+                    className={`text-[11px] font-medium ${manualTokenMsg.type === 'success' ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
                   >
                     {manualTokenMsg.text}
                   </p>
@@ -573,9 +578,8 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
                   key={val}
                   type="button"
                   onClick={() => setLimit(val)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
-                    limit === val ? 'bg-white text-zinc-900 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition cursor-pointer ${limit === val ? 'bg-white text-zinc-900 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
                 >
                   {val} correos
                 </button>
@@ -666,12 +670,12 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
                 const formattedDate = isNaN(dateObj.getTime())
                   ? email.date
                   : dateObj.toLocaleDateString('es-CO', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
 
                 return (
                   <div
@@ -739,11 +743,10 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
             <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80">
               <div className="flex items-center space-x-2.5">
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                    activeSimulation.result.matched
-                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-600 border border-amber-200'
-                  }`}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSimulation.result.matched
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-600 border border-amber-200'
+                    }`}
                 >
                   {activeSimulation.result.matched ? (
                     <CheckCircle2 className="w-4 h-4" />
@@ -923,15 +926,14 @@ export function EmailTesterFeed({ templates, entities, onLoadIntoEditor }: Email
                     return (
                       <div
                         key={i}
-                        className={`leading-relaxed ${
-                          isSuccess
-                            ? 'text-emerald-400'
-                            : isWarning
+                        className={`leading-relaxed ${isSuccess
+                          ? 'text-emerald-400'
+                          : isWarning
                             ? 'text-amber-300'
                             : isError
-                            ? 'text-rose-400'
-                            : 'text-zinc-400'
-                        }`}
+                              ? 'text-rose-400'
+                              : 'text-zinc-400'
+                          }`}
                       >
                         {log}
                       </div>
