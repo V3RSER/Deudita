@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Group, Expense, Payment, Profile, PairwiseBalance } from '@/lib/types';
+
+import { Group, Expense, Payment, Profile, PairwiseBalance, ExpenseAuditLog } from '@/lib/types';
 import {
   formatCurrency,
   calculateSimplifiedBalances,
