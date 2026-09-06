@@ -271,7 +271,7 @@ export function GenericExpenseList({
             <div className="h-px bg-zinc-200/70 flex-1" />
           </div>
 
-          <div className="">
+          <div className="space-y-2">
             {group.items.map((tx) => {
               const parsed = parseTxDate(tx.dateObj);
 
@@ -313,7 +313,7 @@ export function GenericExpenseList({
                     // Current profile paid: recovers ONLY what partner owes in this expense
                     if (partnerTotalOwed > 0) {
                       badgeText = `recuperas ${formatCurrency(partnerTotalOwed, currency)}`;
-                      badgeColorClass = 'text-emerald-600';
+                      badgeColorClass = 'text-emerald-600 font-semibold';
                     } else {
                       badgeText = 'sin aporte de ' + (pairwisePartnerProfile.full_name?.split(' ')[0] || 'contraparte');
                       badgeColorClass = 'text-zinc-400';
@@ -322,7 +322,7 @@ export function GenericExpenseList({
                     // Partner paid: current profile owes what they split
                     if (myTotalOwed > 0) {
                       badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                      badgeColorClass = 'text-rose-600';
+                      badgeColorClass = 'text-rose-600 font-semibold';
                     } else {
                       badgeText = 'no participas';
                       badgeColorClass = 'text-zinc-400';
@@ -331,7 +331,7 @@ export function GenericExpenseList({
                     // 3rd party paid
                     if (myTotalOwed > 0) {
                       badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                      badgeColorClass = 'text-rose-600';
+                      badgeColorClass = 'text-rose-600 font-semibold';
                     } else {
                       badgeText = 'no participas';
                       badgeColorClass = 'text-zinc-400';
@@ -339,19 +339,38 @@ export function GenericExpenseList({
                   }
                 } else {
                   // General / Group feed context
-                  const recovers = isPayer ? exp.total_amount - myTotalOwed : 0;
+                  const recovers = isPayer ? Math.max(0, exp.total_amount - myTotalOwed) : 0;
                   if (isPayer && recovers > 0) {
                     badgeText = `recuperas ${formatCurrency(recovers, currency)}`;
-                    badgeColorClass = 'text-emerald-600';
+                    badgeColorClass = 'text-emerald-600 font-semibold';
                   } else if (isPayer) {
                     badgeText = 'pagaste todo';
-                    badgeColorClass = 'text-emerald-600';
+                    badgeColorClass = 'text-emerald-600 font-semibold';
                   } else if (myTotalOwed > 0) {
                     badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                    badgeColorClass = 'text-rose-600';
+                    badgeColorClass = 'text-rose-600 font-semibold';
                   } else {
                     badgeText = 'no participas';
                     badgeColorClass = 'text-zinc-400';
+                  }
+                }
+
+                let leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
+                if (pairwisePartnerProfile) {
+                  if (isPayer && partnerTotalOwed > 0) {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                  } else if (isPartnerPayer && myTotalOwed > 0) {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
+                  } else if (isPayer) {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                  }
+                } else {
+                  if (isPayer) {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                  } else if (myTotalOwed > 0.01) {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
+                  } else {
+                    leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
                   }
                 }
 
@@ -366,53 +385,58 @@ export function GenericExpenseList({
                   <div
                     id={`expense-card-${exp.id}`}
                     key={`exp-${exp.id}`}
-                    className={`bg-white border transition-all overflow-hidden ${isTargeted
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                    className={`bg-white rounded-2xl border border-zinc-200/85 ${leftBorderAccent} shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isTargeted
+                      ? 'ring-2 ring-emerald-500/30'
                       : isExpanded
-                        ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
-                        : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
+                        ? 'ring-1 ring-emerald-500/20 shadow-xs'
+                        : ''
                       }`}
                   >
                     <div
-                      className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 cursor-pointer group transition-colors select-none ${isExpanded
-                        ? 'bg-zinc-50/80 border-b border-zinc-200/70'
-                        : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
-                        }`}
+                      className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
                       onClick={() => toggleExpenseExpanded(exp.id)}
                     >
                       <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                        {/* Date Block: Only Month & Day (e.g. 24 AGO) */}
+                        {/* Date Block: Day on top, Month below */}
                         <div
-                          className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                          className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
                             ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                            : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
+                            : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
                             }`}
                         >
+                          <span className="text-xs sm:text-sm font-bold leading-none">
+                            {parsed.dayStr}
+                          </span>
                           <span
-                            className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                            className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
                               }`}
                           >
                             {parsed.monthAbbr}
                           </span>
-                          <span className="text-sm font-bold text-zinc-900 leading-none">
-                            {parsed.dayStr}
-                          </span>
                         </div>
 
-                        {/* Category Circular Badge */}
-                        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80 flex items-center justify-center shrink-0 shadow-2xs">
-                          <CategoryIcon className="w-4 h-4" />
+                        {/* Category Icon Box */}
+                        <div
+                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
+                          title={catConfig.name}
+                        >
+                          <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                         </div>
 
-                        {/* Expense Name & Details */}
+                        {/* Description, Category Badge & Subtitle */}
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <h3
-                              className={`font-semibold text-zinc-900 text-sm transition-colors truncate ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
+                              className={`text-sm font-semibold text-zinc-900 truncate leading-snug ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
                                 }`}
                             >
                               {exp.description}
                             </h3>
+                            <span
+                              className={`text-[10px] font-medium px-1.5 py-0.2 rounded-md ${catConfig.bgClass} ${catConfig.textClass} border ${catConfig.borderClass || 'border-zinc-200/50'} shrink-0`}
+                            >
+                              {exp.category || 'General'}
+                            </span>
                             {exp.source === 'gmail' && (
                               <span className="bg-zinc-900 text-white text-[8px] uppercase font-semibold tracking-widest px-1 py-0.2 rounded shrink-0">
                                 AI
@@ -445,10 +469,10 @@ export function GenericExpenseList({
                       {/* Right Amount & Personal Share info beneath amount */}
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="flex flex-col items-end justify-center text-right">
-                          <span className="text-sm font-bold text-zinc-900 leading-tight">
+                          <span className="text-xs sm:text-sm font-bold text-zinc-900 leading-tight">
                             {formatCurrency(exp.total_amount, currency)}
                           </span>
-                          <span className={`text-xs font-semibold leading-tight mt-0.5 ${badgeColorClass}`}>
+                          <span className={`text-[10px] sm:text-xs leading-tight mt-0.5 font-semibold ${badgeColorClass}`}>
                             {badgeText}
                           </span>
                         </div>
@@ -481,10 +505,11 @@ export function GenericExpenseList({
                           </div>
                         )}
 
-                        <ChevronRight
-                          className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${isExpanded ? 'rotate-90 text-emerald-600' : ''
-                            }`}
-                        />
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                        )}
                       </div>
                     </div>
 
@@ -725,59 +750,53 @@ export function GenericExpenseList({
                 <div
                   key={`pay-${payment.id}`}
                   id={`payment-card-${payment.id}`}
-                  className={`bg-white border transition-all overflow-hidden ${isExpanded
-                    ? 'border-emerald-300 ring-2 ring-emerald-500/10 shadow-xs'
-                    : 'border-zinc-100/90 shadow-2xs hover:shadow-xs hover:border-zinc-200'
+                  className={`bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isExpanded ? 'ring-1 ring-emerald-500/20 shadow-xs' : ''
                     }`}
                 >
                   {/* Collapsed / Summary Header (Click toggles expansion) */}
                   <div
                     onClick={() => togglePaymentExpanded(payment.id)}
-                    className={`px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 min-w-0 transition-colors cursor-pointer select-none ${isExpanded
-                      ? 'bg-zinc-50/80 border-b border-zinc-200/70'
-                      : 'hover:bg-zinc-50/60 active:bg-zinc-100/50'
-                      }`}
+                    className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
                   >
                     <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                       {/* Date Block: Day on top, Month below */}
                       <div
-                        className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                        className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
                           ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                          : 'bg-zinc-50 border-zinc-100/90 text-zinc-900'
+                          : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
                           }`}
                       >
+                        <span className="text-xs sm:text-sm font-bold leading-none">
+                          {parsed.dayStr}
+                        </span>
                         <span
-                          className={`text-[9px] font-bold uppercase tracking-tight leading-none mt-1 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                          className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
                             }`}
                         >
                           {parsed.monthAbbr}
                         </span>
-                        <span className="text-sm font-bold text-zinc-900 leading-none">
-                          {parsed.dayStr}
-                        </span>
                       </div>
 
-                      {/* Payment Circular Badge */}
-                      <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/80 flex items-center justify-center shrink-0 shadow-2xs">
-                        <HandCoins className="w-4 h-4 text-emerald-600" />
+                      {/* Payment Icon Box */}
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                        <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
 
                       {/* Payment Description & Details */}
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-zinc-900 text-sm flex items-center space-x-1 flex-wrap truncate">
-                          <span className={isIpaid ? 'text-emerald-700 font-bold' : ''}>
-                            {payer ? payer.full_name : 'Usuario'}
-                          </span>
-                          <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span className={isIreceived ? 'text-emerald-700 font-bold' : ''}>
-                            {receiver ? receiver.full_name : 'Usuario'}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
+                            Pago a {receiver ? receiver.full_name : 'Usuario'}
+                          </h3>
+                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
+                            Saldado
                           </span>
                           {dateFilterMode === 'entry_date' && tx.isUpdated && (
                             <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
                               Editado
                             </span>
                           )}
-                        </h3>
+                        </div>
 
                         {/* Subtitle row */}
                         <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
@@ -800,7 +819,7 @@ export function GenericExpenseList({
                     {/* Right Amount & Personal Share info beneath amount */}
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="flex flex-col items-end justify-center text-right">
-                        <span className="text-sm font-bold text-zinc-900 leading-tight">
+                        <span className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
                           {formatCurrency(payment.amount, currency)}
                         </span>
                         <span
@@ -811,7 +830,7 @@ export function GenericExpenseList({
                               : 'text-zinc-400'
                             }`}
                         >
-                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'no participas'}
+                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'saldado'}
                         </span>
                       </div>
 
@@ -843,10 +862,11 @@ export function GenericExpenseList({
                         </div>
                       )}
 
-                      <ChevronRight
-                        className={`w-4 h-4 text-zinc-400 ml-1 transition-transform ${isExpanded ? 'rotate-90 text-emerald-600' : ''
-                          }`}
-                      />
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
                     </div>
                   </div>
 

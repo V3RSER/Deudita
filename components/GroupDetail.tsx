@@ -70,6 +70,7 @@ import { EditGroupModal } from '@/components/EditGroupModal';
 import { GroupSettingsModal } from '@/components/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 
 interface GroupDetailProps {
   group: Group;
@@ -270,11 +271,6 @@ export function GroupDetail({
 
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isSimplifiedBalances, setIsSimplifiedBalances] = useState(true);
-  const [expandedExpenseIds, setExpandedExpenseIds] = useState<Set<string>>(
-    new Set(initialExpenseId ? [initialExpenseId] : [])
-  );
-  const [expandedPaymentIds, setExpandedPaymentIds] = useState<Set<string>>(new Set());
-  const [openMenuExpenseId, setOpenMenuExpenseId] = useState<string | null>(null);
 
   const [selectedPairwiseForDetail, setSelectedPairwiseForDetail] = useState<PairwiseBalance | null>(null);
   const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
@@ -282,51 +278,6 @@ export function GroupDetail({
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
-
-  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
-  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
-  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
-  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
-  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  // Close card menu on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpenMenuExpenseId(null);
-      }
-    }
-    if (openMenuExpenseId) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [openMenuExpenseId]);
-
-  const toggleExpenseExpand = (id: string) => {
-    setExpandedExpenseIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const togglePaymentExpand = (id: string) => {
-    setExpandedPaymentIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
 
   const isOwner = Boolean(currentProfile?.id && group.owner_id === currentProfile.id);
   const groupExpenses = expenses.filter((e) => e.group_id === group.id);
@@ -412,38 +363,6 @@ export function GroupDetail({
     });
   });
 
-  // Combine and sort chronologically
-  const transactions: UnifiedTransaction[] = [
-    ...filteredExpenses.map((e) => {
-      const eff = getEffectiveTransactionDate(e, filters.dateMode);
-      return {
-        type: 'expense' as const,
-        dateObj: eff.dateObj,
-        data: e,
-      };
-    }),
-    ...filteredPayments.map((p) => {
-      const eff = getEffectiveTransactionDate(p, filters.dateMode);
-      return {
-        type: 'payment' as const,
-        dateObj: eff.dateObj,
-        data: p,
-      };
-    }),
-  ].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-
-  // Group transactions by month
-  const groupedByMonth: { key: string; label: string; items: UnifiedTransaction[] }[] = [];
-  transactions.forEach((tx) => {
-    const parsed = parseTxDate(tx.dateObj);
-    let existing = groupedByMonth.find((g) => g.key === parsed.key);
-    if (!existing) {
-      existing = { key: parsed.key, label: parsed.monthLabel, items: [] };
-      groupedByMonth.push(existing);
-    }
-    existing.items.push(tx);
-  });
-
   const handleDeleteGroup = async () => {
     setIsDeletingGroup(true);
     try {
@@ -452,32 +371,6 @@ export function GroupDetail({
       onBack();
     } finally {
       setIsDeletingGroup(false);
-    }
-  };
-
-  const handleConfirmDeleteExpense = async () => {
-    if (!expenseToDelete) return;
-    setIsDeletingExpense(true);
-    try {
-      await deleteExpense(expenseToDelete);
-      setExpenseToDelete(null);
-    } finally {
-      setIsDeletingExpense(false);
-    }
-  };
-
-  const handleConfirmDeletePayment = async () => {
-    if (!paymentToDelete) return;
-    setIsDeletingPayment(true);
-    try {
-      if (onDeletePayment) {
-        await onDeletePayment(paymentToDelete);
-      } else {
-        await deletePayment(paymentToDelete);
-      }
-      setPaymentToDelete(null);
-    } finally {
-      setIsDeletingPayment(false);
     }
   };
 
@@ -818,453 +711,28 @@ export function GroupDetail({
             </button>
           </div>
 
-          {/* Empty state */}
-          {transactions.length === 0 && (
-            <div className="bg-white rounded-2xl border border-zinc-200/80 p-10 text-center text-zinc-500 shadow-2xs space-y-2">
-              <Receipt className="w-10 h-10 text-zinc-300 mx-auto" />
-              <h3 className="font-semibold text-zinc-900 text-sm">No hay gastos</h3>
-              <p className="text-xs text-zinc-500">
-                {filters.searchTerm
-                  ? 'No se encontraron gastos para tu búsqueda.'
-                  : 'Aún no se han registrado gastos en este grupo.'}
-              </p>
-            </div>
-          )}
+          <GenericExpenseList
+            expenses={filteredExpenses}
+            payments={filteredPayments}
+            profiles={profiles}
+            userGroups={userGroups.length > 0 ? userGroups : [group]}
+            currentProfile={currentProfile}
+            groupCurrency={effectiveCurrency}
+            dateFilterMode={filters.dateMode}
+            onEditExpense={onEditExpense}
+            onDeleteExpense={async (id) => {
+              await deleteExpense(id);
+            }}
+            onEditPayment={onEditPayment}
+            onDeletePayment={async (id) => {
+              if (onDeletePayment) await onDeletePayment(id);
+              else await deletePayment(id);
+            }}
+            showGroupBadge={false}
+            pageSize={30}
+            initialExpandedExpenseId={initialExpenseId}
+          />
 
-          {/* Month Grouped Transaction List */}
-          {groupedByMonth.map((mGroup) => (
-            <div key={mGroup.key} className="space-y-1.5 pt-1">
-              <div className="flex items-center space-x-2.5 px-1 py-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
-                  <Calendar className="w-3 h-3 text-zinc-500" />
-                  <span>{mGroup.label}</span>
-                </span>
-                <div className="h-px bg-zinc-200/70 flex-1" />
-              </div>
-
-              <div className="space-y-2">
-                {mGroup.items.map((tx) => {
-                  const parsed = parseTxDate(tx.dateObj);
-
-                  if (tx.type === 'expense') {
-                    const exp = tx.data;
-                    const paidBy = profiles.find((p) => p.id === exp.paid_by);
-                    const createdBy = profiles.find((p) => p.id === exp.created_by);
-                    const isExpanded = expandedExpenseIds.has(exp.id);
-                    const catConfig = getCategoryConfig(exp.category);
-                    const CategoryIcon = catConfig.icon;
-                    const currency = group.currency || 'COP';
-
-                    const isPayer = currentProfile?.id === exp.paid_by;
-                    const mySplit = exp.splits?.find((s) => s.user_id === currentProfile?.id);
-                    const myOwed = mySplit ? mySplit.amount_owed : 0;
-                    const recovers = isPayer ? Math.max(0, exp.total_amount - myOwed) : 0;
-
-                    let badgeText = '';
-                    let badgeColorClass = 'text-zinc-400';
-
-                    if (isPayer) {
-                      if (recovers > 0) {
-                        badgeText = `recuperas ${formatCurrency(recovers, currency)}`;
-                        badgeColorClass = 'text-emerald-600 font-semibold';
-                      } else {
-                        badgeText = 'pagaste todo';
-                        badgeColorClass = 'text-emerald-600 font-semibold';
-                      }
-                    } else if (myOwed > 0) {
-                      badgeText = `debes ${formatCurrency(myOwed, currency)}`;
-                      badgeColorClass = 'text-[#c25a3a] font-semibold';
-                    } else {
-                      badgeText = 'no participas';
-                      badgeColorClass = 'text-zinc-400';
-                    }
-
-                    // Participants list for expanded distribution
-                    const participants = (exp.splits || []).map((s) => {
-                      const pProf = profiles.find((p) => p.id === s.user_id);
-                      const isUserPayer = s.user_id === exp.paid_by;
-                      const isMe = s.user_id === currentProfile?.id;
-                      const baseName = pProf?.full_name || 'Integrante';
-                      const displayName = isMe ? `${baseName} (tú)` : baseName;
-                      const initial = baseName.trim().charAt(0).toUpperCase();
-
-                      return {
-                        id: s.user_id,
-                        profile: pProf,
-                        name: displayName,
-                        initial,
-                        amount: s.amount_owed,
-                        isPayer: isUserPayer,
-                        badgeType: isUserPayer ? ('aportó' as const) : s.amount_owed > 0 ? ('debe' as const) : null,
-                      };
-                    });
-
-                    // Itemized breakdown if present
-                    const items = (() => {
-                      if (exp.items && exp.items.length > 0) {
-                        return exp.items.map((it) => ({
-                          description: it.description,
-                          amount: it.amount,
-                        }));
-                      }
-                      if (exp.split_config?.items && Array.isArray(exp.split_config.items) && exp.split_config.items.length > 0) {
-                        return exp.split_config.items.map((it) => {
-                          const qty = parseFloat(it.quantity) || 1;
-                          const amt = parseFloat(it.amount) || 0;
-                          const total = it.amountType === 'each' ? qty * amt : amt;
-                          const desc = it.quantity && it.quantity !== '1' ? `${it.quantity} ${it.desc}` : it.desc;
-                          return {
-                            description: desc || 'Artículo',
-                            amount: total,
-                          };
-                        });
-                      }
-                      return [];
-                    })();
-
-                    const leftBorderAccent = isPayer
-                      ? 'border-l-[3.5px] border-l-emerald-500'
-                      : myOwed > 0.01
-                      ? 'border-l-[3.5px] border-l-rose-400'
-                      : 'border-l-[3.5px] border-l-zinc-300';
-
-                    return (
-                      <div
-                        id={`expense-${exp.id}`}
-                        key={`exp-${exp.id}`}
-                        className={`bg-white rounded-2xl border border-zinc-200/85 ${leftBorderAccent} shadow-2xs overflow-hidden transition-all hover:border-zinc-300`}
-                      >
-                        {/* Collapsed/Header Row */}
-                        <div
-                          onClick={() => toggleExpenseExpand(exp.id)}
-                          className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
-                        >
-                          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                            {/* Date Box: Day on top, month below */}
-                            <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-200/70 flex flex-col items-center justify-center shrink-0 text-center shadow-2xs">
-                              <span className="text-xs sm:text-sm font-bold text-zinc-800 leading-none">
-                                {parsed.dayStr}
-                              </span>
-                              <span className="text-[9px] font-bold uppercase text-zinc-400 leading-none mt-0.5">
-                                {parsed.monthAbbr}
-                              </span>
-                            </div>
-
-                            {/* Category Icon Box */}
-                            <div
-                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
-                            >
-                              <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-                            </div>
-
-                            {/* Description & Payer */}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
-                                  {exp.description}
-                                </h3>
-                                <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
-                                  {exp.category || 'General'}
-                                </span>
-                              </div>
-                              <p className="text-xs text-zinc-500 truncate mt-0.5 leading-none">
-                                Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Right side: Amount & Personal Status & Chevron */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-right">
-                              <div className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
-                                {formatCurrency(exp.total_amount, currency)}
-                              </div>
-                              <div className={`text-xs mt-0.5 leading-none ${badgeColorClass}`}>
-                                {badgeText}
-                              </div>
-                            </div>
-
-                            {isExpanded ? (
-                              <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Expanded Content Section */}
-                        {isExpanded && (() => {
-                          const entryInfo = getRecordEntryDateInfo(exp);
-                          const isEdited = entryInfo.isUpdated || Boolean(exp.updated_by && exp.updated_by !== exp.created_by);
-                          const updatedByProfile = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
-                          const actionUser = isEdited ? (updatedByProfile || createdBy) : createdBy;
-                          const actionUserName = actionUser?.full_name?.split(' ')[0] || actionUser?.full_name || 'Luis';
-
-                          return (
-                          <div className="border-t border-zinc-100 bg-white">
-                            {/* Metadata Row */}
-                            <div className="px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-zinc-500">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                  <span className="w-20 sm:w-24 shrink-0 text-zinc-600 font-normal">
-                                    {formatShortDateWithTime(exp.expense_date, exp.expense_time)}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-zinc-500">
-                                    <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                    <span>Fecha del gasto</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                  <span className="w-20 sm:w-24 shrink-0 text-zinc-600 font-normal">
-                                    {formatShortDateWithTime(entryInfo.timestamp)}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-zinc-500">
-                                    <Pencil className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                    <span>
-                                      {isEdited ? `Actualizado por ${actionUserName}` : `Registrado por ${actionUserName}`}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* More Options Dropdown button */}
-                              <div className="relative" ref={openMenuExpenseId === exp.id ? menuRef : undefined}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenMenuExpenseId(openMenuExpenseId === exp.id ? null : exp.id);
-                                  }}
-                                  className="w-8 h-8 rounded-full hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-zinc-700 transition cursor-pointer"
-                                  title="Opciones del gasto"
-                                  aria-label="Opciones del gasto"
-                                >
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </button>
-
-                                {openMenuExpenseId === exp.id && (
-                                  <div className="absolute right-0 top-9 w-44 bg-white rounded-xl shadow-lg border border-zinc-200/90 py-1 z-30 divide-y divide-zinc-100 text-xs">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuExpenseId(null);
-                                        onEditExpense?.(exp);
-                                      }}
-                                      className="w-full px-3 py-2 text-left text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 cursor-pointer font-medium"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5 text-zinc-500" />
-                                      <span>Editar gasto</span>
-                                    </button>
-
-                                    {exp.receipt_url && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuExpenseId(null);
-                                          setSelectedProofUrl(exp.receipt_url || null);
-                                        }}
-                                        className="w-full px-3 py-2 text-left text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 cursor-pointer font-medium"
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
-                                        <span>Ver comprobante</span>
-                                      </button>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuExpenseId(null);
-                                        setExpenseToDelete(exp.id);
-                                      }}
-                                      className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer font-medium"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                                      <span>Eliminar gasto</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Divider */}
-                            <div className="border-t border-zinc-100" />
-
-                            {/* Section: Distribución entre participantes */}
-                            <div className="px-3.5 sm:px-4 pt-2.5 pb-1.5 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
-                              <Share2 className="w-3.5 h-3.5 text-zinc-400" />
-                              <span>Distribución entre participantes</span>
-                            </div>
-
-                            <div className="px-3.5 sm:px-4 pb-2.5 space-y-2">
-                              {participants.map((part) => (
-                                <div
-                                  key={part.id}
-                                  className="flex items-center justify-between text-sm py-0.5"
-                                >
-                                  <div className="flex items-center space-x-2.5 min-w-0">
-                                    <UserAvatar
-                                      profile={part.profile}
-                                      name={part.name}
-                                      badge={part.badgeType as AvatarBadge}
-                                      size="sm"
-                                    />
-
-                                    <span className="font-medium text-zinc-800 truncate text-xs sm:text-sm">
-                                      {part.name}
-                                    </span>
-                                  </div>
-
-                                  <span className="font-semibold text-zinc-800 text-xs sm:text-sm shrink-0">
-                                    {formatCurrency(part.amount, currency)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Section: Desglose de artículos (if items exist) */}
-                            {items.length > 0 && (
-                              <>
-                                <div className="border-t border-zinc-100" />
-                                <div className="px-3.5 sm:px-4 pt-2.5 pb-1.5 flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
-                                  <List className="w-3.5 h-3.5 text-zinc-400" />
-                                  <span>Desglose de artículos</span>
-                                </div>
-                                <div className="px-3.5 sm:px-4 pb-2.5 space-y-1.5">
-                                  {items.map((it, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-xs sm:text-sm py-0.5">
-                                      <span className="font-medium text-zinc-800 truncate mr-2">{it.description}</span>
-                                      <span className="font-semibold text-zinc-800 shrink-0">
-                                        {formatCurrency(it.amount, currency)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-
-                            {/* Optional: Notes if present */}
-                            {(() => {
-                              const cleanUserNote = extractNotesAndConfig(exp.notes).userNote;
-                              if (!cleanUserNote) return null;
-                              return (
-                                <>
-                                  <div className="border-t border-zinc-100" />
-                                  <div className="px-3.5 sm:px-4 py-2 text-xs text-zinc-500">
-                                    <span className="font-semibold text-zinc-600 mr-1">Notas:</span>
-                                    <span>{cleanUserNote}</span>
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }
-
-                  // tx.type === 'payment'
-                  const pay = tx.data;
-                  const payer = profiles.find((p) => p.id === pay.paid_by);
-                  const receiver = profiles.find((p) => p.id === pay.paid_to);
-                  const isExpanded = expandedPaymentIds.has(pay.id);
-                  const currency = group.currency || 'COP';
-
-                  return (
-                    <div
-                      key={`pay-${pay.id}`}
-                      className="bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300"
-                    >
-                      <div
-                        onClick={() => togglePaymentExpand(pay.id)}
-                        className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
-                      >
-                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-200/70 flex flex-col items-center justify-center shrink-0 text-center shadow-2xs">
-                            <span className="text-xs sm:text-sm font-bold text-zinc-800 leading-none">
-                              {parsed.dayStr}
-                            </span>
-                            <span className="text-[9px] font-bold uppercase text-zinc-400 leading-none mt-0.5">
-                              {parsed.monthAbbr}
-                            </span>
-                          </div>
-
-                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                            <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
-                                Pago a {receiver ? receiver.full_name : 'Integrante'}
-                              </h3>
-                              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
-                                Saldado
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-500 truncate mt-0.5 leading-none">
-                              Saldado por <span className="font-medium text-zinc-700">{payer ? payer.full_name : 'Integrante'}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="text-right">
-                            <div className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
-                              {formatCurrency(pay.amount, currency)}
-                            </div>
-                            <div className="text-xs font-semibold text-emerald-600 mt-0.5 leading-none">
-                              saldado
-                            </div>
-                          </div>
-
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
-                          )}
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="border-t border-zinc-100 bg-white p-4 space-y-2.5 text-xs text-zinc-600">
-                          <div className="flex items-center justify-between">
-                            <span>
-                              <strong>{payer?.full_name || 'Alguien'}</strong> pagó{' '}
-                              <strong>{formatCurrency(pay.amount, currency)}</strong> a{' '}
-                              <strong>{receiver?.full_name || 'Alguien'}</strong>
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {onEditPayment && (
-                                <button
-                                  type="button"
-                                  onClick={() => onEditPayment(pay)}
-                                  className="text-zinc-600 hover:text-zinc-900 font-medium cursor-pointer"
-                                >
-                                  Editar
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setPaymentToDelete(pay.id)}
-                                className="text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
-                              >
-                                Eliminar
-                              </button>
-                            </div>
-                          </div>
-                          {pay.note && <p className="text-zinc-500">Nota: {pay.note}</p>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
@@ -1597,32 +1065,6 @@ export function GroupDetail({
         isLoading={isDeletingGroup}
       />
 
-      {/* Delete Expense Confirm Modal */}
-      <ConfirmModal
-        isOpen={Boolean(expenseToDelete)}
-        onClose={() => setExpenseToDelete(null)}
-        onConfirm={handleConfirmDeleteExpense}
-        title="¿Eliminar gasto?"
-        description="Esta acción eliminará el gasto y recalculará los balances del grupo."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        variant="danger"
-        isLoading={isDeletingExpense}
-      />
-
-      {/* Delete Payment Confirm Modal */}
-      <ConfirmModal
-        isOpen={Boolean(paymentToDelete)}
-        onClose={() => setPaymentToDelete(null)}
-        onConfirm={handleConfirmDeletePayment}
-        title="¿Eliminar pago?"
-        description="Esta acción eliminará este registro de pago y restaurará la deuda."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        variant="danger"
-        isLoading={isDeletingPayment}
-      />
-
       {/* Pairwise Debt Detail Modal */}
       <PairwiseDetailModal
         isOpen={Boolean(selectedPairwiseForDetail)}
@@ -1649,40 +1091,6 @@ export function GroupDetail({
           groupId={group.id}
           onClose={() => setSelectedMemberForDetail(null)}
         />
-      )}
-
-      {/* Receipt Proof Lightbox / Modal */}
-      {selectedProofUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-xs"
-          onClick={() => setSelectedProofUrl(null)}
-        >
-          <div
-            className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-2">
-              <h4 className="text-sm font-semibold text-zinc-900">Comprobante</h4>
-              <button
-                type="button"
-                onClick={() => setSelectedProofUrl(null)}
-                className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-500 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="relative w-full h-80 sm:h-96 rounded-xl overflow-hidden bg-zinc-100">
-              <Image
-                src={selectedProofUrl}
-                alt="Comprobante"
-                fill
-                className="object-contain"
-                unoptimized
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
