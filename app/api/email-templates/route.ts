@@ -391,7 +391,7 @@ export async function PUT(req: NextRequest) {
 
 /**
  * DELETE /api/email-templates?id=...
- * Desactiva una plantilla (soft delete).
+ * Elimina una plantilla (intenta hard delete si no tiene dependencias, o soft delete si ya tiene gastos vinculados).
  */
 export async function DELETE(req: NextRequest) {
   try {
@@ -409,16 +409,28 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'ID de plantilla requerido' }, { status: 400 });
     }
 
-    const { error: delErr } = await supabase
+    // 1. Intentar eliminación física (hard delete)
+    const { error: hardDelErr } = await supabase
+      .from('email_templates')
+      .delete()
+      .eq('id', id);
+
+    if (!hardDelErr) {
+      return NextResponse.json({ success: true, mode: 'deleted' });
+    }
+
+    // 2. Si falla (por ejemplo por restricción de clave foránea en expenses), realizar soft delete (active = false)
+    const { error: softDelErr } = await supabase
       .from('email_templates')
       .update({ active: false })
       .eq('id', id);
 
-    if (delErr) {
-      return NextResponse.json({ error: delErr.message }, { status: 500 });
+    if (softDelErr) {
+      console.error('[API DELETE /api/email-templates] Soft delete error:', softDelErr);
+      return NextResponse.json({ error: softDelErr.message || hardDelErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, mode: 'deactivated' });
   } catch (err: unknown) {
     console.error('[API DELETE /api/email-templates] Error:', err);
     return NextResponse.json({ error: 'Error al eliminar plantilla' }, { status: 500 });
