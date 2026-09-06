@@ -1091,13 +1091,6 @@ export function simulateGoogleAppsScriptProcess(
             }
           }
 
-          const normalizedAmt = normalizeAmount(amountMatch[1]);
-          const numericAmount = Number(normalizedAmt);
-          if (isNaN(numericAmount)) {
-            logs.push(`  → Plantilla "${t.name}": amount_regex extrajo "${amountMatch[1]}" pero no se pudo convertir a número.`);
-            continue;
-          }
-
           const concept = buildConcept(t.expense_type_label, merchant);
 
           logs.push(`✅ [Apps Script Match] "${subject}" (de: ${sender}) → match con plantilla "${t.name}" (ID: ${t.id}), monto=${numericAmount}, concept="${concept}"`);
@@ -1111,7 +1104,7 @@ export function simulateGoogleAppsScriptProcess(
               currency,
               merchant,
               entity: t.entity_name || null,
-              sourceAccount: sourceAccountMatch && sourceAccountMatch[1] ? sourceAccountMatch[1] : null,
+              sourceAccount: sourceAccountMatch ? (sourceAccountMatch[1] !== undefined ? sourceAccountMatch[1] : sourceAccountMatch[0]) : null,
               date: dtDate,
               time: dtTime,
               concept,
