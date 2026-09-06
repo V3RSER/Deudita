@@ -217,23 +217,26 @@ export function PairwiseDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 lg:p-6 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 lg:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-5xl max-h-[94vh] bg-zinc-50 rounded-3xl shadow-2xl border border-zinc-200/90 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+        className="relative w-full sm:max-w-5xl h-[92vh] sm:h-auto sm:max-h-[94vh] bg-zinc-50 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-zinc-200/90 flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* TOP MODAL HEADER */}
-        <div className="bg-white px-4 sm:px-6 py-4 border-b border-zinc-200/80 shrink-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Left Header info */}
-            <div className="flex items-center space-x-3.5 min-w-0">
+        <div className="bg-white px-4 sm:px-6 pt-3 pb-3.5 sm:py-4 border-b border-zinc-200/80 shrink-0">
+          {/* Mobile Handle Indicator */}
+          <div className="w-12 h-1 bg-zinc-200 rounded-full mx-auto mb-2.5 sm:hidden" />
+
+          {/* Top Row: Navigation + Perspective + Close */}
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar detalle"
-                className="w-9 h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-300 text-zinc-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -244,14 +247,14 @@ export function PairwiseDetailModal({
                   <Image
                     src={debtorProfile.avatar_url}
                     alt={debtorName}
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
+                    width={36}
+                    height={36}
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
                     unoptimized
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-[#581c87] text-white flex items-center justify-center text-xs font-bold ring-2 ring-white shrink-0 shadow-2xs">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-white shrink-0 shadow-2xs">
                     {getInitials(debtorName)}
                   </div>
                 )}
@@ -260,64 +263,78 @@ export function PairwiseDetailModal({
                   <Image
                     src={creditorProfile.avatar_url}
                     alt={creditorName}
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
+                    width={36}
+                    height={36}
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
                     unoptimized
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-slate-600 text-white flex items-center justify-center text-xs font-bold ring-2 ring-white shrink-0 shadow-2xs">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-white shrink-0 shadow-2xs">
                     {getInitials(creditorName)}
                   </div>
                 )}
               </div>
 
               {/* Title & Perspective */}
-              <div className="min-w-0">
-                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                  <span className="text-xs font-bold text-zinc-600">
-                    {isCreditor ? 'A tu favor' : isDebtor ? 'Por pagar' : 'Detalle de deuda'}
-                  </span>
-                  <span className="bg-purple-100 text-purple-900 text-[11px] font-bold px-2 py-0.5 rounded-full border border-purple-200">
-                    {pendingConsumedExpenses.length} consumos directos • {activeReverseExpenses.length + activeDirectPayments.length} aportes directos
-                  </span>
-                </div>
-                <h2 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight truncate mt-0.5">
-                  <span className="text-[#581c87] font-black">{debtorName}</span>{' '}
-                  <span className="text-zinc-500 font-medium">le debe a</span>{' '}
-                  <span className="text-zinc-900 font-black">{creditorName}</span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight truncate leading-snug">
+                  <span className="text-zinc-950 font-black">{debtorName}</span>{' '}
+                  <span className="text-zinc-500 font-normal">le debe a</span>{' '}
+                  <span className="text-zinc-950 font-black">{creditorName}</span>
                 </h2>
               </div>
             </div>
 
-            {/* Right: Saldo a liquidar & Saldar button */}
-            <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-100">
-              <div className="text-left md:text-right">
-                <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">
-                  SALDO A LIQUIDAR
-                </span>
-                <span className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight">
-                  {formatCurrency(finalSettlementAmount, currency)}
-                </span>
-              </div>
+            {/* Status Chip (Por pagar / A tu favor) */}
+            <span
+              className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold shrink-0 border ${
+                isCreditor
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : isDebtor
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+              }`}
+            >
+              {isCreditor ? 'A tu favor' : isDebtor ? 'Por pagar' : 'Detalle'}
+            </span>
+          </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenSettleModal(
-                    pairwise.group_id || groupId,
-                    debtorProfile.id,
-                    creditorProfile.id,
-                    finalSettlementAmount
-                  );
-                }}
-                className="bg-[#581c87] hover:bg-[#4a1470] active:scale-95 text-white font-extrabold px-6 py-2.5 rounded-xl text-sm transition-all shadow-md cursor-pointer shrink-0"
-              >
-                Saldar
-              </button>
+          {/* Counts pill (Consumos directos & Aportes) */}
+          <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px] text-zinc-500">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-zinc-100 border border-zinc-200/80 font-medium text-zinc-700">
+              <span className="font-bold text-zinc-900">{pendingConsumedExpenses.length}</span> consumos directos
+              <span className="text-zinc-300">•</span>
+              <span className="font-bold text-zinc-900">{activeReverseExpenses.length + activeDirectPayments.length}</span> aportes directos
+            </span>
+          </div>
+
+          {/* Liquidation Bar: Saldo a liquidar + Saldar button */}
+          <div className="mt-3 pt-2.5 sm:pt-3 border-t border-zinc-100 flex items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider block leading-tight">
+                SALDO A LIQUIDAR
+              </span>
+              <span className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight block mt-0.5">
+                {formatCurrency(finalSettlementAmount, currency)}
+              </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenSettleModal(
+                  pairwise.group_id || groupId,
+                  debtorProfile.id,
+                  creditorProfile.id,
+                  finalSettlementAmount
+                );
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold px-5 sm:px-6 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer shrink-0"
+            >
+              Saldar
+            </button>
           </div>
         </div>
 
@@ -352,38 +369,40 @@ export function PairwiseDetailModal({
               onClick={() =>
                 setExpandedSections((prev) => ({ ...prev, debts: !prev.debts }))
               }
-              className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
+              className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
             >
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start space-x-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Gastos que debe {debtorName} a {creditorName}
+                    </h3>
+                    <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
+                      Gastos pagados por {creditorName} donde participó {debtorName}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    Gastos que debe {debtorName} a {creditorName} (Consumos directos)
-                  </h3>
-                  <p className="text-xs text-zinc-500 font-medium">
-                    Gastos pagados por {creditorName} donde participó {debtorName}
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center space-x-3 shrink-0">
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    Total consumos directos
-                  </span>
-                  <span className="text-sm sm:text-base font-black text-rose-600">
-                    + {formatCurrency(totalDirectConsumption, currency)}
-                  </span>
-                </div>
-                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                   {expandedSections.debts ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
                     <ChevronDown className="w-4 h-4" />
                   )}
                 </div>
+              </div>
+
+              {/* Amount row */}
+              <div className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Total consumos directos
+                </span>
+                <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
+                  + {formatCurrency(totalDirectConsumption, currency)}
+                </span>
               </div>
             </div>
 
@@ -421,38 +440,40 @@ export function PairwiseDetailModal({
               onClick={() =>
                 setExpandedSections((prev) => ({ ...prev, recovers: !prev.recovers }))
               }
-              className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
+              className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
             >
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Wallet className="w-4 h-4" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start space-x-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Gastos y pagos a favor de {debtorName}
+                    </h3>
+                    <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
+                      Gastos pagados por {debtorName} con {creditorName} y pagos directos registrados
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                    Gastos y pagos a favor de {debtorName} (Aportes directos)
-                  </h3>
-                  <p className="text-xs text-zinc-500 font-medium">
-                    Gastos pagados por {debtorName} donde participó {creditorName} y pagos directos registrados
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center space-x-3 shrink-0">
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                    Total aportes directos
-                  </span>
-                  <span className="text-sm sm:text-base font-black text-emerald-600">
-                    - {formatCurrency(totalActiveRecoverable, currency)}
-                  </span>
-                </div>
-                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                   {expandedSections.recovers ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
                     <ChevronDown className="w-4 h-4" />
                   )}
                 </div>
+              </div>
+
+              {/* Amount row */}
+              <div className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Total aportes directos
+                </span>
+                <span className="text-sm sm:text-base font-black text-emerald-600 font-mono">
+                  - {formatCurrency(totalActiveRecoverable, currency)}
+                </span>
               </div>
             </div>
 
@@ -492,46 +513,46 @@ export function PairwiseDetailModal({
                 onClick={() =>
                   setExpandedSections((prev) => ({ ...prev, distribution: !prev.distribution }))
                 }
-                className="p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
+                className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
               >
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-sky-50 border border-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-                    <Users className="w-4 h-4" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start space-x-3 min-w-0 flex-1">
+                    <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 text-sky-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                        Compensaciones grupales y triangulaciones
+                      </h3>
+                      <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
+                        Ajustes y simplificación con otros integrantes del grupo
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                      Compensaciones grupales y triangulaciones
-                    </h3>
-                    <p className="text-xs text-zinc-500 font-medium">
-                      Compensaciones del grupo que optimizan el saldo a liquidar
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center space-x-3 shrink-0">
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider">
-                      {detail.optimizationDetail?.isDiscount
-                        ? 'Descuento aplicado'
-                        : 'Consolidación aplicada'}
-                    </span>
-                    <span
-                      className={`text-sm sm:text-base font-black ${detail.optimizationDetail?.isDiscount
-                          ? 'text-emerald-600'
-                          : 'text-rose-600'
-                        }`}
-                    >
-                      {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
-                      {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
-                    </span>
-                  </div>
-                  <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                  <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                     {expandedSections.distribution ? (
                       <ChevronUp className="w-4 h-4" />
                     ) : (
                       <ChevronDown className="w-4 h-4" />
                     )}
                   </div>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    {detail.optimizationDetail?.isDiscount
+                      ? 'Descuento aplicado'
+                      : 'Consolidación aplicada'}
+                  </span>
+                  <span
+                    className={`text-sm sm:text-base font-black font-mono ${
+                      detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
+                    {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
+                  </span>
                 </div>
               </div>
 
@@ -1154,7 +1175,7 @@ export function PairwiseDetailModal({
                                   </div>
                                   <div>
                                     <div className="text-xs sm:text-sm font-black text-zinc-900">
-                                      <span className="text-[#581c87]">{sug.from.full_name || 'Deudor'}</span>{' '}
+                                      <span className="text-zinc-950 font-black">{sug.from.full_name || 'Deudor'}</span>{' '}
                                       <span className="text-zinc-500 font-medium">le debe pagar a</span>{' '}
                                       <span className="text-emerald-700 font-black">{sug.to.full_name || 'Tercero'}</span>
                                     </div>
@@ -1203,7 +1224,7 @@ export function PairwiseDetailModal({
                                 return next;
                               })
                             }
-                            className="w-full py-2 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#581c87] text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer border border-purple-200/60"
+                            className="w-full py-2 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-colors flex items-center justify-center space-x-1.5 cursor-pointer border border-zinc-200"
                           >
                             <span>
                               {expandedTriangulationIndexes.has(999)
@@ -1256,46 +1277,53 @@ export function PairwiseDetailModal({
           )}
 
           {/* 4. SECCIÓN: CÁLCULO DEL SALDO A LIQUIDAR */}
-          <div className="bg-white rounded-2xl border border-purple-200/90 shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {/* Header */}
             <div
               onClick={() =>
                 setExpandedSections((prev) => ({ ...prev, calculation: !prev.calculation }))
               }
-              className="p-4 sm:p-4.5 bg-gradient-to-r from-purple-50/50 via-white to-white flex items-center justify-between border-b border-purple-100 cursor-pointer hover:bg-purple-50/80 transition-colors select-none"
+              className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
             >
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-full bg-purple-100 text-[#581c87] flex items-center justify-center shrink-0">
-                  <Calculator className="w-4.5 h-4.5" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start space-x-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <Calculator className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                      Resumen y cálculo matemático
+                    </h3>
+                    <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
+                      Desglose paso a paso para llegar al saldo a liquidar
+                    </p>
+                  </div>
                 </div>
-                <h3 className="text-sm sm:text-base font-extrabold text-zinc-900 tracking-tight">
-                  Resumen y cálculo matemático del balance
-                </h3>
-              </div>
 
-              <div className="flex items-center space-x-2.5">
-                <span className="bg-purple-100/80 text-purple-900 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
-                  {isSimplified ? 'Modo simplificado' : 'Modo directo'}
-                </span>
-                <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
-                  {expandedSections.calculation ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="bg-zinc-100 text-zinc-700 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border border-zinc-200">
+                    {isSimplified ? 'Simplificado' : 'Directo'}
+                  </span>
+                  <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+                    {expandedSections.calculation ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Calculations Box */}
             {expandedSections.calculation && (
-              <div className="p-4 sm:p-6 space-y-3">
+              <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-3">
                 <div className="space-y-2.5 text-xs sm:text-sm">
                   {/* Consumos directos */}
-                  <div className="flex items-center justify-between text-zinc-700">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-between gap-2 text-zinc-700">
+                    <div className="flex items-center space-x-2 min-w-0">
                       <User className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                      <span className="font-semibold text-zinc-900">Total consumos directos de {debtorName} con {creditorName}</span>
+                      <span className="font-semibold text-zinc-800 truncate">Consumos directos con {creditorName}</span>
                     </div>
                     <span className="font-black text-rose-600 shrink-0 font-mono">
                       + {formatCurrency(totalDirectConsumption, currency)}
@@ -1303,10 +1331,10 @@ export function PairwiseDetailModal({
                   </div>
 
                   {/* Aportes directos */}
-                  <div className="flex items-center justify-between text-zinc-700">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-between gap-2 text-zinc-700">
+                    <div className="flex items-center space-x-2 min-w-0">
                       <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="font-semibold text-zinc-900">Total aportes y pagos directos aplicados</span>
+                      <span className="font-semibold text-zinc-800 truncate">Aportes y pagos directos</span>
                     </div>
                     <span className="font-black text-emerald-600 shrink-0 font-mono">
                       - {formatCurrency(totalActiveRecoverable, currency)}
@@ -1315,13 +1343,13 @@ export function PairwiseDetailModal({
 
                   {/* Descuento o aumento por compensación con integrantes */}
                   {hasCompensations && (
-                    <div className="flex items-center justify-between text-zinc-700">
-                      <div className="flex items-center space-x-2">
+                    <div className="flex items-center justify-between gap-2 text-zinc-700">
+                      <div className="flex items-center space-x-2 min-w-0">
                         <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span className="font-semibold text-zinc-900">
+                        <span className="font-semibold text-zinc-800 truncate">
                           {detail.optimizationDetail?.isDiscount
-                            ? 'Descuento por compensación con integrantes'
-                            : 'Consolidación de cuentas del grupo'}
+                            ? 'Compensación grupal (descuento)'
+                            : 'Consolidación de grupo'}
                         </span>
                       </div>
                       <span
@@ -1336,15 +1364,15 @@ export function PairwiseDetailModal({
                   )}
                 </div>
 
-                {/* Total Final Line - Estilo ecuación matemática */}
-                <div className="pt-3 border-t-2 border-zinc-800 flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg font-black text-zinc-500 font-mono select-none">=</span>
-                    <span className="text-sm sm:text-base font-black text-zinc-900">
+                {/* Total Final Line */}
+                <div className="pt-3 border-t border-zinc-200 flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <span className="text-base font-black text-zinc-400 font-mono select-none">=</span>
+                    <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
                       Saldo final a liquidar
                     </span>
                   </div>
-                  <span className="text-xl sm:text-2xl font-black text-[#581c87] tracking-tight font-mono border-b-2 border-double border-[#581c87] pb-0.5">
+                  <span className="text-lg sm:text-xl font-black text-emerald-700 tracking-tight font-mono shrink-0">
                     {formatCurrency(finalSettlementAmount, currency)}
                   </span>
                 </div>

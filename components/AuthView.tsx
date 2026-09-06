@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Wallet, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { DeuditaLogo } from '@/components/DeuditaLogo';
 
 export function AuthView({ error }: { error?: string }) {
   const supabase = createClient();
@@ -121,9 +122,7 @@ export function AuthView({ error }: { error?: string }) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center shadow-lg">
-            <Wallet className="w-8 h-8 text-white" />
-          </div>
+          <DeuditaLogo size="xl" className="shadow-lg" />
         </div>
         
         <h1 className="text-3xl font-bold text-zinc-900 mb-2">Deudita</h1>

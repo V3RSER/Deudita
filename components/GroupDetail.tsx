@@ -47,6 +47,8 @@ import {
   Clock,
   ArrowRight,
   PlusCircle,
+  Settings,
+  History,
 } from 'lucide-react';
 
 import { getGroupImage } from '@/lib/group-utils';
@@ -626,135 +628,153 @@ export function GroupDetail({
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3 font-sans pb-16">
       {/* 1. Header: Group Banner with Background Photo, Blur, and Contrast Gradient */}
-      <div className="relative w-full h-36 sm:h-44 md:h-48 rounded-3xl overflow-hidden shadow-xs border border-zinc-200/80 bg-zinc-900">
+      <div className="relative w-full rounded-3xl overflow-hidden shadow-xs border border-zinc-800/80 bg-zinc-950 text-white">
         {/* Background photo with subtle blur */}
         {group.image_url ? (
           <Image
             src={groupImageUrl}
             alt={group.name}
             fill
-            className="object-cover scale-105 blur-[3px] brightness-[0.6] contrast-[1.05]"
+            className="object-cover scale-105 blur-[3px] brightness-[0.45] contrast-[1.05]"
             unoptimized
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-tr from-zinc-900 via-zinc-800 to-zinc-700" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-zinc-950 via-zinc-900 to-zinc-800" />
         )}
 
         {/* Gradient overlay to ensure sharp contrast with foreground elements */}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-black/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/70 to-black/40" />
 
-        {/* Top-right actions (Settings button) */}
-        <div className="absolute top-3.5 right-3.5 z-10">
-          <button
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white backdrop-blur-md border border-white/20 flex items-center justify-center transition cursor-pointer shadow-sm active:scale-95"
-            title="Opciones del grupo"
-            aria-label="Opciones del grupo"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Banner content: Group avatar badge + Title + Metadata */}
-        <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex items-end justify-between gap-3 z-10">
-          <div className="flex items-center space-x-3.5 sm:space-x-4 min-w-0">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden relative shadow-md border-2 border-white/90 shrink-0 bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex items-center justify-center">
-              {group.image_url ? (
-                <Image
-                  src={groupImageUrl}
-                  alt={group.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span className="font-bold text-lg sm:text-xl text-amber-900 tracking-tight">
-                  {group.name.slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </div>
-
-            <div className="min-w-0 text-white">
-              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white tracking-tight truncate drop-shadow-sm">
+        {/* Content */}
+        <div className="relative z-10 p-4 sm:p-5 space-y-3 sm:space-y-3.5">
+          {/* Top Row: Group Title & Members count + Settings Button */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate drop-shadow-sm">
                 {group.name}
               </h1>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs text-white/85 font-medium flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-white/70" />
-                  {memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}
-                </span>
-                {group.currency && (
-                  <span className="bg-white/20 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                    {group.currency}
-                  </span>
-                )}
-                {group.category && (
-                  <span className="bg-black/35 backdrop-blur-md border border-white/10 text-white/80 text-[10px] font-medium px-2 py-0.5 rounded-md capitalize">
-                    {group.category}
-                  </span>
-                )}
-              </div>
+              <p className="text-xs text-zinc-300 font-medium flex items-center gap-1.5 mt-0.5">
+                <Users className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>{memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}</span>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white/90 hover:text-white backdrop-blur-md border border-white/15 flex items-center justify-center transition cursor-pointer shadow-sm active:scale-95 shrink-0"
+              title="Ajustes del grupo"
+              aria-label="Ajustes del grupo"
+            >
+              <Settings className="w-4.5 h-4.5" />
+            </button>
+          </div>
+
+          {/* Bottom Row: Balance Status & Action Buttons (Saldar + Nuevo gasto) */}
+          <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2.5">
+            <div className="min-w-0 flex flex-col justify-center">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-400 leading-tight">
+                {myNetBalance > 0.01
+                  ? 'Tú recuperas'
+                  : myNetBalance < -0.01
+                  ? 'Tú debes'
+                  : 'Estás al día'}
+              </span>
+              <span
+                className={`text-lg sm:text-2xl font-black tracking-tight leading-tight mt-0.5 truncate ${
+                  myNetBalance > 0.01
+                    ? 'text-emerald-400'
+                    : myNetBalance < -0.01
+                    ? 'text-rose-400'
+                    : 'text-zinc-200'
+                }`}
+              >
+                {formatCurrency(Math.abs(myNetBalance), effectiveCurrency)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => onOpenSettleModal(group.id)}
+                className="h-9 sm:h-10 px-3 sm:px-3.5 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white border border-white/20 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 backdrop-blur-md cursor-pointer"
+              >
+                <Wallet className="w-4 h-4 text-white shrink-0" />
+                <span>Saldar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenNewExpense(group.id)}
+                className="h-9 sm:h-10 px-3.5 sm:px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-950/40 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <span>Nuevo gasto</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Top Navigation Tabs: Gastos | Balances | Miembros | Actividad */}
-      <div className="flex border-b border-zinc-200 justify-between sm:justify-start sm:space-x-8 px-1">
+      {/* 2. Top Navigation Tabs: Gastos | Balances | Miembros | Historial */}
+      <div className="bg-zinc-100/90 p-1 rounded-2xl grid grid-cols-4 gap-1 border border-zinc-200/70 shadow-2xs">
         <button
+          type="button"
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center space-x-1.5 pb-2.5 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+          className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
             activeTab === 'expenses'
-              ? 'border-emerald-600 text-emerald-700 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
           }`}
         >
-          <DollarSign className={`w-4 h-4 ${activeTab === 'expenses' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-500'}`} />
-          <span>Gastos</span>
+          <DollarSign className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'expenses' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
+          <span className="truncate">Gastos</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('balances')}
-          className={`flex items-center space-x-1.5 pb-2.5 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+          className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
             activeTab === 'balances'
-              ? 'border-emerald-600 text-emerald-700 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
           }`}
         >
-          <Scale className="w-4 h-4" />
-          <span>Balances</span>
+          <Scale className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'balances' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
+          <span className="truncate">Balances</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('members')}
-          className={`flex items-center space-x-1.5 pb-2.5 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+          className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
             activeTab === 'members'
-              ? 'border-emerald-600 text-emerald-700 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Miembros</span>
+          <Users className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'members' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
+          <span className="truncate">Miembros</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('activity')}
-          className={`flex items-center space-x-1.5 pb-2.5 text-sm font-semibold transition-colors cursor-pointer border-b-2 ${
+          className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
             activeTab === 'activity'
-              ? 'border-emerald-600 text-emerald-700 font-bold'
-              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
           }`}
         >
-          <Activity className="w-4 h-4" />
-          <span>Actividad</span>
+          <History className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'activity' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
+          <span className="truncate">Historial</span>
         </button>
       </div>
 
-      {/* 3. TAB 1: GASTOS (Exact reproduction of uploaded reference image) */}
+      {/* 3. TAB 1: GASTOS */}
       {activeTab === 'expenses' && (
-        <div className="space-y-3.5 pt-1">
+        <div className="space-y-3 pt-1">
           {/* Row 1: Dominant Search Bar + Filter Button [ 🎚️ ] */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -796,50 +816,6 @@ export function GroupDetail({
                 </span>
               )}
             </button>
-          </div>
-
-          {/* Row 2: Balance Status & Action Buttons (Saldar + Nuevo gasto) */}
-          <div className="flex items-center justify-between gap-3 pt-1 pb-1 px-0.5">
-            <div className="flex flex-col justify-center">
-              <p className="text-xs sm:text-[13px] font-semibold text-zinc-500 leading-tight">
-                {myNetBalance > 0.01
-                  ? 'Tú recuperas'
-                  : myNetBalance < -0.01
-                  ? 'Tú debes'
-                  : 'Estás al día'}
-              </p>
-              <p
-                className={`text-2xl sm:text-[28px] font-extrabold tracking-tight leading-tight mt-0.5 ${
-                  myNetBalance > 0.01
-                    ? 'text-emerald-600'
-                    : myNetBalance < -0.01
-                    ? 'text-rose-600'
-                    : 'text-zinc-800'
-                }`}
-              >
-                {formatCurrency(Math.abs(myNetBalance), effectiveCurrency)}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => onOpenSettleModal(group.id)}
-                className="h-10 px-3.5 bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200/90 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-2xs cursor-pointer"
-              >
-                <Wallet className="w-4 h-4 text-zinc-700" />
-                <span>Saldar</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onOpenNewExpense(group.id)}
-                className="h-10 px-4 bg-[#c25737] hover:bg-[#b04d30] text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-[0.98] shadow-xs cursor-pointer"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>Nuevo gasto</span>
-              </button>
-            </div>
           </div>
 
           {/* Empty state */}
@@ -946,11 +922,17 @@ export function GroupDetail({
                       return [];
                     })();
 
+                    const leftBorderAccent = isPayer
+                      ? 'border-l-[3.5px] border-l-emerald-500'
+                      : myOwed > 0.01
+                      ? 'border-l-[3.5px] border-l-rose-400'
+                      : 'border-l-[3.5px] border-l-zinc-300';
+
                     return (
                       <div
                         id={`expense-${exp.id}`}
                         key={`exp-${exp.id}`}
-                        className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden transition-all"
+                        className={`bg-white rounded-2xl border border-zinc-200/85 ${leftBorderAccent} shadow-2xs overflow-hidden transition-all hover:border-zinc-300`}
                       >
                         {/* Collapsed/Header Row */}
                         <div
@@ -959,29 +941,34 @@ export function GroupDetail({
                         >
                           <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                             {/* Date Box: Day on top, month below */}
-                            <div className="w-8 text-center shrink-0 flex flex-col items-center justify-center">
-                              <span className="text-sm sm:text-base font-bold text-zinc-900 leading-none">
+                            <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-200/70 flex flex-col items-center justify-center shrink-0 text-center shadow-2xs">
+                              <span className="text-xs sm:text-sm font-bold text-zinc-800 leading-none">
                                 {parsed.dayStr}
                               </span>
-                              <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
+                              <span className="text-[9px] font-bold uppercase text-zinc-400 leading-none mt-0.5">
                                 {parsed.monthAbbr}
                               </span>
                             </div>
 
-                            {/* Category Icon Box (Soft pastel background) */}
+                            {/* Category Icon Box */}
                             <div
-                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${catConfig.bgClass} ${catConfig.textClass}`}
+                              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
                             >
-                              <CategoryIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                              <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                             </div>
 
                             {/* Description & Payer */}
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
-                                {exp.description}
-                              </h3>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
+                                  {exp.description}
+                                </h3>
+                                <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
+                                  {exp.category || 'General'}
+                                </span>
+                              </div>
                               <p className="text-xs text-zinc-500 truncate mt-0.5 leading-none">
-                                Pagó {paidBy ? paidBy.full_name : 'Alguien'}
+                                Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
                               </p>
                             </div>
                           </div>
@@ -1189,32 +1176,37 @@ export function GroupDetail({
                   return (
                     <div
                       key={`pay-${pay.id}`}
-                      className="bg-white rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden transition-all"
+                      className="bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300"
                     >
                       <div
                         onClick={() => togglePaymentExpand(pay.id)}
                         className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
                       >
                         <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                          <div className="w-8 text-center shrink-0 flex flex-col items-center justify-center">
-                            <span className="text-sm sm:text-base font-bold text-zinc-900 leading-none">
+                          <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-200/70 flex flex-col items-center justify-center shrink-0 text-center shadow-2xs">
+                            <span className="text-xs sm:text-sm font-bold text-zinc-800 leading-none">
                               {parsed.dayStr}
                             </span>
-                            <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-zinc-400 leading-none mt-1">
+                            <span className="text-[9px] font-bold uppercase text-zinc-400 leading-none mt-0.5">
                               {parsed.monthAbbr}
                             </span>
                           </div>
 
-                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700">
+                          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                             <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
-                              Pago a {receiver ? receiver.full_name : 'Integrante'}
-                            </h3>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
+                                Pago a {receiver ? receiver.full_name : 'Integrante'}
+                              </h3>
+                              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
+                                Saldado
+                              </span>
+                            </div>
                             <p className="text-xs text-zinc-500 truncate mt-0.5 leading-none">
-                              Saldado por {payer ? payer.full_name : 'Integrante'}
+                              Saldado por <span className="font-medium text-zinc-700">{payer ? payer.full_name : 'Integrante'}</span>
                             </p>
                           </div>
                         </div>
@@ -1445,13 +1437,13 @@ export function GroupDetail({
         </div>
       )}
 
-      {/* 6. TAB 4: ACTIVIDAD */}
+      {/* 6. TAB 4: HISTORIAL */}
       {activeTab === 'activity' && (
         <div className="space-y-3 pt-1">
           {sortedGroupAuditLogs.length === 0 ? (
             <div className="bg-white rounded-2xl border border-zinc-200 p-10 text-center text-zinc-500 shadow-2xs space-y-2">
-              <Activity className="w-10 h-10 text-zinc-300 mx-auto" />
-              <h3 className="font-semibold text-zinc-900 text-sm">Sin actividad</h3>
+              <History className="w-10 h-10 text-zinc-300 mx-auto" />
+              <h3 className="font-semibold text-zinc-900 text-sm">Sin historial</h3>
               <p className="text-xs text-zinc-500">Aún no hay registros de movimientos en este grupo.</p>
             </div>
           ) : (

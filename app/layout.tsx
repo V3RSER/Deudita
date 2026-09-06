@@ -18,6 +18,11 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: 'Deudita - Gastos Compartidos y División de Cuentas',
   description: 'Aplicación web de gastos compartidos multiusuario para administrar grupos, dividir gastos desglosados, calcular balances consolidados y gestionar borradores de gastos.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
