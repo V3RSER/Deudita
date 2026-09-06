@@ -194,9 +194,9 @@ function extractWithCaptureGroup(
     }
 
     return {
-      success: true,
+      success: false,
       rawExtracted: match[0].trim(),
-      reason: 'El patrón coincidió pero no tiene grupo de captura (...) explícito',
+      reason: 'Falta grupo de captura (...) explícito. Google Apps Script lee match[1]; sin grupo de captura fallará en producción.',
       hasCaptureGroup: false,
     };
   } catch (err: unknown) {
@@ -304,17 +304,16 @@ export function diagnoseEmailMatching(
     }
 
     if (patternsToTest.length === 0) {
-      // Discard because no patterns exist to verify sender
-      discardedEntities.push({
+      // Como en Google Apps Script: si la entidad no tiene email_patterns configurados (length === 0),
+      // no se descarta; se permite evaluar directamente sus plantillas contra el asunto y sender_pattern.
+      passedEntities.push({
         entityId: entId,
         entityName: entity.name,
         patterns: [],
-        matched: false,
-        discardReason: 'No hay patrones de correo registrados en entity_email_patterns para esta entidad.',
+        matched: true,
         templatesCount: entTemplates.length,
         templateNames: entTemplates.map((t) => t.name),
       });
-      l1DiscardedTemplatesCount += entTemplates.length;
       continue;
     }
 
@@ -1054,16 +1053,30 @@ export function simulateGoogleAppsScriptProcess(
             continue;
           }
 
-          const rawAmt = amountMatch[1] !== undefined ? amountMatch[1] : amountMatch[0];
+          const rawAmt = amountMatch[1];
+          if (rawAmt === undefined) {
+            logs.push(`  ❌ Plantilla "${t.name}": amount_regex coincidió pero no tiene grupo de captura (...). En Google Apps Script amountMatch[1] es undefined y se descarta.`);
+            continue;
+          }
+
           const normalizedAmt = normalizeAmount(rawAmt);
           const numericAmount = Number(normalizedAmt);
-          if (isNaN(numericAmount)) {
+          if (isNaN(numericAmount) || !normalizedAmt) {
             logs.push(`  → Plantilla "${t.name}": amount_regex extrajo "${rawAmt}" pero no se pudo convertir a número.`);
             continue;
           }
 
           const cleanMerchRegex = sanitizeRegexPattern(t.merchant_regex);
           const merchantMatch = cleanMerchRegex ? body.match(new RegExp(cleanMerchRegex, 'i')) : null;
+          let merchant: string | null = null;
+          if (merchantMatch) {
+            if (merchantMatch[1] === undefined) {
+              logs.push(`  ❌ Plantilla "${t.name}": merchant_regex coincidió pero no tiene grupo de captura (...). En Google Apps Script provocará TypeError al llamar a merchantMatch[1].trim().`);
+              continue;
+            }
+            merchant = merchantMatch[1].trim();
+          }
+
           const cleanDateRegex = sanitizeRegexPattern(t.date_regex);
           const dateMatch = cleanDateRegex ? body.match(new RegExp(cleanDateRegex, 'i')) : null;
           const cleanTimeRegex = sanitizeRegexPattern(t.time_regex);
@@ -1075,19 +1088,20 @@ export function simulateGoogleAppsScriptProcess(
             ? body.match(new RegExp(cleanSourceRegex, 'i'))
             : null;
 
-          const merchant = merchantMatch ? (merchantMatch[1] !== undefined ? merchantMatch[1].trim() : merchantMatch[0]?.trim()) : null;
-          const currency = currencyMatch ? (currencyMatch[1] !== undefined ? currencyMatch[1] : currencyMatch[0]) : t.default_currency || 'COP';
+          const currency = currencyMatch && currencyMatch[1] ? currencyMatch[1] : t.default_currency || 'COP';
 
           let dtDate: string | null = null;
           let dtTime: string | null = null;
           if (dateMatch) {
-            const rawD = dateMatch[1] !== undefined ? dateMatch[1] : dateMatch[0];
-            const rawT = timeMatch ? (timeMatch[1] !== undefined ? timeMatch[1] : timeMatch[0]) : null;
-            const combined = rawT ? `${rawD} ${rawT}` : rawD;
-            const parsed = parseDateWithFormat(combined, t.date_format);
-            if (parsed) {
-              dtDate = parsed.date;
-              dtTime = parsed.time;
+            const rawD = dateMatch[1] !== undefined ? dateMatch[1] : null;
+            const rawT = timeMatch && timeMatch[1] !== undefined ? timeMatch[1] : null;
+            if (rawD) {
+              const combined = rawT ? `${rawD} ${rawT}` : rawD;
+              const parsed = parseDateWithFormat(combined, t.date_format);
+              if (parsed) {
+                dtDate = parsed.date;
+                dtTime = parsed.time;
+              }
             }
           }
 

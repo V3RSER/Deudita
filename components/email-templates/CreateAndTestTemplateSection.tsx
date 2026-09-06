@@ -334,8 +334,8 @@ export function CreateAndTestTemplateSection({
         level1Reason = 'Entidad seleccionada (sin patrones de remitente específicos)';
       }
     } else {
-      level1Matched = true;
-      level1Reason = 'Nivel 1 abierto (sin filtro estricto)';
+      level1Matched = false;
+      level1Reason = '⚠️ Requiere entidad bancaria: Google Apps Script descarta plantillas sin entity_id';
     }
 
     // Level 2: Subject pattern
@@ -362,8 +362,8 @@ export function CreateAndTestTemplateSection({
     if (cleanMatchPat) {
       try {
         const regex = new RegExp(cleanMatchPat, 'i');
-        level3Matched = regex.test(targetText);
-        level3Reason = level3Matched ? 'Coincide con el patrón de desempate' : 'No coincide con match_pattern';
+        level3Matched = regex.test(targetText) || regex.test(subjectInput);
+        level3Reason = level3Matched ? 'Coincide con el patrón de desempate (cuerpo/asunto)' : 'No coincide con match_pattern';
       } catch {
         level3Matched = false;
         level3Reason = 'Regex de match_pattern inválido';
