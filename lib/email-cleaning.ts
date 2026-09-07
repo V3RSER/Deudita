@@ -175,7 +175,7 @@ export function buildTemplatePrompt(
     '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
     '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) y todos los demás grupos deben ser no capturantes.',
     '5. amount_regex es obligatorio y debe capturar únicamente el importe, sin la etiqueta ni texto posterior.',
-    '6. merchant_regex debe capturar únicamente el comercio, tienda o destinatario cuando esté presente.',
+    '6. merchant_regex: debe capturar el comercio, tienda, destinatario o beneficiario de la operación cuando esté presente. En transferencias, si no existe nombre de beneficiario pero sí una cuenta destino explícita, debe capturarse esa cuenta destino como identificador del destinatario. Si no existe ningún comercio, destinatario, beneficiario o cuenta destino identificable, merchant_regex debe ser null.',
     '7. date_regex debe capturar únicamente la fecha y date_format debe indicar exactamente su formato.',
     '7A. time_regex debe capturar únicamente la hora y time_format debe indicar exactamente su formato.',
     "7B. currency_regex corresponde al tipo de moneda detectado en la notificación y debe coincidir con formato ISO_4217. Ojo: este ex un regex para extraer la informaicón dinámica, no un valor fijo.",
