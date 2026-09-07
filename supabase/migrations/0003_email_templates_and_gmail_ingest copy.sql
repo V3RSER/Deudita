@@ -73,6 +73,7 @@ create policy "select_entity_email_patterns"
 -- ----------------------------------------------------------------------------
 -- 4) TABLA email_templates
 -- ----------------------------------------------------------------------------
+
 create table if not exists public.email_templates (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -87,6 +88,7 @@ create table if not exists public.email_templates (
   currency_regex text,
   source_account_regex text,
   time_regex text,
+  time_format text,
   expense_type_id uuid references public.expense_types(id),
   entity_id uuid references public.entities(id),
   match_pattern text,
@@ -94,6 +96,10 @@ create table if not exists public.email_templates (
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- Migración segura para instalaciones existentes.
+alter table if exists public.email_templates
+  add column if not exists time_format text;
 
 create index if not exists idx_email_templates_active
   on public.email_templates(active);

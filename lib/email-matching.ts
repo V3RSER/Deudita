@@ -15,6 +15,7 @@ export interface CatalogTemplate {
   merchant_regex: string | null;
   date_regex: string | null;
   date_format: string | null;
+  time_format: string | null;
   entity_name: string | null;
   entity_id: string | null;
   match_pattern: string | null;
@@ -818,42 +819,59 @@ export function normalizeAmount(rawAmount: string | number | null | undefined): 
   return num.toFixed(2);
 }
 
+function parseFormattedTokens(
+  rawValue: string | null | undefined,
+  formatStr: string | null | undefined,
+  allowedTokens: RegExp
+): Record<string, string> | null {
+  if (!rawValue || !formatStr) return null;
+
+  const tokenOrder: string[] = [];
+  const tokenRegexSource = formatStr.replace(allowedTokens, (token) => {
+    tokenOrder.push(token);
+    return token === 'YYYY' ? '(\\d{4})' : '(\\d{1,2})';
+  });
+
+  try {
+    const match = rawValue.trim().match(new RegExp(tokenRegexSource));
+    if (!match) return null;
+
+    const parts: Record<string, string> = {};
+    tokenOrder.forEach((token, i) => {
+      parts[token] = match[i + 1].padStart(token === 'YYYY' ? 4 : 2, '0');
+    });
+
+    return parts;
+  } catch {
+    return null;
+  }
+}
+
 export function parseDateWithFormat(
   rawDateStr: string | null | undefined,
   formatStr: string | null | undefined
 ): { date: string; time: string } | null {
   if (!rawDateStr || !formatStr) return null;
 
-  const tokenOrder: string[] = [];
-  const tokenRegexSource = formatStr.replace(/YYYY|MM|DD|HH|mm|ss/g, (match) => {
-    tokenOrder.push(match);
-    return match === 'YYYY' ? '(\\d{4})' : '(\\d{1,2})';
-  });
+  const parts = parseFormattedTokens(rawDateStr, formatStr, /YYYY|MM|DD/g);
+  if (!parts || !parts.YYYY || !parts.MM || !parts.DD) return null;
 
-  try {
-    const match = rawDateStr.match(new RegExp(tokenRegexSource));
-    if (!match) return null;
+  return {
+    date: `${parts.YYYY}-${parts.MM}-${parts.DD}`,
+    time: '00:00:00',
+  };
+}
 
-    const parts: Record<string, string> = {
-      YYYY: '1970',
-      MM: '01',
-      DD: '01',
-      HH: '00',
-      mm: '00',
-      ss: '00',
-    };
+export function parseTimeWithFormat(
+  rawTimeStr: string | null | undefined,
+  formatStr: string | null | undefined
+): string | null {
+  if (!rawTimeStr || !formatStr) return null;
 
-    tokenOrder.forEach((token, i) => {
-      parts[token] = match[i + 1].padStart(token === 'YYYY' ? 4 : 2, '0');
-    });
+  const parts = parseFormattedTokens(rawTimeStr, formatStr, /HH|mm|ss/g);
+  if (!parts || !parts.HH || !parts.mm) return null;
 
-    return {
-      date: `${parts.YYYY}-${parts.MM}-${parts.DD}`,
-      time: `${parts.HH}:${parts.mm}:${parts.ss}`,
-    };
-  } catch {
-    return null;
-  }
+  return `${parts.HH}:${parts.mm}:${parts.ss || '00'}`;
 }
 
 export function StringUtils_toTitleCase(str: string): string {
@@ -1050,16 +1068,29 @@ export function simulateGoogleAppsScriptProcess(
 
           let dtDate: string | null = null;
           let dtTime: string | null = null;
-          if (dateMatch) {
-            const rawD = dateMatch[1] !== undefined ? dateMatch[1] : null;
-            const rawT = timeMatch && timeMatch[1] !== undefined ? timeMatch[1] : null;
-            if (rawD) {
-              const combined = rawT ? `${rawD} ${rawT}` : rawD;
-              const parsed = parseDateWithFormat(combined, t.date_format);
-              if (parsed) {
-                dtDate = parsed.date;
-                dtTime = parsed.time;
-              }
+
+          const rawD = dateMatch?.[1] !== undefined ? dateMatch[1] : null;
+          const rawT = timeMatch?.[1] !== undefined ? timeMatch[1] : null;
+
+          if (rawD) {
+            const parsedDate = parseDateWithFormat(rawD, t.date_format);
+            if (parsedDate) {
+              dtDate = parsedDate.date;
+            }
+          }
+
+          if (rawT) {
+            dtTime = parseTimeWithFormat(rawT, t.time_format);
+          }
+
+          // Backward compatibility: templates created before time_format existed
+          // may have included HH/mm/ss inside date_format.
+          if (rawD && !dtTime && !t.time_format && t.date_format?.match(/HH|mm|ss/)) {
+            const combined = rawT ? `${rawD} ${rawT}` : rawD;
+            const parsedLegacy = parseFormattedTokens(combined, t.date_format, /YYYY|MM|DD|HH|mm|ss/g);
+            if (parsedLegacy?.YYYY && parsedLegacy.MM && parsedLegacy.DD) {
+              dtDate = `${parsedLegacy.YYYY}-${parsedLegacy.MM}-${parsedLegacy.DD}`;
+              dtTime = `${parsedLegacy.HH || '00'}:${parsedLegacy.mm || '00'}:${parsedLegacy.ss || '00'}`;
             }
           }
 

@@ -122,6 +122,7 @@ export function EmailTemplatesManagerView({
   const [formDateRegex, setFormDateRegex] = useState<string>('');
   const [formDateFormat, setFormDateFormat] = useState<string>('');
   const [formTimeRegex, setFormTimeRegex] = useState<string>('');
+  const [formTimeFormat, setFormTimeFormat] = useState<string>('');
   const [formCurrencyRegex, setFormCurrencyRegex] = useState<string>('');
   const [formCurrency, setFormCurrency] = useState<string>('');
 
@@ -159,6 +160,7 @@ export function EmailTemplatesManagerView({
   const [modalName, setModalName] = useState<string>('');
   const [modalEntityName, setModalEntityName] = useState<string>('');
   const [modalEntityId, setModalEntityId] = useState<string | null>(null);
+  const [modalEntityEmailPattern, setModalEntityEmailPattern] = useState<string>('');
   const [modalIsNewEntity, setModalIsNewEntity] = useState<boolean>(false);
   const [modalSubjectPattern, setModalSubjectPattern] = useState<string>('');
   const [modalSenderPattern, setModalSenderPattern] = useState<string>('');
@@ -169,6 +171,7 @@ export function EmailTemplatesManagerView({
   const [modalDateRegex, setModalDateRegex] = useState<string>('');
   const [modalDateFormat, setModalDateFormat] = useState<string>('DD/MM/YYYY');
   const [modalTimeRegex, setModalTimeRegex] = useState<string>('');
+  const [modalTimeFormat, setModalTimeFormat] = useState<string>('HH:mm:ss');
   const [modalCurrencyRegex, setModalCurrencyRegex] = useState<string>('');
   const [modalCurrency, setModalCurrency] = useState<string>('COP');
   const [modalSampleEmailId, setModalSampleEmailId] = useState<string>('');
@@ -646,6 +649,7 @@ export function EmailTemplatesManagerView({
     setFormDateRegex(tmpl.date_regex || '');
     setFormDateFormat(tmpl.date_format || '');
     setFormTimeRegex(tmpl.time_regex || '');
+    setFormTimeFormat(tmpl.time_format || '');
     setFormCurrencyRegex(tmpl.currency_regex || '');
     setFormCurrency(tmpl.default_currency || '');
 
@@ -674,6 +678,7 @@ export function EmailTemplatesManagerView({
     setFormDateRegex('');
     setFormDateFormat('');
     setFormTimeRegex('');
+    setFormTimeFormat('');
     setFormCurrencyRegex('');
     setFormCurrency('');
 
@@ -777,6 +782,7 @@ export function EmailTemplatesManagerView({
       currency_regex: d.currency_regex,
       source_account_regex: d.source_account_regex,
       time_regex: d.time_regex,
+      time_format: d.time_format,
       active: true,
       entity_email_patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
     };
@@ -821,6 +827,7 @@ export function EmailTemplatesManagerView({
     setFormDateRegex(d.date_regex || '');
     setFormDateFormat(d.date_format || '');
     setFormTimeRegex(d.time_regex || '');
+    setFormTimeFormat(d.time_format || '');
     setFormCurrencyRegex(d.currency_regex || '');
     setFormCurrency(d.default_currency || '');
 
@@ -897,6 +904,7 @@ export function EmailTemplatesManagerView({
         setFormDateRegex(s.date_regex || '');
         setFormDateFormat(s.date_format || '');
         setFormTimeRegex(s.time_regex || '');
+        setFormTimeFormat(s.time_format || '');
         setFormCurrency(s.default_currency || '');
         setFormCurrencyRegex(s.currency_regex || '');
 
@@ -956,6 +964,7 @@ export function EmailTemplatesManagerView({
         date_regex: sanitizeRegexPattern(formDateRegex.trim()) || null,
         date_format: formDateFormat.trim() || 'DD/MM/YYYY',
         time_regex: sanitizeRegexPattern(formTimeRegex.trim()) || null,
+        time_format: formTimeFormat.trim() || null,
         currency_regex: sanitizeRegexPattern(formCurrencyRegex.trim()) || null,
         default_currency: formCurrency.trim() || 'COP',
       };
@@ -996,6 +1005,11 @@ export function EmailTemplatesManagerView({
       setModalName(tmpl.name);
       setModalEntityName(tmpl.entity_name || tmpl.entity?.name || '');
       setModalEntityId(tmpl.entity_id || null);
+      setModalEntityEmailPattern(
+        Array.isArray(tmpl.entity_email_patterns) && tmpl.entity_email_patterns.length > 0
+          ? tmpl.entity_email_patterns[0]
+          : ''
+      );
       setModalIsNewEntity(false);
       setModalSubjectPattern(tmpl.subject_pattern || '');
       setModalSenderPattern(tmpl.sender_pattern || '');
@@ -1006,6 +1020,7 @@ export function EmailTemplatesManagerView({
       setModalDateRegex(tmpl.date_regex || '');
       setModalDateFormat(tmpl.date_format || 'DD/MM/YYYY');
       setModalTimeRegex(tmpl.time_regex || '');
+      setModalTimeFormat(tmpl.time_format || 'HH:mm:ss');
       setModalCurrencyRegex(tmpl.currency_regex || '');
       setModalCurrency(tmpl.default_currency || 'COP');
     } else {
@@ -1014,6 +1029,7 @@ export function EmailTemplatesManagerView({
       setModalName('Nueva Plantilla');
       setModalEntityName(entities[0]?.name || 'Bancolombia');
       setModalEntityId(entities[0]?.id || null);
+      setModalEntityEmailPattern('');
       setModalIsNewEntity(false);
       setModalSubjectPattern('');
       setModalSenderPattern('');
@@ -1024,6 +1040,7 @@ export function EmailTemplatesManagerView({
       setModalDateRegex('');
       setModalDateFormat('DD/MM/YYYY');
       setModalTimeRegex('');
+      setModalTimeFormat('HH:mm:ss');
       setModalCurrencyRegex('');
       setModalCurrency('COP');
     }
@@ -1127,6 +1144,7 @@ export function EmailTemplatesManagerView({
     if (d.name) setModalName(d.name);
     if (d.entity_name) {
       setModalEntityName(d.entity_name);
+      setModalEntityEmailPattern(d.entity_email_pattern || '');
       const matched = entities.find((e) => e.name.toLowerCase() === (d.entity_name || '').toLowerCase());
       if (matched) {
         setModalEntityId(matched.id);
@@ -1145,6 +1163,7 @@ export function EmailTemplatesManagerView({
     if (d.date_regex) setModalDateRegex(d.date_regex);
     if (d.date_format) setModalDateFormat(d.date_format);
     if (d.time_regex) setModalTimeRegex(d.time_regex);
+    if (d.time_format) setModalTimeFormat(d.time_format);
     if (d.currency_regex) setModalCurrencyRegex(d.currency_regex);
     if (d.default_currency) setModalCurrency(d.default_currency);
 
@@ -1183,6 +1202,7 @@ export function EmailTemplatesManagerView({
         name: modalName.trim(),
         entity_name: modalEntityName.trim() || null,
         entity_id: modalEntityId || null,
+        entity_email_pattern: modalEntityEmailPattern.trim() || null,
         subject_pattern: sanitizeRegexPattern(modalSubjectPattern.trim()) || null,
         sender_pattern: sanitizeRegexPattern(modalSenderPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(modalMatchPattern.trim()) || null,
@@ -1192,6 +1212,7 @@ export function EmailTemplatesManagerView({
         date_regex: sanitizeRegexPattern(modalDateRegex.trim()) || null,
         date_format: modalDateFormat.trim() || 'DD/MM/YYYY',
         time_regex: sanitizeRegexPattern(modalTimeRegex.trim()) || null,
+        time_format: modalTimeFormat.trim() || null,
         currency_regex: sanitizeRegexPattern(modalCurrencyRegex.trim()) || null,
         default_currency: modalCurrency.trim() || 'COP',
       };
@@ -1239,7 +1260,14 @@ export function EmailTemplatesManagerView({
         throw new Error(data.error || 'Error al eliminar plantilla');
       }
 
-      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+      // Re-fetch from the server so the UI reflects the actual database state
+      // (hard delete or soft delete). This also refreshes entity/template data
+      // used by the diagnostics instead of relying only on local state.
+      await fetchTemplatesData();
+
+      setEmailDiagnoses(new Map());
+      setAiPreviewDiagnosis(null);
+      setAiPreviewEmailId(null);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error al eliminar');
     } finally {
@@ -2225,8 +2253,8 @@ export function EmailTemplatesManagerView({
                         />
                       </div>
 
-                      {/* Fecha, Hora y Formato */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Fecha, Hora y sus formatos */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-zinc-500" />
@@ -2268,6 +2296,23 @@ export function EmailTemplatesManagerView({
                             onChange={(e) => setFormTimeRegex(e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                           />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-zinc-700">Formato de Hora</label>
+                          <input
+                            type="text"
+                            list="time-format-suggestions"
+                            value={formTimeFormat}
+                            onChange={(e) => setFormTimeFormat(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono"
+                            placeholder="HH:mm:ss"
+                          />
+                          <datalist id="time-format-suggestions">
+                            <option value="HH:mm:ss" />
+                            <option value="HH:mm" />
+                            <option value="HH:mm a" />
+                          </datalist>
                         </div>
                       </div>
 
@@ -2843,7 +2888,7 @@ export function EmailTemplatesManagerView({
                 </div>
 
                 {/* Fecha */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                   <div className="sm:col-span-2 space-y-1">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
@@ -2866,7 +2911,7 @@ export function EmailTemplatesManagerView({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-700">Formato</label>
+                    <label className="text-xs font-bold text-zinc-700">Formato de Fecha</label>
                     <select
                       value={modalDateFormat}
                       onChange={(e) => setModalDateFormat(e.target.value)}
@@ -2875,6 +2920,32 @@ export function EmailTemplatesManagerView({
                       <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                       <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                       <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                      <span>Hora</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={modalTimeRegex}
+                      onChange={(e) => setModalTimeRegex(e.target.value)}
+                      placeholder="Regex con grupo de captura () para la hora"
+                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-700">Formato de Hora</label>
+                    <select
+                      value={modalTimeFormat}
+                      onChange={(e) => setModalTimeFormat(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
+                    >
+                      <option value="HH:mm:ss">HH:mm:ss</option>
+                      <option value="HH:mm">HH:mm</option>
                     </select>
                   </div>
                 </div>
