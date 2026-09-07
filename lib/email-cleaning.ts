@@ -377,6 +377,7 @@ export interface TemplateCorrectionDetails {
     expense_type?: string | null;
   };
   failures: string[];
+  warnings?: string[];
 }
 
 /**
@@ -389,18 +390,30 @@ export function buildCorrectionPrompt(
   cleanBody: string,
   details: TemplateCorrectionDetails
 ): string {
-  const failureBullets = details.failures.length > 0
-    ? details.failures.map((f) => `• ${f}`).join('\n')
-    : '• Ningún error bloqueante, pero revisa la coincidencia exacta de los patrones de extracción.';
+  const sections: string[] = [];
+
+  if (details.failures && details.failures.length > 0) {
+    sections.push('ERRORES BLOQUEANTES QUE IMPIDEN QUE LA PLANTILLA COINCIDA:');
+    sections.push(...details.failures.map((f) => `• ${f}`));
+  }
+
+  if (details.warnings && details.warnings.length > 0) {
+    if (sections.length > 0) sections.push('');
+    sections.push('AVISOS EN CAMPOS DE EXTRACCIÓN (Revisa los patrones o define null si no aparecen en el correo):');
+    sections.push(...details.warnings.map((w) => `• ${w}`));
+  }
+
+  if (sections.length === 0) {
+    sections.push('• Revisa la coincidencia exacta de los patrones de extracción sobre el texto real.');
+  }
 
   return [
     'Corrige la siguiente plantilla JSON para extracción de notificaciones de correo.',
-    'La plantilla actual NO pasó las pruebas automáticas contra el correo real debido a los siguientes fallos:',
+    'La plantilla fue evaluada contra el correo real y se obtuvieron los siguientes resultados:',
     '',
-    'FALLOS DETECTADOS QUE DEBES CORREGIR:',
-    failureBullets,
+    ...sections,
     '',
-    'PLANTILLA ACTUAL CON ERRORES:',
+    'PLANTILLA ACTUAL:',
     JSON.stringify(details.template, null, 2),
     '',
     'DATOS REALES DEL CORREO:',
@@ -419,7 +432,7 @@ export function buildCorrectionPrompt(
     '2. En correos procesados, las etiquetas y valores pueden estar separados por espacios o saltos de línea, no siempre dos puntos (:). Usa `(?:\\s*:\\s*|\\s+)`.',
     '3. Cada regex de extracción DEBE tener exactamente UN grupo de captura (...) alrededor del valor limpio (ej: monto, hora, comercio).',
     '4. Si un dato (como hora, comercio o cuenta origen) NO existe en el texto de CUERPO LIMPIO, define su regex correspondiente como null.',
-    '5. Si el correo sí incluye la hora (ej: 14:35 o 02:30 p.m.), asegúrate de que time_regex capture la hora limpia y time_format indique su formato.',
+    '5. Si el correo sí incluye la hora (ej: 14:35 o 02:30 p.m.), asegúrate de que time_regex capture la hora limpia con paréntesis y time_format indique su formato.',
     '6. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
   ].join('\n');
 }

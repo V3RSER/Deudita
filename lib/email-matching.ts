@@ -98,11 +98,18 @@ export interface DiagnosisTemplateReport {
   level1Passed: boolean;
   level2Passed: boolean;
   level3Passed: boolean;
+  level4Passed?: boolean;
+  overallPassed?: boolean;
   failureReason?: string;
+  failureReasons?: string[];
   extractedAmount?: number | null;
   extractedMerchant?: string | null;
   extractedSourceAccount?: string | null;
+  extractedDate?: string | null;
+  extractedTime?: string | null;
+  extractedCurrency?: string | null;
   isWinner: boolean;
+  evaluation?: SingleTemplateEvaluation;
 }
 
 export interface SingleTemplateEvaluation {
@@ -146,6 +153,8 @@ export interface SingleTemplateEvaluation {
   };
   overallPassed: boolean;
   failureReasons: string[];
+  criticalFailures: string[];
+  warnings: string[];
 }
 
 export interface DiagnosisResult {
@@ -228,7 +237,13 @@ function extractWithCaptureGroup(
 
   try {
     const regex = new RegExp(sanitized, 'i');
-    const match = text.match(regex);
+    let match = text.match(regex);
+    // Multiline / normalized whitespace fallback if strict text match fails
+    if (!match) {
+      const normalizedWhitespace = text.replace(/\s+/g, ' ');
+      match = normalizedWhitespace.match(regex);
+    }
+
     const hasCapture = sanitized.includes('(') && sanitized.includes(')');
 
     if (!match) {
@@ -250,10 +265,12 @@ function extractWithCaptureGroup(
       };
     }
 
+    // Regex matched match[0] but had no capturing parentheses (...).
+    // Extract match[0] so the user can see the captured value, and report a note about capture groups.
     return {
-      success: false,
+      success: true,
       rawExtracted: match[0].trim(),
-      reason: 'Falta grupo de captura (...) explícito. Google Apps Script lee match[1]; sin grupo de captura fallará en producción.',
+      reason: 'Capturado de match[0]. Falta grupo de captura (...) para compatibilidad con Google Apps Script.',
       hasCaptureGroup: false,
     };
   } catch (err: unknown) {
@@ -261,7 +278,7 @@ function extractWithCaptureGroup(
     return {
       success: false,
       rawExtracted: null,
-      reason: `Error de sintaxis en expresión regular: /${sanitized}/: ${errMessage}`,
+      reason: `Error de sintaxis en expresión regular /${sanitized}/: ${errMessage}`,
       hasCaptureGroup: false,
     };
   }
@@ -281,7 +298,8 @@ export function evaluateTemplateAgainstEmail(
   const sender = (email.sender || '').trim();
   const subject = (email.subject || '').trim();
 
-  const failureReasons: string[] = [];
+  const criticalFailures: string[] = [];
+  const warnings: string[] = [];
 
   // --- Level 1: Entidad ---
   let level1Passed = false;
@@ -345,7 +363,7 @@ export function evaluateTemplateAgainstEmail(
 
     if (!level1Passed) {
       l1Reason = `El remitente ("${sender || 'vacío'}") o cuerpo no coincide con ningún patrón de la entidad "${entityName}" (${entityPatterns.map((p) => `/${p}/i`).join(', ')}).`;
-      failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+      criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
     }
   } else if (template.sender_pattern) {
     const sanitized = sanitizeRegexPattern(template.sender_pattern);
@@ -362,11 +380,11 @@ export function evaluateTemplateAgainstEmail(
           l1MatchedOn = 'body';
         } else {
           l1Reason = `El remitente o cuerpo no coincide con el patrón de remitente /${sanitized}/i.`;
-          failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+          criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
         }
       } catch (err: unknown) {
         l1Reason = `Error en patrón de remitente /${sanitized}/: ${err instanceof Error ? err.message : String(err)}`;
-        failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+        criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
       }
     } else {
       level1Passed = true;
@@ -393,11 +411,11 @@ export function evaluateTemplateAgainstEmail(
         l2MatchedOn = 'body';
       } else {
         l2Reason = `El asunto ("${subject || 'vacío'}") no coincide con el patrón /${sanitizedSubject}/i.`;
-        failureReasons.push(`Paso 2 (Asunto): ${l2Reason}`);
+        criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
       }
     } catch (err: unknown) {
       l2Reason = `Error en patrón de asunto /${sanitizedSubject}/: ${err instanceof Error ? err.message : String(err)}`;
-      failureReasons.push(`Paso 2 (Asunto): ${l2Reason}`);
+      criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
     }
   } else {
     level2Passed = true;
@@ -420,18 +438,18 @@ export function evaluateTemplateAgainstEmail(
         l3MatchedOn = 'subject';
       } else {
         l3Reason = `El patrón de desempate /${sanitizedMatch}/i no fue encontrado en el cuerpo ni en el asunto del correo.`;
-        failureReasons.push(`Paso 3 (Desempate): ${l3Reason}`);
+        criticalFailures.push(`Paso 3 (Desempate): ${l3Reason}`);
       }
     } catch (err: unknown) {
       l3Reason = `Error en patrón de desempate /${sanitizedMatch}/: ${err instanceof Error ? err.message : String(err)}`;
-      failureReasons.push(`Paso 3 (Desempate): ${l3Reason}`);
+      criticalFailures.push(`Paso 3 (Desempate): ${l3Reason}`);
     }
   } else {
     level3Passed = true;
   }
 
   // --- Level 4: Extracción ---
-  // Monto (obligatorio)
+  // Monto (obligatorio para éxito del match)
   let amountRes = extractWithCaptureGroup(cleanBody, template.amount_regex, 'Monto');
   if (!amountRes.success && subject) {
     const subjectAmountRes = extractWithCaptureGroup(subject, template.amount_regex, 'Monto');
@@ -443,7 +461,9 @@ export function evaluateTemplateAgainstEmail(
     const r = !amountRes.success
       ? (amountRes.reason || `No coincidió con el patrón /${template.amount_regex}/i`)
       : 'No se pudo convertir el monto extraído a un número válido';
-    failureReasons.push(`Paso 4 (Monto): ${r}`);
+    criticalFailures.push(`Paso 4 (Monto): ${r}`);
+  } else if (!amountRes.hasCaptureGroup) {
+    warnings.push('Monto: capturado sin grupo (...). Agrega paréntesis para compatibilidad con Google Apps Script.');
   }
 
   // Comercio (opcional)
@@ -453,7 +473,9 @@ export function evaluateTemplateAgainstEmail(
     if (subjectMerchantRes.success) merchantRes = subjectMerchantRes;
   }
   if (template.merchant_regex && !merchantRes.success) {
-    failureReasons.push(`Paso 4 (Comercio): ${merchantRes.reason || 'Sin captura'}`);
+    warnings.push(`Comercio: ${merchantRes.reason || 'Sin captura'}`);
+  } else if (merchantRes.success && !merchantRes.hasCaptureGroup) {
+    warnings.push('Comercio: capturado sin grupo (...). Agrega paréntesis para Google Apps Script.');
   }
 
   // Fecha (opcional)
@@ -463,7 +485,9 @@ export function evaluateTemplateAgainstEmail(
     if (subjectDateRes.success) dateRes = subjectDateRes;
   }
   if (template.date_regex && !dateRes.success) {
-    failureReasons.push(`Paso 4 (Fecha): ${dateRes.reason || 'Sin captura'}`);
+    warnings.push(`Fecha: ${dateRes.reason || 'Sin captura'}`);
+  } else if (dateRes.success && !dateRes.hasCaptureGroup) {
+    warnings.push('Fecha: capturada sin grupo (...). Agrega paréntesis para Google Apps Script.');
   }
 
   // Hora (opcional)
@@ -473,7 +497,9 @@ export function evaluateTemplateAgainstEmail(
     if (subjectTimeRes.success) timeRes = subjectTimeRes;
   }
   if (template.time_regex && !timeRes.success) {
-    failureReasons.push(`Paso 4 (Hora): ${timeRes.reason || 'Sin captura'}`);
+    warnings.push(`Hora: ${timeRes.reason || 'Sin captura'}`);
+  } else if (timeRes.success && !timeRes.hasCaptureGroup) {
+    warnings.push('Hora: capturada sin grupo (...). Agrega paréntesis para Google Apps Script.');
   }
 
   // Moneda (opcional)
@@ -491,11 +517,14 @@ export function evaluateTemplateAgainstEmail(
     if (subjectAccRes.success) accountRes = subjectAccRes;
   }
   if (template.source_account_regex && !accountRes.success) {
-    failureReasons.push(`Paso 4 (Cuenta origen): ${accountRes.reason || 'Sin captura'}`);
+    warnings.push(`Cuenta origen: ${accountRes.reason || 'Sin captura'}`);
+  } else if (accountRes.success && !accountRes.hasCaptureGroup) {
+    warnings.push('Cuenta origen: capturada sin grupo (...). Agrega paréntesis para Google Apps Script.');
   }
 
   const level4Passed = amountSuccess;
   const overallPassed = level1Passed && level2Passed && level3Passed && level4Passed;
+  const failureReasons = [...criticalFailures, ...warnings];
 
   return {
     template,
@@ -592,6 +621,8 @@ export function evaluateTemplateAgainstEmail(
     },
     overallPassed,
     failureReasons,
+    criticalFailures,
+    warnings,
   };
 }
 
@@ -1027,68 +1058,98 @@ export function diagnoseEmailMatching(
   }
 
   const templateReports: DiagnosisTemplateReport[] = templates.map((tpl) => {
+    const evaluation = evaluateTemplateAgainstEmail(tpl, { sender, subject, body: cleanBody }, entities);
+
     if (orphanTemplates.has(tpl.id)) {
       return {
         template: tpl,
         level1Passed: false,
         level2Passed: false,
         level3Passed: false,
+        level4Passed: false,
+        overallPassed: false,
         failureReason: 'Omitida en producción: la plantilla no tiene un entity_id válido que pertenezca al catálogo de entidades.',
+        failureReasons: ['Omitida: sin entity_id válido en catálogo'],
         isWinner: false,
+        evaluation,
       };
     }
 
     const passedL1 = l1SurvivingTemplates.some((t) => t.id === tpl.id);
     if (!passedL1) {
       const entName = tpl.entity_name || tpl.entity?.name || 'Entidad';
+      const reason = `Descartada en Paso 1: El remitente/cuerpo no coincide con la entidad "${entName}".`;
       return {
         template: tpl,
         level1Passed: false,
         level2Passed: false,
         level3Passed: false,
-        failureReason: `Descartada en Paso 1: El remitente/cuerpo no coincide con la entidad "${entName}".`,
+        level4Passed: false,
+        overallPassed: false,
+        failureReason: reason,
+        failureReasons: [reason, ...evaluation.failureReasons],
         isWinner: false,
+        evaluation,
       };
     }
 
     const passedL2 = l2SurvivingTemplates.some((t) => t.id === tpl.id);
     if (!passedL2) {
+      const reason = `Descartada en Paso 2: El asunto no coincide con el patrón /${tpl.subject_pattern || ''}/i.`;
       return {
         template: tpl,
         level1Passed: true,
         level2Passed: false,
         level3Passed: false,
-        failureReason: `Descartada en Paso 2: El asunto no coincide con el patrón /${tpl.subject_pattern || ''}/i.`,
+        level4Passed: false,
+        overallPassed: false,
+        failureReason: reason,
+        failureReasons: [reason, ...evaluation.failureReasons],
         isWinner: false,
+        evaluation,
       };
     }
 
     const surviving = survivingTemplates.some((t) => t.id === tpl.id);
     if (!surviving) {
       const disc = discardedCandidates.find((c) => c.template.id === tpl.id);
+      const reason = disc?.discardReason || `Descartada en Paso 3: Patrón de desempate /${tpl.match_pattern || ''}/i no encontrado.`;
       return {
         template: tpl,
         level1Passed: true,
         level2Passed: true,
         level3Passed: false,
-        failureReason: disc?.discardReason || `Descartada en Paso 3: Patrón de desempate /${tpl.match_pattern || ''}/i no encontrado.`,
+        level4Passed: false,
+        overallPassed: false,
+        failureReason: reason,
+        failureReasons: [reason, ...evaluation.failureReasons],
         isWinner: false,
+        evaluation,
       };
     }
 
     const ext = extractions.find((e) => e.template.id === tpl.id);
     const amountOk = Boolean(ext?.fields.amount.success);
     const isWinner = Boolean(amountOk && winner?.template.id === tpl.id);
+    const failureReason = amountOk ? undefined : `Falló la extracción de Monto: ${ext?.fields.amount.reason || 'no se pudo extraer o convertir el monto.'}`;
+
     return {
       template: tpl,
       level1Passed: true,
       level2Passed: true,
       level3Passed: true,
-      extractedAmount: (ext?.fields.amount.cleanedValue as number | null) ?? null,
-      extractedMerchant: (ext?.fields.merchant.cleanedValue as string | null) ?? null,
-      extractedSourceAccount: (ext?.fields.source_account.cleanedValue as string | null) ?? null,
-      failureReason: amountOk ? undefined : `Falló la extracción de Monto: ${ext?.fields.amount.reason || 'no se pudo extraer o convertir el monto.'}`,
+      level4Passed: amountOk,
+      overallPassed: Boolean(surviving && amountOk),
+      failureReason,
+      failureReasons: failureReason ? [failureReason, ...evaluation.failureReasons] : evaluation.failureReasons,
+      extractedAmount: (ext?.fields.amount.cleanedValue as number | null) ?? evaluation.level4.extractedAmount,
+      extractedMerchant: (ext?.fields.merchant.cleanedValue as string | null) ?? evaluation.level4.extractedMerchant,
+      extractedSourceAccount: (ext?.fields.source_account.cleanedValue as string | null) ?? evaluation.level4.extractedSourceAccount,
+      extractedDate: (ext?.fields.date.cleanedValue as string | null) ?? evaluation.level4.extractedDate,
+      extractedTime: (ext?.fields.time.cleanedValue as string | null) ?? evaluation.level4.extractedTime,
+      extractedCurrency: (ext?.fields.currency.cleanedValue as string | null) ?? evaluation.level4.extractedCurrency,
       isWinner,
+      evaluation,
     };
   });
 
