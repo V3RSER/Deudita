@@ -111,6 +111,7 @@ export function EmailTemplatesManagerView({
   const [formName, setFormName] = useState<string>('');
   const [formEntityName, setFormEntityName] = useState<string>('');
   const [formEntityId, setFormEntityId] = useState<string | null>(null);
+  const [formEntityEmailPattern, setFormEntityEmailPattern] = useState<string>('');
   const [formIsNewEntity, setFormIsNewEntity] = useState<boolean>(false);
   const [formSubjectPattern, setFormSubjectPattern] = useState<string>('');
   const [formSenderPattern, setFormSenderPattern] = useState<string>('');
@@ -135,6 +136,8 @@ export function EmailTemplatesManagerView({
   const [pastedAIResponse, setPastedAIResponse] = useState<string>('');
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
+  const [aiPreviewDiagnosis, setAiPreviewDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [aiPreviewEmailId, setAiPreviewEmailId] = useState<string | null>(null);
   const [isAISuggestingDirect, setIsAISuggestingDirect] = useState<boolean>(false);
 
   // Saving state in Explorer
@@ -421,6 +424,8 @@ export function EmailTemplatesManagerView({
     setSampleSender(selectedEmail.sender || '');
     setSampleSubject(selectedEmail.subject || '');
     setSampleBody(cleanEmailBody(selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || ''));
+    setAiPreviewDiagnosis(null);
+    setAiPreviewEmailId(null);
   }, [selectedEmail]);
 
   // Templates to test against the selected email (default: 'all')
@@ -431,9 +436,14 @@ export function EmailTemplatesManagerView({
     );
   }, [templates, templateTestFilter]);
 
-  // Diagnosis report of the selected email tested against the selected templates
+  // Diagnosis report of the selected email. When an AI JSON preview is active for this
+  // exact email, use that same complete diagnosis everywhere in the UI so the preview
+  // cannot disagree with the summary shown above.
   const diagnosisForSelectedEmail = useMemo(() => {
     if (!selectedEmail) return null;
+    if (aiPreviewDiagnosis && aiPreviewEmailId === selectedEmail.id) {
+      return aiPreviewDiagnosis;
+    }
     const bodyContent = cleanEmailBody(selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '');
     return diagnoseEmailMatching(
       selectedEmail.sender || '',
@@ -442,7 +452,7 @@ export function EmailTemplatesManagerView({
       templatesToTest,
       entities
     );
-  }, [selectedEmail, templatesToTest, entities]);
+  }, [selectedEmail, templatesToTest, entities, aiPreviewDiagnosis, aiPreviewEmailId, templateTestFilter]);
 
   // Filtered reports according to view filter ('all' | 'matched' | 'failed')
   const filteredTestReports = useMemo(() => {
@@ -474,8 +484,8 @@ export function EmailTemplatesManagerView({
     ).length;
   }, [diagnosisForSelectedEmail]);
 
-  // Reusable regex tester: applies a pattern and returns the captured group (or full match)
-  const testRegexAgainst = useCallback((pattern: string | null | undefined, text: string): { value: string | null; matched: boolean } => {
+  // Reusable regex tester: returns capture result plus a concrete syntax error when invalid.
+  const testRegexAgainst = useCallback((pattern: string | null | undefined, text: string): { value: string | null; matched: boolean; error?: string } => {
     if (!pattern || !pattern.trim() || !text) return { value: null, matched: false };
     try {
       const regex = new RegExp(pattern, 'i');
@@ -485,8 +495,12 @@ export function EmailTemplatesManagerView({
         return { value: val, matched: true };
       }
       return { value: null, matched: false };
-    } catch {
-      return { value: null, matched: false };
+    } catch (err: unknown) {
+      return {
+        value: null,
+        matched: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }, []);
 
@@ -540,13 +554,16 @@ export function EmailTemplatesManagerView({
   // Per-template regex breakdown for the diagnosis list: what each pattern captured (or not) on this email
   const templateTestDetails = useMemo(() => {
     const map = new Map<string, {
+      entity: { value: string | null; matched: boolean; pattern: string | null };
       subject: { value: string | null; matched: boolean } | null;
       sender: { value: string | null; matched: boolean } | null;
       matchPattern: { value: string | null; matched: boolean } | null;
-      amount: { value: string | null; matched: boolean };
-      merchant: { value: string | null; matched: boolean };
-      sourceAccount: { value: string | null; matched: boolean };
-      date: { value: string | null; matched: boolean };
+      amount: { value: string | null; matched: boolean; error?: string };
+      merchant: { value: string | null; matched: boolean; error?: string };
+      sourceAccount: { value: string | null; matched: boolean; error?: string };
+      date: { value: string | null; matched: boolean; error?: string };
+      time: { value: string | null; matched: boolean; error?: string };
+      currency: { value: string | null; matched: boolean; error?: string };
     }>();
 
     if (!selectedEmail || !diagnosisForSelectedEmail) return map;
@@ -557,6 +574,14 @@ export function EmailTemplatesManagerView({
 
     for (const report of diagnosisForSelectedEmail.reports) {
       const tmpl = report.template;
+
+      const level1Entity = diagnosisForSelectedEmail.level1.passedEntities.find((entity) => entity.entityId === tmpl.entity_id);
+      const entityPattern = level1Entity?.matchedPattern || tmpl.entity_email_patterns?.[0] || null;
+      const entityResult = {
+        value: entityPattern,
+        matched: report.level1Passed,
+        pattern: entityPattern,
+      };
 
       let subjectResult: { value: string | null; matched: boolean } | null = null;
       if (tmpl.subject_pattern && tmpl.subject_pattern.trim()) {
@@ -587,6 +612,7 @@ export function EmailTemplatesManagerView({
       }
 
       map.set(tmpl.id, {
+        entity: entityResult,
         subject: subjectResult,
         sender: senderResult,
         matchPattern: matchPatternResult,
@@ -594,6 +620,8 @@ export function EmailTemplatesManagerView({
         merchant: testRegexAgainst(tmpl.merchant_regex, bodyText),
         sourceAccount: testRegexAgainst(tmpl.source_account_regex, bodyText),
         date: testRegexAgainst(tmpl.date_regex, bodyText),
+        time: testRegexAgainst(tmpl.time_regex, bodyText),
+        currency: testRegexAgainst(tmpl.currency_regex, bodyText),
       });
     }
 
@@ -607,6 +635,7 @@ export function EmailTemplatesManagerView({
     setFormName(tmpl.name);
     setFormEntityName(tmpl.entity_name || tmpl.entity?.name || '');
     setFormEntityId(tmpl.entity_id || null);
+    setFormEntityEmailPattern(tmpl.entity_email_patterns?.[0] || '');
     setFormIsNewEntity(false);
     setFormSubjectPattern(tmpl.subject_pattern || '');
     setFormSenderPattern(tmpl.sender_pattern || '');
@@ -625,6 +654,7 @@ export function EmailTemplatesManagerView({
     setSaveErrorMessage(null);
     setAiError(null);
     setAiSuccess(null);
+    setAiPreviewDiagnosis(null);
   }, []);
 
   // Open an empty form to create a template manually (zero defaults)
@@ -633,6 +663,7 @@ export function EmailTemplatesManagerView({
     setFormName('');
     setFormEntityName('');
     setFormEntityId(null);
+    setFormEntityEmailPattern('');
     setFormIsNewEntity(false);
     setFormSubjectPattern('');
     setFormSenderPattern('');
@@ -651,6 +682,7 @@ export function EmailTemplatesManagerView({
     setSaveErrorMessage(null);
     setAiError(null);
     setAiSuccess(null);
+    setAiPreviewDiagnosis(null);
   }, []);
 
   // Add custom sample email to the list and select it
@@ -665,7 +697,7 @@ export function EmailTemplatesManagerView({
       plainBody: customBody.trim(),
       date: new Date().toISOString(),
     };
-    setIngestedEmails((prev) => [newEmail, ...prev]);
+    setEmails((prev) => [newEmail, ...prev]);
     setSelectedEmailId(newEmail.id);
     setIsCustomEmailModalOpen(false);
     setCustomSender('');
@@ -698,6 +730,9 @@ export function EmailTemplatesManagerView({
   const handleApplyPastedAIResponse = () => {
     setAiError(null);
     setAiSuccess(null);
+    setAiPreviewDiagnosis(null);
+    setAiPreviewEmailId(null);
+
     if (!pastedAIResponse.trim()) {
       setAiError('Pega primero la respuesta JSON de la IA.');
       return;
@@ -710,12 +745,63 @@ export function EmailTemplatesManagerView({
     }
 
     const d = result.data;
+    setFormEntityEmailPattern(d.entity_email_pattern || '');
+    const previewId = '__ai_preview_template__';
+    const matchedEntity = d.entity_name
+      ? entities.find((e) => e.name.toLowerCase().trim() === d.entity_name!.toLowerCase().trim())
+      : null;
+
+    const previewEntity: CatalogEntity | null = d.entity_name && !matchedEntity
+      ? {
+          id: '__ai_preview_entity__',
+          name: d.entity_name,
+          patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
+        }
+      : null;
+
+    const previewTemplate: CatalogTemplate = {
+      id: previewId,
+      name: d.name || `${d.entity_name || 'Entidad'} - Plantilla`,
+      sender_pattern: d.sender_pattern,
+      subject_pattern: d.subject_pattern,
+      amount_regex: d.amount_regex,
+      merchant_regex: d.merchant_regex,
+      date_regex: d.date_regex,
+      date_format: d.date_format,
+      entity_name: d.entity_name,
+      entity_id: matchedEntity?.id || previewEntity?.id || null,
+      match_pattern: d.match_pattern,
+      expense_type_id: null,
+      expense_type_label: d.expense_type,
+      default_currency: d.default_currency,
+      currency_regex: d.currency_regex,
+      source_account_regex: d.source_account_regex,
+      time_regex: d.time_regex,
+      active: true,
+      entity_email_patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
+    };
+
+    const previewTemplates = [
+      ...templates.filter((t) => t.id !== previewId),
+      previewTemplate,
+    ];
+    const previewEntities = previewEntity ? [...entities, previewEntity] : entities;
+    const previewDiagnosis = diagnoseEmailMatching(
+      selectedEmail?.sender || sampleSender || '',
+      selectedEmail?.subject || sampleSubject || '',
+      cleanEmailBody(selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || sampleBody || ''),
+      previewTemplates,
+      previewEntities,
+    );
+
+    setTemplateTestFilter('all');
+    setAiPreviewDiagnosis(previewDiagnosis);
+    setAiPreviewEmailId(selectedEmail?.id || null);
     setFormName(d.name || '');
     if (d.entity_name) {
       setFormEntityName(d.entity_name);
-      const matched = entities.find((e) => e.name.toLowerCase() === (d.entity_name || '').toLowerCase());
-      if (matched) {
-        setFormEntityId(matched.id);
+      if (matchedEntity) {
+        setFormEntityId(matchedEntity.id);
         setFormIsNewEntity(false);
       } else {
         setFormEntityId(null);
@@ -741,8 +827,22 @@ export function EmailTemplatesManagerView({
     setEditingTemplateId(null);
     setIsFormVisible(true);
     setPastedAIResponse('');
-    setAiSuccess('¡Campos completados exitosamente a partir del JSON! Revisa el formulario abajo.');
-    setTimeout(() => setAiSuccess(null), 4000);
+
+    const previewReport = previewDiagnosis.reports.find((r) => r.template.id === previewId);
+    if (
+      previewReport?.level1Passed &&
+      previewReport?.level2Passed &&
+      previewReport?.level3Passed &&
+      previewDiagnosis.winner?.template.id === previewId &&
+      previewDiagnosis.winner.fields.amount.success
+    ) {
+      setAiSuccess('JSON válido. La plantilla pasó entidad → asunto → desempate → extracción de monto.');
+    } else {
+      setAiError(
+        previewReport?.failureReason ||
+        'La plantilla no pasó la prueba completa. Revisa el diagnóstico detallado.',
+      );
+    }
   };
 
   // Direct AI Autocomplete helper (via Gemini API)
@@ -771,6 +871,7 @@ export function EmailTemplatesManagerView({
       const s = data.suggestion;
       if (s) {
         setFormName(s.name || '');
+        setFormEntityEmailPattern(s.entity_email_pattern || '');
         if (s.entity_name) {
           setFormEntityName(s.entity_name);
           const matched = entities.find((e) => e.name.toLowerCase() === s.entity_name.toLowerCase());
@@ -784,6 +885,7 @@ export function EmailTemplatesManagerView({
         } else {
           setFormEntityName('');
           setFormEntityId(null);
+          setFormEntityEmailPattern('');
           setFormIsNewEntity(false);
         }
         setFormSenderPattern(s.sender_pattern || '');
@@ -841,6 +943,10 @@ export function EmailTemplatesManagerView({
         name: formName.trim(),
         entity_name: formEntityName.trim() || null,
         entity_id: formEntityId || null,
+        entity_email_pattern: sanitizeRegexPattern(formEntityEmailPattern.trim()) || null,
+        entity_email_patterns: formEntityEmailPattern.trim()
+          ? [sanitizeRegexPattern(formEntityEmailPattern.trim()) || formEntityEmailPattern.trim()]
+          : undefined,
         subject_pattern: sanitizeRegexPattern(formSubjectPattern.trim()) || null,
         sender_pattern: sanitizeRegexPattern(formSenderPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(formMatchPattern.trim()) || null,
@@ -1725,8 +1831,23 @@ export function EmailTemplatesManagerView({
                                   </div>
                                 </div>
 
+                                {report.failureReason && (
+                                  <div className="px-3 pb-1">
+                                    <div className="rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-2 text-[11px] text-rose-800">
+                                      <span className="font-bold">Motivo:</span> {report.failureReason}
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Paso a paso: cada regex/filtro de la plantilla contra este correo */}
                                 <div className="px-3 pb-3 space-y-1">
+                                  {detail?.entity && (
+                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.entity.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
+                                      {detail.entity.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
+                                      <span className="font-semibold shrink-0">Entidad</span>
+                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{detail.entity.pattern || report.template.entity_name || 'sin patrón'}</code>
+                                    </div>
+                                  )}
                                   {detail?.sender && (
                                     <div className={`flex items-center gap-1.5 text-[11px] ${detail.sender.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
                                       {detail.sender.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
@@ -1833,18 +1954,64 @@ export function EmailTemplatesManagerView({
                       </div>
                     )}
 
+                    {aiPreviewDiagnosis && (
+                      <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900">Prueba completa del JSON IA</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${aiPreviewDiagnosis.winner?.template.id === '__ai_preview_template__' && aiPreviewDiagnosis.winner.fields.amount.success ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                            {aiPreviewDiagnosis.winner?.template.id === '__ai_preview_template__' && aiPreviewDiagnosis.winner.fields.amount.success ? 'Pasa' : 'Falla'}
+                          </span>
+                        </div>
+                        {(() => {
+                          const r = aiPreviewDiagnosis.reports.find((x) => x.template.id === '__ai_preview_template__');
+                          const ext = aiPreviewDiagnosis.extractions.find((x) => x.template.id === '__ai_preview_template__');
+                          const steps = [
+                            { label: '1. Entidad', ok: r?.level1Passed, reason: !r?.level1Passed ? r?.failureReason : undefined },
+                            { label: '2. Asunto', ok: r?.level2Passed, reason: r?.level1Passed && !r?.level2Passed ? r?.failureReason : undefined },
+                            { label: '3. Desempate', ok: r?.level3Passed, reason: r?.level2Passed && !r?.level3Passed ? r?.failureReason : undefined },
+                            { label: '4. Extracción', ok: Boolean(ext?.fields.amount.success), reason: ext && !ext.fields.amount.success ? ext.fields.amount.reason : undefined },
+                          ];
+                          return (
+                            <div className="space-y-1.5">
+                              {steps.map((step) => (
+                                <div key={step.label} className="text-[11px]">
+                                  <div className={`flex items-center gap-1.5 ${step.ok ? 'text-emerald-800' : 'text-rose-800'}`}>
+                                    {step.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                    <span className="font-semibold">{step.label}</span>
+                                  </div>
+                                  {!step.ok && step.reason && <p className="ml-4 mt-0.5 text-rose-700">{step.reason}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {aiError && (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-rose-800 text-xs font-medium">
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                        <span className="whitespace-pre-line">{aiError}</span>
+                      </div>
+                    )}
+
                     {/* Extracción en vivo: qué captura cada regex sobre este correo, ahora mismo */}
                     <div className="bg-zinc-900 text-zinc-100 rounded-xl p-3 space-y-2.5 border border-zinc-800">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                        Prueba en vivo contra este correo
-                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          Prueba en vivo contra este correo
+                        </span>
+                        <span className="text-[10px] text-zinc-500">Monto · Comercio · Cuenta · Fecha · Hora · Moneda</span>
+                      </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                         {[
                           { label: 'Monto', data: liveExtraction.amount, prefix: '$' },
                           { label: 'Comercio', data: liveExtraction.merchant },
                           { label: 'Cuenta', data: liveExtraction.sourceAccount },
                           { label: 'Fecha', data: liveExtraction.date },
+                          { label: 'Hora', data: liveExtraction.time },
+                          { label: 'Moneda', data: liveExtraction.currency },
                         ].map((field) => (
                           <div
                             key={field.label}
@@ -1864,10 +2031,12 @@ export function EmailTemplatesManagerView({
                             </div>
                             <span
                               className={`text-xs font-bold font-mono truncate block mt-0.5 ${
-                                field.data.matched ? 'text-emerald-300' : 'text-zinc-600'
+                                field.data.error ? 'text-rose-300' : field.data.matched ? 'text-emerald-300' : 'text-zinc-600'
                               }`}
                             >
-                              {field.data.matched
+                              {field.data.error
+                                ? `Regex inválida: ${field.data.error}`
+                                : field.data.matched
                                 ? `${field.prefix || ''}${field.data.value}`
                                 : 'Sin captura'}
                             </span>
@@ -2104,6 +2273,16 @@ export function EmailTemplatesManagerView({
 
                       {/* Remitente y Moneda Regex (avanzado, poco usado pero visible si el JSON los trae) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-zinc-700">Patrón de Correo de Entidad</label>
+                          <input
+                            type="text"
+                            value={formEntityEmailPattern}
+                            onChange={(e) => setFormEntityEmailPattern(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
+                            placeholder="Se persiste como entity_email_patterns"
+                          />
+                        </div>
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-zinc-700">Patrón de Remitente</label>
                           <input

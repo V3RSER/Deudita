@@ -137,20 +137,31 @@ export interface DiagnosisResult {
 
 function parseAmountValue(rawAmount: string | null): number | null {
   if (!rawAmount) return null;
-  // Remove $ and non-numeric chars except commas and dots
   const sanitized = rawAmount.replace(/[$\s]/g, '').trim();
-  // Check format: e.g. 45.000 (thousands dot) or 45,000 or 45000.00
-  if (sanitized.includes('.') && !sanitized.includes(',')) {
-    const parts = sanitized.split('.');
-    if (parts.length === 2 && parts[1].length === 3) {
-      // Colombian thousand separator: 45.000 -> 45000
-      return parseFloat(sanitized.replace(/\./g, ''));
-    }
+  if (!sanitized) return null;
+
+  // Mantener exactamente la misma interpretación de separadores que usa el
+  // simulador de Google Apps Script:
+  // 53,079 -> 53079 | 49.800 -> 49800 | 49.800,50 -> 49800.50 | 49,800.50 -> 49800.50
+  let normalized = sanitized;
+
+  if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(normalized)) {
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(normalized)) {
+    normalized = normalized.replace(/,/g, '');
+  } else if (/^\d+,\d{1,2}$/.test(normalized)) {
+    normalized = normalized.replace(',', '.');
+  } else if (/^\d+\.\d{1,2}$/.test(normalized)) {
+    // Decimal point only when it is not a 3-digit thousands group.
+    normalized = normalized;
+  } else {
+    // For plain integers containing separators not covered above, discard
+    // grouping commas/dots rather than silently turning thousands into decimals.
+    normalized = normalized.replace(/,/g, '');
   }
-  // Standard cleanup: replace thousand dots, convert comma decimal
-  const normalized = sanitized.replace(/\./g, '').replace(',', '.');
-  const parsed = parseFloat(normalized);
-  return isNaN(parsed) ? null : parsed;
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /**
@@ -222,42 +233,23 @@ export function diagnoseEmailMatching(
 ): DiagnosisResult {
   const cleanBody = cleanEmailBody(rawOrCleanBody);
 
-  // Group templates by entity
-  // An entity can be found either by entity_id matching entities.id or fallback entity_name
-  const entityMap = new Map<string, { entity: CatalogEntity; templates: CatalogTemplate[] }>();
+  // Mirror Google Apps Script exactly: templates participate only through
+  // their persisted entity_id. No fallback by entity_name and no virtual
+  // entities for saved templates.
+  const entityMap = new Map<string, { entity: CatalogEntity | null; templates: CatalogTemplate[] }>();
 
-  // Initialize with all known entities
   for (const ent of entities) {
     entityMap.set(ent.id, { entity: ent, templates: [] });
   }
 
-  // Populate templates
-  for (const tpl of templates) {
-    let matchedEntId = tpl.entity_id;
-    if (!matchedEntId && tpl.entity_name) {
-      const found = entities.find(
-        (e) => e.name.toLowerCase().trim() === tpl.entity_name?.toLowerCase().trim()
-      );
-      if (found) matchedEntId = found.id;
-    }
+  const orphanTemplates = new Set<string>();
 
-    if (matchedEntId && entityMap.has(matchedEntId)) {
-      entityMap.get(matchedEntId)!.templates.push(tpl);
-    } else {
-      // Template has no registered entity or unknown entity
-      const fallbackId = tpl.entity_name ? `virtual-${tpl.entity_name}` : 'sin-entidad';
-      if (!entityMap.has(fallbackId)) {
-        entityMap.set(fallbackId, {
-          entity: {
-            id: fallbackId,
-            name: tpl.entity_name || 'Sin entidad asignada',
-            patterns: tpl.sender_pattern ? [tpl.sender_pattern] : [],
-          },
-          templates: [],
-        });
-      }
-      entityMap.get(fallbackId)!.templates.push(tpl);
+  for (const tpl of templates) {
+    if (!tpl.entity_id || !entityMap.has(tpl.entity_id)) {
+      orphanTemplates.add(tpl.id);
+      continue;
     }
+    entityMap.get(tpl.entity_id)!.templates.push(tpl);
   }
 
   // -------------------------------------------------------------
@@ -271,44 +263,20 @@ export function diagnoseEmailMatching(
     // If entity has no templates, skip reporting to avoid noise
     if (entTemplates.length === 0) continue;
 
-    // Compile patterns to test for this entity:
-    // 1. Registered patterns in entity_email_patterns
+    // Google Apps Script uses ONLY the persisted entity_email_patterns returned
+    // with the template. sender_pattern and entity name are not substitutes.
     const patternsToTest: string[] = [];
-    for (const p of entity.patterns) {
-      const cleanP = sanitizeRegexPattern(p);
-      if (cleanP && !patternsToTest.includes(cleanP)) {
-        patternsToTest.push(cleanP);
+    for (const tpl of entTemplates) {
+      for (const p of Array.isArray(tpl.entity_email_patterns) ? tpl.entity_email_patterns : []) {
+        const cleanP = sanitizeRegexPattern(p);
+        if (cleanP && !patternsToTest.includes(cleanP)) patternsToTest.push(cleanP);
       }
-    }
-
-    // 2. Plus template sender_pattern and entity_email_patterns from any template in this group
-    for (const t of entTemplates) {
-      const cleanSp = sanitizeRegexPattern(t.sender_pattern);
-      if (cleanSp && !patternsToTest.includes(cleanSp)) {
-        patternsToTest.push(cleanSp);
-      }
-      if (t.entity_email_patterns && Array.isArray(t.entity_email_patterns)) {
-        for (const ep of t.entity_email_patterns) {
-          const cleanEp = sanitizeRegexPattern(ep);
-          if (cleanEp && !patternsToTest.includes(cleanEp)) {
-            patternsToTest.push(cleanEp);
-          }
-        }
-      }
-    }
-
-    // 3. Fallback: if no patterns registered, check if sender or body mentions entity name
-    if (patternsToTest.length === 0 && entity.name && entity.name !== 'Sin entidad asignada') {
-      const escapedName = entity.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      patternsToTest.push(escapedName);
     }
 
     if (patternsToTest.length === 0) {
-      // Como en Google Apps Script: si la entidad no tiene email_patterns configurados (length === 0),
-      // no se descarta; se permite evaluar directamente sus plantillas contra el asunto y sender_pattern.
       passedEntities.push({
         entityId: entId,
-        entityName: entity.name,
+        entityName: entity?.name || entId,
         patterns: [],
         matched: true,
         templatesCount: entTemplates.length,
@@ -345,7 +313,7 @@ export function diagnoseEmailMatching(
     if (entityMatched) {
       passedEntities.push({
         entityId: entId,
-        entityName: entity.name,
+        entityName: entity?.name || entId,
         patterns: patternsToTest,
         matched: true,
         matchedPattern,
@@ -356,7 +324,7 @@ export function diagnoseEmailMatching(
     } else {
       discardedEntities.push({
         entityId: entId,
-        entityName: entity.name,
+        entityName: entity?.name || entId,
         patterns: patternsToTest,
         matched: false,
         discardReason: `Ningún patrón (${patternsToTest.map((p) => `/${p}/i`).join(', ')}) coincidió con el remitente ni con el cuerpo.`,
@@ -685,6 +653,17 @@ export function diagnoseEmailMatching(
   }
 
   const templateReports: DiagnosisTemplateReport[] = templates.map((tpl) => {
+    if (orphanTemplates.has(tpl.id)) {
+      return {
+        template: tpl,
+        level1Passed: false,
+        level2Passed: false,
+        level3Passed: false,
+        failureReason: 'Omitida en producción: la plantilla no tiene un entity_id válido que pertenezca al catálogo de entidades.',
+        isWinner: false,
+      };
+    }
+
     const passedL1 = l1SurvivingTemplates.some((t) => t.id === tpl.id);
     if (!passedL1) {
       const entName = tpl.entity_name || tpl.entity?.name || 'Entidad';
@@ -724,7 +703,8 @@ export function diagnoseEmailMatching(
     }
 
     const ext = extractions.find((e) => e.template.id === tpl.id);
-    const isWinner = winner?.template.id === tpl.id;
+    const amountOk = Boolean(ext?.fields.amount.success);
+    const isWinner = Boolean(amountOk && winner?.template.id === tpl.id);
     return {
       template: tpl,
       level1Passed: true,
@@ -733,6 +713,7 @@ export function diagnoseEmailMatching(
       extractedAmount: (ext?.fields.amount.cleanedValue as number | null) ?? null,
       extractedMerchant: (ext?.fields.merchant.cleanedValue as string | null) ?? null,
       extractedSourceAccount: (ext?.fields.source_account.cleanedValue as string | null) ?? null,
+      failureReason: amountOk ? undefined : `Falló la extracción de Monto: ${ext?.fields.amount.reason || 'no se pudo extraer o convertir el monto.'}`,
       isWinner,
     };
   });
@@ -761,7 +742,7 @@ export function diagnoseEmailMatching(
 
   return {
     cleanedBody: cleanBody,
-    matched: survivingTemplates.length > 0,
+    matched: Boolean(winner && winner.fields.amount.success),
     level1: {
       passedEntities,
       matchingEntities: passedEntities.map((e) => ({ id: e.entityId, name: e.entityName })),
@@ -930,7 +911,8 @@ export function simulateGoogleAppsScriptProcess(
   logs.push(`[Google Apps Script] 📧 Procesando correo: "${subject}" | Remitente: ${sender}`);
   logs.push(`[Google Apps Script] Limpieza de cuerpo ejecutada (${body.length} caracteres de texto plano).`);
 
-  // Build entity groups
+  // Match the production Apps Script data model exactly. A template without
+  // a valid entity_id is ignored. Level 1 reads only entity_email_patterns.
   const entityMap = new Map<
     string,
     { entityId: string; entityName: string; emailPatterns: string[]; templates: CatalogTemplate[] }
@@ -940,46 +922,22 @@ export function simulateGoogleAppsScriptProcess(
     entityMap.set(ent.id, {
       entityId: ent.id,
       entityName: ent.name,
-      emailPatterns: ent.patterns || [],
+      emailPatterns: [],
       templates: [],
     });
   }
 
   for (const t of templates) {
-    let matchedEntId = t.entity_id;
-    if (!matchedEntId && t.entity_name) {
-      const found = entities.find((e) => e.name.toLowerCase() === t.entity_name?.toLowerCase());
-      if (found) matchedEntId = found.id;
+    if (!t.entity_id || !entityMap.has(t.entity_id)) {
+      logs.push(`  ⚠️ Plantilla "${t.name}": sin entity_id válido — Apps Script la ignora.`);
+      continue;
     }
 
-    if (!matchedEntId) {
-      matchedEntId = t.entity_name ? `virtual-${t.entity_name}` : 'sin-entidad';
-    }
-
-    if (!entityMap.has(matchedEntId)) {
-      entityMap.set(matchedEntId, {
-        entityId: matchedEntId,
-        entityName: t.entity_name || 'Entidad',
-        emailPatterns: t.entity_email_patterns || (t.sender_pattern ? [t.sender_pattern] : []),
-        templates: [],
-      });
-    }
-
-    const grp = entityMap.get(matchedEntId)!;
+    const grp = entityMap.get(t.entity_id)!;
     grp.templates.push(t);
-    if (t.sender_pattern) {
-      const cleanSp = sanitizeRegexPattern(t.sender_pattern);
-      if (cleanSp && !grp.emailPatterns.includes(cleanSp)) {
-        grp.emailPatterns.push(cleanSp);
-      }
-    }
-    if (t.entity_email_patterns && Array.isArray(t.entity_email_patterns)) {
-      for (const ep of t.entity_email_patterns) {
-        const cleanEp = sanitizeRegexPattern(ep);
-        if (cleanEp && !grp.emailPatterns.includes(cleanEp)) {
-          grp.emailPatterns.push(cleanEp);
-        }
-      }
+    for (const ep of Array.isArray(t.entity_email_patterns) ? t.entity_email_patterns : []) {
+      const cleanEp = sanitizeRegexPattern(ep);
+      if (cleanEp && !grp.emailPatterns.includes(cleanEp)) grp.emailPatterns.push(cleanEp);
     }
   }
 

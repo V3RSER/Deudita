@@ -56,6 +56,11 @@ export function sanitizeRegexPattern(pattern: string | null | undefined): string
   if (slashMatch) {
     p = slashMatch[1];
   }
+
+  // Common LLM typo: (?\:...) is invalid JavaScript regex syntax; the intended
+  // non-capturing group is (?:...). Repair only this unambiguous typo.
+  p = p.replace(/\(\?\\:/g, '(?:');
+
   return p.trim() || null;
 }
 
@@ -103,53 +108,101 @@ export function buildTemplatePrompt(
     'bancarias y de billeteras digitales (Colombia y Latinoamérica).',
     '',
     'OBJETIVO:',
-    'Analizar el correo real proporcionado y generar la configuración completa para',
-    'insertar una nueva plantilla en la base de datos, definiendo expresiones regulares',
-    'robustas y gestionando las relaciones con entidades bancarias y tipos de gasto.',
+    'Analiza el correo proporcionado y genera una plantilla reutilizable para reconocer futuros',
+    'correos de la MISMA CLASE DE NOTIFICACIÓN y extraer sus datos transaccionales.',
+    'La plantilla debe modelar la identidad de la entidad y el tipo de notificación, no memorizar',
+    'la redacción completa ni los valores concretos de una sola muestra.',
     '',
-    'ARQUITECTURA DE COINCIDENCIA DEL SISTEMA (3 NIVELES):',
-    '  NIVEL 1: Entidad emisora (entity_email_patterns).',
-    '           Filtra por el remitente o dominio del banco (ej. @bancolombia.com.co).',
-    '           Si la entidad es NUEVA (no está en la lista), se debe crear la entidad',
-    '           y registrar su patrón de correo en entity_email_patterns.',
-    '  NIVEL 2: Asunto del correo (subject_pattern).',
-    '           Filtra qué tipo de notificación es (ej. transferencias, compras).',
-    '  NIVEL 3: Desempate en cuerpo (match_pattern).',
-    '           SOLO si existen varias plantillas para la misma entidad con el mismo',
-    '           asunto (ej. "tarjeta de crédito" vs "cuenta de ahorros").',
+    'NIVEL 1 — ENTIDAD:',
+    'Identifica la institución que origina la notificación y usa su nombre comercial o denominación',
+    'habitual en el sistema. Debe ser un nombre corto, natural y reconocible.',
+    'NO copies automáticamente sufijos societarios, jurídicos o registrales como S.A., S.A.S., Ltda.,',
+    'Inc., Corp. u otros equivalentes si la entidad es conocida normalmente por una forma comercial más simple.',
+    'Por ejemplo, si la organización se presenta como "DAVIbank S.A." pero su identidad habitual es',
+    '"DAVIbank", usa "DAVIbank" como entity_name.',
+    'Si existe una entidad equivalente en la lista de entidades registradas, usa exactamente ese nombre',
+    'en lugar de crear una variante como "Entidad S.A." o "Entidad Colombia".',
+    'entity_email_pattern debe identificar la señal institucional estable de la organización.',
+    'No lo confundas con el tipo de mensaje ni con datos de una transacción.',
+    '',
+    'NIVEL 2 — ASUNTO Y NOMBRE DE LA PLANTILLA:',
+    'Analiza el asunto para determinar la clase de notificación. Separa conceptualmente la identidad',
+    'estable de la notificación de cualquier información incidental o variable.',
+    'El subject_pattern debe identificar la clase de notificación y ser reutilizable para otros correos',
+    'de esa misma clase.',
+    'Para decidir qué conservar y qué abstraer, analiza semántica, estructura, contexto y el significado',
+    'de cada segmento del asunto. No dependas de una lista predeterminada de ejemplos.',
+    'No hagas opcional ni elimines una característica que realmente diferencie esta clase de otra.',
+    'No conviertas información incidental o variable en parte obligatoria del patrón.',
+    '',
+    'El campo name NO debe describir el contenido concreto del correo ni mencionar datos de una instancia.',
+    'El nombre debe ser corto, descriptivo y seguir principalmente esta idea: ENTIDAD + TIPO DE NOTIFICACIÓN',
+    '(derivado del asunto y, solo cuando sea necesario, de la naturaleza de la operación).',
+    'Usa el concepto normal de la notificación, no una frase extraída literalmente del cuerpo.',
+    'El nombre debe permitir reconocer la plantilla en un catálogo sin abrir el correo.',
+    '',
+    'NIVEL 3 — DESEMPATE:',
+    'Usa match_pattern SOLO cuando varias plantillas de la misma entidad puedan compartir el mismo subject_pattern',
+    'y exista una diferencia semántica o estructural estable que realmente permita distinguirlas.',
+    'La característica usada como desempate debe seguir siendo válida cuando cambien los valores concretos',
+    'de las transacciones.',
+    'No uses datos de una instancia, valores concretos, personas, comercios, importes, fechas, horas,',
+    'números de tarjeta o cuenta, códigos, referencias ni frases accidentales de la muestra.',
+    'Si no existe una diferencia estable que requiera desempate, devuelve match_pattern=null.',
+    'Nunca inventes un desempate para rellenar el campo.',
+    '',
+    'REGLA FUNDAMENTAL:',
+    'Distingue siempre entre VARIACIÓN DE INSTANCIA y DIFERENCIA DE TIPO.',
+    'Una variación de instancia es cualquier información que puede cambiar entre dos correos sin cambiar',
+    'la clase de notificación. Esa variación debe abstraerse en los patrones.',
+    'Una diferencia de tipo es cualquier característica cuya presencia, ausencia o estructura haga que el correo',
+    'pertenezca a otra clase de notificación. Esa diferencia debe conservarse.',
+    'Haz esta clasificación por análisis del correo, no aplicando mecánicamente ejemplos prefijados.',
     '',
     entityListText,
-    'REGLAS PARA EXPRESIONES REGULARES:',
-    '1. Todos los regex deben ser de JavaScript válidos (evaluados con flag "i").',
-    '2. Los campos de extracción (amount_regex, merchant_regex, date_regex, time_regex,',
-    '   currency_regex, source_account_regex) DEBEN incluir exactamente UN grupo de captura (...)',
-    '   alrededor del valor limpio que se desea extraer.',
-    '3. amount_regex es ESTRICTAMENTE OBLIGATORIO. Debe capturar los dígitos y separadores del monto.',
-    '4. merchant_regex debe capturar el nombre del comercio, tienda o persona destinataria.',
-    '5. date_regex debe capturar la fecha. date_format debe indicar el formato (ej. DD/MM/YYYY).',
-    '6. expense_type debe ser uno de: "compra", "transferencia", "pago", "transporte" (o null).',
+    'REGLAS PARA LOS REGEX:',
+    '1. Todos deben ser JavaScript válidos y compilar con new RegExp(regex, "i").',
+    '1A. entity_email_pattern debe identificar la entidad de forma estable; debe funcionar como patrón persistido de entity_email_patterns.',
+    '2. No uses delimitadores /.../ ni flags dentro del valor.',
+    '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
+    '4. Los regex de extracción deben tener exactamente UN grupo de captura (...) alrededor del valor extraído.',
+    '5. amount_regex es obligatorio.',
+    '6. merchant_regex debe capturar comercio, tienda o destinatario cuando esté presente.',
+    '7. date_regex debe capturar la fecha y date_format debe indicar su formato.',
+    '8. time_regex, currency_regex y source_account_regex deben ser null si el correo no proporciona ese dato.',
+    '9. entity_email_pattern y sender_pattern deben representar señales de identidad institucional, no datos transaccionales.',
+    '10. Los patrones deben generalizar variaciones de instancia sin borrar diferencias que definan otra plantilla.',
     '',
-    'CORREO REAL A ANALIZAR (cuerpo ya limpio de HTML y URLs):',
-    '--- REMITENTE ---',
+    'ANTES DE CONSTRUIR EL JSON, RAZONA INTERNAMENTE:',
+    'A) Cuál es la identidad habitual y corta de la entidad.',
+    'B) Qué clase de notificación representa el asunto.',
+    'C) Qué parte del asunto es estructural y qué parte es variable o incidental.',
+    'D) Qué nombre corto de catálogo describe mejor ENTIDAD + TIPO DE NOTIFICACIÓN.',
+    'E) Si existe ambigüedad real que requiera match_pattern.',
+    'F) Qué datos concretos de esta muestra nunca deberían convertirse en identificadores de la plantilla.',
+    'No escribas este razonamiento en la respuesta final; úsalo únicamente para construir el JSON.',
+    '',
+    'CORREO REAL A ANALIZAR:',
+    '--- REMITENTE RECIBIDO POR EL SISTEMA ---',
     sender || '(Sin remitente)',
     '',
-    '--- ASUNTO ---',
+    '--- ASUNTO RECIBIDO POR EL SISTEMA ---',
     subject || '(Sin asunto)',
     '',
     '--- CUERPO LIMPIO ---',
     cleanBody || '(Sin cuerpo)',
     '--- FIN DEL CUERPO ---',
     '',
-    'RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO (sin bloques de código markdown, sin explicaciones antes o después), con la siguiente estructura:',
+    'RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO, SIN MARKDOWN NI EXPLICACIONES:',
     '{',
-    '  "name": "Nombre descriptivo (ej: Bancolombia - Transferencia a terceros)",',
-    '  "entity_name": "Nombre oficial de la entidad (ej: Bancolombia)",',
+    '  "name": "Entidad + tipo de notificación",',
+    '  "entity_name": "Nombre comercial corto y habitual de la entidad",',
     '  "is_new_entity": false,',
     '  "entity_email_pattern": null,',
     '  "sender_pattern": null,',
-    '  "subject_pattern": "Regex para el asunto del correo",',
+    '  "subject_pattern": "Regex que identifique el tipo de notificación",',
     '  "match_pattern": null,',
-    '  "amount_regex": "Regex con grupo (...) para el monto numérico",',
+    '  "amount_regex": "Regex con grupo (...) para el monto",',
     '  "merchant_regex": "Regex con grupo (...) para el comercio o destinatario",',
     '  "date_regex": "Regex con grupo (...) para la fecha",',
     '  "date_format": "DD/MM/YYYY",',
@@ -240,6 +293,8 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     { key: 'entity_email_pattern', label: 'Patrón de Correo de Entidad', reqGroup: false },
   ];
 
+  const validationErrors: string[] = [];
+
   for (const { key, label, reqGroup } of regexFields) {
     const rawPattern = parsed[key];
     const pattern = sanitizeRegexPattern(rawPattern);
@@ -248,12 +303,23 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
       try {
         new RegExp(pattern, 'i');
         if (reqGroup && !/\([^?].*?\)/.test(pattern)) {
-          warnings.push(`El patrón de "${label}" (${pattern}) parece no contener un grupo de captura (...).`);
+          validationErrors.push(`El patrón de "${label}" no tiene un grupo de captura (...) válido.`);
         }
-      } catch {
-        warnings.push(`El patrón de "${label}" (${pattern}) contiene una expresión regular con errores de sintaxis.`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        validationErrors.push(`El patrón de "${label}" es inválido: ${msg}`);
       }
+    } else if (reqGroup && key !== 'currency_regex' && key !== 'source_account_regex' && key !== 'time_regex' && key !== 'date_regex' && key !== 'merchant_regex') {
+      validationErrors.push(`El patrón de "${label}" es obligatorio.`);
     }
+  }
+
+  if (validationErrors.length > 0) {
+    return {
+      success: false,
+      error: `La respuesta de la IA contiene errores que deben corregirse:\n${validationErrors.map((e) => `• ${e}`).join('\n')}`,
+      warnings,
+    };
   }
 
   return {
@@ -279,4 +345,3 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     warnings: warnings.length > 0 ? warnings : undefined,
   };
 }
-
