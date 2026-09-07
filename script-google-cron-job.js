@@ -1,7 +1,22 @@
-const BACKEND_BASE_URL = 'https://deudita-nine.vercel.app'; 
+/**
+ * ============================================================
+ * DETECCIÓN DE GASTOS POR CORREO — Apps Script (Web App único)
+ * ============================================================
+ * Se despliega UNA sola vez como Web App ("Ejecutar como: el usuario
+ * que accede a la app"). Cada amigo se conecta con un solo clic en
+ * el link que le da tu app (con su token ya incluido) — no necesita
+ * copiar código ni tokens a mano.
+ */
+
+const BACKEND_BASE_URL = 'https://deudita-nine.vercel.app'; // <-- cambiar por tu dominio real
 const PROCESSED_LABEL = 'gastos-procesados';
-const TEMPLATES_CACHE_SECONDS = 21600; 
-const DEBUG_MATCHING = true; 
+const TEMPLATES_CACHE_SECONDS = 21600; // 6 horas — tope máximo que permite CacheService
+const DEBUG_MATCHING = true; // true = loguea el motivo por el que CADA plantilla no matcheó un correo.
+// Ponlo en false cuando ya no lo necesites — genera bastante ruido en el log.
+
+// ------------------------------------------------------------
+// 1) CONEXIÓN INICIAL (doGet) — se activa desde el link que la app genera
+// ------------------------------------------------------------
 
 function doGet(e) {
   if (e.parameter.mode === 'test') {
@@ -18,7 +33,6 @@ function doGet(e) {
 
   const props = PropertiesService.getUserProperties();
   props.setProperty('WEBHOOK_TOKEN', token);
-
   CacheService.getUserCache().remove('TEMPLATES_JSON');
 
   ensureLabelExists(PROCESSED_LABEL);
@@ -27,7 +41,7 @@ function doGet(e) {
   try {
     syncExpenseEmails();
   } catch (err) {
-
+    // No bloqueamos la confirmación al usuario por un error puntual en la primera corrida.
   }
 
   return HtmlService.createHtmlOutput(
@@ -43,21 +57,28 @@ function installTriggerIfMissing() {
   if (!already) {
     ScriptApp.newTrigger('syncExpenseEmails')
       .timeBased()
-      .everyMinutes(5) 
+      .everyMinutes(5)
       .create();
   }
 }
+
+// ------------------------------------------------------------
+// 2) SINCRONIZACIÓN PERIÓDICA
+// ------------------------------------------------------------
 
 function syncExpenseEmails() {
   const startTime = Date.now();
   const token = getWebhookToken();
 
   if (!token) {
-    console.warn('syncExpenseEmails: usuario sin WEBHOOK_TOKEN — no debería pasar si el trigger es suyo.');
+    console.warn(
+      'syncExpenseEmails: usuario sin WEBHOOK_TOKEN — no debería pasar si el trigger es suyo.'
+    );
     return;
   }
 
   ensureLabelExists(PROCESSED_LABEL);
+
   const label = GmailApp.getUserLabelByName(PROCESSED_LABEL);
   const templates = getTemplatesWithCache(token);
 
@@ -69,7 +90,9 @@ function syncExpenseEmails() {
 
   const sinceEpoch = getLastSyncEpoch();
 
-  console.log(`Ventana de búsqueda: desde ${new Date(sinceEpoch * 1000).toISOString()}`);
+  console.log(
+    `Ventana de búsqueda: desde ${new Date(sinceEpoch * 1000).toISOString()}`
+  );
 
   const query = `in:inbox -label:${PROCESSED_LABEL} after:${sinceEpoch}`;
   const threads = GmailApp.search(query, 0, 50);
@@ -81,7 +104,8 @@ function syncExpenseEmails() {
   let matchesFound = 0;
   let candidatesSent = 0;
   let candidatesFailed = 0;
-  const matchesByTemplate = {}; 
+
+  const matchesByTemplate = {};
 
   threads.forEach(thread => {
     thread.getMessages().forEach(message => {
@@ -148,25 +172,34 @@ function syncExpenseEmails() {
   }
 }
 
+/**
+ * Limpia el cuerpo de un correo antes de aplicarle cualquier regex.
+ */
 function cleanEmailBody(body) {
   if (!body) return body;
 
   return body
-    .replace(/\[image:[^\]]*\]/gi, '')       
-    .replace(/<https?:\/\/[^\s>]+>/g, '')    
-    .replace(/https?:\/\/\S+/g, '')          
-    .replace(/\*/g, '')                       
-    .replace(/[ \t]+/g, ' ')                  
-    .replace(/\n{3,}/g, '\n\n')               
+    .replace(/\[image:[^\]]*\]/gi, '')
+    .replace(/<https?:\/\/[^\s>]+>/g, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\*/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
+/**
+ * Prueba una regex contra el texto directo y, si no encuentra coincidencia,
+ * contra el cuerpo del correo.
+ */
 function matchesEitherSource(pattern, directText, body) {
   const regex = new RegExp(pattern, 'i');
-
   return regex.test(directText) || regex.test(body);
 }
 
+/**
+ * Normaliza montos en formato colombiano/latinoamericano a string "NNNN.dd".
+ */
 function normalizeAmount(rawAmount) {
   if (!rawAmount) return rawAmount;
 
@@ -176,9 +209,9 @@ function normalizeAmount(rawAmount) {
 
   if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
     s = s.replace(/\./g, '');
-  } else if (/\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s)) {
+  } else if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s)) {
     s = s.replace(/\./g, '').replace(',', '.');
-  } else if (/\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(s)) {
+  } else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(s)) {
     s = s.replace(/,/g, '');
   } else if (/^\d+,\d{1,2}$/.test(s)) {
     s = s.replace(',', '.');
@@ -186,76 +219,156 @@ function normalizeAmount(rawAmount) {
 
   const num = parseFloat(s);
 
-  if (isNaN(num)) return rawAmount;
+  if (isNaN(num)) {
+    return rawAmount;
+  }
 
   return num.toFixed(2);
 }
 
+/**
+ * Convierte un string según date_format.
+ *
+ * date_format debe contener únicamente YYYY, MM y DD.
+ *
+ * Ejemplos:
+ *   DD/MM/YYYY
+ *   YYYY-MM-DD
+ *   MM/DD/YYYY
+ */
 function parseDateWithFormat(rawDateStr, formatStr) {
-  if (!rawDateStr) return null;
-
-  if (!formatStr) return rawDateStr;
+  if (!rawDateStr || !formatStr) return null;
 
   const tokenOrder = [];
 
   const tokenRegexSource = formatStr.replace(
-    /YYYY|MM|DD|HH|mm|ss/g,
+    /YYYY|MM|DD/g,
     match => {
       tokenOrder.push(match);
-      return match === 'YYYY' ? '(\\d{4})' : '(\\d{1,2})';
+      return match === 'YYYY'
+        ? '(\\d{4})'
+        : '(\\d{1,2})';
     }
   );
 
-  const match = rawDateStr.match(new RegExp(tokenRegexSource));
-
-  if (!match) return null;
-
-  const parts = {
-    YYYY: '1970',
-    MM: '01',
-    DD: '01',
-    HH: '00',
-    mm: '00',
-    ss: '00'
-  };
-
-  tokenOrder.forEach((token, i) => {
-    parts[token] = match[i + 1].padStart(
-      token === 'YYYY' ? 4 : 2,
-      '0'
+  try {
+    const match = rawDateStr.match(
+      new RegExp(tokenRegexSource)
     );
-  });
 
-  return {
-    date: `${parts.YYYY}-${parts.MM}-${parts.DD}`,
-    time: `${parts.HH}:${parts.mm}:${parts.ss}`,
-  };
+    if (!match) {
+      return null;
+    }
+
+    const parts = {
+      YYYY: '1970',
+      MM: '01',
+      DD: '01',
+    };
+
+    tokenOrder.forEach((token, i) => {
+      parts[token] = match[i + 1].padStart(
+        token === 'YYYY' ? 4 : 2,
+        '0'
+      );
+    });
+
+    return `${parts.YYYY}-${parts.MM}-${parts.DD}`;
+  } catch (err) {
+    console.warn(
+      `Formato de fecha inválido "${formatStr}": ${err.message}`
+    );
+
+    return null;
+  }
 }
 
-function normalizeDateTime(dateRaw, timeRaw, dateFormat) {
-  if (!dateRaw) {
-    return {
-      date: null,
-      time: null
-    };
-  }
+/**
+ * Convierte un string según time_format.
+ *
+ * time_format debe contener únicamente HH, mm y ss.
+ *
+ * Ejemplos:
+ *   HH:mm
+ *   HH:mm:ss
+ */
+function parseTimeWithFormat(rawTimeStr, formatStr) {
+  if (!rawTimeStr || !formatStr) return null;
 
-  const combined = timeRaw
-    ? `${dateRaw} ${timeRaw}`
-    : dateRaw;
+  const tokenOrder = [];
 
-  const parsed = parseDateWithFormat(
-    combined,
-    dateFormat
+  const tokenRegexSource = formatStr.replace(
+    /HH|mm|ss/g,
+    match => {
+      tokenOrder.push(match);
+      return '(\\d{1,2})';
+    }
   );
 
-  return parsed || {
-    date: null,
-    time: null
+  try {
+    const match = rawTimeStr.match(
+      new RegExp(tokenRegexSource)
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const parts = {
+      HH: '00',
+      mm: '00',
+      ss: '00',
+    };
+
+    tokenOrder.forEach((token, i) => {
+      parts[token] = match[i + 1].padStart(2, '0');
+    });
+
+    return `${parts.HH}:${parts.mm}:${parts.ss}`;
+  } catch (err) {
+    console.warn(
+      `Formato de hora inválido "${formatStr}": ${err.message}`
+    );
+
+    return null;
+  }
+}
+
+/**
+ * Normaliza fecha y hora utilizando exclusivamente sus formatos independientes.
+ *
+ * date_regex + date_format → date
+ * time_regex + time_format → time
+ *
+ * No admite formatos combinados de fecha y hora.
+ */
+function normalizeDateTime(
+  dateRaw,
+  timeRaw,
+  dateFormat,
+  timeFormat
+) {
+  return {
+    date:
+      dateRaw && dateFormat
+        ? parseDateWithFormat(dateRaw, dateFormat)
+        : null,
+
+    time:
+      timeRaw && timeFormat
+        ? parseTimeWithFormat(timeRaw, timeFormat)
+        : null,
   };
 }
 
-function buildConcept(expenseTypeLabel, merchant) {
+/**
+ * Arma el título compuesto tipo:
+ * "Pago · AGUAS DE CARTAGENA"
+ */
+function buildConcept(
+  expenseTypeLabel,
+  merchant
+) {
   const cleanMerchant = merchant
     ? StringUtils_toTitleCase(merchant.trim())
     : null;
@@ -275,6 +388,9 @@ function buildConcept(expenseTypeLabel, merchant) {
   return null;
 }
 
+/**
+ * Title Case básico para nombres de comercio.
+ */
 function StringUtils_toTitleCase(str) {
   return str
     .toLowerCase()
@@ -284,6 +400,9 @@ function StringUtils_toTitleCase(str) {
     );
 }
 
+/**
+ * Agrupa las plantillas por entidad.
+ */
 function groupTemplatesByEntity(templates) {
   const byEntity = {};
 
@@ -309,25 +428,45 @@ function groupTemplatesByEntity(templates) {
   return Object.values(byEntity);
 }
 
-function matchesEntityEmail(emailPatterns, sender, body) {
+/**
+ * Prueba un correo contra los patrones de correo de una entidad.
+ */
+function matchesEntityEmail(
+  emailPatterns,
+  sender,
+  body
+) {
   return emailPatterns.some(
-    pattern => matchesEitherSource(pattern, sender, body)
+    pattern => matchesEitherSource(
+      pattern,
+      sender,
+      body
+    )
   );
 }
 
-function matchAgainstTemplates(message, entityGroups) {
+/**
+ * Prueba un mensaje contra las plantillas.
+ */
+function matchAgainstTemplates(
+  message,
+  entityGroups
+) {
   const sender = message.getFrom();
   const subject = message.getSubject();
-  const body = cleanEmailBody(message.getPlainBody());
+  const body = cleanEmailBody(
+    message.getPlainBody()
+  );
 
   for (const group of entityGroups) {
-
     if (group.emailPatterns.length > 0) {
-      if (!matchesEntityEmail(
-        group.emailPatterns,
-        sender,
-        body
-      )) {
+      if (
+        !matchesEntityEmail(
+          group.emailPatterns,
+          sender,
+          body
+        )
+      ) {
         if (DEBUG_MATCHING) {
           console.log(
             `  → entidad ${group.entityId}: descartada, ningún email_pattern matcheó (${group.templates.length} plantilla(s) omitida(s) sin evaluar)`
@@ -379,44 +518,49 @@ function matchAgainstTemplates(message, entityGroups) {
         continue;
       }
 
-      const toEvaluate = candidates.length > 1
-        ? candidates.filter(t => {
-            if (!t.match_pattern) {
-              if (DEBUG_MATCHING) {
+      const toEvaluate =
+        candidates.length > 1
+          ? candidates.filter(t => {
+              if (!t.match_pattern) {
+                if (DEBUG_MATCHING) {
+                  console.log(
+                    `  → plantilla "${t.name}": ambigua con otra(s) del mismo asunto y SIN match_pattern definido — se omite (definir match_pattern en la plantilla)`
+                  );
+                }
+
+                return false;
+              }
+
+              const regex = new RegExp(
+                t.match_pattern,
+                'i'
+              );
+
+              const matched =
+                regex.test(body) ||
+                regex.test(subject);
+
+              if (
+                !matched &&
+                DEBUG_MATCHING
+              ) {
                 console.log(
-                  `  → plantilla "${t.name}": ambigua con otra(s) del mismo asunto y SIN match_pattern definido — se omite (definir match_pattern en la plantilla)`
+                  `  → plantilla "${t.name}": match_pattern "${t.match_pattern}" no encontrado, se descarta`
                 );
               }
 
-              return false;
-            }
-
-            const regex = new RegExp(
-              t.match_pattern,
-              'i'
-            );
-
-            const matched =
-              regex.test(body) ||
-              regex.test(subject);
-
-            if (!matched && DEBUG_MATCHING) {
-              console.log(
-                `  → plantilla "${t.name}": match_pattern "${t.match_pattern}" no encontrado, se descarta`
-              );
-            }
-
-            return matched;
-          })
-        : candidates;
+              return matched;
+            })
+          : candidates;
 
       for (const t of toEvaluate) {
-        const result = tryExtractFromTemplate(
-          t,
-          sender,
-          subject,
-          body
-        );
+        const result =
+          tryExtractFromTemplate(
+            t,
+            sender,
+            subject,
+            body
+          );
 
         if (result) {
           return result;
@@ -428,6 +572,9 @@ function matchAgainstTemplates(message, entityGroups) {
   return null;
 }
 
+/**
+ * Intenta extraer los datos de un correo usando una plantilla específica.
+ */
 function tryExtractFromTemplate(
   t,
   sender,
@@ -435,7 +582,6 @@ function tryExtractFromTemplate(
   body
 ) {
   try {
-
     if (
       t.sender_pattern &&
       !matchesEitherSource(
@@ -453,9 +599,13 @@ function tryExtractFromTemplate(
       return null;
     }
 
-    const amountMatch = body.match(
-      new RegExp(t.amount_regex, 'i')
-    );
+    const amountMatch =
+      body.match(
+        new RegExp(
+          t.amount_regex,
+          'i'
+        )
+      );
 
     if (!amountMatch) {
       if (DEBUG_MATCHING) {
@@ -467,52 +617,81 @@ function tryExtractFromTemplate(
       return null;
     }
 
-    const merchantMatch = t.merchant_regex
-      ? body.match(
-          new RegExp(t.merchant_regex, 'i')
-        )
-      : null;
+    const merchantMatch =
+      t.merchant_regex
+        ? body.match(
+            new RegExp(
+              t.merchant_regex,
+              'i'
+            )
+          )
+        : null;
 
-    const dateMatch = t.date_regex
-      ? body.match(
-          new RegExp(t.date_regex, 'i')
-        )
-      : null;
+    const dateMatch =
+      t.date_regex
+        ? body.match(
+            new RegExp(
+              t.date_regex,
+              'i'
+            )
+          )
+        : null;
 
-    const timeMatch = t.time_regex
-      ? body.match(
-          new RegExp(t.time_regex, 'i')
-        )
-      : null;
+    const timeMatch =
+      t.time_regex
+        ? body.match(
+            new RegExp(
+              t.time_regex,
+              'i'
+            )
+          )
+        : null;
 
-    const currencyMatch = t.currency_regex
-      ? body.match(
-          new RegExp(t.currency_regex, 'i')
-        )
-      : null;
+    const currencyMatch =
+      t.currency_regex
+        ? body.match(
+            new RegExp(
+              t.currency_regex,
+              'i'
+            )
+          )
+        : null;
 
-    const sourceAccountMatch = t.source_account_regex
-      ? body.match(
-          new RegExp(t.source_account_regex, 'i')
-        )
-      : null;
+    const sourceAccountMatch =
+      t.source_account_regex
+        ? body.match(
+            new RegExp(
+              t.source_account_regex,
+              'i'
+            )
+          )
+        : null;
 
-    const merchant = merchantMatch
-      ? merchantMatch[1].trim()
-      : null;
+    const merchant =
+      merchantMatch
+        ? merchantMatch[1].trim()
+        : null;
 
-    const currency = currencyMatch
-      ? currencyMatch[1]
-      : null;
+    const currency =
+      currencyMatch
+        ? currencyMatch[1]
+        : null;
 
     const dt = normalizeDateTime(
-      dateMatch ? dateMatch[1] : null,
-      timeMatch ? timeMatch[1] : null,
-      t.date_format
+      dateMatch
+        ? dateMatch[1]
+        : null,
+      timeMatch
+        ? timeMatch[1]
+        : null,
+      t.date_format,
+      t.time_format
     );
 
     const normalizedAmount =
-      normalizeAmount(amountMatch[1]);
+      normalizeAmount(
+        amountMatch[1]
+      );
 
     const numericAmount =
       Number(normalizedAmount);
@@ -532,21 +711,23 @@ function tryExtractFromTemplate(
       amount: numericAmount,
       currency: currency,
       merchant: merchant,
-      entity: t.entity_name || null,
+      entity:
+        t.entity_name || null,
       sourceAccount:
         sourceAccountMatch
           ? sourceAccountMatch[1]
           : null,
-      date: dt.date,
-      time: dt.time,
-      concept: buildConcept(
-        t.expense_type_label,
-        merchant
-      ),
+      date:
+        dt.date,
+      time:
+        dt.time,
+      concept:
+        buildConcept(
+          t.expense_type_label,
+          merchant
+        ),
     };
-
   } catch (regexError) {
-
     console.warn(
       `Plantilla ${t.id} (${t.name || 'sin nombre'}) tiene una regex inválida: ${regexError.message}`
     );
@@ -560,36 +741,53 @@ function sendCandidate(
   message,
   match
 ) {
-  const response = UrlFetchApp.fetch(
-    `${BACKEND_BASE_URL}/api/expense-candidate`,
-    {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      payload: JSON.stringify({
-        gmail_message_id: message.getId(),
-        template_id: match.templateId,
-        amount: match.amount,
-        currency: match.currency,
-        merchant: match.merchant,
-        entity: match.entity,
-        sourceAccount: match.sourceAccount,
-        date: match.date,
-        time: match.time,
-        concept: match.concept,
-        received_at:
-          message.getDate().toISOString(),
-      }),
-      muteHttpExceptions: true,
-    }
-  );
+  const response =
+    UrlFetchApp.fetch(
+      `${BACKEND_BASE_URL}/api/expense-candidate`,
+      {
+        method: 'post',
+        contentType:
+          'application/json',
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+        payload: JSON.stringify({
+          gmail_message_id:
+            message.getId(),
+          template_id:
+            match.templateId,
+          amount:
+            match.amount,
+          currency:
+            match.currency,
+          merchant:
+            match.merchant,
+          entity:
+            match.entity,
+          sourceAccount:
+            match.sourceAccount,
+          date:
+            match.date,
+          time:
+            match.time,
+          concept:
+            match.concept,
+          received_at:
+            message.getDate().toISOString(),
+        }),
+        muteHttpExceptions:
+          true,
+      }
+    );
 
   const code =
     response.getResponseCode();
 
-  if (code < 200 || code >= 300) {
+  if (
+    code < 200 ||
+    code >= 300
+  ) {
     console.warn(
       `expense-candidate respondió ${code} para el mensaje ${message.getId()}: ${response.getContentText()}`
     );
@@ -600,12 +798,20 @@ function sendCandidate(
   return true;
 }
 
-function getTemplatesWithCache(token) {
+// ------------------------------------------------------------
+// 3) CACHÉ DE PLANTILLAS
+// ------------------------------------------------------------
+
+function getTemplatesWithCache(
+  token
+) {
   const cache =
     CacheService.getUserCache();
 
   const cached =
-    cache.get('TEMPLATES_JSON');
+    cache.get(
+      'TEMPLATES_JSON'
+    );
 
   if (cached) {
     const templates =
@@ -618,17 +824,23 @@ function getTemplatesWithCache(token) {
     return templates;
   }
 
-  const response = UrlFetchApp.fetch(
-    `${BACKEND_BASE_URL}/api/email-templates`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      muteHttpExceptions: true,
-    }
-  );
+  const response =
+    UrlFetchApp.fetch(
+      `${BACKEND_BASE_URL}/api/email-templates`,
+      {
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+        muteHttpExceptions:
+          true,
+      }
+    );
 
-  if (response.getResponseCode() !== 200) {
+  if (
+    response.getResponseCode() !==
+    200
+  ) {
     console.warn(
       `No se pudieron obtener plantillas del backend (código ${response.getResponseCode()}): ${response.getContentText()}`
     );
@@ -643,7 +855,9 @@ function getTemplatesWithCache(token) {
 
   cache.put(
     'TEMPLATES_JSON',
-    JSON.stringify(templates),
+    JSON.stringify(
+      templates
+    ),
     TEMPLATES_CACHE_SECONDS
   );
 
@@ -654,30 +868,47 @@ function getTemplatesWithCache(token) {
   return templates;
 }
 
+/**
+ * Fuerza un refresco inmediato de las plantillas.
+ */
 function forceRefreshTemplates() {
-  CacheService.getUserCache()
-    .remove('TEMPLATES_JSON');
+  CacheService
+    .getUserCache()
+    .remove(
+      'TEMPLATES_JSON'
+    );
 
   const token =
     getWebhookToken();
 
   if (token) {
-    getTemplatesWithCache(token);
+    getTemplatesWithCache(
+      token
+    );
   }
 }
+
+// ------------------------------------------------------------
+// 4) UTILIDADES
+// ------------------------------------------------------------
 
 function getWebhookToken() {
   return PropertiesService
     .getUserProperties()
-    .getProperty('WEBHOOK_TOKEN');
+    .getProperty(
+      'WEBHOOK_TOKEN'
+    );
 }
 
 function getLastSyncEpoch() {
   const props =
-    PropertiesService.getUserProperties();
+    PropertiesService
+      .getUserProperties();
 
   const stored =
-    props.getProperty('LAST_SYNC_EPOCH');
+    props.getProperty(
+      'LAST_SYNC_EPOCH'
+    );
 
   if (stored) {
     return Number(stored);
@@ -694,7 +925,8 @@ function getLastSyncEpoch() {
   );
 
   return Math.floor(
-    startOfToday.getTime() / 1000
+    startOfToday.getTime() /
+      1000
   );
 }
 
@@ -709,8 +941,16 @@ function setLastSyncEpoch(
     );
 }
 
-function ensureLabelExists(name) {
-  if (!GmailApp.getUserLabelByName(name)) {
-    GmailApp.createLabel(name);
+function ensureLabelExists(
+  name
+) {
+  if (
+    !GmailApp.getUserLabelByName(
+      name
+    )
+  ) {
+    GmailApp.createLabel(
+      name
+    );
   }
 }
