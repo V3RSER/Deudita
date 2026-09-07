@@ -48,8 +48,353 @@ import {
   DiagnosisResult,
   SingleTemplateEvaluation,
   evaluateTemplateAgainstEmail,
+  DiagnosisTemplateReport,
+  extractWithCaptureGroup,
 } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
+
+interface TemplateDiagnosticStepsViewProps {
+  evaluation: SingleTemplateEvaluation;
+  isWinner?: boolean;
+  onAction?: () => void;
+  actionLabel?: string;
+  onCopyCorrectionPrompt?: () => void;
+  copiedPrompt?: boolean;
+  customTitle?: string;
+}
+
+function TemplateDiagnosticStepsView({
+  evaluation,
+  isWinner,
+  onAction,
+  actionLabel,
+  onCopyCorrectionPrompt,
+  copiedPrompt,
+  customTitle,
+}: TemplateDiagnosticStepsViewProps) {
+  const tmpl = evaluation.template;
+  const isPassing = evaluation.overallPassed;
+
+  return (
+    <div
+      className={`rounded-xl border text-xs overflow-hidden transition ${
+        isPassing
+          ? 'bg-emerald-50/40 border-emerald-200 shadow-2xs'
+          : 'bg-zinc-50/80 border-zinc-200'
+      }`}
+    >
+      {/* Cabecera */}
+      <div className="p-3 flex items-start justify-between gap-2 border-b border-zinc-200/60 bg-white/60">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span className="font-bold text-zinc-900 truncate">
+            {customTitle || tmpl.name || 'Plantilla'}
+          </span>
+          {tmpl.entity_name && (
+            <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded">
+              {tmpl.entity_name}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {isPassing ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300">
+              <Check className="w-3 h-3 text-emerald-600" />
+              <span>{isWinner ? 'Ganadora / Coincide' : 'Coincide'}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-300">
+              <X className="w-3 h-3 text-rose-600" />
+              <span>No coincide</span>
+            </span>
+          )}
+
+          {onCopyCorrectionPrompt && (
+            <button
+              type="button"
+              onClick={onCopyCorrectionPrompt}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                copiedPrompt
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white hover:bg-zinc-50 text-indigo-700 border-indigo-200 hover:border-indigo-300'
+              }`}
+              title="Copiar mini-prompt para que la IA corrija esta plantilla"
+            >
+              {copiedPrompt ? (
+                <>
+                  <Check className="w-3 h-3 text-white" />
+                  <span>¡Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>Mini-prompt IA</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {onAction && actionLabel && (
+            <button
+              type="button"
+              onClick={onAction}
+              className="text-[11px] font-bold text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:border-zinc-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+            >
+              {actionLabel}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Fallos bloqueantes si no coincide */}
+      {evaluation.criticalFailures.length > 0 && (
+        <div className="p-3 pb-2">
+          <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] text-rose-800 space-y-1">
+            <span className="font-bold flex items-center gap-1 text-rose-900">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              Motivo(s) por los que no coincide:
+            </span>
+            <ul className="list-disc list-inside space-y-0.5 text-rose-800/90 pl-1">
+              {evaluation.criticalFailures.map((reason, idx) => (
+                <li key={idx} className="leading-snug">{reason}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Avisos en campos opcionales */}
+      {evaluation.warnings.length > 0 && (
+        <div className="p-3 pb-2 pt-1">
+          <div className="rounded-lg bg-amber-50/80 border border-amber-200 px-3 py-1.5 text-[11px] text-amber-900 space-y-0.5">
+            <span className="font-bold flex items-center gap-1 text-amber-800">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              Avisos de extracción:
+            </span>
+            <ul className="list-disc list-inside space-y-0.5 text-amber-800/90 pl-1">
+              {evaluation.warnings.map((warn, idx) => (
+                <li key={idx} className="leading-snug">{warn}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Desglose paso a paso de TODOS los filtros y extracciones */}
+      <div className="p-3 space-y-1.5">
+        {/* Paso 1: Entidad */}
+        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level1.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
+          {evaluation.level1.passed ? (
+            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+          ) : (
+            <X className="w-3 h-3 text-rose-500 shrink-0" />
+          )}
+          <span className="font-semibold shrink-0">1. Entidad</span>
+          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
+            {evaluation.level1.matchedPattern ? `/${evaluation.level1.matchedPattern}/i` : tmpl.entity_name || 'sin patrón'}
+          </code>
+          {evaluation.level1.matchedOn && (
+            <span className="text-[10px] text-zinc-500 shrink-0">
+              ({evaluation.level1.matchedOn === 'sender' ? 'en remitente' : 'en cuerpo'})
+            </span>
+          )}
+        </div>
+
+        {/* Remitente si está configurado */}
+        {tmpl.sender_pattern && (
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-700">
+            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            <span className="font-semibold shrink-0">Remitente</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
+              /{tmpl.sender_pattern}/i
+            </code>
+          </div>
+        )}
+
+        {/* Paso 2: Asunto */}
+        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level2.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
+          {evaluation.level2.passed ? (
+            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+          ) : (
+            <X className="w-3 h-3 text-rose-500 shrink-0" />
+          )}
+          <span className="font-semibold shrink-0">2. Asunto</span>
+          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
+            {tmpl.subject_pattern ? `/${tmpl.subject_pattern}/i` : 'sin filtro de asunto'}
+          </code>
+        </div>
+
+        {/* Paso 3: Desempate */}
+        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level3.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
+          {evaluation.level3.passed ? (
+            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+          ) : (
+            <X className="w-3 h-3 text-rose-500 shrink-0" />
+          )}
+          <span className="font-semibold shrink-0">3. Desempate</span>
+          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
+            {tmpl.match_pattern ? `/${tmpl.match_pattern}/i` : 'no requerido'}
+          </code>
+        </div>
+
+        {/* 4. Extracción de Monto (Obligatorio) */}
+        {tmpl.amount_regex && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.amount.success ? 'text-zinc-700' : 'text-rose-700'}`}>
+            {evaluation.level4.fields.amount.success ? (
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            ) : (
+              <X className="w-3 h-3 text-rose-500 shrink-0" />
+            )}
+            <span className="font-semibold shrink-0">4. Monto</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+              /{tmpl.amount_regex}/i
+            </code>
+            <span className="text-zinc-400 shrink-0">→</span>
+            {evaluation.level4.fields.amount.success ? (
+              <span className="font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+                ${formatCurrency(evaluation.level4.extractedAmount)}
+              </span>
+            ) : (
+              <span className="font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shrink-0">
+                sin captura
+              </span>
+            )}
+            {!evaluation.level4.fields.amount.hasCaptureGroup && evaluation.level4.fields.amount.success && (
+              <span className="text-[10px] text-amber-700 font-medium shrink-0" title="Usa paréntesis (...) para capturar exactamente el valor">
+                (sin grupo (...))
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Comercio */}
+        {tmpl.merchant_regex && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.merchant.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
+            {evaluation.level4.fields.merchant.success ? (
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            ) : (
+              <X className="w-3 h-3 text-zinc-400 shrink-0" />
+            )}
+            <span className="font-semibold shrink-0">Comercio</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+              /{tmpl.merchant_regex}/i
+            </code>
+            <span className="text-zinc-400 shrink-0">→</span>
+            {evaluation.level4.fields.merchant.success ? (
+              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
+                {evaluation.level4.fields.merchant.rawExtracted}
+              </span>
+            ) : (
+              <span className="text-zinc-400">sin captura</span>
+            )}
+            {!evaluation.level4.fields.merchant.hasCaptureGroup && evaluation.level4.fields.merchant.success && (
+              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                (sin grupo (...))
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Cuenta */}
+        {tmpl.source_account_regex && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.source_account.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
+            {evaluation.level4.fields.source_account.success ? (
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            ) : (
+              <X className="w-3 h-3 text-zinc-400 shrink-0" />
+            )}
+            <span className="font-semibold shrink-0">Cuenta</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+              /{tmpl.source_account_regex}/i
+            </code>
+            <span className="text-zinc-400 shrink-0">→</span>
+            {evaluation.level4.fields.source_account.success ? (
+              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
+                {evaluation.level4.fields.source_account.rawExtracted}
+              </span>
+            ) : (
+              <span className="text-zinc-400">sin captura</span>
+            )}
+            {!evaluation.level4.fields.source_account.hasCaptureGroup && evaluation.level4.fields.source_account.success && (
+              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                (sin grupo (...))
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Fecha */}
+        {tmpl.date_regex && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.date.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
+            {evaluation.level4.fields.date.success ? (
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            ) : (
+              <X className="w-3 h-3 text-zinc-400 shrink-0" />
+            )}
+            <span className="font-semibold shrink-0">Fecha</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+              /{tmpl.date_regex}/i
+            </code>
+            <span className="text-zinc-400 shrink-0">→</span>
+            {evaluation.level4.fields.date.success ? (
+              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
+                {evaluation.level4.fields.date.rawExtracted}
+              </span>
+            ) : (
+              <span className="text-zinc-400">sin captura</span>
+            )}
+            {!evaluation.level4.fields.date.hasCaptureGroup && evaluation.level4.fields.date.success && (
+              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                (sin grupo (...))
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Hora */}
+        {tmpl.time_regex && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.time.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
+            {evaluation.level4.fields.time.success ? (
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+            ) : (
+              <X className="w-3 h-3 text-zinc-400 shrink-0" />
+            )}
+            <span className="font-semibold shrink-0">Hora</span>
+            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+              /{tmpl.time_regex}/i
+            </code>
+            <span className="text-zinc-400 shrink-0">→</span>
+            {evaluation.level4.fields.time.success ? (
+              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
+                {evaluation.level4.fields.time.rawExtracted}
+              </span>
+            ) : (
+              <span className="text-zinc-400">sin captura</span>
+            )}
+            {!evaluation.level4.fields.time.hasCaptureGroup && evaluation.level4.fields.time.success && (
+              <span className="text-[10px] text-amber-700 font-medium shrink-0">
+                (sin grupo (...))
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Moneda */}
+        <div className="flex items-center gap-1.5 text-[11px] text-zinc-700">
+          <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+          <span className="font-semibold shrink-0">Moneda</span>
+          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
+            {tmpl.currency_regex ? `/${tmpl.currency_regex}/i` : 'por defecto'}
+          </code>
+          <span className="text-zinc-400 shrink-0">→</span>
+          <span className="font-bold text-zinc-800 bg-white border border-zinc-200 px-2 py-0.5 rounded">
+            {evaluation.level4.fields.currency.rawExtracted || tmpl.default_currency || 'COP'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface EmailTemplatesManagerViewProps {
   initialMode?: 'explorer' | 'catalog';
@@ -492,37 +837,6 @@ export function EmailTemplatesManagerView({
     ).length;
   }, [diagnosisForSelectedEmail]);
 
-  // Reusable regex tester: returns capture result plus a concrete syntax error when invalid.
-  const testRegexAgainst = useCallback((pattern: string | null | undefined, text: string): { value: string | null; matched: boolean; error?: string } => {
-    if (!pattern || !pattern.trim() || !text) return { value: null, matched: false };
-    try {
-      const sanitized = sanitizeRegexPattern(pattern);
-      if (!sanitized) return { value: null, matched: false };
-      const regex = new RegExp(sanitized, 'i');
-      const match = text.match(regex);
-      if (match) {
-        let captured: string | null = null;
-        for (let i = 1; i < match.length; i++) {
-          if (match[i] !== undefined) {
-            captured = match[i].trim();
-            break;
-          }
-        }
-        if (captured === null && match[0] !== undefined) {
-          captured = match[0].trim();
-        }
-        return { value: captured, matched: true };
-      }
-      return { value: null, matched: false };
-    } catch (err: unknown) {
-      return {
-        value: null,
-        matched: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }, []);
-
   // Plantilla activa en el formulario (creación o edición en curso)
   const activeFormTemplate = useMemo<CatalogTemplate>(() => {
     return {
@@ -634,7 +948,8 @@ export function EmailTemplatesManagerView({
           source_account_regex: formSourceAccountRegex || null,
           expense_type: formExpenseType || null,
         },
-        failures: activeFormEvaluation.failureReasons,
+        failures: activeFormEvaluation.criticalFailures,
+        warnings: activeFormEvaluation.warnings,
       }
     );
 
@@ -669,139 +984,37 @@ export function EmailTemplatesManagerView({
     formExpenseType,
   ]);
 
-  // Live Extraction Evaluator backward-compatibility
-  const liveExtraction = useMemo(() => {
-    const textToTest = cleanEmailBody(sampleBody || selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '');
+  const [copiedReportPromptId, setCopiedReportPromptId] = useState<string | null>(null);
 
-    let subjectMatched = true;
-    const subj = sampleSubject || selectedEmail?.subject || '';
-    if (formSubjectPattern && formSubjectPattern.trim() && subj) {
-      try {
-        const sanitized = sanitizeRegexPattern(formSubjectPattern);
-        subjectMatched = sanitized ? new RegExp(sanitized, 'i').test(subj) : false;
-      } catch {
-        subjectMatched = false;
+  // Copiar mini-prompt de corrección para cualquier plantilla del diagnóstico
+  const handleCopyCorrectionPromptForReport = useCallback(async (report: DiagnosisTemplateReport) => {
+    if (!selectedEmail) return;
+    const cleanBody = cleanEmailBody(selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '');
+    const evalData = report.evaluation || evaluateTemplateAgainstEmail(report.template, {
+      sender: selectedEmail.sender || '',
+      subject: selectedEmail.subject || '',
+      body: selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '',
+    }, entities);
+
+    const promptText = buildCorrectionPrompt(
+      selectedEmail.sender || '',
+      selectedEmail.subject || '',
+      cleanBody,
+      {
+        template: report.template,
+        failures: evalData.criticalFailures,
+        warnings: evalData.warnings,
       }
+    );
+
+    try {
+      await navigator.clipboard.writeText(promptText);
+      setCopiedReportPromptId(report.template.id);
+      setTimeout(() => setCopiedReportPromptId(null), 3000);
+    } catch {
+      setAiError('No se pudo copiar automáticamente.');
     }
-
-    let matchPatternFound = true;
-    if (formMatchPattern && formMatchPattern.trim() && textToTest) {
-      try {
-        const sanitized = sanitizeRegexPattern(formMatchPattern);
-        matchPatternFound = sanitized
-          ? (new RegExp(sanitized, 'i').test(textToTest) || new RegExp(sanitized, 'i').test(subj))
-          : false;
-      } catch {
-        matchPatternFound = false;
-      }
-    }
-
-    return {
-      amount: testRegexAgainst(formAmountRegex, textToTest),
-      merchant: testRegexAgainst(formMerchantRegex, textToTest),
-      sourceAccount: testRegexAgainst(formSourceAccountRegex, textToTest),
-      date: testRegexAgainst(formDateRegex, textToTest),
-      time: testRegexAgainst(formTimeRegex, textToTest),
-      currency: testRegexAgainst(formCurrencyRegex, textToTest),
-      subjectMatched,
-      matchPatternFound,
-    };
-  }, [
-    sampleBody,
-    sampleSubject,
-    selectedEmail,
-    formAmountRegex,
-    formMerchantRegex,
-    formSourceAccountRegex,
-    formDateRegex,
-    formTimeRegex,
-    formCurrencyRegex,
-    formSubjectPattern,
-    formMatchPattern,
-    testRegexAgainst,
-  ]);
-
-  // Per-template regex breakdown for the diagnosis list: what each pattern captured (or not) on this email
-  const templateTestDetails = useMemo(() => {
-    const map = new Map<string, {
-      entity: { value: string | null; matched: boolean; pattern: string | null };
-      subject: { value: string | null; matched: boolean } | null;
-      sender: { value: string | null; matched: boolean } | null;
-      matchPattern: { value: string | null; matched: boolean } | null;
-      amount: { value: string | null; matched: boolean; error?: string };
-      merchant: { value: string | null; matched: boolean; error?: string };
-      sourceAccount: { value: string | null; matched: boolean; error?: string };
-      date: { value: string | null; matched: boolean; error?: string };
-      time: { value: string | null; matched: boolean; error?: string };
-      currency: { value: string | null; matched: boolean; error?: string };
-    }>();
-
-    if (!selectedEmail || !diagnosisForSelectedEmail) return map;
-
-    const bodyText = cleanEmailBody(selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '');
-    const subjectText = selectedEmail.subject || '';
-    const senderText = selectedEmail.sender || '';
-
-    for (const report of diagnosisForSelectedEmail.reports) {
-      const tmpl = report.template;
-
-      const level1Entity = diagnosisForSelectedEmail.level1.passedEntities.find((entity) => entity.entityId === tmpl.entity_id);
-      const entityPattern = level1Entity?.matchedPattern || tmpl.entity_email_patterns?.[0] || null;
-      const entityResult = {
-        value: entityPattern,
-        matched: report.level1Passed,
-        pattern: entityPattern,
-      };
-
-      let subjectResult: { value: string | null; matched: boolean } | null = null;
-      if (tmpl.subject_pattern && tmpl.subject_pattern.trim()) {
-        try {
-          const sanitized = sanitizeRegexPattern(tmpl.subject_pattern);
-          subjectResult = { value: subjectText, matched: sanitized ? new RegExp(sanitized, 'i').test(subjectText) : false };
-        } catch {
-          subjectResult = { value: subjectText, matched: false };
-        }
-      }
-
-      let senderResult: { value: string | null; matched: boolean } | null = null;
-      if (tmpl.sender_pattern && tmpl.sender_pattern.trim()) {
-        try {
-          const sanitized = sanitizeRegexPattern(tmpl.sender_pattern);
-          senderResult = { value: senderText, matched: sanitized ? new RegExp(sanitized, 'i').test(senderText) : false };
-        } catch {
-          senderResult = { value: senderText, matched: false };
-        }
-      }
-
-      let matchPatternResult: { value: string | null; matched: boolean } | null = null;
-      if (tmpl.match_pattern && tmpl.match_pattern.trim()) {
-        try {
-          const sanitized = sanitizeRegexPattern(tmpl.match_pattern);
-          matchPatternResult = {
-            value: tmpl.match_pattern,
-            matched: sanitized ? (new RegExp(sanitized, 'i').test(bodyText) || new RegExp(sanitized, 'i').test(subjectText)) : false,
-          };
-        } catch {
-          matchPatternResult = { value: tmpl.match_pattern, matched: false };
-        }
-      }
-
-      map.set(tmpl.id, {
-        entity: entityResult,
-        subject: subjectResult,
-        sender: senderResult,
-        matchPattern: matchPatternResult,
-        amount: testRegexAgainst(tmpl.amount_regex, bodyText),
-        merchant: testRegexAgainst(tmpl.merchant_regex, bodyText),
-        sourceAccount: testRegexAgainst(tmpl.source_account_regex, bodyText),
-        date: testRegexAgainst(tmpl.date_regex, bodyText),
-        time: testRegexAgainst(tmpl.time_regex, bodyText),
-        currency: testRegexAgainst(tmpl.currency_regex, bodyText),
-      });
-    }
-
-    return map;
-  }, [selectedEmail, diagnosisForSelectedEmail, testRegexAgainst]);
+  }, [selectedEmail, entities]);
 
 
   // Load an existing template into the explorer form to edit or inspect
@@ -1234,31 +1447,26 @@ export function EmailTemplatesManagerView({
     return '';
   }, [modalCustomSampleBody, modalSampleEmailId, emails]);
 
-  // Live Extraction within the Modal
+  // Live Extraction within the Modal using unified extractWithCaptureGroup
   const modalLiveExtraction = useMemo(() => {
-    const textToTest = modalSampleText;
+    const textToTest = cleanEmailBody(modalSampleText || '');
 
-    const testRegex = (pattern: string | null | undefined): { value: string | null; matched: boolean } => {
+    const runExtraction = (pattern: string | null | undefined): { value: string | null; matched: boolean; error?: string } => {
       if (!pattern || !pattern.trim() || !textToTest) return { value: null, matched: false };
-      try {
-        const regex = new RegExp(pattern, 'i');
-        const match = textToTest.match(regex);
-        if (match) {
-          const val = match[1] !== undefined ? match[1].trim() : match[0].trim();
-          return { value: val, matched: true };
-        }
-        return { value: null, matched: false };
-      } catch {
-        return { value: null, matched: false };
-      }
+      const res = extractWithCaptureGroup(pattern, textToTest);
+      return {
+        value: res.rawExtracted,
+        matched: res.success,
+        error: res.reason,
+      };
     };
 
     return {
-      amount: testRegex(modalAmountRegex),
-      merchant: testRegex(modalMerchantRegex),
-      sourceAccount: testRegex(modalSourceAccountRegex),
-      date: testRegex(modalDateRegex),
-      time: testRegex(modalTimeRegex),
+      amount: runExtraction(modalAmountRegex),
+      merchant: runExtraction(modalMerchantRegex),
+      sourceAccount: runExtraction(modalSourceAccountRegex),
+      date: runExtraction(modalDateRegex),
+      time: runExtraction(modalTimeRegex),
     };
   }, [modalSampleText, modalAmountRegex, modalMerchantRegex, modalSourceAccountRegex, modalDateRegex, modalTimeRegex]);
 
@@ -1980,148 +2188,21 @@ export function EmailTemplatesManagerView({
                         </div>
                       ) : (
                         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                          {filteredTestReports.map((report) => {
-                            const isWinner = report.level3Passed && report.extractedAmount !== null && report.extractedAmount !== undefined;
-                            const detail = templateTestDetails.get(report.template.id);
-
-                            return (
-                              <div
-                                key={report.template.id}
-                                className={`rounded-xl border text-xs overflow-hidden ${
-                                  isWinner
-                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-500/20'
-                                    : 'bg-zinc-50/70 border-zinc-200'
-                                }`}
-                              >
-                                <div className="p-3 flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-bold text-zinc-900">{report.template.name}</span>
-                                    {report.template.entity_name && (
-                                      <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-1.5 py-0.2 rounded">
-                                        {report.template.entity_name}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {isWinner ? (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                                        <Check className="w-3 h-3" />
-                                        <span>Coincide</span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-200/60 px-2 py-0.5 rounded-full">
-                                        No coincide
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleLoadTemplateIntoForm(report.template)}
-                                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-zinc-200 hover:border-zinc-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
-                                    >
-                                      {isWinner ? 'Editar' : 'Cargar'}
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {report.failureReason && (
-                                  <div className="px-3 pb-1">
-                                    <div className="rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-2 text-[11px] text-rose-800">
-                                      <span className="font-bold">Motivo:</span> {report.failureReason}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Paso a paso: cada regex/filtro de la plantilla contra este correo */}
-                                <div className="px-3 pb-3 space-y-1">
-                                  {detail?.entity && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.entity.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
-                                      {detail.entity.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Entidad</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{detail.entity.pattern || report.template.entity_name || 'sin patrón'}</code>
-                                    </div>
-                                  )}
-                                  {detail?.sender && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.sender.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
-                                      {detail.sender.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Remitente</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.sender_pattern}</code>
-                                    </div>
-                                  )}
-                                  {detail?.subject && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.subject.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
-                                      {detail.subject.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Asunto</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.subject_pattern}</code>
-                                    </div>
-                                  )}
-                                  {detail?.matchPattern && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.matchPattern.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
-                                      {detail.matchPattern.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Desempate</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.match_pattern}</code>
-                                    </div>
-                                  )}
-                                  {report.template.amount_regex && detail?.amount && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.amount.matched ? 'text-zinc-600' : 'text-rose-700'}`}>
-                                      {detail.amount.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Monto</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.amount_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className={`font-semibold truncate ${detail.amount.matched ? 'text-emerald-700' : 'text-rose-600'}`}>
-                                        {detail.amount.matched ? detail.amount.value : 'sin captura'}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {report.template.merchant_regex && detail?.merchant && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.merchant.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                      {detail.merchant.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Comercio</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.merchant_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className="truncate">{detail.merchant.matched ? detail.merchant.value : 'sin captura'}</span>
-                                    </div>
-                                  )}
-                                  {report.template.source_account_regex && detail?.sourceAccount && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.sourceAccount.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                      {detail.sourceAccount.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Cuenta</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.source_account_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className="truncate">{detail.sourceAccount.matched ? detail.sourceAccount.value : 'sin captura'}</span>
-                                    </div>
-                                  )}
-                                  {report.template.date_regex && detail?.date && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.date.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                      {detail.date.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Fecha</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.date_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className="truncate">{detail.date.matched ? detail.date.value : 'sin captura'}</span>
-                                    </div>
-                                  )}
-                                  {report.template.time_regex && detail?.time && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.time.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                      {detail.time.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Hora</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.time_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className="truncate">{detail.time.matched ? detail.time.value : 'sin captura'}</span>
-                                    </div>
-                                  )}
-                                  {report.template.currency_regex && detail?.currency && (
-                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.currency.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                      {detail.currency.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
-                                      <span className="font-semibold shrink-0">Moneda</span>
-                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.currency_regex}</code>
-                                      <span className="text-zinc-400 shrink-0">→</span>
-                                      <span className="truncate">{detail.currency.matched ? detail.currency.value : 'sin captura'}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {filteredTestReports.map((report) => (
+                            <TemplateDiagnosticStepsView
+                              key={report.template.id}
+                              evaluation={report.evaluation || evaluateTemplateAgainstEmail(report.template, {
+                                sender: selectedEmail?.sender || '',
+                                subject: selectedEmail?.subject || '',
+                                body: selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '',
+                              }, entities)}
+                              isWinner={report.isWinner}
+                              onAction={() => handleLoadTemplateIntoForm(report.template)}
+                              actionLabel={report.isWinner ? 'Editar' : 'Cargar'}
+                              onCopyCorrectionPrompt={() => handleCopyCorrectionPromptForReport(report)}
+                              copiedPrompt={copiedReportPromptId === report.template.id}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
@@ -2165,171 +2246,15 @@ export function EmailTemplatesManagerView({
                       </div>
                     )}
 
-                    {/* Prueba unificada en vivo de la plantilla contra el correo actual */}
+                    {/* Prueba unificada en vivo de la plantilla en edición contra el correo actual */}
                     {activeFormEvaluation && (
-                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 p-3.5 space-y-3 shadow-md">
-                        {/* Cabecera: Estado de validación + Botón de Mini-Prompt */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-zinc-800">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${activeFormEvaluation.overallPassed ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-                              Prueba en vivo de la plantilla
-                            </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              activeFormEvaluation.overallPassed
-                                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
-                                : 'bg-rose-950/60 text-rose-300 border-rose-700/60'
-                            }`}>
-                              {activeFormEvaluation.overallPassed ? 'Pasa la prueba' : 'Requiere corrección'}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={handleCopyCorrectionPrompt}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
-                              copiedCorrectionPrompt
-                                ? 'bg-emerald-600 text-white border-emerald-500'
-                                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700 hover:border-zinc-600'
-                            }`}
-                            title="Copia al portapapeles un mini-prompt con los errores exactos para que la IA los corrija"
-                          >
-                            {copiedCorrectionPrompt ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-white" />
-                                <span>¡Prompt copiado!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                <span>Copiar mini-prompt para IA</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Los 4 Pasos del Motor de Emparejamiento */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                          {/* Paso 1: Entidad */}
-                          <div className={`p-2 rounded-xl border ${
-                            activeFormEvaluation.level1.passed
-                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
-                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
-                          }`}>
-                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
-                              <span className="text-zinc-400">1. Entidad</span>
-                              {activeFormEvaluation.level1.passed ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <X className="w-3.5 h-3.5 text-rose-400" />
-                              )}
-                            </div>
-                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level1.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
-                              {activeFormEvaluation.level1.passed
-                                ? (activeFormEvaluation.level1.matchedPattern ? `/${activeFormEvaluation.level1.matchedPattern}/i` : activeFormEvaluation.level1.entityName || 'Coincide')
-                                : 'No coincide'}
-                            </p>
-                            {!activeFormEvaluation.level1.passed && activeFormEvaluation.level1.reason && (
-                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level1.reason}</p>
-                            )}
-                          </div>
-
-                          {/* Paso 2: Asunto */}
-                          <div className={`p-2 rounded-xl border ${
-                            activeFormEvaluation.level2.passed
-                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
-                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
-                          }`}>
-                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
-                              <span className="text-zinc-400">2. Asunto</span>
-                              {activeFormEvaluation.level2.passed ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <X className="w-3.5 h-3.5 text-rose-400" />
-                              )}
-                            </div>
-                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level2.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
-                              {activeFormEvaluation.level2.passed
-                                ? (activeFormEvaluation.level2.subjectPattern ? `/${activeFormEvaluation.level2.subjectPattern}/i` : 'Sin filtro (pasa)')
-                                : 'No coincide'}
-                            </p>
-                            {!activeFormEvaluation.level2.passed && activeFormEvaluation.level2.reason && (
-                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level2.reason}</p>
-                            )}
-                          </div>
-
-                          {/* Paso 3: Desempate */}
-                          <div className={`p-2 rounded-xl border ${
-                            activeFormEvaluation.level3.passed
-                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
-                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
-                          }`}>
-                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
-                              <span className="text-zinc-400">3. Desempate</span>
-                              {activeFormEvaluation.level3.passed ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <X className="w-3.5 h-3.5 text-rose-400" />
-                              )}
-                            </div>
-                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level3.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
-                              {activeFormEvaluation.level3.passed
-                                ? (activeFormEvaluation.level3.matchPattern ? `/${activeFormEvaluation.level3.matchPattern}/i` : 'No requerido')
-                                : 'No coincide'}
-                            </p>
-                            {!activeFormEvaluation.level3.passed && activeFormEvaluation.level3.reason && (
-                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level3.reason}</p>
-                            )}
-                          </div>
-
-                          {/* Paso 4: Extracción de Monto */}
-                          <div className={`p-2 rounded-xl border ${
-                            activeFormEvaluation.level4.passed
-                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
-                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
-                          }`}>
-                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
-                              <span className="text-zinc-400">4. Monto (Obligatorio)</span>
-                              {activeFormEvaluation.level4.passed ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <X className="w-3.5 h-3.5 text-rose-400" />
-                              )}
-                            </div>
-                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level4.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
-                              {activeFormEvaluation.level4.passed
-                                ? `$${formatCurrency(activeFormEvaluation.level4.extractedAmount)}`
-                                : 'Sin captura de monto'}
-                            </p>
-                            {!activeFormEvaluation.level4.passed && activeFormEvaluation.level4.fields.amount.reason && (
-                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level4.fields.amount.reason}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Listado de fallos específicos si no pasó */}
-                        {activeFormEvaluation.failureReasons.length > 0 && (
-                          <div className="p-2.5 bg-rose-950/40 border border-rose-800/50 rounded-xl space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-rose-300">
-                                Errores detectados ({activeFormEvaluation.failureReasons.length}):
-                              </span>
-                              <button
-                                type="button"
-                                onClick={handleCopyCorrectionPrompt}
-                                className="text-[11px] text-rose-200 hover:text-white underline font-semibold cursor-pointer"
-                              >
-                                Copiar prompt con estos fallos
-                              </button>
-                            </div>
-                            <ul className="text-[11px] text-rose-200/90 space-y-0.5 list-disc list-inside">
-                              {activeFormEvaluation.failureReasons.map((reason, idx) => (
-                                <li key={idx} className="leading-snug">{reason}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
+                      <TemplateDiagnosticStepsView
+                        evaluation={activeFormEvaluation}
+                        isWinner={activeFormEvaluation.overallPassed}
+                        customTitle={`Prueba en vivo: ${formName || 'Plantilla en edición'}`}
+                        onCopyCorrectionPrompt={handleCopyCorrectionPrompt}
+                        copiedPrompt={copiedCorrectionPrompt}
+                      />
                     )}
 
                     {aiError && (
@@ -2448,11 +2373,22 @@ export function EmailTemplatesManagerView({
 
                       {/* Monto */}
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                          <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Monto</span>
-                          <span className="text-rose-500">*</span>
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Monto</span>
+                            <span className="text-rose-500">*</span>
+                          </label>
+                          {activeFormEvaluation?.level4.fields.amount && (
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
+                              activeFormEvaluation.level4.fields.amount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                            }`}>
+                              {activeFormEvaluation.level4.fields.amount.matched
+                                ? `Captura: ${activeFormEvaluation.level4.fields.amount.value}`
+                                : (formAmountRegex ? 'Sin captura' : '')}
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           required
@@ -2464,10 +2400,21 @@ export function EmailTemplatesManagerView({
 
                       {/* Comercio */}
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                          <Store className="w-3.5 h-3.5 text-zinc-500" />
-                          <span>Comercio</span>
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                            <Store className="w-3.5 h-3.5 text-zinc-500" />
+                            <span>Comercio</span>
+                          </label>
+                          {activeFormEvaluation?.level4.fields.merchant && (
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
+                              activeFormEvaluation.level4.fields.merchant.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                            }`}>
+                              {activeFormEvaluation.level4.fields.merchant.matched
+                                ? `Captura: ${activeFormEvaluation.level4.fields.merchant.value}`
+                                : (formMerchantRegex ? 'Sin captura' : '')}
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={formMerchantRegex}
@@ -2478,10 +2425,21 @@ export function EmailTemplatesManagerView({
 
                       {/* Cuenta */}
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                          <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
-                          <span>Cuenta o Tarjeta</span>
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                            <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+                            <span>Cuenta o Tarjeta</span>
+                          </label>
+                          {activeFormEvaluation?.level4.fields.sourceAccount && (
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
+                              activeFormEvaluation.level4.fields.sourceAccount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                            }`}>
+                              {activeFormEvaluation.level4.fields.sourceAccount.matched
+                                ? `Captura: ${activeFormEvaluation.level4.fields.sourceAccount.value}`
+                                : (formSourceAccountRegex ? 'Sin captura' : '')}
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={formSourceAccountRegex}
@@ -2493,10 +2451,21 @@ export function EmailTemplatesManagerView({
                       {/* Fecha, Hora y sus formatos */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                            <span>Fecha</span>
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                              <span>Fecha</span>
+                            </label>
+                            {activeFormEvaluation?.level4.fields.date && (
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${
+                                activeFormEvaluation.level4.fields.date.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              }`}>
+                                {activeFormEvaluation.level4.fields.date.matched
+                                  ? activeFormEvaluation.level4.fields.date.value
+                                  : (formDateRegex ? 'Sin captura' : '')}
+                              </span>
+                            )}
+                          </div>
                           <input
                             type="text"
                             value={formDateRegex}
@@ -2523,10 +2492,21 @@ export function EmailTemplatesManagerView({
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                            <span>Hora</span>
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                              <span>Hora</span>
+                            </label>
+                            {activeFormEvaluation?.level4.fields.time && (
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${
+                                activeFormEvaluation.level4.fields.time.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              }`}>
+                                {activeFormEvaluation.level4.fields.time.matched
+                                  ? activeFormEvaluation.level4.fields.time.value
+                                  : (formTimeRegex ? 'Sin captura' : '')}
+                              </span>
+                            )}
+                          </div>
                           <input
                             type="text"
                             value={formTimeRegex}
@@ -3161,10 +3141,17 @@ export function EmailTemplatesManagerView({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Hora</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Hora</span>
+                      </label>
+                      {modalLiveExtraction.time.matched && (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Captura: {modalLiveExtraction.time.value}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={modalTimeRegex}
