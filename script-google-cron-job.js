@@ -803,10 +803,19 @@ function sendCandidate(
 // ------------------------------------------------------------
 
 function getTemplatesWithCache(
-  token
+  token,
+  forceRefresh = false
 ) {
   const cache =
     CacheService.getUserCache();
+
+  // Cuando se solicita una renovación explícita, eliminamos primero
+  // la entrada actual para garantizar que la siguiente lectura vaya
+  // al backend y vuelva a guardar el resultado nuevo en caché.
+  if (forceRefresh) {
+    cache.remove('TEMPLATES_JSON');
+    console.log('Caché de plantillas invalidado: renovación forzada');
+  }
 
   const cached =
     cache.get(
@@ -872,20 +881,30 @@ function getTemplatesWithCache(
  * Fuerza un refresco inmediato de las plantillas.
  */
 function forceRefreshTemplates() {
-  CacheService
-    .getUserCache()
-    .remove(
-      'TEMPLATES_JSON'
-    );
-
   const token =
     getWebhookToken();
 
-  if (token) {
-    getTemplatesWithCache(
-      token
+  if (!token) {
+    throw new Error(
+      'No hay token conectado. Conecta primero desde el link normal de la app.'
     );
   }
+
+  return getTemplatesWithCache(
+    token,
+    true
+  );
+}
+
+/**
+ * Endpoint del panel de pruebas para renovar el caché y devolver
+ * inmediatamente las plantillas recién descargadas.
+ */
+function refreshTemplatesCacheForTest() {
+  return forceRefreshTemplates().map(t => ({
+    id: t.id,
+    name: t.name || t.id,
+  }));
 }
 
 // ------------------------------------------------------------
