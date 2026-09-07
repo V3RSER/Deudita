@@ -1342,7 +1342,7 @@ export function EmailTemplatesManagerView({
         date_regex: sanitizeRegexPattern(formDateRegex.trim()) || null,
         date_format: formDateFormat.trim() || 'DD/MM/YYYY',
         time_regex: sanitizeRegexPattern(formTimeRegex.trim()) || null,
-        time_format: formTimeFormat.trim() || null,
+        time_format: formTimeFormat.trim() || (formTimeRegex.trim() ? 'HH:mm:ss' : null),
         currency_regex: sanitizeRegexPattern(formCurrencyRegex.trim()) || null,
         default_currency: formCurrency.trim() || 'COP',
       };
@@ -1585,7 +1585,7 @@ export function EmailTemplatesManagerView({
         date_regex: sanitizeRegexPattern(modalDateRegex.trim()) || null,
         date_format: modalDateFormat.trim() || 'DD/MM/YYYY',
         time_regex: sanitizeRegexPattern(modalTimeRegex.trim()) || null,
-        time_format: modalTimeFormat.trim() || null,
+        time_format: modalTimeFormat.trim() || (modalTimeRegex.trim() ? 'HH:mm:ss' : null),
         currency_regex: sanitizeRegexPattern(modalCurrencyRegex.trim()) || null,
         default_currency: modalCurrency.trim() || 'COP',
       };

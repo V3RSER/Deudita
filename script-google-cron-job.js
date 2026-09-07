@@ -348,6 +348,7 @@ function normalizeDateTime(
   dateFormat,
   timeFormat
 ) {
+  const effectiveTimeFormat = timeFormat || 'HH:mm:ss';
   return {
     date:
       dateRaw && dateFormat
@@ -355,8 +356,8 @@ function normalizeDateTime(
         : null,
 
     time:
-      timeRaw && timeFormat
-        ? parseTimeWithFormat(timeRaw, timeFormat)
+      timeRaw
+        ? parseTimeWithFormat(timeRaw, effectiveTimeFormat)
         : null,
   };
 }
@@ -582,23 +583,6 @@ function tryExtractFromTemplate(
   body
 ) {
   try {
-    if (
-      t.sender_pattern &&
-      !matchesEitherSource(
-        t.sender_pattern,
-        sender,
-        body
-      )
-    ) {
-      if (DEBUG_MATCHING) {
-        console.log(
-          `  → plantilla "${t.name}": descartada, sender_pattern no matcheó ni en remitente ni en cuerpo`
-        );
-      }
-
-      return null;
-    }
-
     const amountMatch =
       body.match(
         new RegExp(
@@ -669,28 +653,28 @@ function tryExtractFromTemplate(
 
     const merchant =
       merchantMatch
-        ? merchantMatch[1].trim()
+        ? (merchantMatch[1] !== undefined ? merchantMatch[1] : merchantMatch[0]).trim()
         : null;
 
     const currency =
       currencyMatch
-        ? currencyMatch[1]
+        ? (currencyMatch[1] !== undefined ? currencyMatch[1] : currencyMatch[0])
         : null;
 
+    const rawDate = dateMatch ? (dateMatch[1] !== undefined ? dateMatch[1] : dateMatch[0]) : null;
+    const rawTime = timeMatch ? (timeMatch[1] !== undefined ? timeMatch[1] : timeMatch[0]) : null;
+
     const dt = normalizeDateTime(
-      dateMatch
-        ? dateMatch[1]
-        : null,
-      timeMatch
-        ? timeMatch[1]
-        : null,
+      rawDate,
+      rawTime,
       t.date_format,
       t.time_format
     );
 
+    const rawAmount = amountMatch[1] !== undefined ? amountMatch[1] : amountMatch[0];
     const normalizedAmount =
       normalizeAmount(
-        amountMatch[1]
+        rawAmount
       );
 
     const numericAmount =
@@ -699,7 +683,7 @@ function tryExtractFromTemplate(
     if (isNaN(numericAmount)) {
       if (DEBUG_MATCHING) {
         console.log(
-          `  → plantilla "${t.name}": amount_regex matcheó "${amountMatch[1]}" pero no se pudo normalizar a número, se descarta`
+          `  → plantilla "${t.name}": amount_regex matcheó "${rawAmount}" pero no se pudo normalizar a número, se descarta`
         );
       }
 
@@ -715,7 +699,7 @@ function tryExtractFromTemplate(
         t.entity_name || null,
       sourceAccount:
         sourceAccountMatch
-          ? sourceAccountMatch[1]
+          ? (sourceAccountMatch[1] !== undefined ? sourceAccountMatch[1] : sourceAccountMatch[0])
           : null,
       date:
         dt.date,
@@ -725,7 +709,7 @@ function tryExtractFromTemplate(
         buildConcept(
           t.expense_type_label,
           merchant
-        ),
+        ) || (merchant ? StringUtils_toTitleCase(merchant) : (t.entity_name ? StringUtils_toTitleCase(t.entity_name) : null)),
     };
   } catch (regexError) {
     console.warn(

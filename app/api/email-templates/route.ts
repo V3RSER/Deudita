@@ -14,6 +14,51 @@ function getDirectClient() {
   return createSupabaseClient(url, anonKey);
 }
 
+async function enrichTemplatesWithEntities(db: any, templates: any[]) {
+  if (!templates || templates.length === 0) return [];
+
+  const entityIds = Array.from(new Set(templates.map((t) => t.entity_id).filter(Boolean)));
+
+  let entityMap = new Map<string, string>();
+  let patternsMap = new Map<string, string[]>();
+
+  if (entityIds.length > 0) {
+    const { data: entitiesData } = await db
+      .from('entities')
+      .select('id, name')
+      .in('id', entityIds);
+
+    for (const ent of entitiesData || []) {
+      entityMap.set(ent.id, ent.name);
+    }
+
+    const { data: patternsData } = await db
+      .from('entity_email_patterns')
+      .select('entity_id, pattern')
+      .in('entity_id', entityIds);
+
+    for (const pat of patternsData || []) {
+      if (!patternsMap.has(pat.entity_id)) {
+        patternsMap.set(pat.entity_id, []);
+      }
+      patternsMap.get(pat.entity_id)!.push(pat.pattern);
+    }
+  }
+
+  return templates.map((t) => {
+    const canonicalEntityName = t.entity_id ? entityMap.get(t.entity_id) || t.entity_name : t.entity_name;
+    const patterns = t.entity_id ? patternsMap.get(t.entity_id) || [] : [];
+    const resolvedTimeFormat = t.time_format || (t.time_regex ? 'HH:mm:ss' : null);
+
+    return {
+      ...t,
+      entity_name: canonicalEntityName || null,
+      entity_email_patterns: patterns,
+      time_format: resolvedTimeFormat,
+    };
+  });
+}
+
 /**
  * GET /api/email-templates
  * - Con Authorization: Bearer <webhook_token>: devuelve plantillas activas excluyendo las desactivadas por el usuario.
@@ -35,7 +80,8 @@ export async function GET(req: NextRequest) {
         });
 
         if (!rpcErr && rpcData) {
-          return NextResponse.json(rpcData);
+          const enrichedRpc = await enrichTemplatesWithEntities(db, rpcData);
+          return NextResponse.json(enrichedRpc);
         }
       } catch (rpcEx) {
         console.warn('[API /api/email-templates] RPC fallback triggered:', rpcEx);
@@ -71,19 +117,19 @@ export async function GET(req: NextRequest) {
 
       const disabledIds = new Set((disabledPrefs || []).map((p) => p.template_id));
 
-      // Obtener plantillas activas
+      // Obtener plantillas
       const { data: templates, error: tmplErr } = await db
         .from('email_templates')
         .select('*')
-        .eq('active', true)
         .order('created_at', { ascending: true });
 
       if (tmplErr) {
         return NextResponse.json({ error: tmplErr.message }, { status: 500 });
       }
 
-      const filteredTemplates = (templates || []).filter((t) => !disabledIds.has(t.id));
-      return NextResponse.json(filteredTemplates);
+      const activeOnly = (templates || []).filter((t) => t.active !== false && !disabledIds.has(t.id));
+      const enrichedTemplates = await enrichTemplatesWithEntities(db, activeOnly);
+      return NextResponse.json(enrichedTemplates);
     }
 
     // 2. Flujo con Sesión de Usuario (Supabase Auth)
@@ -100,14 +146,15 @@ export async function GET(req: NextRequest) {
     const { data: templates, error: fetchErr } = await supabase
       .from('email_templates')
       .select('*')
-      .eq('active', true)
       .order('created_at', { ascending: false });
 
     if (fetchErr) {
       return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     }
 
-    return NextResponse.json(templates || []);
+    const activeOnly = (templates || []).filter((t) => t.active !== false);
+    const enrichedTemplates = await enrichTemplatesWithEntities(supabase, activeOnly);
+    return NextResponse.json(enrichedTemplates);
   } catch (err: unknown) {
     console.error('[API GET /api/email-templates] Error:', err);
     const message = err instanceof Error ? err.message : 'Error interno al consultar plantillas';
@@ -164,6 +211,7 @@ export async function POST(req: NextRequest) {
       currency_regex,
       source_account_regex,
       time_regex,
+      time_format,
     } = body;
 
     if (!name || !name.trim()) {
@@ -289,6 +337,7 @@ export async function POST(req: NextRequest) {
       currency_regex: currency_regex?.trim() || null,
       source_account_regex: source_account_regex?.trim() || null,
       time_regex: time_regex?.trim() || null,
+      time_format: time_format?.trim() || (time_regex?.trim() ? 'HH:mm:ss' : null),
       created_by: user.id,
       active: true,
     };
@@ -361,6 +410,11 @@ export async function PUT(req: NextRequest) {
     if (updates.currency_regex !== undefined) updatePayload.currency_regex = updates.currency_regex?.trim() || null;
     if (updates.source_account_regex !== undefined) updatePayload.source_account_regex = updates.source_account_regex?.trim() || null;
     if (updates.time_regex !== undefined) updatePayload.time_regex = updates.time_regex?.trim() || null;
+    if (updates.time_format !== undefined) {
+      updatePayload.time_format = updates.time_format?.trim() || null;
+    } else if (updates.time_regex && !updatePayload.time_format) {
+      updatePayload.time_format = 'HH:mm:ss';
+    }
     if (updates.active !== undefined) updatePayload.active = Boolean(updates.active);
 
     const { data: updatedTemplate, error: updateErr } = await supabase

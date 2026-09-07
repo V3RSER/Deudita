@@ -341,7 +341,7 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
       date_regex: sanitizeRegexPattern(parsed.date_regex),
       date_format: parsed.date_format ? String(parsed.date_format).trim() : 'DD/MM/YYYY',
       time_regex: sanitizeRegexPattern(parsed.time_regex),
-      time_format: parsed.time_format ? String(parsed.time_format).trim() : null,
+      time_format: parsed.time_format ? String(parsed.time_format).trim() : (parsed.time_regex ? 'HH:mm:ss' : null),
       currency_regex: sanitizeRegexPattern(parsed.currency_regex),
       default_currency: parsed.default_currency ? String(parsed.default_currency).trim() : 'COP',
       source_account_regex: sanitizeRegexPattern(parsed.source_account_regex),

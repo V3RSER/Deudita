@@ -17,11 +17,10 @@ export async function GET() {
       );
     }
 
-    // 1. Fetch active email templates
+    // 1. Fetch email templates
     const { data: templatesData, error: templatesErr } = await supabase
       .from('email_templates')
       .select('*')
-      .eq('active', true)
       .order('created_at', { ascending: false });
 
     if (templatesErr) {
@@ -100,6 +99,7 @@ export async function GET() {
         entity_name: entityName || null,
         expense_type_label: expenseTypeLabel || null,
         entity_email_patterns: entityPatterns,
+        time_format: t.time_format || (t.time_regex ? 'HH:mm:ss' : null),
       };
     });
 
