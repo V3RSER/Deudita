@@ -39,12 +39,15 @@ import {
   sanitizeRegexPattern,
   parseAITemplateResponse,
   buildTemplatePrompt,
+  buildCorrectionPrompt,
 } from '@/lib/email-cleaning';
 import {
   CatalogEntity,
   CatalogTemplate,
   diagnoseEmailMatching,
   DiagnosisResult,
+  SingleTemplateEvaluation,
+  evaluateTemplateAgainstEmail,
 } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
 
@@ -125,6 +128,8 @@ export function EmailTemplatesManagerView({
   const [formTimeFormat, setFormTimeFormat] = useState<string>('');
   const [formCurrencyRegex, setFormCurrencyRegex] = useState<string>('');
   const [formCurrency, setFormCurrency] = useState<string>('');
+  const [formExpenseType, setFormExpenseType] = useState<string>('compra');
+  const [copiedCorrectionPrompt, setCopiedCorrectionPrompt] = useState<boolean>(false);
 
   // Sample email reference for explorer right panel
   const [sampleSender, setSampleSender] = useState<string>('');
@@ -455,7 +460,7 @@ export function EmailTemplatesManagerView({
       templatesToTest,
       entities
     );
-  }, [selectedEmail, templatesToTest, entities, aiPreviewDiagnosis, aiPreviewEmailId, templateTestFilter]);
+  }, [selectedEmail, templatesToTest, entities, aiPreviewDiagnosis, aiPreviewEmailId]);
 
   // Filtered reports according to view filter ('all' | 'matched' | 'failed')
   const filteredTestReports = useMemo(() => {
@@ -491,11 +496,22 @@ export function EmailTemplatesManagerView({
   const testRegexAgainst = useCallback((pattern: string | null | undefined, text: string): { value: string | null; matched: boolean; error?: string } => {
     if (!pattern || !pattern.trim() || !text) return { value: null, matched: false };
     try {
-      const regex = new RegExp(pattern, 'i');
+      const sanitized = sanitizeRegexPattern(pattern);
+      if (!sanitized) return { value: null, matched: false };
+      const regex = new RegExp(sanitized, 'i');
       const match = text.match(regex);
       if (match) {
-        const val = match[1] !== undefined ? match[1].trim() : match[0].trim();
-        return { value: val, matched: true };
+        let captured: string | null = null;
+        for (let i = 1; i < match.length; i++) {
+          if (match[i] !== undefined) {
+            captured = match[i].trim();
+            break;
+          }
+        }
+        if (captured === null && match[0] !== undefined) {
+          captured = match[0].trim();
+        }
+        return { value: captured, matched: true };
       }
       return { value: null, matched: false };
     } catch (err: unknown) {
@@ -507,14 +523,162 @@ export function EmailTemplatesManagerView({
     }
   }, []);
 
-  // Live Extraction Evaluator for the explorer panel against the current sample text
+  // Plantilla activa en el formulario (creación o edición en curso)
+  const activeFormTemplate = useMemo<CatalogTemplate>(() => {
+    return {
+      id: editingTemplateId || '__active_form_template__',
+      name: formName || 'Nueva Plantilla',
+      sender_pattern: formSenderPattern || null,
+      subject_pattern: formSubjectPattern || null,
+      amount_regex: formAmountRegex || null,
+      merchant_regex: formMerchantRegex || null,
+      date_regex: formDateRegex || null,
+      date_format: formDateFormat || 'DD/MM/YYYY',
+      entity_name: formEntityName || null,
+      entity_id: formEntityId || null,
+      match_pattern: formMatchPattern || null,
+      expense_type_id: null,
+      expense_type_label: formExpenseType || 'compra',
+      default_currency: formCurrency || 'COP',
+      currency_regex: formCurrencyRegex || null,
+      source_account_regex: formSourceAccountRegex || null,
+      time_regex: formTimeRegex || null,
+      time_format: formTimeFormat || 'HH:mm:ss',
+      active: true,
+      entity_email_patterns: formEntityEmailPattern ? [formEntityEmailPattern] : [],
+    };
+  }, [
+    editingTemplateId,
+    formName,
+    formSenderPattern,
+    formSubjectPattern,
+    formAmountRegex,
+    formMerchantRegex,
+    formDateRegex,
+    formDateFormat,
+    formEntityName,
+    formEntityId,
+    formMatchPattern,
+    formExpenseType,
+    formCurrency,
+    formCurrencyRegex,
+    formSourceAccountRegex,
+    formTimeRegex,
+    formTimeFormat,
+    formEntityEmailPattern,
+  ]);
+
+  // Motor de evaluación unificado para la plantilla activa contra el correo seleccionado o muestra
+  const activeFormEvaluation = useMemo<SingleTemplateEvaluation | null>(() => {
+    const emailToTest = selectedEmail
+      ? {
+          sender: selectedEmail.sender,
+          subject: selectedEmail.subject,
+          body: selectedEmail.body,
+          plainBody: selectedEmail.plainBody,
+          snippet: selectedEmail.snippet,
+        }
+      : (sampleSender || sampleSubject || sampleBody)
+      ? {
+          sender: sampleSender,
+          subject: sampleSubject,
+          body: sampleBody,
+          plainBody: sampleBody,
+          snippet: sampleBody.slice(0, 160),
+        }
+      : null;
+
+    if (!emailToTest) return null;
+
+    return evaluateTemplateAgainstEmail(activeFormTemplate, emailToTest, entities);
+  }, [activeFormTemplate, selectedEmail, sampleSender, sampleSubject, sampleBody, entities]);
+
+  // Copiar mini-prompt de corrección para IA con los fallos exactos detectados
+  const handleCopyCorrectionPrompt = useCallback(async () => {
+    const emailToTest = selectedEmail
+      ? {
+          sender: selectedEmail.sender || '',
+          subject: selectedEmail.subject || '',
+          body: selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '',
+        }
+      : {
+          sender: sampleSender || '',
+          subject: sampleSubject || '',
+          body: sampleBody || '',
+        };
+
+    if (!emailToTest.sender && !emailToTest.subject && !emailToTest.body) return;
+    if (!activeFormEvaluation) return;
+
+    const cleanBody = cleanEmailBody(emailToTest.body);
+    const promptText = buildCorrectionPrompt(
+      emailToTest.sender,
+      emailToTest.subject,
+      cleanBody,
+      {
+        template: {
+          name: formName || 'Plantilla',
+          entity_name: formEntityName || null,
+          entity_email_pattern: formEntityEmailPattern || null,
+          sender_pattern: formSenderPattern || null,
+          subject_pattern: formSubjectPattern || null,
+          match_pattern: formMatchPattern || null,
+          amount_regex: formAmountRegex || null,
+          merchant_regex: formMerchantRegex || null,
+          date_regex: formDateRegex || null,
+          date_format: formDateFormat || null,
+          time_regex: formTimeRegex || null,
+          time_format: formTimeFormat || null,
+          currency_regex: formCurrencyRegex || null,
+          default_currency: formCurrency || 'COP',
+          source_account_regex: formSourceAccountRegex || null,
+          expense_type: formExpenseType || null,
+        },
+        failures: activeFormEvaluation.failureReasons,
+      }
+    );
+
+    try {
+      await navigator.clipboard.writeText(promptText);
+      setCopiedCorrectionPrompt(true);
+      setTimeout(() => setCopiedCorrectionPrompt(false), 3000);
+    } catch {
+      setAiError('No se pudo copiar automáticamente. Copia el texto manualmente.');
+    }
+  }, [
+    selectedEmail,
+    sampleSender,
+    sampleSubject,
+    sampleBody,
+    activeFormEvaluation,
+    formName,
+    formEntityName,
+    formEntityEmailPattern,
+    formSenderPattern,
+    formSubjectPattern,
+    formMatchPattern,
+    formAmountRegex,
+    formMerchantRegex,
+    formDateRegex,
+    formDateFormat,
+    formTimeRegex,
+    formTimeFormat,
+    formCurrencyRegex,
+    formCurrency,
+    formSourceAccountRegex,
+    formExpenseType,
+  ]);
+
+  // Live Extraction Evaluator backward-compatibility
   const liveExtraction = useMemo(() => {
-    const textToTest = cleanEmailBody(sampleBody);
+    const textToTest = cleanEmailBody(sampleBody || selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '');
 
     let subjectMatched = true;
-    if (formSubjectPattern && formSubjectPattern.trim() && sampleSubject) {
+    const subj = sampleSubject || selectedEmail?.subject || '';
+    if (formSubjectPattern && formSubjectPattern.trim() && subj) {
       try {
-        subjectMatched = new RegExp(formSubjectPattern, 'i').test(sampleSubject);
+        const sanitized = sanitizeRegexPattern(formSubjectPattern);
+        subjectMatched = sanitized ? new RegExp(sanitized, 'i').test(subj) : false;
       } catch {
         subjectMatched = false;
       }
@@ -523,8 +687,10 @@ export function EmailTemplatesManagerView({
     let matchPatternFound = true;
     if (formMatchPattern && formMatchPattern.trim() && textToTest) {
       try {
-        matchPatternFound = new RegExp(formMatchPattern, 'i').test(textToTest) ||
-          new RegExp(formMatchPattern, 'i').test(sampleSubject);
+        const sanitized = sanitizeRegexPattern(formMatchPattern);
+        matchPatternFound = sanitized
+          ? (new RegExp(sanitized, 'i').test(textToTest) || new RegExp(sanitized, 'i').test(subj))
+          : false;
       } catch {
         matchPatternFound = false;
       }
@@ -543,6 +709,7 @@ export function EmailTemplatesManagerView({
   }, [
     sampleBody,
     sampleSubject,
+    selectedEmail,
     formAmountRegex,
     formMerchantRegex,
     formSourceAccountRegex,
@@ -589,7 +756,8 @@ export function EmailTemplatesManagerView({
       let subjectResult: { value: string | null; matched: boolean } | null = null;
       if (tmpl.subject_pattern && tmpl.subject_pattern.trim()) {
         try {
-          subjectResult = { value: subjectText, matched: new RegExp(tmpl.subject_pattern, 'i').test(subjectText) };
+          const sanitized = sanitizeRegexPattern(tmpl.subject_pattern);
+          subjectResult = { value: subjectText, matched: sanitized ? new RegExp(sanitized, 'i').test(subjectText) : false };
         } catch {
           subjectResult = { value: subjectText, matched: false };
         }
@@ -598,7 +766,8 @@ export function EmailTemplatesManagerView({
       let senderResult: { value: string | null; matched: boolean } | null = null;
       if (tmpl.sender_pattern && tmpl.sender_pattern.trim()) {
         try {
-          senderResult = { value: senderText, matched: new RegExp(tmpl.sender_pattern, 'i').test(senderText) };
+          const sanitized = sanitizeRegexPattern(tmpl.sender_pattern);
+          senderResult = { value: senderText, matched: sanitized ? new RegExp(sanitized, 'i').test(senderText) : false };
         } catch {
           senderResult = { value: senderText, matched: false };
         }
@@ -607,8 +776,11 @@ export function EmailTemplatesManagerView({
       let matchPatternResult: { value: string | null; matched: boolean } | null = null;
       if (tmpl.match_pattern && tmpl.match_pattern.trim()) {
         try {
-          const re = new RegExp(tmpl.match_pattern, 'i');
-          matchPatternResult = { value: tmpl.match_pattern, matched: re.test(bodyText) || re.test(subjectText) };
+          const sanitized = sanitizeRegexPattern(tmpl.match_pattern);
+          matchPatternResult = {
+            value: tmpl.match_pattern,
+            matched: sanitized ? (new RegExp(sanitized, 'i').test(bodyText) || new RegExp(sanitized, 'i').test(subjectText)) : false,
+          };
         } catch {
           matchPatternResult = { value: tmpl.match_pattern, matched: false };
         }
@@ -751,58 +923,10 @@ export function EmailTemplatesManagerView({
 
     const d = result.data;
     setFormEntityEmailPattern(d.entity_email_pattern || '');
-    const previewId = '__ai_preview_template__';
     const matchedEntity = d.entity_name
       ? entities.find((e) => e.name.toLowerCase().trim() === d.entity_name!.toLowerCase().trim())
       : null;
 
-    const previewEntity: CatalogEntity | null = d.entity_name && !matchedEntity
-      ? {
-          id: '__ai_preview_entity__',
-          name: d.entity_name,
-          patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
-        }
-      : null;
-
-    const previewTemplate: CatalogTemplate = {
-      id: previewId,
-      name: d.name || `${d.entity_name || 'Entidad'} - Plantilla`,
-      sender_pattern: d.sender_pattern,
-      subject_pattern: d.subject_pattern,
-      amount_regex: d.amount_regex,
-      merchant_regex: d.merchant_regex,
-      date_regex: d.date_regex,
-      date_format: d.date_format,
-      entity_name: d.entity_name,
-      entity_id: matchedEntity?.id || previewEntity?.id || null,
-      match_pattern: d.match_pattern,
-      expense_type_id: null,
-      expense_type_label: d.expense_type,
-      default_currency: d.default_currency,
-      currency_regex: d.currency_regex,
-      source_account_regex: d.source_account_regex,
-      time_regex: d.time_regex,
-      time_format: d.time_format,
-      active: true,
-      entity_email_patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
-    };
-
-    const previewTemplates = [
-      ...templates.filter((t) => t.id !== previewId),
-      previewTemplate,
-    ];
-    const previewEntities = previewEntity ? [...entities, previewEntity] : entities;
-    const previewDiagnosis = diagnoseEmailMatching(
-      selectedEmail?.sender || sampleSender || '',
-      selectedEmail?.subject || sampleSubject || '',
-      cleanEmailBody(selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || sampleBody || ''),
-      previewTemplates,
-      previewEntities,
-    );
-
-    setTemplateTestFilter('all');
-    setAiPreviewDiagnosis(previewDiagnosis);
-    setAiPreviewEmailId(selectedEmail?.id || null);
     setFormName(d.name || '');
     if (d.entity_name) {
       setFormEntityName(d.entity_name);
@@ -829,26 +953,67 @@ export function EmailTemplatesManagerView({
     setFormTimeRegex(d.time_regex || '');
     setFormTimeFormat(d.time_format || '');
     setFormCurrencyRegex(d.currency_regex || '');
-    setFormCurrency(d.default_currency || '');
+    setFormCurrency(d.default_currency || 'COP');
+    setFormExpenseType(d.expense_type || 'compra');
 
     setEditingTemplateId(null);
     setIsFormVisible(true);
     setPastedAIResponse('');
 
-    const previewReport = previewDiagnosis.reports.find((r) => r.template.id === previewId);
-    if (
-      previewReport?.level1Passed &&
-      previewReport?.level2Passed &&
-      previewReport?.level3Passed &&
-      previewDiagnosis.winner?.template.id === previewId &&
-      previewDiagnosis.winner.fields.amount.success
-    ) {
-      setAiSuccess('JSON válido. La plantilla pasó entidad → asunto → desempate → extracción de monto.');
+    // Evaluación directa e instantánea usando el motor unificado
+    const candidateTemplate: CatalogTemplate = {
+      id: '__ai_pasted_template__',
+      name: d.name || 'Nueva Plantilla',
+      sender_pattern: d.sender_pattern,
+      subject_pattern: d.subject_pattern,
+      amount_regex: d.amount_regex,
+      merchant_regex: d.merchant_regex,
+      date_regex: d.date_regex,
+      date_format: d.date_format,
+      entity_name: d.entity_name,
+      entity_id: matchedEntity?.id || null,
+      match_pattern: d.match_pattern,
+      expense_type_id: null,
+      expense_type_label: d.expense_type,
+      default_currency: d.default_currency || 'COP',
+      currency_regex: d.currency_regex,
+      source_account_regex: d.source_account_regex,
+      time_regex: d.time_regex,
+      time_format: d.time_format,
+      active: true,
+      entity_email_patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
+    };
+
+    const emailToTest = selectedEmail
+      ? {
+          sender: selectedEmail.sender,
+          subject: selectedEmail.subject,
+          body: selectedEmail.body,
+          plainBody: selectedEmail.plainBody,
+          snippet: selectedEmail.snippet,
+        }
+      : (sampleSender || sampleSubject || sampleBody)
+      ? {
+          sender: sampleSender,
+          subject: sampleSubject,
+          body: sampleBody,
+          plainBody: sampleBody,
+          snippet: sampleBody.slice(0, 160),
+        }
+      : null;
+
+    if (emailToTest) {
+      const evalResult = evaluateTemplateAgainstEmail(candidateTemplate, emailToTest, entities);
+      if (evalResult.overallPassed) {
+        setAiSuccess('JSON verificado con éxito: pasó los 4 niveles (Entidad, Asunto, Desempate y Monto).');
+      } else {
+        setAiError(
+          evalResult.failureReasons[0] ||
+          'La plantilla requiere ajustes en las expresiones regulares para coincidir completamente.'
+        );
+      }
     } else {
-      setAiError(
-        previewReport?.failureReason ||
-        'La plantilla no pasó la prueba completa. Revisa el diagnóstico detallado.',
-      );
+      setAiSuccess('JSON cargado correctamente en el formulario.');
     }
   };
 
@@ -1935,6 +2100,24 @@ export function EmailTemplatesManagerView({
                                       <span className="truncate">{detail.date.matched ? detail.date.value : 'sin captura'}</span>
                                     </div>
                                   )}
+                                  {report.template.time_regex && detail?.time && (
+                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.time.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                      {detail.time.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
+                                      <span className="font-semibold shrink-0">Hora</span>
+                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.time_regex}</code>
+                                      <span className="text-zinc-400 shrink-0">→</span>
+                                      <span className="truncate">{detail.time.matched ? detail.time.value : 'sin captura'}</span>
+                                    </div>
+                                  )}
+                                  {report.template.currency_regex && detail?.currency && (
+                                    <div className={`flex items-center gap-1.5 text-[11px] ${detail.currency.matched ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                      {detail.currency.matched ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-zinc-400 shrink-0" />}
+                                      <span className="font-semibold shrink-0">Moneda</span>
+                                      <code className="bg-white/70 border border-zinc-200 rounded px-1 py-0.5 font-mono truncate">{report.template.currency_regex}</code>
+                                      <span className="text-zinc-400 shrink-0">→</span>
+                                      <span className="truncate">{detail.currency.matched ? detail.currency.value : 'sin captura'}</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1982,37 +2165,170 @@ export function EmailTemplatesManagerView({
                       </div>
                     )}
 
-                    {aiPreviewDiagnosis && (
-                      <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900">Prueba completa del JSON IA</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${aiPreviewDiagnosis.winner?.template.id === '__ai_preview_template__' && aiPreviewDiagnosis.winner.fields.amount.success ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                            {aiPreviewDiagnosis.winner?.template.id === '__ai_preview_template__' && aiPreviewDiagnosis.winner.fields.amount.success ? 'Pasa' : 'Falla'}
-                          </span>
+                    {/* Prueba unificada en vivo de la plantilla contra el correo actual */}
+                    {activeFormEvaluation && (
+                      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 p-3.5 space-y-3 shadow-md">
+                        {/* Cabecera: Estado de validación + Botón de Mini-Prompt */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-zinc-800">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${activeFormEvaluation.overallPassed ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+                              Prueba en vivo de la plantilla
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              activeFormEvaluation.overallPassed
+                                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                                : 'bg-rose-950/60 text-rose-300 border-rose-700/60'
+                            }`}>
+                              {activeFormEvaluation.overallPassed ? 'Pasa la prueba' : 'Requiere corrección'}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleCopyCorrectionPrompt}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                              copiedCorrectionPrompt
+                                ? 'bg-emerald-600 text-white border-emerald-500'
+                                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700 hover:border-zinc-600'
+                            }`}
+                            title="Copia al portapapeles un mini-prompt con los errores exactos para que la IA los corrija"
+                          >
+                            {copiedCorrectionPrompt ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-white" />
+                                <span>¡Prompt copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Copiar mini-prompt para IA</span>
+                              </>
+                            )}
+                          </button>
                         </div>
-                        {(() => {
-                          const r = aiPreviewDiagnosis.reports.find((x) => x.template.id === '__ai_preview_template__');
-                          const ext = aiPreviewDiagnosis.extractions.find((x) => x.template.id === '__ai_preview_template__');
-                          const steps = [
-                            { label: '1. Entidad', ok: r?.level1Passed, reason: !r?.level1Passed ? r?.failureReason : undefined },
-                            { label: '2. Asunto', ok: r?.level2Passed, reason: r?.level1Passed && !r?.level2Passed ? r?.failureReason : undefined },
-                            { label: '3. Desempate', ok: r?.level3Passed, reason: r?.level2Passed && !r?.level3Passed ? r?.failureReason : undefined },
-                            { label: '4. Extracción', ok: Boolean(ext?.fields.amount.success), reason: ext && !ext.fields.amount.success ? ext.fields.amount.reason : undefined },
-                          ];
-                          return (
-                            <div className="space-y-1.5">
-                              {steps.map((step) => (
-                                <div key={step.label} className="text-[11px]">
-                                  <div className={`flex items-center gap-1.5 ${step.ok ? 'text-emerald-800' : 'text-rose-800'}`}>
-                                    {step.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                                    <span className="font-semibold">{step.label}</span>
-                                  </div>
-                                  {!step.ok && step.reason && <p className="ml-4 mt-0.5 text-rose-700">{step.reason}</p>}
-                                </div>
-                              ))}
+
+                        {/* Los 4 Pasos del Motor de Emparejamiento */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                          {/* Paso 1: Entidad */}
+                          <div className={`p-2 rounded-xl border ${
+                            activeFormEvaluation.level1.passed
+                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
+                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
+                          }`}>
+                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
+                              <span className="text-zinc-400">1. Entidad</span>
+                              {activeFormEvaluation.level1.passed ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 text-rose-400" />
+                              )}
                             </div>
-                          );
-                        })()}
+                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level1.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
+                              {activeFormEvaluation.level1.passed
+                                ? (activeFormEvaluation.level1.matchedPattern ? `/${activeFormEvaluation.level1.matchedPattern}/i` : activeFormEvaluation.level1.entityName || 'Coincide')
+                                : 'No coincide'}
+                            </p>
+                            {!activeFormEvaluation.level1.passed && activeFormEvaluation.level1.reason && (
+                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level1.reason}</p>
+                            )}
+                          </div>
+
+                          {/* Paso 2: Asunto */}
+                          <div className={`p-2 rounded-xl border ${
+                            activeFormEvaluation.level2.passed
+                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
+                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
+                          }`}>
+                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
+                              <span className="text-zinc-400">2. Asunto</span>
+                              {activeFormEvaluation.level2.passed ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 text-rose-400" />
+                              )}
+                            </div>
+                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level2.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
+                              {activeFormEvaluation.level2.passed
+                                ? (activeFormEvaluation.level2.subjectPattern ? `/${activeFormEvaluation.level2.subjectPattern}/i` : 'Sin filtro (pasa)')
+                                : 'No coincide'}
+                            </p>
+                            {!activeFormEvaluation.level2.passed && activeFormEvaluation.level2.reason && (
+                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level2.reason}</p>
+                            )}
+                          </div>
+
+                          {/* Paso 3: Desempate */}
+                          <div className={`p-2 rounded-xl border ${
+                            activeFormEvaluation.level3.passed
+                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
+                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
+                          }`}>
+                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
+                              <span className="text-zinc-400">3. Desempate</span>
+                              {activeFormEvaluation.level3.passed ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 text-rose-400" />
+                              )}
+                            </div>
+                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level3.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
+                              {activeFormEvaluation.level3.passed
+                                ? (activeFormEvaluation.level3.matchPattern ? `/${activeFormEvaluation.level3.matchPattern}/i` : 'No requerido')
+                                : 'No coincide'}
+                            </p>
+                            {!activeFormEvaluation.level3.passed && activeFormEvaluation.level3.reason && (
+                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level3.reason}</p>
+                            )}
+                          </div>
+
+                          {/* Paso 4: Extracción de Monto */}
+                          <div className={`p-2 rounded-xl border ${
+                            activeFormEvaluation.level4.passed
+                              ? 'bg-emerald-950/30 border-emerald-800/40 text-zinc-200'
+                              : 'bg-rose-950/30 border-rose-800/40 text-zinc-200'
+                          }`}>
+                            <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
+                              <span className="text-zinc-400">4. Monto (Obligatorio)</span>
+                              {activeFormEvaluation.level4.passed ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 text-rose-400" />
+                              )}
+                            </div>
+                            <p className={`text-xs font-bold truncate ${activeFormEvaluation.level4.passed ? 'text-emerald-300' : 'text-rose-300'}`}>
+                              {activeFormEvaluation.level4.passed
+                                ? `$${formatCurrency(activeFormEvaluation.level4.extractedAmount)}`
+                                : 'Sin captura de monto'}
+                            </p>
+                            {!activeFormEvaluation.level4.passed && activeFormEvaluation.level4.fields.amount.reason && (
+                              <p className="text-[10px] text-rose-300/80 mt-0.5 line-clamp-2">{activeFormEvaluation.level4.fields.amount.reason}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Listado de fallos específicos si no pasó */}
+                        {activeFormEvaluation.failureReasons.length > 0 && (
+                          <div className="p-2.5 bg-rose-950/40 border border-rose-800/50 rounded-xl space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-rose-300">
+                                Errores detectados ({activeFormEvaluation.failureReasons.length}):
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleCopyCorrectionPrompt}
+                                className="text-[11px] text-rose-200 hover:text-white underline font-semibold cursor-pointer"
+                              >
+                                Copiar prompt con estos fallos
+                              </button>
+                            </div>
+                            <ul className="text-[11px] text-rose-200/90 space-y-0.5 list-disc list-inside">
+                              {activeFormEvaluation.failureReasons.map((reason, idx) => (
+                                <li key={idx} className="leading-snug">{reason}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -2022,85 +2338,6 @@ export function EmailTemplatesManagerView({
                         <span className="whitespace-pre-line">{aiError}</span>
                       </div>
                     )}
-
-                    {/* Extracción en vivo: qué captura cada regex sobre este correo, ahora mismo */}
-                    <div className="bg-zinc-900 text-zinc-100 rounded-xl p-3 space-y-2.5 border border-zinc-800">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                          Prueba en vivo contra este correo
-                        </span>
-                        <span className="text-[10px] text-zinc-500">Monto · Comercio · Cuenta · Fecha · Hora · Moneda</span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                        {[
-                          { label: 'Monto', data: liveExtraction.amount, prefix: '$' },
-                          { label: 'Comercio', data: liveExtraction.merchant },
-                          { label: 'Cuenta', data: liveExtraction.sourceAccount },
-                          { label: 'Fecha', data: liveExtraction.date },
-                          { label: 'Hora', data: liveExtraction.time },
-                          { label: 'Moneda', data: liveExtraction.currency },
-                        ].map((field) => (
-                          <div
-                            key={field.label}
-                            className={`p-2 rounded-lg border ${
-                              field.data.matched
-                                ? 'bg-emerald-950/40 border-emerald-700/50'
-                                : 'bg-zinc-800/60 border-zinc-700/50'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-zinc-400 font-medium">{field.label}</span>
-                              {field.data.matched ? (
-                                <Check className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <X className="w-3 h-3 text-zinc-600" />
-                              )}
-                            </div>
-                            <span
-                              className={`text-xs font-bold font-mono truncate block mt-0.5 ${
-                                field.data.error ? 'text-rose-300' : field.data.matched ? 'text-emerald-300' : 'text-zinc-600'
-                              }`}
-                            >
-                              {field.data.error
-                                ? `Regex inválida: ${field.data.error}`
-                                : field.data.matched
-                                ? `${field.prefix || ''}${field.data.value}`
-                                : 'Sin captura'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {(formSubjectPattern || formMatchPattern) && (
-                        <div className="flex items-center gap-2 pt-0.5">
-                          {formSubjectPattern && (
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                                liveExtraction.subjectMatched
-                                  ? 'text-emerald-300 bg-emerald-950/40 border-emerald-700/50'
-                                  : 'text-rose-300 bg-rose-950/40 border-rose-700/50'
-                              }`}
-                            >
-                              {liveExtraction.subjectMatched ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                              <span>Asunto</span>
-                            </span>
-                          )}
-                          {formMatchPattern && (
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                                liveExtraction.matchPatternFound
-                                  ? 'text-emerald-300 bg-emerald-950/40 border-emerald-700/50'
-                                  : 'text-rose-300 bg-rose-950/40 border-rose-700/50'
-                              }`}
-                            >
-                              {liveExtraction.matchPatternFound ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                              <span>Desempate</span>
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
 
                     {saveSuccessMessage && (
                       <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-800 text-xs font-medium">

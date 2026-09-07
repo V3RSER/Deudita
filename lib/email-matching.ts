@@ -105,6 +105,49 @@ export interface DiagnosisTemplateReport {
   isWinner: boolean;
 }
 
+export interface SingleTemplateEvaluation {
+  template: CatalogTemplate;
+  level1: {
+    passed: boolean;
+    entityName: string;
+    entityPatterns: string[];
+    matchedPattern?: string;
+    matchedOn?: 'sender' | 'body';
+    reason?: string;
+  };
+  level2: {
+    passed: boolean;
+    subjectPattern: string | null;
+    matchedOn?: 'subject' | 'body';
+    reason?: string;
+  };
+  level3: {
+    passed: boolean;
+    matchPattern: string | null;
+    matchedOn?: 'body' | 'subject';
+    reason?: string;
+  };
+  level4: {
+    passed: boolean;
+    fields: {
+      amount: ExtractedField;
+      merchant: ExtractedField;
+      date: ExtractedField;
+      time: ExtractedField;
+      currency: ExtractedField;
+      source_account: ExtractedField;
+    };
+    extractedAmount: number | null;
+    extractedMerchant: string | null;
+    extractedDate: string | null;
+    extractedTime: string | null;
+    extractedCurrency: string | null;
+    extractedSourceAccount: string | null;
+  };
+  overallPassed: boolean;
+  failureReasons: string[];
+}
+
 export interface DiagnosisResult {
   cleanedBody: string;
   matched: boolean;
@@ -197,10 +240,12 @@ function extractWithCaptureGroup(
       };
     }
 
-    if (match.length > 1 && match[1] !== undefined) {
+    // Look for first defined capturing group (supports alternations like (group1)|(group2))
+    const firstGroup = match.slice(1).find((g) => g !== undefined);
+    if (firstGroup !== undefined) {
       return {
         success: true,
-        rawExtracted: match[1].trim(),
+        rawExtracted: firstGroup.trim(),
         hasCaptureGroup: true,
       };
     }
@@ -220,6 +265,334 @@ function extractWithCaptureGroup(
       hasCaptureGroup: false,
     };
   }
+}
+
+/**
+ * Unified evaluation of a single template against an email.
+ * Applies the EXACT same 4-level logic whether the template is an active draft/new template
+ * or an already created template saved in the database.
+ */
+export function evaluateTemplateAgainstEmail(
+  template: CatalogTemplate,
+  email: { sender: string; subject: string; body?: string; plainBody?: string; snippet?: string },
+  entities: CatalogEntity[] = []
+): SingleTemplateEvaluation {
+  const cleanBody = cleanEmailBody(email.body || email.plainBody || email.snippet || '');
+  const sender = (email.sender || '').trim();
+  const subject = (email.subject || '').trim();
+
+  const failureReasons: string[] = [];
+
+  // --- Level 1: Entidad ---
+  let level1Passed = false;
+  let l1MatchedPattern: string | undefined;
+  let l1MatchedOn: 'sender' | 'body' | undefined;
+  let l1Reason: string | undefined;
+
+  const matchedEntity = template.entity_id
+    ? entities.find((e) => e.id === template.entity_id)
+    : template.entity_name
+    ? entities.find((e) => e.name.toLowerCase().trim() === template.entity_name!.toLowerCase().trim())
+    : null;
+
+  const entityPatterns = [
+    ...(template.entity_email_patterns || []),
+    ...(matchedEntity?.patterns || []),
+  ].filter(Boolean);
+
+  const entityName = template.entity_name || matchedEntity?.name || 'Entidad';
+
+  if (entityPatterns.length > 0) {
+    for (const pat of entityPatterns) {
+      const sanitized = sanitizeRegexPattern(pat);
+      if (!sanitized) continue;
+      try {
+        const re = new RegExp(sanitized, 'i');
+        if (re.test(sender)) {
+          level1Passed = true;
+          l1MatchedPattern = pat;
+          l1MatchedOn = 'sender';
+          break;
+        }
+        if (re.test(cleanBody)) {
+          level1Passed = true;
+          l1MatchedPattern = pat;
+          l1MatchedOn = 'body';
+          break;
+        }
+      } catch {
+        // Invalid regex in pattern list
+      }
+    }
+
+    if (!level1Passed && template.sender_pattern) {
+      const sanitizedSender = sanitizeRegexPattern(template.sender_pattern);
+      if (sanitizedSender) {
+        try {
+          const re = new RegExp(sanitizedSender, 'i');
+          if (re.test(sender)) {
+            level1Passed = true;
+            l1MatchedPattern = template.sender_pattern;
+            l1MatchedOn = 'sender';
+          } else if (re.test(cleanBody)) {
+            level1Passed = true;
+            l1MatchedPattern = template.sender_pattern;
+            l1MatchedOn = 'body';
+          }
+        } catch {}
+      }
+    }
+
+    if (!level1Passed) {
+      l1Reason = `El remitente ("${sender || 'vacío'}") o cuerpo no coincide con ningún patrón de la entidad "${entityName}" (${entityPatterns.map((p) => `/${p}/i`).join(', ')}).`;
+      failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+    }
+  } else if (template.sender_pattern) {
+    const sanitized = sanitizeRegexPattern(template.sender_pattern);
+    if (sanitized) {
+      try {
+        const re = new RegExp(sanitized, 'i');
+        if (re.test(sender)) {
+          level1Passed = true;
+          l1MatchedPattern = template.sender_pattern;
+          l1MatchedOn = 'sender';
+        } else if (re.test(cleanBody)) {
+          level1Passed = true;
+          l1MatchedPattern = template.sender_pattern;
+          l1MatchedOn = 'body';
+        } else {
+          l1Reason = `El remitente o cuerpo no coincide con el patrón de remitente /${sanitized}/i.`;
+          failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+        }
+      } catch (err: unknown) {
+        l1Reason = `Error en patrón de remitente /${sanitized}/: ${err instanceof Error ? err.message : String(err)}`;
+        failureReasons.push(`Paso 1 (Entidad): ${l1Reason}`);
+      }
+    } else {
+      level1Passed = true;
+    }
+  } else {
+    // Si no tiene patrones configurados, pasa nivel 1
+    level1Passed = true;
+  }
+
+  // --- Level 2: Asunto ---
+  let level2Passed = false;
+  let l2MatchedOn: 'subject' | 'body' | undefined;
+  let l2Reason: string | undefined;
+
+  const sanitizedSubject = sanitizeRegexPattern(template.subject_pattern);
+  if (sanitizedSubject) {
+    try {
+      const re = new RegExp(sanitizedSubject, 'i');
+      if (re.test(subject)) {
+        level2Passed = true;
+        l2MatchedOn = 'subject';
+      } else if (re.test(cleanBody)) {
+        level2Passed = true;
+        l2MatchedOn = 'body';
+      } else {
+        l2Reason = `El asunto ("${subject || 'vacío'}") no coincide con el patrón /${sanitizedSubject}/i.`;
+        failureReasons.push(`Paso 2 (Asunto): ${l2Reason}`);
+      }
+    } catch (err: unknown) {
+      l2Reason = `Error en patrón de asunto /${sanitizedSubject}/: ${err instanceof Error ? err.message : String(err)}`;
+      failureReasons.push(`Paso 2 (Asunto): ${l2Reason}`);
+    }
+  } else {
+    level2Passed = true;
+  }
+
+  // --- Level 3: Desempate (match_pattern) ---
+  let level3Passed = false;
+  let l3MatchedOn: 'body' | 'subject' | undefined;
+  let l3Reason: string | undefined;
+
+  const sanitizedMatch = sanitizeRegexPattern(template.match_pattern);
+  if (sanitizedMatch) {
+    try {
+      const re = new RegExp(sanitizedMatch, 'i');
+      if (re.test(cleanBody)) {
+        level3Passed = true;
+        l3MatchedOn = 'body';
+      } else if (re.test(subject)) {
+        level3Passed = true;
+        l3MatchedOn = 'subject';
+      } else {
+        l3Reason = `El patrón de desempate /${sanitizedMatch}/i no fue encontrado en el cuerpo ni en el asunto del correo.`;
+        failureReasons.push(`Paso 3 (Desempate): ${l3Reason}`);
+      }
+    } catch (err: unknown) {
+      l3Reason = `Error en patrón de desempate /${sanitizedMatch}/: ${err instanceof Error ? err.message : String(err)}`;
+      failureReasons.push(`Paso 3 (Desempate): ${l3Reason}`);
+    }
+  } else {
+    level3Passed = true;
+  }
+
+  // --- Level 4: Extracción ---
+  // Monto (obligatorio)
+  let amountRes = extractWithCaptureGroup(cleanBody, template.amount_regex, 'Monto');
+  if (!amountRes.success && subject) {
+    const subjectAmountRes = extractWithCaptureGroup(subject, template.amount_regex, 'Monto');
+    if (subjectAmountRes.success) amountRes = subjectAmountRes;
+  }
+  const parsedAmount = amountRes.success ? parseAmountValue(amountRes.rawExtracted) : null;
+  const amountSuccess = Boolean(amountRes.success && parsedAmount !== null);
+  if (!amountSuccess) {
+    const r = !amountRes.success
+      ? (amountRes.reason || `No coincidió con el patrón /${template.amount_regex}/i`)
+      : 'No se pudo convertir el monto extraído a un número válido';
+    failureReasons.push(`Paso 4 (Monto): ${r}`);
+  }
+
+  // Comercio (opcional)
+  let merchantRes = extractWithCaptureGroup(cleanBody, template.merchant_regex, 'Comercio');
+  if (!merchantRes.success && subject) {
+    const subjectMerchantRes = extractWithCaptureGroup(subject, template.merchant_regex, 'Comercio');
+    if (subjectMerchantRes.success) merchantRes = subjectMerchantRes;
+  }
+  if (template.merchant_regex && !merchantRes.success) {
+    failureReasons.push(`Paso 4 (Comercio): ${merchantRes.reason || 'Sin captura'}`);
+  }
+
+  // Fecha (opcional)
+  let dateRes = extractWithCaptureGroup(cleanBody, template.date_regex, 'Fecha');
+  if (!dateRes.success && subject) {
+    const subjectDateRes = extractWithCaptureGroup(subject, template.date_regex, 'Fecha');
+    if (subjectDateRes.success) dateRes = subjectDateRes;
+  }
+  if (template.date_regex && !dateRes.success) {
+    failureReasons.push(`Paso 4 (Fecha): ${dateRes.reason || 'Sin captura'}`);
+  }
+
+  // Hora (opcional)
+  let timeRes = extractWithCaptureGroup(cleanBody, template.time_regex, 'Hora');
+  if (!timeRes.success && subject) {
+    const subjectTimeRes = extractWithCaptureGroup(subject, template.time_regex, 'Hora');
+    if (subjectTimeRes.success) timeRes = subjectTimeRes;
+  }
+  if (template.time_regex && !timeRes.success) {
+    failureReasons.push(`Paso 4 (Hora): ${timeRes.reason || 'Sin captura'}`);
+  }
+
+  // Moneda (opcional)
+  let currencyRes = extractWithCaptureGroup(cleanBody, template.currency_regex, 'Moneda');
+  if (!currencyRes.success && subject) {
+    const subjectCurrRes = extractWithCaptureGroup(subject, template.currency_regex, 'Moneda');
+    if (subjectCurrRes.success) currencyRes = subjectCurrRes;
+  }
+  const currencySuccess = currencyRes.success || Boolean(template.default_currency);
+
+  // Cuenta (opcional)
+  let accountRes = extractWithCaptureGroup(cleanBody, template.source_account_regex, 'Cuenta de origen');
+  if (!accountRes.success && subject) {
+    const subjectAccRes = extractWithCaptureGroup(subject, template.source_account_regex, 'Cuenta de origen');
+    if (subjectAccRes.success) accountRes = subjectAccRes;
+  }
+  if (template.source_account_regex && !accountRes.success) {
+    failureReasons.push(`Paso 4 (Cuenta origen): ${accountRes.reason || 'Sin captura'}`);
+  }
+
+  const level4Passed = amountSuccess;
+  const overallPassed = level1Passed && level2Passed && level3Passed && level4Passed;
+
+  return {
+    template,
+    level1: {
+      passed: level1Passed,
+      entityName,
+      entityPatterns,
+      matchedPattern: l1MatchedPattern,
+      matchedOn: l1MatchedOn,
+      reason: l1Reason,
+    },
+    level2: {
+      passed: level2Passed,
+      subjectPattern: template.subject_pattern,
+      matchedOn: l2MatchedOn,
+      reason: l2Reason,
+    },
+    level3: {
+      passed: level3Passed,
+      matchPattern: template.match_pattern,
+      matchedOn: l3MatchedOn,
+      reason: l3Reason,
+    },
+    level4: {
+      passed: level4Passed,
+      fields: {
+        amount: {
+          field: 'amount',
+          label: 'Monto',
+          pattern: template.amount_regex,
+          rawExtracted: amountRes.rawExtracted,
+          cleanedValue: parsedAmount,
+          success: amountSuccess,
+          reason: !amountRes.success ? amountRes.reason : parsedAmount === null ? 'No se pudo convertir a número' : undefined,
+          hasCaptureGroup: amountRes.hasCaptureGroup,
+        },
+        merchant: {
+          field: 'merchant',
+          label: 'Comercio / Destinatario',
+          pattern: template.merchant_regex,
+          rawExtracted: merchantRes.rawExtracted,
+          cleanedValue: merchantRes.rawExtracted,
+          success: merchantRes.success,
+          reason: merchantRes.reason,
+          hasCaptureGroup: merchantRes.hasCaptureGroup,
+        },
+        date: {
+          field: 'date',
+          label: 'Fecha',
+          pattern: template.date_regex,
+          rawExtracted: dateRes.rawExtracted,
+          cleanedValue: dateRes.rawExtracted,
+          success: dateRes.success,
+          reason: dateRes.reason,
+          hasCaptureGroup: dateRes.hasCaptureGroup,
+        },
+        time: {
+          field: 'time',
+          label: 'Hora',
+          pattern: template.time_regex,
+          rawExtracted: timeRes.rawExtracted,
+          cleanedValue: timeRes.rawExtracted,
+          success: timeRes.success,
+          reason: timeRes.reason,
+          hasCaptureGroup: timeRes.hasCaptureGroup,
+        },
+        currency: {
+          field: 'currency',
+          label: 'Moneda',
+          pattern: template.currency_regex,
+          rawExtracted: currencyRes.rawExtracted || template.default_currency || 'COP',
+          cleanedValue: currencyRes.rawExtracted || template.default_currency || 'COP',
+          success: currencySuccess,
+          reason: currencyRes.reason,
+          hasCaptureGroup: currencyRes.hasCaptureGroup,
+        },
+        source_account: {
+          field: 'source_account',
+          label: 'Cuenta / Tarjeta Origen',
+          pattern: template.source_account_regex,
+          rawExtracted: accountRes.rawExtracted,
+          cleanedValue: accountRes.rawExtracted,
+          success: accountRes.success,
+          reason: accountRes.reason,
+          hasCaptureGroup: accountRes.hasCaptureGroup,
+        },
+      },
+      extractedAmount: parsedAmount,
+      extractedMerchant: merchantRes.rawExtracted,
+      extractedDate: dateRes.rawExtracted,
+      extractedTime: timeRes.rawExtracted,
+      extractedCurrency: currencyRes.rawExtracted || template.default_currency || 'COP',
+      extractedSourceAccount: accountRes.rawExtracted,
+    },
+    overallPassed,
+    failureReasons,
+  };
 }
 
 /**

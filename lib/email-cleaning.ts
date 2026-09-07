@@ -173,24 +173,21 @@ export function buildTemplatePrompt(
     'No debe depender de nombres, comercios, importes, fechas, referencias ni otros datos transaccionales.',
     '2. No uses delimitadores /.../ ni flags dentro del valor.',
     '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
-    '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) y todos los demás grupos deben ser no capturantes.',
-    '5. amount_regex es obligatorio y debe capturar únicamente el importe, sin la etiqueta ni texto posterior.',
-    '6. merchant_regex: debe capturar el comercio, tienda, destinatario o beneficiario de la operación cuando esté presente. En transferencias, si no existe nombre de beneficiario pero sí una cuenta destino explícita, debe capturarse esa cuenta destino como identificador del destinatario. Si no existe ningún comercio, destinatario, beneficiario o cuenta destino identificable, merchant_regex debe ser null.',
-    '7. date_regex debe capturar únicamente la fecha y date_format debe indicar exactamente su formato.',
-    '7A. time_regex debe capturar únicamente la hora y time_format debe indicar exactamente su formato.',
-    "7B. currency_regex corresponde al tipo de moneda detectado en la notificación y debe coincidir con formato ISO_4217. Ojo: este ex un regex para extraer la informaicón dinámica, no un valor fijo.",
-    '8. time_regex, currency_regex y source_account_regex deben ser null cuando el dato correspondiente no esté presente en el correo.',
-    '9. sender_pattern debe identificar una señal estable del remitente institucional.',
-    'Debe representar la identidad del emisor, no datos transaccionales ni el contenido de la notificación.',
-    '10. Los patrones deben generalizar variaciones de instancia sin borrar diferencias que definan otra plantilla.',
+    '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) alrededor del valor a extraer. Si usas alternaciones como (val1)|(val2), asegúrate de que capture el valor.',
+    '5. amount_regex es OBLIGATORIO y debe capturar únicamente el importe numérico (ej: "50.000,00" o "120500"), sin el signo de moneda ni etiquetas.',
+    '6. merchant_regex: captura el comercio, tienda, destinatario o beneficiario de la operación cuando esté presente. En transferencias, si no existe nombre de beneficiario pero sí una cuenta destino explícita, debe capturarse esa cuenta destino. Si no existe ningún comercio, destinatario ni beneficiario identificable, merchant_regex debe ser null.',
+    '7. date_regex debe capturar únicamente la fecha y date_format debe indicar exactamente su formato (ej: DD/MM/YYYY, YYYY-MM-DD, etc.).',
+    '7A. time_regex: Si el correo tiene hora de transacción (ej: "14:35", "02:35 p. m.", "Hora: 14:35:00", "a las 14:35"), usa un patrón tolerante a formato 12h/24h con segundos opcionales, capturando el valor exacto de la hora: ejemplo `(?:hora|hora\\s+transacción)?:?\\s*([0-2]?[0-9]:[0-5][0-9](?::[0-5][0-9])?(?:\\s*[ap]\\.?\\s*m\\.?)?)`. time_format debe coincidir con los tokens de fecha/hora (ej: "HH:mm", "HH:mm:ss", "hh:mm a", "hh:mm a.m."). Si la hora NO aparece en el correo, devuelve time_regex=null y time_format=null.',
+    '7B. currency_regex: Si el correo indica dinámicamente la moneda (ej: "COP", "USD", "$"), usa un regex con captura. Si la moneda es implícita, deja currency_regex=null y define default_currency="COP".',
+    '8. CRÍTICO PARA EXTRACCIÓN: Las expresiones regulares DEBEN coincidir contra el texto en CUERPO LIMPIO. Ten en cuenta que tras la limpieza de correos y tablas HTML, entre etiquetas y sus valores suele haber espacios o saltos de línea, NO siempre dos puntos ":". Usa separadores flexibles como `(?:\\s*:\\s*|\\s+)`.',
+    '9. Si un campo opcional (como hora, cuenta de origen, comercio) NO aparece en el texto del correo, devuelve null. NUNCA inventes un regex para un campo que no está en el correo.',
+    '10. sender_pattern debe identificar una señal estable del remitente institucional.',
+    '11. Los patrones deben generalizar variaciones de instancia sin borrar diferencias que definan otra plantilla.',
     '',
     'VALORES SEMÁNTICOS DEL RESULTADO:',
-    '11. default_currency debe contener la moneda aplicable por defecto cuando el correo no indique explícitamente una.',
-    'Para notificaciones bancarias de Colombia, usa "COP" salvo evidencia clara de otra moneda.',
-    '12. expense_type debe describir la naturaleza de la operación según el vocabulario del sistema.',
-    'Para una compra o pago realizado con tarjeta, usa "compra".',
-    'No uses traducciones ni valores alternativos como "expense", "purchase" o "payment".',
-    '13. entity_name debe usar exactamente el nombre de una entidad equivalente si ya existe en la lista registrada.',
+    '12. default_currency debe contener la moneda aplicable por defecto cuando el correo no indique explícitamente una. Para notificaciones bancarias de Colombia, usa "COP" salvo evidencia clara de otra moneda.',
+    '13. expense_type debe describir la naturaleza de la operación según el vocabulario del sistema: "compra", "transferencia", "retiro", "pago", etc.',
+    '14. entity_name debe usar exactamente el nombre de una entidad equivalente si ya existe en la lista registrada.',
     '',
     'ANTES DE CONSTRUIR EL JSON, RAZONA INTERNAMENTE:',
     'A) Cuál es la identidad habitual y corta de la entidad.',
@@ -358,4 +355,71 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     },
     warnings: warnings.length > 0 ? warnings : undefined,
   };
+}
+
+export interface TemplateCorrectionDetails {
+  template: {
+    name?: string | null;
+    entity_name?: string | null;
+    entity_email_pattern?: string | null;
+    sender_pattern?: string | null;
+    subject_pattern?: string | null;
+    match_pattern?: string | null;
+    amount_regex?: string | null;
+    merchant_regex?: string | null;
+    date_regex?: string | null;
+    date_format?: string | null;
+    time_regex?: string | null;
+    time_format?: string | null;
+    currency_regex?: string | null;
+    default_currency?: string | null;
+    source_account_regex?: string | null;
+    expense_type?: string | null;
+  };
+  failures: string[];
+}
+
+/**
+ * Builds a concise targeted correction prompt with the exact failures detected
+ * so the AI can fix the regex patterns and re-generate the JSON template.
+ */
+export function buildCorrectionPrompt(
+  sender: string,
+  subject: string,
+  cleanBody: string,
+  details: TemplateCorrectionDetails
+): string {
+  const failureBullets = details.failures.length > 0
+    ? details.failures.map((f) => `• ${f}`).join('\n')
+    : '• Ningún error bloqueante, pero revisa la coincidencia exacta de los patrones de extracción.';
+
+  return [
+    'Corrige la siguiente plantilla JSON para extracción de notificaciones de correo.',
+    'La plantilla actual NO pasó las pruebas automáticas contra el correo real debido a los siguientes fallos:',
+    '',
+    'FALLOS DETECTADOS QUE DEBES CORREGIR:',
+    failureBullets,
+    '',
+    'PLANTILLA ACTUAL CON ERRORES:',
+    JSON.stringify(details.template, null, 2),
+    '',
+    'DATOS REALES DEL CORREO:',
+    '--- REMITENTE RECIBIDO ---',
+    sender || '(Sin remitente)',
+    '',
+    '--- ASUNTO RECIBIDO ---',
+    subject || '(Sin asunto)',
+    '',
+    '--- CUERPO LIMPIO (DONDE DEBEN COINCIDIR LOS REGEX) ---',
+    cleanBody || '(Sin cuerpo)',
+    '--- FIN DEL CORREO ---',
+    '',
+    'INSTRUCCIONES DE CORRECCIÓN:',
+    '1. Cada expresión regular de extracción debe coincidir con el texto exacto que aparece en CUERPO LIMPIO.',
+    '2. En correos procesados, las etiquetas y valores pueden estar separados por espacios o saltos de línea, no siempre dos puntos (:). Usa `(?:\\s*:\\s*|\\s+)`.',
+    '3. Cada regex de extracción DEBE tener exactamente UN grupo de captura (...) alrededor del valor limpio (ej: monto, hora, comercio).',
+    '4. Si un dato (como hora, comercio o cuenta origen) NO existe en el texto de CUERPO LIMPIO, define su regex correspondiente como null.',
+    '5. Si el correo sí incluye la hora (ej: 14:35 o 02:30 p.m.), asegúrate de que time_regex capture la hora limpia y time_format indique su formato.',
+    '6. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
+  ].join('\n');
 }
