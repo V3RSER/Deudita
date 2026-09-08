@@ -9,23 +9,19 @@ export interface CatalogEntity {
 export interface CatalogTemplate {
   id: string;
   name: string;
-  sender_pattern: string | null;
   subject_pattern: string | null;
   amount_regex: string;
   merchant_regex: string | null;
   date_regex: string | null;
   date_format: string | null;
   time_format: string | null;
-  entity_name: string | null;
   entity_id: string | null;
   match_pattern: string | null;
   expense_type_id: string | null;
   expense_type_label?: string | null;
-  default_currency: string | null;
   currency_regex: string | null;
   source_account_regex: string | null;
   time_regex: string | null;
-  active: boolean;
   created_at?: string;
   entity_email_patterns?: string[];
   entity?: { name?: string };
@@ -38,7 +34,7 @@ export interface Level1EntityReport {
   patterns: string[];
   matched: boolean;
   matchedPattern?: string;
-  matchedOn?: 'sender' | 'body';
+  matchedOn?: 'sender';
   discardReason?: string;
   templatesCount: number;
   templateNames: string[];
@@ -119,7 +115,7 @@ export interface SingleTemplateEvaluation {
     entityName: string;
     entityPatterns: string[];
     matchedPattern?: string;
-    matchedOn?: 'sender' | 'body';
+    matchedOn?: 'sender';
     reason?: string;
   };
   level2: {
@@ -301,97 +297,43 @@ export function evaluateTemplateAgainstEmail(
   const criticalFailures: string[] = [];
   const warnings: string[] = [];
 
-  // --- Level 1: Entidad ---
+  // --- Nivel 1: Entidad ---
   let level1Passed = false;
   let l1MatchedPattern: string | undefined;
-  let l1MatchedOn: 'sender' | 'body' | undefined;
+  let l1MatchedOn: 'sender' | undefined;
   let l1Reason: string | undefined;
 
   const matchedEntity = template.entity_id
-    ? entities.find((e) => e.id === template.entity_id)
-    : template.entity_name
-    ? entities.find((e) => e.name.toLowerCase().trim() === template.entity_name!.toLowerCase().trim())
+    ? entities.find((e) => e.id === template.entity_id) || null
     : null;
-
-  const entityPatterns = [
-    ...(template.entity_email_patterns || []),
+  const entityPatterns = Array.from(new Set([
     ...(matchedEntity?.patterns || []),
-  ].filter(Boolean);
+    ...(template.entity_email_patterns || []),
+  ].map((p) => sanitizeRegexPattern(p)).filter((p): p is string => Boolean(p))));
+  const entityName = matchedEntity?.name || 'Entidad';
 
-  const entityName = template.entity_name || matchedEntity?.name || 'Entidad';
-
-  if (entityPatterns.length > 0) {
+  if (!template.entity_id) {
+    l1Reason = 'La plantilla no tiene entity_id válido.';
+    criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
+  } else if (entityPatterns.length === 0) {
+    l1Reason = `La entidad "${entityName}" no tiene entity_email_patterns configurados; no puede coincidir ningún correo.`;
+    criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
+  } else {
     for (const pat of entityPatterns) {
-      const sanitized = sanitizeRegexPattern(pat);
-      if (!sanitized) continue;
       try {
-        const re = new RegExp(sanitized, 'i');
+        const re = new RegExp(pat, 'i');
         if (re.test(sender)) {
           level1Passed = true;
           l1MatchedPattern = pat;
           l1MatchedOn = 'sender';
           break;
         }
-        if (re.test(cleanBody)) {
-          level1Passed = true;
-          l1MatchedPattern = pat;
-          l1MatchedOn = 'body';
-          break;
-        }
-      } catch {
-        // Invalid regex in pattern list
-      }
+      } catch {}
     }
-
-    if (!level1Passed && template.sender_pattern) {
-      const sanitizedSender = sanitizeRegexPattern(template.sender_pattern);
-      if (sanitizedSender) {
-        try {
-          const re = new RegExp(sanitizedSender, 'i');
-          if (re.test(sender)) {
-            level1Passed = true;
-            l1MatchedPattern = template.sender_pattern;
-            l1MatchedOn = 'sender';
-          } else if (re.test(cleanBody)) {
-            level1Passed = true;
-            l1MatchedPattern = template.sender_pattern;
-            l1MatchedOn = 'body';
-          }
-        } catch {}
-      }
-    }
-
     if (!level1Passed) {
-      l1Reason = `El remitente ("${sender || 'vacío'}") o cuerpo no coincide con ningún patrón de la entidad "${entityName}" (${entityPatterns.map((p) => `/${p}/i`).join(', ')}).`;
+      l1Reason = `El remitente ("${sender || 'vacío'}") no coincide con ningún entity_email_pattern de "${entityName}".`;
       criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
     }
-  } else if (template.sender_pattern) {
-    const sanitized = sanitizeRegexPattern(template.sender_pattern);
-    if (sanitized) {
-      try {
-        const re = new RegExp(sanitized, 'i');
-        if (re.test(sender)) {
-          level1Passed = true;
-          l1MatchedPattern = template.sender_pattern;
-          l1MatchedOn = 'sender';
-        } else if (re.test(cleanBody)) {
-          level1Passed = true;
-          l1MatchedPattern = template.sender_pattern;
-          l1MatchedOn = 'body';
-        } else {
-          l1Reason = `El remitente o cuerpo no coincide con el patrón de remitente /${sanitized}/i.`;
-          criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
-        }
-      } catch (err: unknown) {
-        l1Reason = `Error en patrón de remitente /${sanitized}/: ${err instanceof Error ? err.message : String(err)}`;
-        criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
-      }
-    } else {
-      level1Passed = true;
-    }
-  } else {
-    // Si no tiene patrones configurados, pasa nivel 1
-    level1Passed = true;
   }
 
   // --- Level 2: Asunto ---
@@ -508,7 +450,7 @@ export function evaluateTemplateAgainstEmail(
     const subjectCurrRes = extractWithCaptureGroup(subject, template.currency_regex, 'Moneda');
     if (subjectCurrRes.success) currencyRes = subjectCurrRes;
   }
-  const currencySuccess = currencyRes.success || Boolean(template.default_currency);
+  const currencySuccess = currencyRes.success;
 
   // Cuenta (opcional)
   let accountRes = extractWithCaptureGroup(cleanBody, template.source_account_regex, 'Cuenta de origen');
@@ -595,8 +537,8 @@ export function evaluateTemplateAgainstEmail(
           field: 'currency',
           label: 'Moneda',
           pattern: template.currency_regex,
-          rawExtracted: currencyRes.rawExtracted || template.default_currency || 'COP',
-          cleanedValue: currencyRes.rawExtracted || template.default_currency || 'COP',
+          rawExtracted: currencyRes.rawExtracted,
+          cleanedValue: currencyRes.rawExtracted,
           success: currencySuccess,
           reason: currencyRes.reason,
           hasCaptureGroup: currencyRes.hasCaptureGroup,
@@ -616,7 +558,7 @@ export function evaluateTemplateAgainstEmail(
       extractedMerchant: merchantRes.rawExtracted,
       extractedDate: dateRes.rawExtracted,
       extractedTime: timeRes.rawExtracted,
-      extractedCurrency: currencyRes.rawExtracted || template.default_currency || 'COP',
+      extractedCurrency: currencyRes.rawExtracted,
       extractedSourceAccount: accountRes.rawExtracted,
     },
     overallPassed,
@@ -639,7 +581,7 @@ export function diagnoseEmailMatching(
   const cleanBody = cleanEmailBody(rawOrCleanBody);
 
   // Mirror Google Apps Script exactly: templates participate only through
-  // their persisted entity_id. No fallback by entity_name and no virtual
+  // their persisted entity_id. No fallback by entity label and no virtual
   // entities for saved templates.
   const entityMap = new Map<string, { entity: CatalogEntity | null; templates: CatalogTemplate[] }>();
 
@@ -669,7 +611,7 @@ export function diagnoseEmailMatching(
     if (entTemplates.length === 0) continue;
 
     // Google Apps Script uses ONLY the persisted entity_email_patterns returned
-    // with the template. sender_pattern and entity name are not substitutes.
+    // with the template. No other field is a substitute.
     const patternsToTest: string[] = [];
     for (const tpl of entTemplates) {
       for (const p of Array.isArray(tpl.entity_email_patterns) ? tpl.entity_email_patterns : []) {
@@ -679,20 +621,22 @@ export function diagnoseEmailMatching(
     }
 
     if (patternsToTest.length === 0) {
-      passedEntities.push({
+      discardedEntities.push({
         entityId: entId,
         entityName: entity?.name || entId,
         patterns: [],
-        matched: true,
+        matched: false,
+        discardReason: 'La entidad no tiene entity_email_patterns; no puede participar en el matching.',
         templatesCount: entTemplates.length,
         templateNames: entTemplates.map((t) => t.name),
       });
+      l1DiscardedTemplatesCount += entTemplates.length;
       continue;
     }
 
     let entityMatched = false;
     let matchedPattern: string | undefined;
-    let matchedOn: 'sender' | 'body' | undefined;
+    let matchedOn: 'sender' | undefined;
 
     for (const pat of patternsToTest) {
       try {
@@ -701,13 +645,6 @@ export function diagnoseEmailMatching(
           entityMatched = true;
           matchedPattern = pat;
           matchedOn = 'sender';
-          break;
-        }
-        // Fallback to body (e.g. forwarded emails where sender is in the body text)
-        if (regex.test(cleanBody)) {
-          entityMatched = true;
-          matchedPattern = pat;
-          matchedOn = 'body';
           break;
         }
       } catch {
@@ -1008,9 +945,9 @@ export function diagnoseEmailMatching(
           field: 'currency',
           label: 'Moneda',
           pattern: tpl.currency_regex,
-          rawExtracted: currencyRes.rawExtracted || tpl.default_currency || 'COP',
-          cleanedValue: currencyRes.rawExtracted || tpl.default_currency || 'COP',
-          success: currencyRes.success || Boolean(tpl.default_currency),
+          rawExtracted: currencyRes.rawExtracted,
+          cleanedValue: currencyRes.rawExtracted,
+          success: currencyRes.success,
           reason: currencyRes.reason,
           hasCaptureGroup: currencyRes.hasCaptureGroup,
         },
@@ -1077,7 +1014,7 @@ export function diagnoseEmailMatching(
 
     const passedL1 = l1SurvivingTemplates.some((t) => t.id === tpl.id);
     if (!passedL1) {
-      const entName = tpl.entity_name || tpl.entity?.name || 'Entidad';
+      const entName = tpl.entity?.name || 'Entidad';
       const reason = `Descartada en Paso 1: El remitente/cuerpo no coincide con la entidad "${entName}".`;
       return {
         template: tpl,
@@ -1450,11 +1387,6 @@ export function simulateGoogleAppsScriptProcess(
 
       for (const t of toEvaluate) {
         try {
-          if (t.sender_pattern && !matchesEitherSource(t.sender_pattern, sender, body)) {
-            logs.push(`  → Plantilla "${t.name}": descartada, sender_pattern no coincidió.`);
-            continue;
-          }
-
           const cleanAmtRegex = sanitizeRegexPattern(t.amount_regex) || t.amount_regex;
           const amountRegex = new RegExp(cleanAmtRegex, 'i');
           const amountMatch = body.match(amountRegex);
@@ -1498,7 +1430,7 @@ export function simulateGoogleAppsScriptProcess(
             ? body.match(new RegExp(cleanSourceRegex, 'i'))
             : null;
 
-          const currency = currencyMatch && currencyMatch[1] ? currencyMatch[1] : t.default_currency || 'COP';
+          const currency = currencyMatch && currencyMatch[1] ? currencyMatch[1] : null;
 
           let dtDate: string | null = null;
           let dtTime: string | null = null;
@@ -1517,17 +1449,6 @@ export function simulateGoogleAppsScriptProcess(
             dtTime = parseTimeWithFormat(rawT, t.time_format);
           }
 
-          // Backward compatibility: templates created before time_format existed
-          // may have included HH/mm/ss inside date_format.
-          if (rawD && !dtTime && !t.time_format && t.date_format?.match(/HH|mm|ss/)) {
-            const combined = rawT ? `${rawD} ${rawT}` : rawD;
-            const parsedLegacy = parseFormattedTokens(combined, t.date_format, /YYYY|MM|DD|HH|mm|ss/g);
-            if (parsedLegacy?.YYYY && parsedLegacy.MM && parsedLegacy.DD) {
-              dtDate = `${parsedLegacy.YYYY}-${parsedLegacy.MM}-${parsedLegacy.DD}`;
-              dtTime = `${parsedLegacy.HH || '00'}:${parsedLegacy.mm || '00'}:${parsedLegacy.ss || '00'}`;
-            }
-          }
-
           const concept = buildConcept(t.expense_type_label, merchant);
 
           logs.push(`✅ [Apps Script Match] "${subject}" (de: ${sender}) → match con plantilla "${t.name}" (ID: ${t.id}), monto=${numericAmount}, concept="${concept}"`);
@@ -1540,7 +1461,7 @@ export function simulateGoogleAppsScriptProcess(
               amount: numericAmount,
               currency,
               merchant,
-              entity: t.entity_name || null,
+              entity_id: t.entity_id,
               sourceAccount: sourceAccountMatch ? (sourceAccountMatch[1] !== undefined ? sourceAccountMatch[1] : sourceAccountMatch[0]) : null,
               date: dtDate,
               time: dtTime,

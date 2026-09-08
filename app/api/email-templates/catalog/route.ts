@@ -5,136 +5,37 @@ import { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
 export async function GET() {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authErr,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) return NextResponse.json({ error: 'No autorizado. Debes iniciar sesión para consultar plantillas.' }, { status: 401 });
 
-    if (authErr || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado. Debes iniciar sesión para consultar plantillas.' },
-        { status: 401 }
-      );
-    }
+    const [{ data: templates, error: templatesErr }, { data: entities }, { data: patterns }, { data: expenseTypes }] = await Promise.all([
+      supabase.from('email_templates').select('*').order('created_at', { ascending: false }),
+      supabase.from('entities').select('id,name').order('name', { ascending: true }),
+      supabase.from('entity_email_patterns').select('entity_id,pattern').order('created_at', { ascending: true }),
+      supabase.from('expense_types').select('*').order('label', { ascending: true }),
+    ]);
+    if (templatesErr) return NextResponse.json({ error: `Error al consultar plantillas: ${templatesErr.message}` }, { status: 500 });
 
-    // 1. Fetch email templates
-    const { data: templatesData, error: templatesErr } = await supabase
-      .from('email_templates')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const entityList: CatalogEntity[] = (entities || []).map((e: any) => ({
+      id: e.id, name: e.name, patterns: (patterns || []).filter((p: any) => p.entity_id === e.id).map((p: any) => p.pattern),
+    }));
+    const entityMap = new Map(entityList.map(e => [e.id, e]));
+    const expenseMap = new Map((expenseTypes || []).map((e: any) => [e.id, e.label || e.name]));
+    const templateList: CatalogTemplate[] = (templates || []).map((t: any) => ({
+      ...t,
+      entity: t.entity_id ? entityMap.get(t.entity_id) || null : null,
+      entity_email_patterns: t.entity_id ? entityMap.get(t.entity_id)?.patterns || [] : [],
+      expense_type_label: t.expense_type_id ? expenseMap.get(t.expense_type_id) || null : null,
+    }));
 
-    if (templatesErr) {
-      console.error('[email-templates/catalog] Error fetching templates:', templatesErr);
-      return NextResponse.json(
-        { error: `Error al consultar plantillas: ${templatesErr.message}` },
-        { status: 500 }
-      );
-    }
-
-    // 2. Fetch entities
-    const { data: entitiesData, error: entitiesErr } = await supabase
-      .from('entities')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (entitiesErr) {
-      console.warn('[email-templates/catalog] Warning fetching entities:', entitiesErr);
-    }
-
-    // 3. Fetch entity email patterns
-    const { data: patternsData, error: patternsErr } = await supabase
-      .from('entity_email_patterns')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (patternsErr) {
-      console.warn('[email-templates/catalog] Warning fetching entity patterns:', patternsErr);
-    }
-
-    // 4. Fetch expense types
-    const { data: expenseTypesData, error: expenseTypesErr } = await supabase
-      .from('expense_types')
-      .select('*')
-      .order('label', { ascending: true });
-
-    if (expenseTypesErr) {
-      console.warn('[email-templates/catalog] Warning fetching expense types:', expenseTypesErr);
-    }
-
-    // Map entities with their patterns
-    const entitiesList: CatalogEntity[] = (entitiesData || []).map((ent: { id: string; name: string }) => {
-      const patterns = (patternsData || [])
-        .filter((p: { entity_id: string; pattern: string }) => p.entity_id === ent.id)
-        .map((p: { pattern: string }) => p.pattern);
-
-      return {
-        id: ent.id,
-        name: ent.name,
-        patterns,
-      };
-    });
-
-    // Also enrich templates with entity names and expense type labels
-    const expenseTypeMap = new Map<string, string>();
-    for (const et of expenseTypesData || []) {
-      expenseTypeMap.set(et.id, et.label || et.name);
-    }
-
-    const entityNameMap = new Map<string, string>();
-    for (const ent of entitiesData || []) {
-      entityNameMap.set(ent.id, ent.name);
-    }
-
-    const templatesList: CatalogTemplate[] = (templatesData || []).map((t: CatalogTemplate) => {
-      const entityName = t.entity_id ? entityNameMap.get(t.entity_id) || t.entity_name : t.entity_name;
-      const expenseTypeLabel = t.expense_type_id ? expenseTypeMap.get(t.expense_type_id) : undefined;
-      const entityPatterns = t.entity_id
-        ? (patternsData || [])
-            .filter((p: { entity_id: string; pattern: string }) => p.entity_id === t.entity_id)
-            .map((p: { pattern: string }) => p.pattern)
-        : [];
-
-      return {
-        ...t,
-        entity_name: entityName || null,
-        expense_type_label: expenseTypeLabel || null,
-        entity_email_patterns: entityPatterns,
-        time_format: t.time_format || (t.time_regex ? 'HH:mm:ss' : null),
-      };
-    });
-
-    // Query ambiguous templates if RPC is available
-    let ambiguousTemplates: Array<{
-      entity_id: string;
-      subject_pattern: string;
-      template_ids: string[];
-      template_names: string[];
-    }> = [];
-
+    let ambiguousTemplates: Array<{ entity_id: string; subject_pattern: string; template_ids: string[]; template_names: string[] }> = [];
     try {
-      const { data: ambData } = await supabase.rpc('detect_ambiguous_templates');
-      if (ambData && Array.isArray(ambData)) {
-        ambiguousTemplates = ambData;
-      }
-    } catch {
-      // RPC might not exist or failed, compute fallback client/server-side
-    }
+      const { data } = await supabase.rpc('detect_ambiguous_templates');
+      if (Array.isArray(data)) ambiguousTemplates = data;
+    } catch {}
 
-    return NextResponse.json({
-      success: true,
-      templates: templatesList,
-      entities: entitiesList,
-      expense_types: expenseTypesData || [],
-      ambiguous_templates: ambiguousTemplates,
-      total_active_templates: templatesList.length,
-      total_entities: entitiesList.length,
-    });
+    return NextResponse.json({ success: true, templates: templateList, entities: entityList, expense_types: expenseTypes || [], ambiguous_templates: ambiguousTemplates, total_templates: templateList.length, total_entities: entityList.length });
   } catch (err: unknown) {
-    const errMessage = err instanceof Error ? err.message : String(err);
-    console.error('[email-templates/catalog] Unexpected error:', errMessage);
-    return NextResponse.json(
-      { error: `Error inesperado: ${errMessage}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

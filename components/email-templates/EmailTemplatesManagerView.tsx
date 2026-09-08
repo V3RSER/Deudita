@@ -89,9 +89,9 @@ function TemplateDiagnosticStepsView({
           <span className="font-bold text-zinc-900 truncate">
             {customTitle || tmpl.name || 'Plantilla'}
           </span>
-          {tmpl.entity_name && (
+          {tmpl.entity?.name && (
             <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded">
-              {tmpl.entity_name}
+              {tmpl.entity.name}
             </span>
           )}
         </div>
@@ -191,7 +191,7 @@ function TemplateDiagnosticStepsView({
           )}
           <span className="font-semibold shrink-0">1. Entidad</span>
           <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
-            {evaluation.level1.matchedPattern ? `/${evaluation.level1.matchedPattern}/i` : tmpl.entity_name || 'sin patrón'}
+            {evaluation.level1.matchedPattern ? `/${evaluation.level1.matchedPattern}/i` : tmpl.entity?.name || 'sin patrón'}
           </code>
           {evaluation.level1.matchedOn && (
             <span className="text-[10px] text-zinc-500 shrink-0">
@@ -199,17 +199,6 @@ function TemplateDiagnosticStepsView({
             </span>
           )}
         </div>
-
-        {/* Remitente si está configurado */}
-        {tmpl.sender_pattern && (
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-700">
-            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            <span className="font-semibold shrink-0">Remitente</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
-              /{tmpl.sender_pattern}/i
-            </code>
-          </div>
-        )}
 
         {/* Paso 2: Asunto */}
         <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level2.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
@@ -388,7 +377,7 @@ function TemplateDiagnosticStepsView({
           </code>
           <span className="text-zinc-400 shrink-0">→</span>
           <span className="font-bold text-zinc-800 bg-white border border-zinc-200 px-2 py-0.5 rounded">
-            {evaluation.level4.fields.currency.rawExtracted || tmpl.default_currency || 'COP'}
+            {evaluation.level4.fields.currency.rawExtracted || '—'}
           </span>
         </div>
       </div>
@@ -457,12 +446,11 @@ export function EmailTemplatesManagerView({
   const [testResultViewFilter, setTestResultViewFilter] = useState<'all' | 'matched' | 'failed'>('all');
 
   const [formName, setFormName] = useState<string>('');
-  const [formEntityName, setFormEntityName] = useState<string>('');
+  const [formEntityLabel, setFormEntityLabel] = useState<string>('');
   const [formEntityId, setFormEntityId] = useState<string | null>(null);
   const [formEntityEmailPattern, setFormEntityEmailPattern] = useState<string>('');
   const [formIsNewEntity, setFormIsNewEntity] = useState<boolean>(false);
   const [formSubjectPattern, setFormSubjectPattern] = useState<string>('');
-  const [formSenderPattern, setFormSenderPattern] = useState<string>('');
   const [formMatchPattern, setFormMatchPattern] = useState<string>('');
   const [formAmountRegex, setFormAmountRegex] = useState<string>('');
   const [formMerchantRegex, setFormMerchantRegex] = useState<string>('');
@@ -472,7 +460,6 @@ export function EmailTemplatesManagerView({
   const [formTimeRegex, setFormTimeRegex] = useState<string>('');
   const [formTimeFormat, setFormTimeFormat] = useState<string>('');
   const [formCurrencyRegex, setFormCurrencyRegex] = useState<string>('');
-  const [formCurrency, setFormCurrency] = useState<string>('');
   const [formExpenseType, setFormExpenseType] = useState<string>('compra');
   const [copiedCorrectionPrompt, setCopiedCorrectionPrompt] = useState<boolean>(false);
 
@@ -508,12 +495,11 @@ export function EmailTemplatesManagerView({
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [editingModalId, setEditingModalId] = useState<string | null>(null);
   const [modalName, setModalName] = useState<string>('');
-  const [modalEntityName, setModalEntityName] = useState<string>('');
+  const [modalEntityLabel, setModalEntityLabel] = useState<string>('');
   const [modalEntityId, setModalEntityId] = useState<string | null>(null);
   const [modalEntityEmailPattern, setModalEntityEmailPattern] = useState<string>('');
   const [modalIsNewEntity, setModalIsNewEntity] = useState<boolean>(false);
   const [modalSubjectPattern, setModalSubjectPattern] = useState<string>('');
-  const [modalSenderPattern, setModalSenderPattern] = useState<string>('');
   const [modalMatchPattern, setModalMatchPattern] = useState<string>('');
   const [modalAmountRegex, setModalAmountRegex] = useState<string>('');
   const [modalMerchantRegex, setModalMerchantRegex] = useState<string>('');
@@ -523,7 +509,6 @@ export function EmailTemplatesManagerView({
   const [modalTimeRegex, setModalTimeRegex] = useState<string>('');
   const [modalTimeFormat, setModalTimeFormat] = useState<string>('HH:mm:ss');
   const [modalCurrencyRegex, setModalCurrencyRegex] = useState<string>('');
-  const [modalCurrency, setModalCurrency] = useState<string>('COP');
   const [modalSampleEmailId, setModalSampleEmailId] = useState<string>('');
   const [modalCustomSampleBody, setModalCustomSampleBody] = useState<string>('');
   const [isModalSaving, setIsModalSaving] = useState<boolean>(false);
@@ -785,7 +770,7 @@ export function EmailTemplatesManagerView({
   const templatesToTest = useMemo(() => {
     if (templateTestFilter === 'all') return templates;
     return templates.filter(
-      (t) => (t.entity_name || '').toLowerCase() === templateTestFilter.toLowerCase()
+      (t) => (entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase() === templateTestFilter.toLowerCase()
     );
   }, [templates, templateTestFilter]);
 
@@ -842,39 +827,33 @@ export function EmailTemplatesManagerView({
     return {
       id: editingTemplateId || '__active_form_template__',
       name: formName || 'Nueva Plantilla',
-      sender_pattern: formSenderPattern || null,
       subject_pattern: formSubjectPattern || null,
       amount_regex: formAmountRegex || null,
       merchant_regex: formMerchantRegex || null,
       date_regex: formDateRegex || null,
       date_format: formDateFormat || 'DD/MM/YYYY',
-      entity_name: formEntityName || null,
       entity_id: formEntityId || null,
       match_pattern: formMatchPattern || null,
       expense_type_id: null,
       expense_type_label: formExpenseType || 'compra',
-      default_currency: formCurrency || 'COP',
       currency_regex: formCurrencyRegex || null,
       source_account_regex: formSourceAccountRegex || null,
       time_regex: formTimeRegex || null,
       time_format: formTimeFormat || 'HH:mm:ss',
-      active: true,
       entity_email_patterns: formEntityEmailPattern ? [formEntityEmailPattern] : [],
     };
   }, [
     editingTemplateId,
     formName,
-    formSenderPattern,
     formSubjectPattern,
     formAmountRegex,
     formMerchantRegex,
     formDateRegex,
     formDateFormat,
-    formEntityName,
+    formEntityLabel,
     formEntityId,
     formMatchPattern,
     formExpenseType,
-    formCurrency,
     formCurrencyRegex,
     formSourceAccountRegex,
     formTimeRegex,
@@ -932,9 +911,7 @@ export function EmailTemplatesManagerView({
       {
         template: {
           name: formName || 'Plantilla',
-          entity_name: formEntityName || null,
           entity_email_pattern: formEntityEmailPattern || null,
-          sender_pattern: formSenderPattern || null,
           subject_pattern: formSubjectPattern || null,
           match_pattern: formMatchPattern || null,
           amount_regex: formAmountRegex || null,
@@ -944,7 +921,6 @@ export function EmailTemplatesManagerView({
           time_regex: formTimeRegex || null,
           time_format: formTimeFormat || null,
           currency_regex: formCurrencyRegex || null,
-          default_currency: formCurrency || 'COP',
           source_account_regex: formSourceAccountRegex || null,
           expense_type: formExpenseType || null,
         },
@@ -967,9 +943,8 @@ export function EmailTemplatesManagerView({
     sampleBody,
     activeFormEvaluation,
     formName,
-    formEntityName,
+    formEntityLabel,
     formEntityEmailPattern,
-    formSenderPattern,
     formSubjectPattern,
     formMatchPattern,
     formAmountRegex,
@@ -979,7 +954,6 @@ export function EmailTemplatesManagerView({
     formTimeRegex,
     formTimeFormat,
     formCurrencyRegex,
-    formCurrency,
     formSourceAccountRegex,
     formExpenseType,
   ]);
@@ -1021,12 +995,11 @@ export function EmailTemplatesManagerView({
   const handleLoadTemplateIntoForm = useCallback((tmpl: CatalogTemplate) => {
     setEditingTemplateId(tmpl.id);
     setFormName(tmpl.name);
-    setFormEntityName(tmpl.entity_name || tmpl.entity?.name || '');
+    setFormEntityLabel(tmpl.entity?.name || '');
     setFormEntityId(tmpl.entity_id || null);
     setFormEntityEmailPattern(tmpl.entity_email_patterns?.[0] || '');
     setFormIsNewEntity(false);
     setFormSubjectPattern(tmpl.subject_pattern || '');
-    setFormSenderPattern(tmpl.sender_pattern || '');
     setFormMatchPattern(tmpl.match_pattern || '');
     setFormAmountRegex(tmpl.amount_regex || '');
     setFormMerchantRegex(tmpl.merchant_regex || '');
@@ -1036,7 +1009,6 @@ export function EmailTemplatesManagerView({
     setFormTimeRegex(tmpl.time_regex || '');
     setFormTimeFormat(tmpl.time_format || '');
     setFormCurrencyRegex(tmpl.currency_regex || '');
-    setFormCurrency(tmpl.default_currency || '');
 
     setIsFormVisible(true);
     setSaveSuccessMessage(null);
@@ -1050,12 +1022,11 @@ export function EmailTemplatesManagerView({
   const handleOpenEmptyForm = useCallback(() => {
     setEditingTemplateId(null);
     setFormName('');
-    setFormEntityName('');
+    setFormEntityLabel('');
     setFormEntityId(null);
     setFormEntityEmailPattern('');
     setFormIsNewEntity(false);
     setFormSubjectPattern('');
-    setFormSenderPattern('');
     setFormMatchPattern('');
     setFormAmountRegex('');
     setFormMerchantRegex('');
@@ -1065,7 +1036,6 @@ export function EmailTemplatesManagerView({
     setFormTimeRegex('');
     setFormTimeFormat('');
     setFormCurrencyRegex('');
-    setFormCurrency('');
 
     setIsFormVisible(true);
     setSaveSuccessMessage(null);
@@ -1100,12 +1070,12 @@ export function EmailTemplatesManagerView({
   // ---------------------------------------------------------------------------
   const handleCopyPrompt = async () => {
     setAiError(null);
-    const existingEntityNames = entities.map((e) => e.name);
+    const existingEntityCatalog = entities.map((e) => ({ id: e.id, name: e.name, patterns: e.patterns || [] }));
     const promptText = buildTemplatePrompt(
       sampleSender || selectedEmail?.sender || '',
       sampleSubject || selectedEmail?.subject || '',
       cleanEmailBody(sampleBody || selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || ''),
-      existingEntityNames
+      existingEntityCatalog
     );
 
     try {
@@ -1135,14 +1105,16 @@ export function EmailTemplatesManagerView({
     }
 
     const d = result.data;
-    setFormEntityEmailPattern(d.entity_email_pattern || '');
-    const matchedEntity = d.entity_name
-      ? entities.find((e) => e.name.toLowerCase().trim() === d.entity_name!.toLowerCase().trim())
-      : null;
+    const senderForEntity = sampleSender || selectedEmail?.sender || '';
+    const matchedByPattern = entities.find((e) => (e.patterns || []).some((p) => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(senderForEntity); } catch { return false; } })) || null;
+    const matchedEntity = matchedByPattern || (d.entity_label
+      ? entities.find((e) => e.name.toLowerCase().trim() === d.entity_label!.toLowerCase().trim())
+      : null);
+    setFormEntityEmailPattern(matchedByPattern ? '' : (d.entity_email_pattern || ''));
 
     setFormName(d.name || '');
-    if (d.entity_name) {
-      setFormEntityName(d.entity_name);
+    if (d.entity_label) {
+      setFormEntityLabel(d.entity_label);
       if (matchedEntity) {
         setFormEntityId(matchedEntity.id);
         setFormIsNewEntity(false);
@@ -1151,12 +1123,11 @@ export function EmailTemplatesManagerView({
         setFormIsNewEntity(true);
       }
     } else {
-      setFormEntityName('');
+      setFormEntityLabel('');
       setFormEntityId(null);
       setFormIsNewEntity(false);
     }
     setFormSubjectPattern(d.subject_pattern || '');
-    setFormSenderPattern(d.sender_pattern || '');
     setFormMatchPattern(d.match_pattern || '');
     setFormAmountRegex(d.amount_regex || '');
     setFormMerchantRegex(d.merchant_regex || '');
@@ -1166,7 +1137,6 @@ export function EmailTemplatesManagerView({
     setFormTimeRegex(d.time_regex || '');
     setFormTimeFormat(d.time_format || '');
     setFormCurrencyRegex(d.currency_regex || '');
-    setFormCurrency(d.default_currency || 'COP');
     setFormExpenseType(d.expense_type || 'compra');
 
     setEditingTemplateId(null);
@@ -1177,23 +1147,19 @@ export function EmailTemplatesManagerView({
     const candidateTemplate: CatalogTemplate = {
       id: '__ai_pasted_template__',
       name: d.name || 'Nueva Plantilla',
-      sender_pattern: d.sender_pattern,
       subject_pattern: d.subject_pattern,
       amount_regex: d.amount_regex,
       merchant_regex: d.merchant_regex,
       date_regex: d.date_regex,
       date_format: d.date_format,
-      entity_name: d.entity_name,
       entity_id: matchedEntity?.id || null,
       match_pattern: d.match_pattern,
       expense_type_id: null,
       expense_type_label: d.expense_type,
-      default_currency: d.default_currency || 'COP',
       currency_regex: d.currency_regex,
       source_account_regex: d.source_account_regex,
       time_regex: d.time_regex,
       time_format: d.time_format,
-      active: true,
       entity_email_patterns: d.entity_email_pattern ? [d.entity_email_pattern] : [],
     };
 
@@ -1257,9 +1223,9 @@ export function EmailTemplatesManagerView({
       if (s) {
         setFormName(s.name || '');
         setFormEntityEmailPattern(s.entity_email_pattern || '');
-        if (s.entity_name) {
-          setFormEntityName(s.entity_name);
-          const matched = entities.find((e) => e.name.toLowerCase() === s.entity_name.toLowerCase());
+        if (s.entity_label) {
+          setFormEntityLabel(s.entity_label);
+          const matched = entities.find((e) => e.name.toLowerCase() === s.entity_label.toLowerCase());
           if (matched) {
             setFormEntityId(matched.id);
             setFormIsNewEntity(false);
@@ -1268,12 +1234,11 @@ export function EmailTemplatesManagerView({
             setFormIsNewEntity(true);
           }
         } else {
-          setFormEntityName('');
+          setFormEntityLabel('');
           setFormEntityId(null);
           setFormEntityEmailPattern('');
           setFormIsNewEntity(false);
         }
-        setFormSenderPattern(s.sender_pattern || '');
         setFormSubjectPattern(s.subject_pattern || '');
         setFormMatchPattern(s.match_pattern || '');
         setFormAmountRegex(s.amount_regex || '');
@@ -1283,7 +1248,6 @@ export function EmailTemplatesManagerView({
         setFormDateFormat(s.date_format || '');
         setFormTimeRegex(s.time_regex || '');
         setFormTimeFormat(s.time_format || '');
-        setFormCurrency(s.default_currency || '');
         setFormCurrencyRegex(s.currency_regex || '');
 
         setEditingTemplateId(null);
@@ -1327,14 +1291,10 @@ export function EmailTemplatesManagerView({
       const payload = {
         ...(editingTemplateId ? { id: editingTemplateId } : {}),
         name: formName.trim(),
-        entity_name: formEntityName.trim() || null,
+        new_entity_label: formEntityLabel.trim() || null,
         entity_id: formEntityId || null,
-        entity_email_pattern: sanitizeRegexPattern(formEntityEmailPattern.trim()) || null,
-        entity_email_patterns: formEntityEmailPattern.trim()
-          ? [sanitizeRegexPattern(formEntityEmailPattern.trim()) || formEntityEmailPattern.trim()]
-          : undefined,
+        entity_email_pattern: (() => { const proposed = sanitizeRegexPattern(formEntityEmailPattern.trim()); if (!proposed || !formEntityId) return proposed; const ent = entities.find(e => e.id === formEntityId); const sender = sampleSender || selectedEmail?.sender || ''; return ent?.patterns?.some(p => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(sender); } catch { return false; } }) ? null : proposed; })(),
         subject_pattern: sanitizeRegexPattern(formSubjectPattern.trim()) || null,
-        sender_pattern: sanitizeRegexPattern(formSenderPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(formMatchPattern.trim()) || null,
         amount_regex: sanitizeRegexPattern(formAmountRegex.trim()) || formAmountRegex.trim(),
         merchant_regex: sanitizeRegexPattern(formMerchantRegex.trim()) || null,
@@ -1344,7 +1304,6 @@ export function EmailTemplatesManagerView({
         time_regex: sanitizeRegexPattern(formTimeRegex.trim()) || null,
         time_format: formTimeFormat.trim() || (formTimeRegex.trim() ? 'HH:mm:ss' : null),
         currency_regex: sanitizeRegexPattern(formCurrencyRegex.trim()) || null,
-        default_currency: formCurrency.trim() || 'COP',
       };
 
       const method = editingTemplateId ? 'PUT' : 'POST';
@@ -1381,7 +1340,7 @@ export function EmailTemplatesManagerView({
     if (tmpl) {
       setEditingModalId(tmpl.id);
       setModalName(tmpl.name);
-      setModalEntityName(tmpl.entity_name || tmpl.entity?.name || '');
+      setModalEntityLabel(tmpl.entity?.name || '');
       setModalEntityId(tmpl.entity_id || null);
       setModalEntityEmailPattern(
         Array.isArray(tmpl.entity_email_patterns) && tmpl.entity_email_patterns.length > 0
@@ -1390,7 +1349,6 @@ export function EmailTemplatesManagerView({
       );
       setModalIsNewEntity(false);
       setModalSubjectPattern(tmpl.subject_pattern || '');
-      setModalSenderPattern(tmpl.sender_pattern || '');
       setModalMatchPattern(tmpl.match_pattern || '');
       setModalAmountRegex(tmpl.amount_regex || '');
       setModalMerchantRegex(tmpl.merchant_regex || '');
@@ -1400,17 +1358,15 @@ export function EmailTemplatesManagerView({
       setModalTimeRegex(tmpl.time_regex || '');
       setModalTimeFormat(tmpl.time_format || 'HH:mm:ss');
       setModalCurrencyRegex(tmpl.currency_regex || '');
-      setModalCurrency(tmpl.default_currency || 'COP');
     } else {
       // Create new template from Catalog
       setEditingModalId(null);
       setModalName('Nueva Plantilla');
-      setModalEntityName(entities[0]?.name || 'Bancolombia');
+      setModalEntityLabel(entities[0]?.name || 'Bancolombia');
       setModalEntityId(entities[0]?.id || null);
       setModalEntityEmailPattern('');
       setModalIsNewEntity(false);
       setModalSubjectPattern('');
-      setModalSenderPattern('');
       setModalMatchPattern('');
       setModalAmountRegex('');
       setModalMerchantRegex('');
@@ -1420,7 +1376,6 @@ export function EmailTemplatesManagerView({
       setModalTimeRegex('');
       setModalTimeFormat('HH:mm:ss');
       setModalCurrencyRegex('');
-      setModalCurrency('COP');
     }
 
     setModalSampleEmailId('');
@@ -1472,7 +1427,7 @@ export function EmailTemplatesManagerView({
 
   // Copy Prompt from Modal
   const handleModalCopyPrompt = async () => {
-    const existingEntityNames = entities.map((e) => e.name);
+    const existingEntityCatalog = entities.map((e) => ({ id: e.id, name: e.name, patterns: e.patterns || [] }));
     let sampleSubj = '';
     let sampleSenderAddr = '';
     if (modalSampleEmailId) {
@@ -1486,7 +1441,7 @@ export function EmailTemplatesManagerView({
       sampleSenderAddr,
       sampleSubj,
       modalSampleText,
-      existingEntityNames
+      existingEntityCatalog
     );
 
     try {
@@ -1514,11 +1469,13 @@ export function EmailTemplatesManagerView({
     }
 
     const d = result.data;
+    const modalSenderForEntity = modalSampleEmailId ? (emails.find((e) => e.id === modalSampleEmailId)?.sender || '') : '';
+    const matchedByPattern = entities.find((e) => (e.patterns || []).some((p) => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(modalSenderForEntity); } catch { return false; } })) || null;
     if (d.name) setModalName(d.name);
-    if (d.entity_name) {
-      setModalEntityName(d.entity_name);
-      setModalEntityEmailPattern(d.entity_email_pattern || '');
-      const matched = entities.find((e) => e.name.toLowerCase() === (d.entity_name || '').toLowerCase());
+    if (d.entity_label || matchedByPattern) {
+      const matched = matchedByPattern || entities.find((e) => e.name.toLowerCase() === (d.entity_label || '').toLowerCase()) || null;
+      setModalEntityLabel(matched?.name || d.entity_label || '');
+      setModalEntityEmailPattern(matchedByPattern ? '' : (d.entity_email_pattern || ''));
       if (matched) {
         setModalEntityId(matched.id);
         setModalIsNewEntity(false);
@@ -1528,7 +1485,6 @@ export function EmailTemplatesManagerView({
       }
     }
     if (d.subject_pattern) setModalSubjectPattern(d.subject_pattern);
-    if (d.sender_pattern) setModalSenderPattern(d.sender_pattern);
     if (d.match_pattern) setModalMatchPattern(d.match_pattern);
     if (d.amount_regex) setModalAmountRegex(d.amount_regex);
     if (d.merchant_regex) setModalMerchantRegex(d.merchant_regex);
@@ -1538,7 +1494,6 @@ export function EmailTemplatesManagerView({
     if (d.time_regex) setModalTimeRegex(d.time_regex);
     if (d.time_format) setModalTimeFormat(d.time_format);
     if (d.currency_regex) setModalCurrencyRegex(d.currency_regex);
-    if (d.default_currency) setModalCurrency(d.default_currency);
 
     setModalPastedJson('');
     setModalSuccess('¡Campos completados con la respuesta!');
@@ -1573,11 +1528,10 @@ export function EmailTemplatesManagerView({
       const payload = {
         id: editingModalId,
         name: modalName.trim(),
-        entity_name: modalEntityName.trim() || null,
+        new_entity_label: modalEntityLabel.trim() || null,
         entity_id: modalEntityId || null,
-        entity_email_pattern: modalEntityEmailPattern.trim() || null,
+        entity_email_pattern: (() => { const proposed = sanitizeRegexPattern(modalEntityEmailPattern.trim()); if (!proposed || !modalEntityId) return proposed; const ent = entities.find(e => e.id === modalEntityId); const sender = modalSampleEmailId ? (emails.find(e => e.id === modalSampleEmailId)?.sender || '') : ''; return ent?.patterns?.some(p => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(sender); } catch { return false; } }) ? null : proposed; })(),
         subject_pattern: sanitizeRegexPattern(modalSubjectPattern.trim()) || null,
-        sender_pattern: sanitizeRegexPattern(modalSenderPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(modalMatchPattern.trim()) || null,
         amount_regex: sanitizeRegexPattern(modalAmountRegex.trim()) || modalAmountRegex.trim(),
         merchant_regex: sanitizeRegexPattern(modalMerchantRegex.trim()) || null,
@@ -1587,7 +1541,6 @@ export function EmailTemplatesManagerView({
         time_regex: sanitizeRegexPattern(modalTimeRegex.trim()) || null,
         time_format: modalTimeFormat.trim() || (modalTimeRegex.trim() ? 'HH:mm:ss' : null),
         currency_regex: sanitizeRegexPattern(modalCurrencyRegex.trim()) || null,
-        default_currency: modalCurrency.trim() || 'COP',
       };
 
       const method = editingModalId ? 'PUT' : 'POST';
@@ -1675,24 +1628,25 @@ export function EmailTemplatesManagerView({
       const matchesSearch =
         templateSearchQuery === '' ||
         t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
-        (t.entity_name && t.entity_name.toLowerCase().includes(templateSearchQuery.toLowerCase())) ||
+        ((entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase().includes(templateSearchQuery.toLowerCase())) ||
         (t.subject_pattern && t.subject_pattern.toLowerCase().includes(templateSearchQuery.toLowerCase()));
 
       const matchesEntity =
         selectedEntityFilter === 'all' ||
-        (t.entity_name && t.entity_name.toLowerCase() === selectedEntityFilter.toLowerCase());
+        ((entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase() === selectedEntityFilter.toLowerCase());
 
       return matchesSearch && matchesEntity;
     });
-  }, [templates, templateSearchQuery, selectedEntityFilter]);
+  }, [templates, entities, templateSearchQuery, selectedEntityFilter]);
 
   const availableEntityNames = useMemo(() => {
     const set = new Set<string>();
     templates.forEach((t) => {
-      if (t.entity_name) set.add(t.entity_name);
+      const entityName = entities.find((e) => e.id === t.entity_id)?.name;
+      if (entityName) set.add(entityName);
     });
     return Array.from(set);
-  }, [templates]);
+  }, [templates, entities]);
 
   const statusCounts = useMemo(() => {
     let unmatched = 0;
@@ -2172,9 +2126,9 @@ export function EmailTemplatesManagerView({
                             className="text-xs bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1 font-medium text-zinc-700 focus:outline-hidden"
                           >
                             <option value="all">Todas las plantillas ({templates.length})</option>
-                            {Array.from(new Set(templates.map((t) => t.entity_name).filter(Boolean))).map((ent) => (
+                            {Array.from(new Set(templates.map((t) => entities.find((e) => e.id === t.entity_id)?.name).filter(Boolean))).map((ent) => (
                               <option key={ent} value={ent as string}>
-                                Solo {ent} ({templates.filter((t) => t.entity_name === ent).length})
+                                Solo {ent} ({templates.filter((t) => entities.find((e) => e.id === t.entity_id)?.name === ent).length})
                               </option>
                             ))}
                           </select>
@@ -2297,10 +2251,10 @@ export function EmailTemplatesManagerView({
                         <input
                           type="text"
                           list="entity-suggestions"
-                          value={formEntityName}
+                          value={formEntityLabel}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setFormEntityName(val);
+                            setFormEntityLabel(val);
                             const match = entities.find((ent) => ent.name.toLowerCase() === val.toLowerCase());
                             if (match) {
                               setFormEntityId(match.id);
@@ -2317,28 +2271,11 @@ export function EmailTemplatesManagerView({
                             <option key={ent.id} value={ent.name} />
                           ))}
                         </datalist>
-                        {formEntityName && formIsNewEntity && (
+                        {formEntityLabel && formIsNewEntity && (
                           <span className="text-[10px] font-semibold text-amber-700 mt-0.5 block">
                             Entidad nueva, no existe en el catálogo
                           </span>
                         )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">Moneda</label>
-                        <input
-                          type="text"
-                          list="currency-suggestions"
-                          value={formCurrency}
-                          onChange={(e) => setFormCurrency(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono uppercase"
-                        />
-                        <datalist id="currency-suggestions">
-                          <option value="COP" />
-                          <option value="USD" />
-                          <option value="EUR" />
-                          <option value="MXN" />
-                        </datalist>
                       </div>
                     </div>
 
@@ -2533,7 +2470,7 @@ export function EmailTemplatesManagerView({
                         </div>
                       </div>
 
-                      {/* Remitente y Moneda Regex (avanzado, poco usado pero visible si el JSON los trae) */}
+                      {/* Regex adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-zinc-700">Patrón de Correo de Entidad</label>
@@ -2543,15 +2480,6 @@ export function EmailTemplatesManagerView({
                             onChange={(e) => setFormEntityEmailPattern(e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                             placeholder="Se persiste como entity_email_patterns"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700">Patrón de Remitente</label>
-                          <input
-                            type="text"
-                            value={formSenderPattern}
-                            onChange={(e) => setFormSenderPattern(e.target.value)}
-                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                           />
                         </div>
                         <div className="space-y-1">
@@ -2757,7 +2685,7 @@ export function EmailTemplatesManagerView({
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-0.5">
                         <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
-                          {t.entity_name || 'General'}
+                          {entities.find((e) => e.id === t.entity_id)?.name || 'General'}
                         </span>
                         <h3 className="text-sm font-bold text-zinc-900">{t.name}</h3>
                       </div>
@@ -2963,8 +2891,8 @@ export function EmailTemplatesManagerView({
                   {modalIsNewEntity ? (
                     <input
                       type="text"
-                      value={modalEntityName}
-                      onChange={(e) => setModalEntityName(e.target.value)}
+                      value={modalEntityLabel}
+                      onChange={(e) => setModalEntityLabel(e.target.value)}
                       placeholder="Nombre del banco"
                       className="w-full px-3 py-2 text-xs bg-amber-50/40 border border-amber-300 rounded-xl font-medium"
                     />
@@ -2975,7 +2903,7 @@ export function EmailTemplatesManagerView({
                         const val = e.target.value;
                         setModalEntityId(val || null);
                         const match = entities.find((ent) => ent.id === val);
-                        if (match) setModalEntityName(match.name);
+                        if (match) setModalEntityLabel(match.name);
                       }}
                       className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
                     >
@@ -2986,20 +2914,6 @@ export function EmailTemplatesManagerView({
                       ))}
                     </select>
                   )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">Moneda</label>
-                  <select
-                    value={modalCurrency}
-                    onChange={(e) => setModalCurrency(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
-                  >
-                    <option value="COP">COP ($ Pesos colombianos)</option>
-                    <option value="USD">USD ($ Dólares)</option>
-                    <option value="EUR">EUR (€ Euros)</option>
-                    <option value="MXN">MXN ($ Pesos mexicanos)</option>
-                  </select>
                 </div>
               </div>
 

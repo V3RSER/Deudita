@@ -432,18 +432,14 @@ function groupTemplatesByEntity(templates) {
 /**
  * Prueba un correo contra los patrones de correo de una entidad.
  */
-function matchesEntityEmail(
-  emailPatterns,
-  sender,
-  body
-) {
-  return emailPatterns.some(
-    pattern => matchesEitherSource(
-      pattern,
-      sender,
-      body
-    )
-  );
+function matchesEntityEmail(emailPatterns, sender) {
+  return emailPatterns.some(pattern => {
+    try {
+      return new RegExp(pattern, 'i').test(sender || '');
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -460,29 +456,15 @@ function matchAgainstTemplates(
   );
 
   for (const group of entityGroups) {
-    if (group.emailPatterns.length > 0) {
-      if (
-        !matchesEntityEmail(
-          group.emailPatterns,
-          sender,
-          body
-        )
-      ) {
-        if (DEBUG_MATCHING) {
-          console.log(
-            `  → entidad ${group.entityId}: descartada, ningún email_pattern matcheó (${group.templates.length} plantilla(s) omitida(s) sin evaluar)`
-          );
-        }
-
-        continue;
-      }
-
-      if (DEBUG_MATCHING) {
-        console.log(
-          `  → entidad ${group.entityId}: email_pattern matcheó, evaluando sus ${group.templates.length} plantilla(s)`
-        );
-      }
+    if (group.emailPatterns.length === 0) {
+      if (DEBUG_MATCHING) console.log(`  → entidad ${group.entityId}: descartada, no tiene entity_email_patterns`);
+      continue;
     }
+    if (!matchesEntityEmail(group.emailPatterns, sender)) {
+      if (DEBUG_MATCHING) console.log(`  → entidad ${group.entityId}: descartada, ningún entity_email_pattern coincide con el remitente`);
+      continue;
+    }
+    if (DEBUG_MATCHING) console.log(`  ✓ entidad ${group.entityId}: entity_email_pattern coincidió; evaluando ${group.templates.length} plantilla(s)`);
 
     const bySubject = {};
 
@@ -695,8 +677,7 @@ function tryExtractFromTemplate(
       amount: numericAmount,
       currency: currency,
       merchant: merchant,
-      entity:
-        t.entity_name || null,
+      entityId: t.entity_id,
       sourceAccount:
         sourceAccountMatch
           ? (sourceAccountMatch[1] !== undefined ? sourceAccountMatch[1] : sourceAccountMatch[0])
@@ -709,7 +690,7 @@ function tryExtractFromTemplate(
         buildConcept(
           t.expense_type_label,
           merchant
-        ) || (merchant ? StringUtils_toTitleCase(merchant) : (t.entity_name ? StringUtils_toTitleCase(t.entity_name) : null)),
+        ) || (merchant ? StringUtils_toTitleCase(merchant) : null),
     };
   } catch (regexError) {
     console.warn(

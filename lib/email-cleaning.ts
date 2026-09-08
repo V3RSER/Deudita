@@ -68,10 +68,9 @@ export interface ParsedAITemplateResult {
   success: boolean;
   data?: {
     name: string;
-    entity_name: string | null;
+    entity_label: string | null;
     is_new_entity: boolean;
     entity_email_pattern: string | null;
-    sender_pattern: string | null;
     subject_pattern: string | null;
     match_pattern: string | null;
     amount_regex: string;
@@ -81,7 +80,6 @@ export interface ParsedAITemplateResult {
     time_regex: string | null;
     time_format: string | null;
     currency_regex: string | null;
-    default_currency: string;
     source_account_regex: string | null;
     expense_type: string | null;
   };
@@ -93,15 +91,36 @@ export interface ParsedAITemplateResult {
  * Builds the exact prompt used to create a new expense extraction template.
  * Includes entity matching logic, level 1-3 filtering, and required database fields.
  */
+export interface PromptEntity { id: string; name: string; patterns: string[]; }
+
+export function findEntityByEmailPattern(sender: string, entities: PromptEntity[] = []): PromptEntity | null {
+  const value = (sender || '').trim();
+  if (!value) return null;
+  for (const entity of entities) {
+    for (const rawPattern of entity.patterns || []) {
+      const pattern = sanitizeRegexPattern(rawPattern);
+      if (!pattern || !pattern.includes('@')) continue;
+      try {
+        if (new RegExp(pattern, 'i').test(value)) return entity;
+      } catch {}
+    }
+  }
+  return null;
+}
+
 export function buildTemplatePrompt(
   sender: string,
   subject: string,
   cleanBody: string,
-  existingEntities: string[] = []
+  existingEntities: PromptEntity[] = []
 ): string {
+  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities);
   const entityListText = existingEntities.length > 0
-    ? `ENTIDADES BANCARIAS YA REGISTRADAS EN EL SISTEMA:\n${existingEntities.map(e => `  - "${e}"`).join('\n')}\n`
+    ? `ENTIDADES REGISTRADAS Y SUS PATRONES DE CORREO:\n${existingEntities.map(e => `  - "${e.name}" | entity_id=${e.id} | patterns=${JSON.stringify(e.patterns || [])}`).join('\n')}\n`
     : 'Aún no hay entidades registradas en el sistema.\n';
+  const priorMatchText = matchedExistingEntity
+    ? `MATCH PREVIO DE ENTIDAD: el remitente coincide con entity_email_patterns de "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}). Usa esta entidad. NO generes entity_email_pattern nuevo.`
+    : 'MATCH PREVIO DE ENTIDAD: ningún entity_email_pattern existente coincide con el remitente. Solo propone un patrón nuevo si realmente corresponde a una entidad nueva y el patrón contiene @.';
 
   return [
     'Eres un asistente especializado en diseñar plantillas de extracción de datos',
@@ -115,12 +134,13 @@ export function buildTemplatePrompt(
     'la redacción completa ni los valores concretos de una sola muestra.',
     '',
     'NIVEL 1 — ENTIDAD:',
-    'Identifica como entity_name la marca o entidad que emite directamente la notificación, priorizando el campo "De:", el remitente original, el asunto y el contenido principal.',
+    'Identifica como entity_label la marca o entidad que emite directamente la notificación, priorizando el campo "De:", el remitente original, el asunto y el contenido principal.',
     'No infieras la entidad a partir de relaciones corporativas, bancos asociados, propietarios, emisores legales, procesadores ni menciones en pies de página, términos legales o frases como "Producto de...".',
     'Ejemplo: si el correo dice De: RappiCard y al final dice Producto de Davivienda S.A., la entidad es "RappiCard", no Davivienda ni DAVIbank.',
     'La lista de entidades registradas solo sirve para normalizar el nombre cuando la entidad emisora identificada directamente sea inequívocamente equivalente a una entidad registrada. No uses relaciones corporativas para determinar equivalencia.',
     'is_new_entity debe ser true únicamente si la entidad emisora identificada no corresponde a ninguna entidad registrada.',
-    'equivalente de la lista de entidades registradas; en caso contrario debe ser false.',
+    'REGLA ABSOLUTA: antes de proponer una entidad existente, compara el remitente recibido contra los entity_email_patterns de cada entidad registrada. Si una entidad tiene cero patrones, NO puede considerarse coincidencia. Si un patrón coincide, usa esa entidad y no generes otro patrón para ella.',
+    'Si ninguna entidad existente coincide por entity_email_patterns, puedes proponer una entidad nueva solo si la evidencia del correo lo justifica. En ese caso, entity_email_pattern debe contener @ y representar una señal institucional estable.',
     '',
     'NIVEL 2 — ASUNTO Y NOMBRE DE LA PLANTILLA:',
     'Analiza el asunto para determinar la clase de notificación y construye subject_pattern únicamente con',
@@ -161,10 +181,11 @@ export function buildTemplatePrompt(
     'Haz esta clasificación por análisis semántico y estructural del correo, no por coincidencia literal con la muestra.',
     '',
     entityListText,
+    priorMatchText,
     'REGLAS PARA LOS REGEX:',
     '1. Todos deben ser JavaScript válidos y compilar con new RegExp(regex, "i").',
-    '1A. entity_email_pattern debe identificar de forma estable el dominio, buzón o señal institucional de la entidad.',
-    'No debe depender de nombres, comercios, importes, fechas, referencias ni otros datos transaccionales.',
+    '1A. entity_email_pattern solo puede crearse si ninguna entidad registrada tiene un entity_email_pattern que coincida con el remitente.',
+    'Debe ser una señal estable del correo institucional y debe contener obligatoriamente el carácter @. No generes patrones como "bbva", "bancolombia\\.com\\.co" o cualquier fragmento sin @.',
     '2. No uses delimitadores /.../ ni flags dentro del valor.',
     '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
     '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) alrededor del valor a extraer. Si usas alternaciones como (val1)|(val2), asegúrate de que capture el valor.',
@@ -172,16 +193,16 @@ export function buildTemplatePrompt(
     '6. merchant_regex: captura el comercio, tienda, destinatario o beneficiario de la operación cuando esté presente. En transferencias, si no existe nombre de beneficiario pero sí una cuenta destino explícita, debe capturarse esa cuenta destino. Si no existe ningún comercio, destinatario ni beneficiario identificable, merchant_regex debe ser null.',
     '7. date_regex debe capturar únicamente la fecha y date_format debe indicar exactamente su formato (ej: DD/MM/YYYY, YYYY-MM-DD, etc.).',
     '7A. time_regex: Si el correo tiene hora de transacción (ej: "14:35", "02:35 p. m.", "Hora: 14:35:00", "a las 14:35"), usa un patrón tolerante a formato 12h/24h con segundos opcionales, capturando el valor exacto de la hora: ejemplo `(?:hora|hora\\s+transacción)?:?\\s*([0-2]?[0-9]:[0-5][0-9](?::[0-5][0-9])?(?:\\s*[ap]\\.?\\s*m\\.?)?)`. time_format debe coincidir con los tokens de fecha/hora (ej: "HH:mm", "HH:mm:ss", "hh:mm a", "hh:mm a.m."). Si la hora NO aparece en el correo, devuelve time_regex=null y time_format=null.',
-    '7B. currency_regex: Si el correo indica dinámicamente la moneda (ej: "COP", "USD", "$"), usa un regex con captura. Si la moneda es implícita, deja currency_regex=null y define default_currency="COP".',
+    '7B. currency_regex: Si el correo indica dinámicamente la moneda (ej: "COP", "USD", "$"), usa un regex con captura. Si no aparece una moneda explícita, deja currency_regex=null.',
     '8. CRÍTICO PARA EXTRACCIÓN: Las expresiones regulares DEBEN coincidir contra el texto en CUERPO LIMPIO. Ten en cuenta que tras la limpieza de correos y tablas HTML, entre etiquetas y sus valores suele haber espacios o saltos de línea, NO siempre dos puntos ":". Usa separadores flexibles como `(?:\\s*:\\s*|\\s+)`.',
     '9. Si un campo opcional (como hora, cuenta de origen, comercio) NO aparece en el texto del correo, devuelve null. NUNCA inventes un regex para un campo que no está en el correo.',
-    '10. sender_pattern debe identificar una señal estable del remitente institucional.',
+
     '11. Los patrones deben generalizar variaciones de instancia sin borrar diferencias que definan otra plantilla.',
     '',
     'VALORES SEMÁNTICOS DEL RESULTADO:',
-    '12. default_currency debe contener la moneda aplicable por defecto cuando el correo no indique explícitamente una. Para notificaciones bancarias de Colombia, usa "COP" salvo evidencia clara de otra moneda.',
+
     '13. expense_type debe describir la naturaleza de la operación según el vocabulario del sistema: "compra", "transferencia", "retiro", "pago", etc.',
-    '14. entity_name debe usar exactamente el nombre de una entidad equivalente si ya existe en la lista registrada.',
+    '14. entity_label debe usar exactamente el nombre de una entidad equivalente si ya existe en la lista registrada.',
     '',
     'ANTES DE CONSTRUIR EL JSON, RAZONA INTERNAMENTE:',
     'A) Cuál es la identidad habitual y corta de la entidad.',
@@ -195,9 +216,9 @@ export function buildTemplatePrompt(
     '',
     'RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO, SIN MARKDOWN NI EXPLICACIONES.',
     'El objeto debe contener EXACTAMENTE estas propiedades:',
-    'name, entity_name, is_new_entity, entity_email_pattern, sender_pattern, subject_pattern,',
+    'name, entity_label, is_new_entity, entity_email_pattern, subject_pattern,',
     'match_pattern, amount_regex, merchant_regex, date_regex, date_format, time_regex, time_format,',
-    'currency_regex, default_currency, source_account_regex, expense_type.',
+    'currency_regex, source_account_regex, expense_type.',
     '',
     'Cada propiedad debe contener el valor determinado por el análisis del correo y las reglas anteriores.',
     'NO copies valores de esta instrucción como si fueran datos del correo.',
@@ -273,7 +294,7 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
   // Required field checks
   if (!parsed.name || typeof parsed.name !== 'string' || !parsed.name.trim()) {
     warnings.push('La IA no especificó un nombre para la plantilla; se asignará uno por defecto.');
-    parsed.name = `${parsed.entity_name || 'Banco'} - Plantilla`;
+    parsed.name = `${parsed.entity_label || 'Banco'} - Plantilla`;
   }
 
   if (!parsed.amount_regex || typeof parsed.amount_regex !== 'string' || !parsed.amount_regex.trim()) {
@@ -292,7 +313,6 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     { key: 'currency_regex', label: 'Moneda', reqGroup: true },
     { key: 'source_account_regex', label: 'Cuenta de origen', reqGroup: true },
     { key: 'subject_pattern', label: 'Patrón de Asunto', reqGroup: false },
-    { key: 'sender_pattern', label: 'Patrón de Remitente', reqGroup: false },
     { key: 'match_pattern', label: 'Patrón de Desempate', reqGroup: false },
     { key: 'entity_email_pattern', label: 'Patrón de Correo de Entidad', reqGroup: false },
   ];
@@ -318,6 +338,14 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     }
   }
 
+  if (parsed.time_regex && !parsed.time_format) validationErrors.push('Si existe time_regex, time_format es obligatorio.');
+
+  const entityPattern = sanitizeRegexPattern(parsed.entity_email_pattern);
+  if (entityPattern) {
+    if (!entityPattern.includes('@')) validationErrors.push('El entity_email_pattern debe contener @ y representar un correo/dominio institucional.');
+    else { try { new RegExp(entityPattern, 'i'); } catch { validationErrors.push('El entity_email_pattern no es un regex válido.'); } }
+  }
+
   if (validationErrors.length > 0) {
     return {
       success: false,
@@ -330,10 +358,9 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     success: true,
     data: {
       name: String(parsed.name).trim(),
-      entity_name: parsed.entity_name ? String(parsed.entity_name).trim() : null,
+      entity_label: parsed.entity_label ? String(parsed.entity_label).trim() : null,
       is_new_entity: Boolean(parsed.is_new_entity),
       entity_email_pattern: sanitizeRegexPattern(parsed.entity_email_pattern),
-      sender_pattern: sanitizeRegexPattern(parsed.sender_pattern),
       subject_pattern: sanitizeRegexPattern(parsed.subject_pattern),
       match_pattern: sanitizeRegexPattern(parsed.match_pattern),
       amount_regex: sanitizeRegexPattern(parsed.amount_regex) || String(parsed.amount_regex).trim(),
@@ -341,9 +368,8 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
       date_regex: sanitizeRegexPattern(parsed.date_regex),
       date_format: parsed.date_format ? String(parsed.date_format).trim() : 'DD/MM/YYYY',
       time_regex: sanitizeRegexPattern(parsed.time_regex),
-      time_format: parsed.time_format ? String(parsed.time_format).trim() : (parsed.time_regex ? 'HH:mm:ss' : null),
+      time_format: parsed.time_format ? String(parsed.time_format).trim() : null,
       currency_regex: sanitizeRegexPattern(parsed.currency_regex),
-      default_currency: parsed.default_currency ? String(parsed.default_currency).trim() : 'COP',
       source_account_regex: sanitizeRegexPattern(parsed.source_account_regex),
       expense_type: parsed.expense_type ? String(parsed.expense_type).toLowerCase().trim() : null,
     },
@@ -354,9 +380,8 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
 export interface TemplateCorrectionDetails {
   template: {
     name?: string | null;
-    entity_name?: string | null;
+    entity_label?: string | null;
     entity_email_pattern?: string | null;
-    sender_pattern?: string | null;
     subject_pattern?: string | null;
     match_pattern?: string | null;
     amount_regex?: string | null;
@@ -366,7 +391,6 @@ export interface TemplateCorrectionDetails {
     time_regex?: string | null;
     time_format?: string | null;
     currency_regex?: string | null;
-    default_currency?: string | null;
     source_account_regex?: string | null;
     expense_type?: string | null;
   };
