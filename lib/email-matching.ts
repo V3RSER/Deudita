@@ -1,4 +1,4 @@
-import { cleanEmailBody, sanitizeRegexPattern } from './email-cleaning';
+import { cleanEmailBody, sanitizeRegexPattern, getHeadLines } from './email-cleaning';
 
 export interface CatalogEntity {
   id: string;
@@ -34,7 +34,7 @@ export interface Level1EntityReport {
   patterns: string[];
   matched: boolean;
   matchedPattern?: string;
-  matchedOn?: 'sender';
+  matchedOn?: 'sender' | 'body';
   discardReason?: string;
   templatesCount: number;
   templateNames: string[];
@@ -115,7 +115,7 @@ export interface SingleTemplateEvaluation {
     entityName: string;
     entityPatterns: string[];
     matchedPattern?: string;
-    matchedOn?: 'sender';
+    matchedOn?: 'sender' | 'body';
     reason?: string;
   };
   level2: {
@@ -553,6 +553,7 @@ export function diagnoseEmailMatching(
   entities: CatalogEntity[]
 ): DiagnosisResult {
   const cleanBody = cleanEmailBody(rawOrCleanBody);
+  const bodyHeadLines = getHeadLines(cleanBody, 10);
 
   // Mirror Google Apps Script exactly: templates participate only through
   // their persisted entity_id. No fallback by entity label and no virtual
@@ -610,7 +611,7 @@ export function diagnoseEmailMatching(
 
     let entityMatched = false;
     let matchedPattern: string | undefined;
-    let matchedOn: 'sender' | undefined;
+    let matchedOn: 'sender' | 'body' | undefined;
 
     for (const pat of patternsToTest) {
       try {
@@ -619,6 +620,14 @@ export function diagnoseEmailMatching(
           entityMatched = true;
           matchedPattern = pat;
           matchedOn = 'sender';
+          break;
+        }
+        // Correo reenviado por regla (p. ej. Outlook): el remitente real
+        // suele quedar en las primeras líneas del cuerpo, no en el sender.
+        if (regex.test(bodyHeadLines)) {
+          entityMatched = true;
+          matchedPattern = pat;
+          matchedOn = 'body';
           break;
         }
       } catch {
@@ -643,7 +652,7 @@ export function diagnoseEmailMatching(
         entityName: entity?.name || entId,
         patterns: patternsToTest,
         matched: false,
-        discardReason: `Ningún patrón (${patternsToTest.map((p) => `/${p}/i`).join(', ')}) coincidió con el remitente ni con el cuerpo.`,
+        discardReason: `Ningún patrón (${patternsToTest.map((p) => `/${p}/i`).join(', ')}) coincidió con el remitente ni con las primeras 10 líneas del cuerpo.`,
         templatesCount: entTemplates.length,
         templateNames: entTemplates.map((t) => t.name),
       });
@@ -1270,6 +1279,7 @@ export function simulateGoogleAppsScriptProcess(
   const sender = message.sender || '';
   const subject = message.subject || '';
   const body = cleanEmailBody(message.plainBody);
+  const bodyHeadLines = getHeadLines(body, 10);
 
   logs.push(`[Google Apps Script] 📧 Procesando correo: "${subject}" | Remitente: ${sender}`);
   logs.push(`[Google Apps Script] Limpieza de cuerpo ejecutada (${body.length} caracteres de texto plano).`);
@@ -1312,14 +1322,20 @@ export function simulateGoogleAppsScriptProcess(
       logs.push(`  → Entidad "${group.entityName}": descartada, no tiene entity_email_patterns.`);
       continue;
     }
+    let matchedOnBody = false;
     const entityMatch = group.emailPatterns.some((pattern) => {
-      try { return new RegExp(pattern, 'i').test(sender); } catch { return false; }
+      try {
+        const regex = new RegExp(pattern, 'i');
+        if (regex.test(sender)) return true;
+        if (regex.test(bodyHeadLines)) { matchedOnBody = true; return true; }
+        return false;
+      } catch { return false; }
     });
     if (!entityMatch) {
-      logs.push(`  → Entidad "${group.entityName}": descartada, ningún entity_email_pattern coincidió con el remitente.`);
+      logs.push(`  → Entidad "${group.entityName}": descartada, ningún entity_email_pattern coincidió con el remitente ni con las primeras 10 líneas del cuerpo.`);
       continue;
     }
-    logs.push(`  ✓ Entidad "${group.entityName}": coincidió con entity_email_pattern. Evaluando ${group.templates.length} plantilla(s).`);
+    logs.push(`  ✓ Entidad "${group.entityName}": coincidió con entity_email_pattern${matchedOnBody ? ' en las primeras 10 líneas del cuerpo (correo reenviado)' : ''}. Evaluando ${group.templates.length} plantilla(s).`);
 
     // Agrupar por subject_pattern
     const bySubject = new Map<string, CatalogTemplate[]>();

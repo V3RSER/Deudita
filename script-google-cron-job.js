@@ -418,6 +418,7 @@ function groupTemplatesByEntity(templates) {
     if (!byEntity[t.entity_id]) {
       byEntity[t.entity_id] = {
         entityId: t.entity_id,
+        entityName: (t.entity && t.entity.name) || t.entity_id,
         emailPatterns: t.entity_email_patterns || [],
         templates: [],
       };
@@ -430,12 +431,30 @@ function groupTemplatesByEntity(templates) {
 }
 
 /**
- * Prueba un correo contra los patrones de correo de una entidad.
+ * Devuelve las primeras N líneas no vacías del cuerpo, para buscar ahí
+ * el remitente/entidad real cuando el correo llegó reenviado (p. ej. por
+ * una regla de Outlook) y message.getFrom() apunta al correo personal
+ * en vez de al remitente original.
  */
-function matchesEntityEmail(emailPatterns, sender) {
+function getHeadLines(body, maxLines) {
+  if (!body) return '';
+  return body
+    .split('\n')
+    .slice(0, maxLines || 10)
+    .join('\n');
+}
+
+/**
+ * Prueba un correo contra los patrones de correo de una entidad.
+ * Revisa primero el remitente (sender) y, si no coincide, también las
+ * primeras 10 líneas del cuerpo, donde suele quedar el remitente original
+ * cuando el correo fue reenviado automáticamente por una regla (Outlook, etc.).
+ */
+function matchesEntityEmail(emailPatterns, sender, bodyHeadLines) {
   return emailPatterns.some(pattern => {
     try {
-      return new RegExp(pattern, 'i').test(sender || '');
+      const regex = new RegExp(pattern, 'i');
+      return regex.test(sender || '') || regex.test(bodyHeadLines || '');
     } catch {
       return false;
     }
@@ -443,7 +462,11 @@ function matchesEntityEmail(emailPatterns, sender) {
 }
 
 /**
- * Prueba un mensaje contra las plantillas.
+ * Prueba un mensaje contra las plantillas. Uso en producción (sync cron):
+ * recorre niveles 1→4 y retorna el primer match (o null). No construye
+ * reportes intermedios, para no gastar ciclos de más en cada ejecución
+ * del trigger. Para diagnóstico nivel-por-nivel usa
+ * diagnoseMessageAgainstTemplates, que comparte toda esta misma lógica.
  */
 function matchAgainstTemplates(
   message,
@@ -454,17 +477,21 @@ function matchAgainstTemplates(
   const body = cleanEmailBody(
     message.getPlainBody()
   );
+  const bodyHeadLines = getHeadLines(body, 10);
 
   for (const group of entityGroups) {
     if (group.emailPatterns.length === 0) {
       if (DEBUG_MATCHING) console.log(`  → entidad ${group.entityId}: descartada, no tiene entity_email_patterns`);
       continue;
     }
-    if (!matchesEntityEmail(group.emailPatterns, sender)) {
-      if (DEBUG_MATCHING) console.log(`  → entidad ${group.entityId}: descartada, ningún entity_email_pattern coincide con el remitente`);
+    if (!matchesEntityEmail(group.emailPatterns, sender, bodyHeadLines)) {
+      if (DEBUG_MATCHING) console.log(`  → entidad ${group.entityId}: descartada, ningún entity_email_pattern coincide con el remitente ni con las primeras 10 líneas del cuerpo`);
       continue;
     }
-    if (DEBUG_MATCHING) console.log(`  ✓ entidad ${group.entityId}: entity_email_pattern coincidió; evaluando ${group.templates.length} plantilla(s)`);
+    if (DEBUG_MATCHING) {
+      const matchedOnSender = group.emailPatterns.some(p => { try { return new RegExp(p, 'i').test(sender || ''); } catch { return false; } });
+      console.log(`  ✓ entidad ${group.entityId}: entity_email_pattern coincidió con ${matchedOnSender ? 'el remitente' : 'las primeras 10 líneas del cuerpo (correo reenviado)'}; evaluando ${group.templates.length} plantilla(s)`);
+    }
 
     const bySubject = {};
 
@@ -553,6 +580,198 @@ function matchAgainstTemplates(
   }
 
   return null;
+}
+
+/**
+ * Igual que matchAgainstTemplates, pero en vez de devolver solo el primer
+ * match, construye un reporte completo de los 4 niveles de filtrado
+ * (entidad, asunto, desempate, extracción) para cada plantilla evaluada.
+ * Reutiliza exactamente las mismas funciones que producción — nunca hay
+ * dos implementaciones del matching corriendo en paralelo.
+ *
+ * Se usa desde el panel de pruebas (testMessageAgainstTemplates).
+ */
+function diagnoseMessageAgainstTemplates(message, entityGroups) {
+  const sender = message.getFrom();
+  const subject = message.getSubject();
+  const body = cleanEmailBody(message.getPlainBody());
+  const bodyHeadLines = getHeadLines(body, 10);
+
+  const level1 = { passedEntities: [], discardedEntities: [] };
+  const level2 = { passedGroups: [], discardedGroups: [] };
+  const level3 = { candidates: [], discardedCandidates: [] };
+  const extractions = [];
+  let winner = null;
+
+  for (const group of entityGroups) {
+    const entityLabel = group.entityName || group.entityId;
+
+    if (group.emailPatterns.length === 0) {
+      level1.discardedEntities.push({
+        entityId: group.entityId,
+        entityName: entityLabel,
+        patterns: [],
+        matched: false,
+        reason: 'La entidad no tiene entity_email_patterns; no puede participar en el matching.',
+        templatesCount: group.templates.length,
+      });
+      continue;
+    }
+
+    const matchedOnSender = group.emailPatterns.some(p => {
+      try { return new RegExp(p, 'i').test(sender || ''); } catch { return false; }
+    });
+    const matchedOnBody = !matchedOnSender && group.emailPatterns.some(p => {
+      try { return new RegExp(p, 'i').test(bodyHeadLines || ''); } catch { return false; }
+    });
+    const entityMatched = matchedOnSender || matchedOnBody;
+
+    if (!entityMatched) {
+      level1.discardedEntities.push({
+        entityId: group.entityId,
+        entityName: entityLabel,
+        patterns: group.emailPatterns,
+        matched: false,
+        reason: `Ningún patrón (${group.emailPatterns.map(p => `/${p}/i`).join(', ')}) coincidió con el remitente ni con las primeras 10 líneas del cuerpo.`,
+        templatesCount: group.templates.length,
+      });
+      continue;
+    }
+
+    level1.passedEntities.push({
+      entityId: group.entityId,
+      entityName: entityLabel,
+      patterns: group.emailPatterns,
+      matched: true,
+      matchedOn: matchedOnSender ? 'sender' : 'body',
+      templatesCount: group.templates.length,
+    });
+
+    const bySubject = {};
+    group.templates.forEach(t => {
+      const key = t.subject_pattern || `__no_subject_${t.id}`;
+      if (!bySubject[key]) bySubject[key] = [];
+      bySubject[key].push(t);
+    });
+
+    for (const key of Object.keys(bySubject)) {
+      const candidates = bySubject[key];
+      const first = candidates[0];
+      const subjectPassed =
+        !first.subject_pattern ||
+        matchesEitherSource(first.subject_pattern, subject, body);
+
+      const groupReport = {
+        entityId: group.entityId,
+        entityName: entityLabel,
+        subjectPattern: first.subject_pattern || null,
+        matched: subjectPassed,
+        templatesCount: candidates.length,
+        templateNames: candidates.map(t => t.name),
+      };
+
+      if (!subjectPassed) {
+        groupReport.reason = `El patrón de asunto "${first.subject_pattern}" no coincidió con el asunto ni con el cuerpo.`;
+        level2.discardedGroups.push(groupReport);
+        continue;
+      }
+      groupReport.matchedOn = first.subject_pattern ? 'subject' : undefined;
+      level2.passedGroups.push(groupReport);
+
+      const toEvaluate = candidates.length > 1
+        ? candidates.filter(t => {
+          const matchPat = t.match_pattern;
+          if (!matchPat) {
+            level3.discardedCandidates.push({
+              templateId: t.id,
+              templateName: t.name,
+              matchPattern: null,
+              isAmbiguousGroup: true,
+              matched: false,
+              reason: 'Plantilla ambigua con otra(s) del mismo asunto y SIN match_pattern definido — se descarta (define match_pattern para desambiguar).',
+            });
+            return false;
+          }
+          try {
+            const regex = new RegExp(matchPat, 'i');
+            const matched = regex.test(body) || regex.test(subject);
+            if (!matched) {
+              level3.discardedCandidates.push({
+                templateId: t.id,
+                templateName: t.name,
+                matchPattern: matchPat,
+                isAmbiguousGroup: true,
+                matched: false,
+                reason: `match_pattern "${matchPat}" no se encontró en el asunto ni en el cuerpo.`,
+              });
+            } else {
+              level3.candidates.push({
+                templateId: t.id,
+                templateName: t.name,
+                matchPattern: matchPat,
+                isAmbiguousGroup: true,
+                matched: true,
+              });
+            }
+            return matched;
+          } catch (err) {
+            level3.discardedCandidates.push({
+              templateId: t.id,
+              templateName: t.name,
+              matchPattern: matchPat,
+              isAmbiguousGroup: true,
+              matched: false,
+              reason: `match_pattern inválido: ${err.message}`,
+            });
+            return false;
+          }
+        })
+        : candidates;
+
+      if (candidates.length === 1) {
+        level3.candidates.push({
+          templateId: first.id,
+          templateName: first.name,
+          matchPattern: first.match_pattern || null,
+          isAmbiguousGroup: false,
+          matched: true,
+        });
+      }
+
+      for (const t of toEvaluate) {
+        const result = tryExtractFromTemplate(t, sender, subject, body);
+        const report = {
+          templateId: t.id,
+          templateName: t.name,
+          overallPassed: Boolean(result),
+        };
+
+        if (result) {
+          report.extractedAmount = result.amount;
+          report.extractedMerchant = result.merchant;
+          report.extractedDate = result.date;
+          report.extractedTime = result.time;
+          report.extractedCurrency = result.currency;
+          report.extractedSourceAccount = result.sourceAccount;
+          extractions.push(report);
+          if (!winner) winner = result;
+        } else {
+          report.reason = 'amount_regex no encontró nada en el cuerpo, o el monto extraído no se pudo normalizar a número.';
+          extractions.push(report);
+        }
+      }
+    }
+  }
+
+  return {
+    matched: Boolean(winner),
+    winner,
+    cleanedBody: body,
+    level1,
+    level2,
+    level3,
+    extractions,
+  };
 }
 
 /**

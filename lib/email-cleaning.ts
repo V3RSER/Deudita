@@ -41,6 +41,17 @@ export function cleanEmailBody(body: string | null | undefined): string {
 }
 
 /**
+ * Returns the first N non-trailing lines of the (cleaned) body. Used to look for
+ * the real sender/entity when an email arrived forwarded by a rule (e.g. Outlook),
+ * in which case getFrom()/sender points to the personal inbox instead of the
+ * original sender, and the subject may have been rewritten too.
+ */
+export function getHeadLines(body: string | null | undefined, maxLines: number = 10): string {
+  if (!body) return '';
+  return String(body).split('\n').slice(0, maxLines).join('\n');
+}
+
+/**
  * Sanitizes regex strings by removing leading/trailing forward slashes (/.../i)
  * and accidental outer quotes that LLMs or users might introduce.
  */
