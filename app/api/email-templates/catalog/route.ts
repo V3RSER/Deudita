@@ -32,7 +32,7 @@ export async function GET() {
     try {
       const { data } = await supabase.rpc('detect_ambiguous_templates');
       if (Array.isArray(data)) ambiguousTemplates = data;
-    } catch {}
+    } catch { }
 
     return NextResponse.json({ success: true, templates: templateList, entities: entityList, expense_types: expenseTypes || [], ambiguous_templates: ambiguousTemplates, total_templates: templateList.length, total_entities: entityList.length });
   } catch (err: unknown) {

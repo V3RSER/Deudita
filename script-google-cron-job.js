@@ -504,36 +504,36 @@ function matchAgainstTemplates(
       const toEvaluate =
         candidates.length > 1
           ? candidates.filter(t => {
-              if (!t.match_pattern) {
-                if (DEBUG_MATCHING) {
-                  console.log(
-                    `  → plantilla "${t.name}": ambigua con otra(s) del mismo asunto y SIN match_pattern definido — se omite (definir match_pattern en la plantilla)`
-                  );
-                }
-
-                return false;
-              }
-
-              const regex = new RegExp(
-                t.match_pattern,
-                'i'
-              );
-
-              const matched =
-                regex.test(body) ||
-                regex.test(subject);
-
-              if (
-                !matched &&
-                DEBUG_MATCHING
-              ) {
+            if (!t.match_pattern) {
+              if (DEBUG_MATCHING) {
                 console.log(
-                  `  → plantilla "${t.name}": match_pattern "${t.match_pattern}" no encontrado, se descarta`
+                  `  → plantilla "${t.name}": ambigua con otra(s) del mismo asunto y SIN match_pattern definido — se omite (definir match_pattern en la plantilla)`
                 );
               }
 
-              return matched;
-            })
+              return false;
+            }
+
+            const regex = new RegExp(
+              t.match_pattern,
+              'i'
+            );
+
+            const matched =
+              regex.test(body) ||
+              regex.test(subject);
+
+            if (
+              !matched &&
+              DEBUG_MATCHING
+            ) {
+              console.log(
+                `  → plantilla "${t.name}": match_pattern "${t.match_pattern}" no encontrado, se descarta`
+              );
+            }
+
+            return matched;
+          })
           : candidates;
 
       for (const t of toEvaluate) {
@@ -586,51 +586,51 @@ function tryExtractFromTemplate(
     const merchantMatch =
       t.merchant_regex
         ? body.match(
-            new RegExp(
-              t.merchant_regex,
-              'i'
-            )
+          new RegExp(
+            t.merchant_regex,
+            'i'
           )
+        )
         : null;
 
     const dateMatch =
       t.date_regex
         ? body.match(
-            new RegExp(
-              t.date_regex,
-              'i'
-            )
+          new RegExp(
+            t.date_regex,
+            'i'
           )
+        )
         : null;
 
     const timeMatch =
       t.time_regex
         ? body.match(
-            new RegExp(
-              t.time_regex,
-              'i'
-            )
+          new RegExp(
+            t.time_regex,
+            'i'
           )
+        )
         : null;
 
     const currencyMatch =
       t.currency_regex
         ? body.match(
-            new RegExp(
-              t.currency_regex,
-              'i'
-            )
+          new RegExp(
+            t.currency_regex,
+            'i'
           )
+        )
         : null;
 
     const sourceAccountMatch =
       t.source_account_regex
         ? body.match(
-            new RegExp(
-              t.source_account_regex,
-              'i'
-            )
+          new RegExp(
+            t.source_account_regex,
+            'i'
           )
+        )
         : null;
 
     const merchant =
@@ -910,7 +910,7 @@ function getLastSyncEpoch() {
 
   return Math.floor(
     startOfToday.getTime() /
-      1000
+    1000
   );
 }
 

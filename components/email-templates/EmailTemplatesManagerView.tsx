@@ -1107,21 +1107,18 @@ export function EmailTemplatesManagerView({
     const d = result.data;
     const senderForEntity = sampleSender || selectedEmail?.sender || '';
     const matchedByPattern = entities.find((e) => (e.patterns || []).some((p) => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(senderForEntity); } catch { return false; } })) || null;
-    const matchedEntity = matchedByPattern || (d.entity_label
-      ? entities.find((e) => e.name.toLowerCase().trim() === d.entity_label!.toLowerCase().trim())
-      : null);
+    const matchedEntity = matchedByPattern;
     setFormEntityEmailPattern(matchedByPattern ? '' : (d.entity_email_pattern || ''));
 
     setFormName(d.name || '');
-    if (d.entity_label) {
+    if (matchedEntity) {
+      setFormEntityLabel(matchedEntity.name);
+      setFormEntityId(matchedEntity.id);
+      setFormIsNewEntity(false);
+    } else if (d.entity_label) {
       setFormEntityLabel(d.entity_label);
-      if (matchedEntity) {
-        setFormEntityId(matchedEntity.id);
-        setFormIsNewEntity(false);
-      } else {
-        setFormEntityId(null);
-        setFormIsNewEntity(true);
-      }
+      setFormEntityId(null);
+      setFormIsNewEntity(true);
     } else {
       setFormEntityLabel('');
       setFormEntityId(null);
@@ -1223,21 +1220,25 @@ export function EmailTemplatesManagerView({
       if (s) {
         setFormName(s.name || '');
         setFormEntityEmailPattern(s.entity_email_pattern || '');
-        if (s.entity_label) {
-          setFormEntityLabel(s.entity_label);
-          const matched = entities.find((e) => e.name.toLowerCase() === s.entity_label.toLowerCase());
-          if (matched) {
-            setFormEntityId(matched.id);
-            setFormIsNewEntity(false);
-          } else {
-            setFormEntityId(null);
-            setFormIsNewEntity(true);
+        const matched = entities.find((e) => (e.patterns || []).some((p) => {
+          try {
+            const pattern = sanitizeRegexPattern(p);
+            return Boolean(pattern && new RegExp(pattern, 'i').test(selectedEmail.sender));
+          } catch {
+            return false;
           }
-        } else {
-          setFormEntityLabel('');
-          setFormEntityId(null);
+        })) || null;
+
+        if (matched) {
+          setFormEntityLabel(matched.name);
+          setFormEntityId(matched.id);
           setFormEntityEmailPattern('');
           setFormIsNewEntity(false);
+        } else {
+          setFormEntityLabel(s.entity_label || '');
+          setFormEntityId(null);
+          setFormEntityEmailPattern(s.entity_email_pattern || '');
+          setFormIsNewEntity(true);
         }
         setFormSubjectPattern(s.subject_pattern || '');
         setFormMatchPattern(s.match_pattern || '');
@@ -1408,7 +1409,7 @@ export function EmailTemplatesManagerView({
 
     const runExtraction = (pattern: string | null | undefined): { value: string | null; matched: boolean; error?: string } => {
       if (!pattern || !pattern.trim() || !textToTest) return { value: null, matched: false };
-      const res = extractWithCaptureGroup(pattern, textToTest);
+      const res = extractWithCaptureGroup(textToTest, pattern, 'Extracción');
       return {
         value: res.rawExtracted,
         matched: res.success,
@@ -1473,7 +1474,7 @@ export function EmailTemplatesManagerView({
     const matchedByPattern = entities.find((e) => (e.patterns || []).some((p) => { try { return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(modalSenderForEntity); } catch { return false; } })) || null;
     if (d.name) setModalName(d.name);
     if (d.entity_label || matchedByPattern) {
-      const matched = matchedByPattern || entities.find((e) => e.name.toLowerCase() === (d.entity_label || '').toLowerCase()) || null;
+      const matched = matchedByPattern;
       setModalEntityLabel(matched?.name || d.entity_label || '');
       setModalEntityEmailPattern(matchedByPattern ? '' : (d.entity_email_pattern || ''));
       if (matched) {

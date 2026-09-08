@@ -216,7 +216,7 @@ function parseAmountValue(rawAmount: string | null): number | null {
 /**
  * Executes a regex extraction with safe evaluation, validating capture groups.
  */
-function extractWithCaptureGroup(
+export function extractWithCaptureGroup(
   text: string,
   regexPattern: string | null | undefined,
   fieldLabel: string
@@ -306,10 +306,11 @@ export function evaluateTemplateAgainstEmail(
   const matchedEntity = template.entity_id
     ? entities.find((e) => e.id === template.entity_id) || null
     : null;
-  const entityPatterns = Array.from(new Set([
-    ...(matchedEntity?.patterns || []),
-    ...(template.entity_email_patterns || []),
-  ].map((p) => sanitizeRegexPattern(p)).filter((p): p is string => Boolean(p))));
+  const entityPatterns = Array.from(new Set(
+    (matchedEntity?.patterns || [])
+      .map((p) => sanitizeRegexPattern(p))
+      .filter((p): p is string => Boolean(p))
+  ));
   const entityName = matchedEntity?.name || 'Entidad';
 
   if (!template.entity_id) {
@@ -348,9 +349,6 @@ export function evaluateTemplateAgainstEmail(
       if (re.test(subject)) {
         level2Passed = true;
         l2MatchedOn = 'subject';
-      } else if (re.test(cleanBody)) {
-        level2Passed = true;
-        l2MatchedOn = 'body';
       } else {
         l2Reason = `El asunto ("${subject || 'vacío'}") no coincide con el patrón /${sanitizedSubject}/i.`;
         criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
@@ -393,10 +391,6 @@ export function evaluateTemplateAgainstEmail(
   // --- Level 4: Extracción ---
   // Monto (obligatorio para éxito del match)
   let amountRes = extractWithCaptureGroup(cleanBody, template.amount_regex, 'Monto');
-  if (!amountRes.success && subject) {
-    const subjectAmountRes = extractWithCaptureGroup(subject, template.amount_regex, 'Monto');
-    if (subjectAmountRes.success) amountRes = subjectAmountRes;
-  }
   const parsedAmount = amountRes.success ? parseAmountValue(amountRes.rawExtracted) : null;
   const amountSuccess = Boolean(amountRes.success && parsedAmount !== null);
   if (!amountSuccess) {
@@ -410,10 +404,6 @@ export function evaluateTemplateAgainstEmail(
 
   // Comercio (opcional)
   let merchantRes = extractWithCaptureGroup(cleanBody, template.merchant_regex, 'Comercio');
-  if (!merchantRes.success && subject) {
-    const subjectMerchantRes = extractWithCaptureGroup(subject, template.merchant_regex, 'Comercio');
-    if (subjectMerchantRes.success) merchantRes = subjectMerchantRes;
-  }
   if (template.merchant_regex && !merchantRes.success) {
     warnings.push(`Comercio: ${merchantRes.reason || 'Sin captura'}`);
   } else if (merchantRes.success && !merchantRes.hasCaptureGroup) {
@@ -422,10 +412,6 @@ export function evaluateTemplateAgainstEmail(
 
   // Fecha (opcional)
   let dateRes = extractWithCaptureGroup(cleanBody, template.date_regex, 'Fecha');
-  if (!dateRes.success && subject) {
-    const subjectDateRes = extractWithCaptureGroup(subject, template.date_regex, 'Fecha');
-    if (subjectDateRes.success) dateRes = subjectDateRes;
-  }
   if (template.date_regex && !dateRes.success) {
     warnings.push(`Fecha: ${dateRes.reason || 'Sin captura'}`);
   } else if (dateRes.success && !dateRes.hasCaptureGroup) {
@@ -434,10 +420,6 @@ export function evaluateTemplateAgainstEmail(
 
   // Hora (opcional)
   let timeRes = extractWithCaptureGroup(cleanBody, template.time_regex, 'Hora');
-  if (!timeRes.success && subject) {
-    const subjectTimeRes = extractWithCaptureGroup(subject, template.time_regex, 'Hora');
-    if (subjectTimeRes.success) timeRes = subjectTimeRes;
-  }
   if (template.time_regex && !timeRes.success) {
     warnings.push(`Hora: ${timeRes.reason || 'Sin captura'}`);
   } else if (timeRes.success && !timeRes.hasCaptureGroup) {
@@ -446,18 +428,10 @@ export function evaluateTemplateAgainstEmail(
 
   // Moneda (opcional)
   let currencyRes = extractWithCaptureGroup(cleanBody, template.currency_regex, 'Moneda');
-  if (!currencyRes.success && subject) {
-    const subjectCurrRes = extractWithCaptureGroup(subject, template.currency_regex, 'Moneda');
-    if (subjectCurrRes.success) currencyRes = subjectCurrRes;
-  }
   const currencySuccess = currencyRes.success;
 
   // Cuenta (opcional)
   let accountRes = extractWithCaptureGroup(cleanBody, template.source_account_regex, 'Cuenta de origen');
-  if (!accountRes.success && subject) {
-    const subjectAccRes = extractWithCaptureGroup(subject, template.source_account_regex, 'Cuenta de origen');
-    if (subjectAccRes.success) accountRes = subjectAccRes;
-  }
   if (template.source_account_regex && !accountRes.success) {
     warnings.push(`Cuenta origen: ${accountRes.reason || 'Sin captura'}`);
   } else if (accountRes.success && !accountRes.hasCaptureGroup) {
@@ -1149,7 +1123,7 @@ export interface AppsScriptCandidatePayload {
   amount: number;
   currency: string | null;
   merchant: string | null;
-  entity: string | null;
+  entity_id: string | null;
   sourceAccount: string | null;
   date: string | null;
   time: string | null;
@@ -1308,10 +1282,15 @@ export function simulateGoogleAppsScriptProcess(
   >();
 
   for (const ent of entities) {
+    const emailPatterns = Array.from(new Set(
+      (ent.patterns || [])
+        .map((p) => sanitizeRegexPattern(p))
+        .filter((p): p is string => Boolean(p))
+    ));
     entityMap.set(ent.id, {
       entityId: ent.id,
       entityName: ent.name,
-      emailPatterns: [],
+      emailPatterns,
       templates: [],
     });
   }
@@ -1321,13 +1300,7 @@ export function simulateGoogleAppsScriptProcess(
       logs.push(`  ⚠️ Plantilla "${t.name}": sin entity_id válido — Apps Script la ignora.`);
       continue;
     }
-
-    const grp = entityMap.get(t.entity_id)!;
-    grp.templates.push(t);
-    for (const ep of Array.isArray(t.entity_email_patterns) ? t.entity_email_patterns : []) {
-      const cleanEp = sanitizeRegexPattern(ep);
-      if (cleanEp && !grp.emailPatterns.includes(cleanEp)) grp.emailPatterns.push(cleanEp);
-    }
+    entityMap.get(t.entity_id)!.templates.push(t);
   }
 
   const entityGroups = Array.from(entityMap.values()).filter((g) => g.templates.length > 0);
@@ -1335,14 +1308,18 @@ export function simulateGoogleAppsScriptProcess(
 
   for (const group of entityGroups) {
     // Nivel 1: Filtro por entidad
-    if (group.emailPatterns.length > 0) {
-      const entityMatch = group.emailPatterns.some((pattern) => matchesEitherSource(pattern, sender, body));
-      if (!entityMatch) {
-        logs.push(`  → Entidad "${group.entityName}": descartada, ningún email_pattern coincidió con el remitente ni cuerpo.`);
-        continue;
-      }
-      logs.push(`  ✓ Entidad "${group.entityName}": coincidió con email_pattern. Evaluando ${group.templates.length} plantilla(s).`);
+    if (group.emailPatterns.length === 0) {
+      logs.push(`  → Entidad "${group.entityName}": descartada, no tiene entity_email_patterns.`);
+      continue;
     }
+    const entityMatch = group.emailPatterns.some((pattern) => {
+      try { return new RegExp(pattern, 'i').test(sender); } catch { return false; }
+    });
+    if (!entityMatch) {
+      logs.push(`  → Entidad "${group.entityName}": descartada, ningún entity_email_pattern coincidió con el remitente.`);
+      continue;
+    }
+    logs.push(`  ✓ Entidad "${group.entityName}": coincidió con entity_email_pattern. Evaluando ${group.templates.length} plantilla(s).`);
 
     // Agrupar por subject_pattern
     const bySubject = new Map<string, CatalogTemplate[]>();

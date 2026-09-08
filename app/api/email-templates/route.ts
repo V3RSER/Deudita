@@ -73,10 +73,23 @@ async function upsertEntityPattern(db: any, entityId: string, rawPattern: unknow
 }
 
 async function ensureEntityHasPattern(db: any, entityId: string, proposedPattern: unknown) {
-  await upsertEntityPattern(db, entityId, proposedPattern);
-  const { data, error } = await db.from('entity_email_patterns').select('id').eq('entity_id', entityId).limit(1);
+  const { data: existing, error } = await db
+    .from('entity_email_patterns')
+    .select('id')
+    .eq('entity_id', entityId)
+    .limit(1);
   if (error) throw error;
-  if (!data?.length) throw new Error('La entidad no tiene entity_email_patterns. Toda plantilla debe pertenecer a una entidad identificable por un patrón de correo.');
+  if (existing?.length) return;
+  await upsertEntityPattern(db, entityId, proposedPattern);
+  const { data: created, error: verifyError } = await db
+    .from('entity_email_patterns')
+    .select('id')
+    .eq('entity_id', entityId)
+    .limit(1);
+  if (verifyError) throw verifyError;
+  if (!created?.length) {
+    throw new Error('La entidad no tiene entity_email_patterns. Toda plantilla debe pertenecer a una entidad identificable por un patrón de correo.');
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -112,6 +125,9 @@ export async function POST(req: NextRequest) {
     if (!name?.trim()) return NextResponse.json({ error: 'El nombre de la plantilla es obligatorio' }, { status: 400 });
     if (!amount_regex?.trim()) return NextResponse.json({ error: 'El patrón amount_regex es obligatorio' }, { status: 400 });
 
+    if (!entity_id?.trim() && (!new_entity_name?.trim() || !entity_email_pattern?.trim())) {
+      return NextResponse.json({ error: 'Una entidad nueva requiere new_entity_name y entity_email_pattern.' }, { status: 400 });
+    }
     const resolvedEntityId = await resolveEntity(supabase, entity_id?.trim() || null, new_entity_name?.trim() || null);
     await ensureEntityHasPattern(supabase, resolvedEntityId, entity_email_pattern);
 
@@ -130,7 +146,7 @@ export async function POST(req: NextRequest) {
       date_regex: date_regex?.trim() || null, date_format: date_format?.trim() || 'DD/MM/YYYY',
       expense_type_id: resolvedExpenseTypeId, currency_regex: currency_regex?.trim() || null,
       source_account_regex: source_account_regex?.trim() || null,
-      time_regex: time_regex?.trim() || null, time_format: time_format?.trim() || null,
+      time_regex: time_regex?.trim() || null, time_format: time_regex?.trim() ? (time_format?.trim() || 'HH:mm:ss') : null,
       created_by: user.id,
     };
     const { data, error } = await supabase.from('email_templates').insert(payload).select().single();
@@ -152,7 +168,7 @@ export async function PUT(req: NextRequest) {
 
     const { id, ...updates } = await req.json();
     if (!id) return NextResponse.json({ error: 'El ID de la plantilla es obligatorio' }, { status: 400 });
-    const allowed = ['name','entity_id','subject_pattern','match_pattern','amount_regex','merchant_regex','date_regex','date_format','expense_type_id','currency_regex','source_account_regex','time_regex','time_format'];
+    const allowed = ['name', 'entity_id', 'subject_pattern', 'match_pattern', 'amount_regex', 'merchant_regex', 'date_regex', 'date_format', 'expense_type_id', 'currency_regex', 'source_account_regex', 'time_regex', 'time_format'];
     const payload: Record<string, unknown> = {};
     for (const key of allowed) if (updates[key] !== undefined) payload[key] = typeof updates[key] === 'string' ? updates[key].trim() || null : updates[key];
     if (payload.amount_regex === null) return NextResponse.json({ error: 'amount_regex es obligatorio' }, { status: 400 });

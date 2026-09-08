@@ -47,10 +47,6 @@ begin
     raise exception 'Token de webhook inválido o inactivo';
   end if;
 
-  update public.email_ingest_connections
-  set last_sync_at = now()
-  where user_id = v_user_id;
-
   return query
   select
     t.id,
