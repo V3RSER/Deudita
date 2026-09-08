@@ -305,19 +305,26 @@ export function evaluateTemplateAgainstEmail(
 
   const matchedEntity = template.entity_id
     ? entities.find((e) => e.id === template.entity_id) || null
-    : null;
+    : (template.entity?.name
+        ? entities.find((e) => e.name.trim().toLowerCase() === template.entity!.name!.trim().toLowerCase()) || null
+        : null);
+
   const entityPatterns = Array.from(new Set(
-    (matchedEntity?.patterns || [])
+    [
+      ...(matchedEntity?.patterns || []),
+      ...(template.entity_email_patterns || []),
+    ]
       .map((p) => sanitizeRegexPattern(p))
       .filter((p): p is string => Boolean(p))
   ));
-  const entityName = matchedEntity?.name || 'Entidad';
 
-  if (!template.entity_id) {
-    l1Reason = 'La plantilla no tiene entity_id válido.';
+  const entityName = matchedEntity?.name || template.entity?.name || 'Entidad';
+
+  if (!template.entity_id && !template.entity?.name && entityPatterns.length === 0) {
+    l1Reason = 'La plantilla no tiene entidad ni patrón de correo configurado.';
     criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
   } else if (entityPatterns.length === 0) {
-    l1Reason = `La entidad "${entityName}" no tiene entity_email_patterns configurados; no puede coincidir ningún correo.`;
+    l1Reason = `La entidad "${entityName}" no tiene patrones de correo configurados (entity_email_patterns); no puede coincidir ningún correo.`;
     criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
   } else {
     for (const pat of entityPatterns) {

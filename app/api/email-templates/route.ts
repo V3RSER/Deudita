@@ -73,21 +73,16 @@ async function upsertEntityPattern(db: any, entityId: string, rawPattern: unknow
 }
 
 async function ensureEntityHasPattern(db: any, entityId: string, proposedPattern: unknown) {
+  if (typeof proposedPattern === 'string' && proposedPattern.trim()) {
+    await upsertEntityPattern(db, entityId, proposedPattern);
+  }
   const { data: existing, error } = await db
     .from('entity_email_patterns')
     .select('id')
     .eq('entity_id', entityId)
     .limit(1);
   if (error) throw error;
-  if (existing?.length) return;
-  await upsertEntityPattern(db, entityId, proposedPattern);
-  const { data: created, error: verifyError } = await db
-    .from('entity_email_patterns')
-    .select('id')
-    .eq('entity_id', entityId)
-    .limit(1);
-  if (verifyError) throw verifyError;
-  if (!created?.length) {
+  if (!existing?.length) {
     throw new Error('La entidad no tiene entity_email_patterns. Toda plantilla debe pertenecer a una entidad identificable por un patrón de correo.');
   }
 }
@@ -121,14 +116,17 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'Acceso restringido: Se requiere cuenta conectada con Google.' }, { status: 403 });
 
     const body = await req.json();
-    const { name, entity_id, new_entity_name, entity_email_pattern, subject_pattern, match_pattern, amount_regex, merchant_regex, date_regex, date_format, expense_type_id, expense_type, currency_regex, source_account_regex, time_regex, time_format } = body;
+    const { name, entity_id, subject_pattern, match_pattern, amount_regex, merchant_regex, date_regex, date_format, expense_type_id, expense_type, currency_regex, source_account_regex, time_regex, time_format } = body;
+    const new_entity_name = (body.new_entity_name || body.new_entity_label || '')?.trim() || null;
+    const entity_email_pattern = (body.entity_email_pattern || '')?.trim() || null;
+
     if (!name?.trim()) return NextResponse.json({ error: 'El nombre de la plantilla es obligatorio' }, { status: 400 });
     if (!amount_regex?.trim()) return NextResponse.json({ error: 'El patrón amount_regex es obligatorio' }, { status: 400 });
 
-    if (!entity_id?.trim() && (!new_entity_name?.trim() || !entity_email_pattern?.trim())) {
-      return NextResponse.json({ error: 'Una entidad nueva requiere new_entity_name y entity_email_pattern.' }, { status: 400 });
+    if (!entity_id?.trim() && !new_entity_name?.trim()) {
+      return NextResponse.json({ error: 'Se requiere entity_id o el nombre de la entidad (new_entity_name).' }, { status: 400 });
     }
-    const resolvedEntityId = await resolveEntity(supabase, entity_id?.trim() || null, new_entity_name?.trim() || null);
+    const resolvedEntityId = await resolveEntity(supabase, entity_id?.trim() || null, new_entity_name);
     await ensureEntityHasPattern(supabase, resolvedEntityId, entity_email_pattern);
 
     let resolvedExpenseTypeId = expense_type_id?.trim() || null;
@@ -172,6 +170,12 @@ export async function PUT(req: NextRequest) {
     const payload: Record<string, unknown> = {};
     for (const key of allowed) if (updates[key] !== undefined) payload[key] = typeof updates[key] === 'string' ? updates[key].trim() || null : updates[key];
     if (payload.amount_regex === null) return NextResponse.json({ error: 'amount_regex es obligatorio' }, { status: 400 });
+
+    const newEntityName = (updates.new_entity_name || updates.new_entity_label || '')?.trim() || null;
+    if (!payload.entity_id && newEntityName) {
+      payload.entity_id = await resolveEntity(supabase, null, newEntityName);
+    }
+
     const { data: current, error: currentError } = await supabase.from('email_templates').select('entity_id').eq('id', id).single();
     if (currentError) return NextResponse.json({ error: currentError.message }, { status: 404 });
     if (payload.entity_id && payload.entity_id !== current.entity_id) {
