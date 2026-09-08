@@ -174,20 +174,66 @@ function syncExpenseEmails() {
 
 /**
  * Limpia el cuerpo de un correo antes de aplicarle cualquier regex.
+ * Protege direcciones de email en encabezados (RFC 5322) para que no sean borradas como tags HTML.
  */
-function cleanEmailBody(body) {
-  if (!body) return body;
+function cleanEmailBody(bodyText) {
+  if (!bodyText) return "";
+  var text = String(bodyText);
 
-  return body
+  // 1. Normalizar saltos de línea
+  text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // 2. Normalizar correos en cabeceras envueltos con saltos de línea dentro de < y >:
+  // Ej: "From: Alertas <\n  alertas@bancolombia.com>" -> "From: Alertas <alertas@bancolombia.com>"
+  text = text.replace(/<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, '<$1>');
+  text = text.replace(/((?:^|\n)\s*(?:from|de|to|para|cc|reply-to)\s*:[^\n\r<]*?)\s*<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gim, '$1 <$2>');
+
+  // 3. Proteger direcciones de correo dentro de <...> mediante tokens temporales
+  // para evitar que la limpieza HTML por regex las destruya.
+  var emailTokens = {};
+  var tokenCounter = 0;
+  text = text.replace(/<\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, function (match, email) {
+    var token = '__EMAIL_ADDR_TOKEN_' + (tokenCounter++) + '__';
+    emailTokens[token] = '<' + email.trim() + '>';
+    return token;
+  });
+
+  // 4. Si el texto contiene fragmentos o etiquetas HTML, convertirlos a texto plano
+  if (/<[a-z!/][\s\S]*>/i.test(text)) {
+    text = text
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+      .replace(/<br\s*[\/]?>/gi, '\n')
+      .replace(/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n')
+      .replace(/<(td|th)[^>]*>/gi, ' ')
+      .replace(/<https?:\/\/[^\s>]+>/g, '')    // Eliminar <https://...>
+      .replace(/<[^>]+>/g, '')                 // Eliminar etiquetas HTML (los correos están protegidos)
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, function (_, dec) { return String.fromCharCode(parseInt(dec, 10)); });
+  }
+
+  // 5. Restaurar las direcciones de correo protegidas
+  text = text.replace(/__EMAIL_ADDR_TOKEN_(\d+)__/g, function (match) {
+    return emailTokens[match] || match;
+  });
+
+  // 6. 6 reglas de limpieza idénticas al frontend y backend
+  return text
     .replace(/\[image:[^\]]*\]/gi, '')
     .replace(/<https?:\/\/[^\s>]+>/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\*/g, '')
-    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \zt]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
-
 /**
  * Prueba una regex contra el texto directo y, si no encuentra coincidencia,
  * contra el cuerpo del correo.
