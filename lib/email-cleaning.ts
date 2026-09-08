@@ -6,9 +6,28 @@ export function cleanEmailBody(body: string | null | undefined): string {
   if (!body) return '';
   let text = String(body);
 
+  // Normalizar saltos de línea primero
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Normalizar correos en cabeceras envueltos con saltos de línea dentro de < y >:
+  // Ej: "From: Alertas <\n  alertas@bancolombia.com>" -> "From: Alertas <alertas@bancolombia.com>"
+  text = text.replace(/<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, '<$1>');
+  text = text.replace(/((?:^|\n)\s*(?:from|de|to|para|cc|reply-to)\s*:[^\n\r<]*?)\s*<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gim, '$1 <$2>');
+
+  // Proteger direcciones de correo dentro de <...> para que la limpieza de etiquetas HTML no las elimine.
+  // En correos (From, To, etc.), las direcciones vienen entre < y > (RFC 5322).
+  // Un replace(/<[^>]+>/g, '') ingenuo borraría todas las direcciones de correo.
+  const emailTokens = new Map<string, string>();
+  let tokenCounter = 0;
+  text = text.replace(/<\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, (_, email) => {
+    const token = `__EMAIL_ADDR_TOKEN_${tokenCounter++}__`;
+    emailTokens.set(token, `<${email.trim()}>`);
+    return token;
+  });
+
   // Si el texto contiene fragmentos o etiquetas HTML (p. ej. correos sin procesar o pegados directos),
   // los convertimos a texto plano respetando saltos de línea, idéntico a GmailMessage.getPlainBody() de Google Apps Script.
-  if (/<[a-z][\s\S]*>/i.test(text)) {
+  if (/<[a-z!/][\s\S]*>/i.test(text)) {
     text = text
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -16,7 +35,8 @@ export function cleanEmailBody(body: string | null | undefined): string {
       .replace(/<br\s*[\/]?>/gi, '\n')
       .replace(/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n')
       .replace(/<(td|th)[^>]*>/gi, ' ')
-      .replace(/<[^>]+>/g, '')
+      .replace(/<https?:\/\/[^\s>]+>/g, '')    // <https://...> (links envueltos)
+      .replace(/<[^>]+>/g, '')                 // Resto de etiquetas HTML (los correos ya están protegidos)
       .replace(/&nbsp;/gi, ' ')
       .replace(/&amp;/gi, '&')
       .replace(/&lt;/gi, '<')
@@ -27,10 +47,13 @@ export function cleanEmailBody(body: string | null | undefined): string {
       .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
   }
 
+  // Restaurar las direcciones de correo protegidas
+  text = text.replace(/__EMAIL_ADDR_TOKEN_(\d+)__/g, (match) => {
+    return emailTokens.get(match) || match;
+  });
+
   // Exactas 6 reglas de cleanEmailBody de Google Apps Script:
   return text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
     .replace(/\[image:[^\]]*\]/gi, '')       // [image: BBVA Logo]
     .replace(/<https?:\/\/[^\s>]+>/g, '')    // <https://...> (links envueltos)
     .replace(/https?:\/\/\S+/g, '')          // URLs sueltas
@@ -55,14 +78,118 @@ export function stripSubjectPrefixes(subject: string | null | undefined): string
 }
 
 /**
+ * Detects if an email address belongs to a generic personal webmail provider
+ * (Gmail, Outlook, Hotmail, Yahoo, iCloud, Proton, etc.).
+ */
+export function isPersonalEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const match = String(email).toLowerCase().match(/@([a-z0-9.-]+)/);
+  if (!match) return false;
+  const domain = match[1];
+  const personalDomains = [
+    'gmail.com', 'googlemail.com', 'hotmail.com', 'outlook.com',
+    'live.com', 'msn.com', 'yahoo.com', 'yahoo.es', 'icloud.com', 'me.com',
+    'proton.me', 'protonmail.com'
+  ];
+  return personalDomains.some((d) => domain === d || domain.endsWith('.' + d));
+}
+
+/**
+ * Detects if an email was forwarded or arrived via an inbox rule.
+ */
+export function isForwardedEmail(
+  sender: string | null | undefined,
+  subject: string | null | undefined,
+  body: string | null | undefined
+): boolean {
+  const s = (subject || '').trim();
+  const b = (body || '').trim();
+  if (/^(?:\[?(?:fwd?|fw|re|rv|vs|tr|wg|aw|sv|res|enc|doorst)\]?\s*[:：\-]\s*)+/i.test(s)) {
+    return true;
+  }
+  if (/---+\s*(?:forwarded message|mensaje reenviado)\s*---+/i.test(b)) {
+    return true;
+  }
+  const head = getHeadLines(b, 15);
+  if (/^(?:de|from)\s*:/im.test(head) && /^(?:fecha|date|asunto|subject|para|to)\s*:/im.test(head)) {
+    return true;
+  }
+  if (sender && isPersonalEmail(sender) && /^(?:de|from)\s*:/im.test(head)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extracts the real institutional sender email.
+ * If the email is forwarded, it MUST come from the original forwarded headers in the body,
+ * NEVER from the outer envelope sender (which is just the user who forwarded the email).
+ */
+export function extractInstitutionalSenderEmail(
+  sender: string | null | undefined,
+  body: string | null | undefined,
+  isForwarded: boolean
+): string | null {
+  // 1. Prioritize forwarded headers in the body
+  const forwardedSender = extractForwardedSenderFromBody(body, 15);
+  const forwardedEmail = extractEmailAddress(forwardedSender);
+  if (forwardedEmail && !isPersonalEmail(forwardedEmail)) {
+    return forwardedEmail;
+  }
+
+  // 2. Look for non-personal email address in the first 15 lines of the body
+  const head = getHeadLines(body, 15);
+  const bodyEmails = head.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g);
+  if (bodyEmails && bodyEmails.length > 0) {
+    for (const em of bodyEmails) {
+      const lower = em.toLowerCase();
+      if (!isPersonalEmail(lower)) {
+        return lower;
+      }
+    }
+  }
+
+  // If forwarded, under NO circumstances use the outer sender as institutional!
+  if (isForwarded) {
+    return null;
+  }
+
+  // 3. Direct non-forwarded email: use sender if it's not a personal email
+  const directEmail = extractEmailAddress(sender);
+  if (directEmail && !isPersonalEmail(directEmail)) {
+    return directEmail;
+  }
+
+  return null;
+}
+
+/**
  * Extracts the original sender from forwarded headers in the body (e.g., "De: Bancolombia <alertas@...>" or "From: ...").
  */
 export function extractForwardedSenderFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
   if (!body) return null;
   const head = getHeadLines(body, maxLines);
+
+  // Match wrapped line where '<' is at end of line and email is on next line
+  const wrappedMatch = head.match(/^(?:de|from)\s*:\s*([^\n\r<]*?)\s*<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?(?:\s*\n|$)/im);
+  if (wrappedMatch) {
+    const name = wrappedMatch[1].trim();
+    const email = wrappedMatch[2].trim();
+    return name ? `${name} <${email}>` : `<${email}>`;
+  }
+
   const match = head.match(/^(?:de|from)\s*:\s*([^\n\r]+)/im);
   if (match && match[1]) {
-    return match[1].trim();
+    let senderStr = match[1].trim();
+    // If sender ends with '<' without closing '>', check if next line has the email
+    if (senderStr.includes('<') && !senderStr.includes('>')) {
+      const rest = head.slice(match.index! + match[0].length);
+      const nextLineEmail = rest.match(/^\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i);
+      if (nextLineEmail) {
+        senderStr = `${senderStr} ${nextLineEmail[1]}>`;
+      }
+    }
+    return senderStr;
   }
   return null;
 }
@@ -91,29 +218,11 @@ export function inferEntityEmailPattern(
   sender: string | null | undefined,
   body?: string | null | undefined
 ): string | null {
-  const forwarded = extractForwardedSenderFromBody(body, 15);
-  const forwardedEmail = extractEmailAddress(forwarded);
-  if (forwardedEmail) {
-    return escapeRegexEmail(forwardedEmail);
+  const isFwd = isForwardedEmail(sender, null, body);
+  const institutional = extractInstitutionalSenderEmail(sender, body, isFwd);
+  if (institutional) {
+    return escapeRegexEmail(institutional);
   }
-
-  // Also look for institutional De: / From: lines in body head
-  const head = getHeadLines(body, 15);
-  const bodyEmails = head.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g);
-  if (bodyEmails && bodyEmails.length > 0) {
-    for (const em of bodyEmails) {
-      const lower = em.toLowerCase();
-      if (!lower.includes('gmail.com') && !lower.includes('outlook.com') && !lower.includes('hotmail.com')) {
-        return escapeRegexEmail(lower);
-      }
-    }
-  }
-
-  const directEmail = extractEmailAddress(sender);
-  if (directEmail) {
-    return escapeRegexEmail(directEmail);
-  }
-
   return null;
 }
 
@@ -224,34 +333,51 @@ export function buildTemplatePrompt(
   cleanBody: string,
   existingEntities: PromptEntity[] = []
 ): string {
-  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities, cleanBody);
+  const isFwd = isForwardedEmail(sender, subject, cleanBody);
   const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
   const strippedSubject = stripSubjectPrefixes(subject);
   const forwardedSubject = extractForwardedSubjectFromBody(cleanBody, 15);
   const effectiveSubject = forwardedSubject || (strippedSubject !== subject ? strippedSubject : subject);
-  const detectedInstitutionalEmail = extractEmailAddress(forwardedSender) || extractEmailAddress(sender);
 
-  const entityListText = existingEntities.length > 0
-    ? `ENTIDADES REGISTRADAS Y SUS PATRONES DE CORREO ACTUALES:\n${existingEntities.map(e => `  - "${e.name}" | entity_id=${e.id} | patterns=${JSON.stringify(e.patterns || [])}`).join('\n')}\n`
-    : 'Aún no hay entidades registradas en el sistema.\n';
+  // Probar primero si el correo ya es reconocido por los patrones de una entidad existente
+  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities, cleanBody);
 
-  let priorMatchText = '';
+  // Remitente institucional original (si fue reenviado, NUNCA usar la cuenta personal externa)
+  const detectedInstitutionalEmail = extractInstitutionalSenderEmail(sender, cleanBody, isFwd);
+
+  let entityInstructions = '';
   if (matchedExistingEntity) {
-    const patterns = matchedExistingEntity.patterns || [];
-    priorMatchText = [
-      `MATCH PREVIO DE ENTIDAD: El correo coincide con la entidad registrada "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}).`,
-      `Patrones registrados actualmente en base de datos: ${JSON.stringify(patterns)}.`,
-      `is_new_entity DEBE SER false y entity_label DEBE SER "${matchedExistingEntity.name}".`,
-      `Dirección institucional real del correo: ${detectedInstitutionalEmail ? `"${detectedInstitutionalEmail}"` : '(No detectada)'}.`,
-      `REGLA PARA entity_email_pattern: Si la dirección institucional real ya está cubierta por alguno de esos patrones registrados, devuelve entity_email_pattern=null.`,
-      `Si esta dirección real NO está en sus patrones registrados, extrae la dirección literal del correo y devuélvela en entity_email_pattern para registrarla en la base de datos de "${matchedExistingEntity.name}".`,
+    entityInstructions = [
+      'ENTIDAD PREVIAMENTE RECONOCIDA POR EL SISTEMA:',
+      `El correo coincide con la entidad registrada "${matchedExistingEntity.name}".`,
+      `- entity_label: "${matchedExistingEntity.name}"`,
+      `- is_new_entity: false`,
+      `- entity_email_pattern: null (los patrones registrados de "${matchedExistingEntity.name}" ya reconocen este correo).`,
     ].join('\n');
   } else {
-    priorMatchText = [
-      'MATCH PREVIO DE ENTIDAD: Ninguna entidad registrada tiene patrones de correo que coincidan con este remitente.',
-      `Dirección institucional real extraída del correo: ${detectedInstitutionalEmail ? `"${detectedInstitutionalEmail}"` : '(No detectada)'}.`,
-      'Define entity_label con el nombre de la entidad emisora (e is_new_entity=true si no existe en el catálogo, o false si ya existe).',
-      'En entity_email_pattern, coloca la dirección institucional real extraída textualmente del correo para que el sistema la registre en la base de datos.',
+    // Si no coincide con ninguna por patrón, enviamos ÚNICAMENTE los nombres de las entidades
+    // (sin IDs ni patrones regex) para que el modelo razone si corresponde a alguna de ellas.
+    const entityNames = existingEntities.map((e) => e.name).filter(Boolean);
+    const namesList = entityNames.length > 0
+      ? `ENTIDADES REGISTRADAS EN EL SISTEMA:\n${entityNames.map((n) => `  • "${n}"`).join('\n')}`
+      : 'Aún no hay entidades registradas en el sistema.';
+
+    entityInstructions = [
+      namesList,
+      '',
+      'INSTRUCCIÓN PARA ENTIDAD (entity_label / is_new_entity / entity_email_pattern):',
+      '1. Analiza el correo y razona si la notificación corresponde a alguna de las entidades registradas arriba (por ejemplo normalizando el nombre a una de ellas).',
+      '2. Si corresponde a una entidad de la lista:',
+      '   - entity_label: usa exactamente ese nombre registrado.',
+      '   - is_new_entity: false.',
+      '3. Si es una entidad completamente nueva que no está en la lista:',
+      '   - entity_label: define el nombre comercial corto de la entidad emisora (ej: "Nu", "Bancolombia", "Daviplata", "RappiCard").',
+      '   - is_new_entity: true.',
+      '4. Reglas para entity_email_pattern:',
+      detectedInstitutionalEmail
+        ? `   - Dirección institucional detectada en el correo: "${detectedInstitutionalEmail}". Devuélvela exactamente en entity_email_pattern para registrarla en la base de datos.`
+        : '   - Si detectas una dirección de correo institucional del emisor en el encabezado original De:/From: o cuerpo, colócala en entity_email_pattern. De lo contrario usa null.',
+      '   - Si el correo fue reenviado (por ejemplo por una cuenta personal de Gmail), NUNCA uses la dirección de quien lo reenvió como entity_email_pattern.',
     ].join('\n');
   }
 
@@ -316,11 +442,11 @@ export function buildTemplatePrompt(
     'Las variaciones de instancia se abstraen; las diferencias de tipo se conservan.',
     'Haz esta clasificación por análisis semántico y estructural del correo, no por coincidencia literal con la muestra.',
     '',
-    entityListText,
-    priorMatchText,
+    entityInstructions,
+    '',
     'REGLAS PARA LOS REGEX:',
     '1. Todos deben ser JavaScript válidos y compilar con new RegExp(regex, "i").',
-    '1A. entity_email_pattern: Debe ser la dirección de correo institucional real del remitente, extraída textualmente del correo analizado (o del encabezado De:/From: si fue reenviado). NUNCA inventes nombres de dominios, palabras sueltas ni expresiones genéricas. Si la dirección exacta ya está en los patrones registrados de la entidad, usa null; de lo contrario, devuelve esa dirección real para su registro.',
+    '1A. entity_email_pattern: Si aplica registrar un nuevo remitente institucional, debe ser la dirección de correo institucional real del emisor (ej: alertas@bancolombia.com.co). Si ya está cubierto o no aplica, usa null. Si el correo fue reenviado, NUNCA uses el correo de quien lo reenvió.',
     '2. No uses delimitadores /.../ ni flags dentro del valor.',
     '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
     '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) alrededor del valor a extraer. Si usas alternaciones como (val1)|(val2), asegúrate de que capture el valor.',
@@ -331,11 +457,8 @@ export function buildTemplatePrompt(
     '7B. currency_regex: Si el correo indica dinámicamente la moneda (ej: "COP", "USD", "$"), usa un regex con captura. Si no aparece una moneda explícita, deja currency_regex=null.',
     '8. CRÍTICO PARA EXTRACCIÓN: Las expresiones regulares DEBEN coincidir contra el texto en CUERPO LIMPIO. Ten en cuenta que tras la limpieza de correos y tablas HTML, entre etiquetas y sus valores suele haber espacios o saltos de línea, NO siempre dos puntos ":". Usa separadores flexibles como `(?:\\s*:\\s*|\\s+)`.',
     '9. Si un campo opcional (como hora, cuenta de origen, comercio) NO aparece en el texto del correo, devuelve null. NUNCA inventes un regex para un campo que no está en el correo.',
-
-    '11. Los patrones deben generalizar variaciones de instancia sin borrar diferencias que definan otra plantilla.',
     '',
     'VALORES SEMÁNTICOS DEL RESULTADO:',
-
     '13. expense_type debe describir la naturaleza de la operación según el vocabulario del sistema: "compra", "transferencia", "retiro", "pago", etc.',
     '14. entity_label debe usar exactamente el nombre de una entidad equivalente si ya existe en la lista registrada.',
     '',
@@ -363,14 +486,15 @@ export function buildTemplatePrompt(
     'No uses valores en inglés cuando el vocabulario indicado por estas instrucciones define otro valor.',
     '',
     'DATOS DEL CORREO A ANALIZAR:',
-    '--- REMITENTE RECIBIDO POR EL SISTEMA ---',
+    '--- REMITENTE EXTERNO RECIBIDO ---',
     sender || '(Sin remitente)',
-    ...(forwardedSender ? [`[NOTA: Correo reenviado detectado. Remitente original en el cuerpo: "${forwardedSender}"]`] : []),
-    ...(detectedInstitutionalEmail ? [`[DIRECCIÓN INSTITUCIONAL EXTRAÍDA: "${detectedInstitutionalEmail}"] -> Si no está en los patrones registrados de la entidad, colócala textualmente en entity_email_pattern.`] : []),
+    ...(isFwd ? [`[AVISO: Mensaje reenviado. El remitente externo "${sender}" corresponde a quien reenvió el correo, NO al emisor original.]`] : []),
+    ...(forwardedSender ? [`[REMITENTE ORIGINAL EN EL CUERPO: "${forwardedSender}"]`] : []),
+    ...(detectedInstitutionalEmail ? [`[DIRECCIÓN INSTITUCIONAL ORIGINAL: "${detectedInstitutionalEmail}"]`] : []),
     '',
-    '--- ASUNTO RECIBIDO POR EL SISTEMA ---',
+    '--- ASUNTO RECIBIDO ---',
     subject || '(Sin asunto)',
-    ...(effectiveSubject !== subject ? [`[NOTA IMPORTANTE: El asunto contiene prefijos de reenvío/respuesta. El asunto original del banco/entidad es: "${effectiveSubject}"]`] : []),
+    ...(effectiveSubject !== subject ? [`[NOTA IMPORTANTE: El asunto contiene prefijos de reenvío/respuesta. El asunto original normalizado es: "${effectiveSubject}"]`] : []),
     '',
     '--- CUERPO LIMPIO ---',
     cleanBody || '(Sin cuerpo)',
@@ -563,6 +687,10 @@ export function buildCorrectionPrompt(
     sections.push('• Revisa la coincidencia exacta de los patrones de extracción sobre el texto real.');
   }
 
+  const isFwd = isForwardedEmail(sender, subject, cleanBody);
+  const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
+  const detectedInstitutionalEmail = extractInstitutionalSenderEmail(sender, cleanBody, isFwd);
+
   return [
     'Corrige la siguiente plantilla JSON para extracción de notificaciones de correo.',
     'La plantilla fue evaluada contra el correo real y se obtuvieron los siguientes resultados:',
@@ -573,8 +701,11 @@ export function buildCorrectionPrompt(
     JSON.stringify(details.template, null, 2),
     '',
     'DATOS REALES DEL CORREO:',
-    '--- REMITENTE RECIBIDO ---',
+    '--- REMITENTE EXTERNO RECIBIDO ---',
     sender || '(Sin remitente)',
+    ...(isFwd ? [`[AVISO: Mensaje reenviado. El remitente externo "${sender}" corresponde a quien reenvió el correo, NO al emisor original.]`] : []),
+    ...(forwardedSender ? [`[REMITENTE ORIGINAL EN EL CUERPO: "${forwardedSender}"]`] : []),
+    ...(detectedInstitutionalEmail ? [`[DIRECCIÓN INSTITUCIONAL ORIGINAL: "${detectedInstitutionalEmail}"]`] : []),
     '',
     '--- ASUNTO RECIBIDO ---',
     subject || '(Sin asunto)',
@@ -589,7 +720,7 @@ export function buildCorrectionPrompt(
     '3. Cada regex de extracción DEBE tener exactamente UN grupo de captura (...) alrededor del valor limpio (ej: monto, hora, comercio).',
     '4. Si un dato (como hora, comercio o cuenta origen) NO existe en el texto de CUERPO LIMPIO, define su regex correspondiente como null.',
     '5. Si el correo sí incluye la hora (ej: 14:35 o 02:30 p.m.), asegúrate de que time_regex capture la hora limpia con paréntesis y time_format indique su formato.',
-    '6. Si el Nivel 1 (Entidad) falla porque el remitente no coincide con ningún patrón de la entidad, extrae la dirección de correo institucional real del remitente (o del encabezado De:/From: del cuerpo si fue reenviado) y devuélvela en entity_email_pattern para su registro.',
+    '6. Si el Nivel 1 (Entidad) falla porque el remitente no coincide con ningún patrón de la entidad, extrae la dirección de correo institucional real del remitente (o del encabezado De:/From: del cuerpo si fue reenviado) y devuélvela en entity_email_pattern para su registro. NUNCA uses la dirección personal de quien reenvió el correo.',
     '7. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
   ].join('\n');
 }
