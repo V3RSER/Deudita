@@ -68,6 +68,56 @@ export function extractForwardedSenderFromBody(body: string | null | undefined, 
 }
 
 /**
+ * Extracts a standard email address from arbitrary text (e.g. "Bancolombia <alertas@bancolombia.com>" -> "alertas@bancolombia.com").
+ */
+export function extractEmailAddress(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const match = String(text).match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * Escapes special regex characters in an email address so it can safely be used as an exact regex pattern.
+ */
+export function escapeRegexEmail(email: string): string {
+  return email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Infers an entity_email_pattern from the email sender or forwarded headers in the body.
+ * If the email is forwarded (e.g., from Outlook or personal rule), prefers the forwarded institutional sender.
+ */
+export function inferEntityEmailPattern(
+  sender: string | null | undefined,
+  body?: string | null | undefined
+): string | null {
+  const forwarded = extractForwardedSenderFromBody(body, 15);
+  const forwardedEmail = extractEmailAddress(forwarded);
+  if (forwardedEmail) {
+    return escapeRegexEmail(forwardedEmail);
+  }
+
+  // Also look for institutional De: / From: lines in body head
+  const head = getHeadLines(body, 15);
+  const bodyEmails = head.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g);
+  if (bodyEmails && bodyEmails.length > 0) {
+    for (const em of bodyEmails) {
+      const lower = em.toLowerCase();
+      if (!lower.includes('gmail.com') && !lower.includes('outlook.com') && !lower.includes('hotmail.com')) {
+        return escapeRegexEmail(lower);
+      }
+    }
+  }
+
+  const directEmail = extractEmailAddress(sender);
+  if (directEmail) {
+    return escapeRegexEmail(directEmail);
+  }
+
+  return null;
+}
+
+/**
  * Extracts the original subject from forwarded headers in the body (e.g., "Asunto: Alertas y Notificaciones" or "Subject: ...").
  */
 export function extractForwardedSubjectFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
@@ -179,13 +229,31 @@ export function buildTemplatePrompt(
   const strippedSubject = stripSubjectPrefixes(subject);
   const forwardedSubject = extractForwardedSubjectFromBody(cleanBody, 15);
   const effectiveSubject = forwardedSubject || (strippedSubject !== subject ? strippedSubject : subject);
+  const detectedInstitutionalEmail = extractEmailAddress(forwardedSender) || extractEmailAddress(sender);
 
   const entityListText = existingEntities.length > 0
-    ? `ENTIDADES REGISTRADAS Y SUS PATRONES DE CORREO:\n${existingEntities.map(e => `  - "${e.name}" | entity_id=${e.id} | patterns=${JSON.stringify(e.patterns || [])}`).join('\n')}\n`
+    ? `ENTIDADES REGISTRADAS Y SUS PATRONES DE CORREO ACTUALES:\n${existingEntities.map(e => `  - "${e.name}" | entity_id=${e.id} | patterns=${JSON.stringify(e.patterns || [])}`).join('\n')}\n`
     : 'Aún no hay entidades registradas en el sistema.\n';
-  const priorMatchText = matchedExistingEntity
-    ? `MATCH PREVIO DE ENTIDAD: el correo (remitente o reenviado) coincide con entity_email_patterns de "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}). Usa esta entidad. NO generes entity_email_pattern nuevo.`
-    : 'MATCH PREVIO DE ENTIDAD: ningún entity_email_pattern existente coincide con el remitente. Solo propone un patrón nuevo si realmente corresponde a una entidad nueva y el patrón contiene @.';
+
+  let priorMatchText = '';
+  if (matchedExistingEntity) {
+    const patterns = matchedExistingEntity.patterns || [];
+    priorMatchText = [
+      `MATCH PREVIO DE ENTIDAD: El correo coincide con la entidad registrada "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}).`,
+      `Sus patrones registrados actuales en base de datos son: ${JSON.stringify(patterns)}.`,
+      `is_new_entity DEBE SER false y entity_label DEBE SER "${matchedExistingEntity.name}".`,
+      `REGLA PARA entity_email_pattern: Si la dirección de correo institucional del remitente (${detectedInstitutionalEmail || 'detectado'}) ya está cubierta por alguno de esos patrones, devuelve entity_email_pattern=null.`,
+      `PERO si esta dirección institucional no está presente en sus patterns registrados, DEBES devolver la dirección o dominio con @ en entity_email_pattern (ej: "${detectedInstitutionalEmail ? escapeRegexEmail(detectedInstitutionalEmail) : '@dominio\\.com'}") para que el sistema la inserte en la tabla entity_email_patterns de "${matchedExistingEntity.name}".`,
+    ].join('\n');
+  } else {
+    priorMatchText = [
+      'MATCH PREVIO DE ENTIDAD: Ninguna entidad registrada tiene patrones de correo que coincidan con este remitente.',
+      `Remitente institucional detectado: ${detectedInstitutionalEmail || '(No detectado)'}.`,
+      'Si la entidad no existe en el catálogo, define is_new_entity=true y entity_label con el nombre de la entidad.',
+      'Si la entidad ya existe en el catálogo pero aún no tenía patrones registrados o este correo proviene de una nueva dirección institucional, define is_new_entity=false y usa su nombre exacto en entity_label.',
+      `EN AMBOS CASOS, ES OBLIGATORIO que proporciones en entity_email_pattern la dirección o dominio institucional con @ (ej: "${detectedInstitutionalEmail ? escapeRegexEmail(detectedInstitutionalEmail) : '@entidad\\.com'}"). El sistema insertará este patrón en la tabla entity_email_patterns para que las plantillas puedan coincidir.`,
+    ].join('\n');
+  }
 
   return [
     'Eres un asistente especializado en diseñar plantillas de extracción de datos',
@@ -198,14 +266,18 @@ export function buildTemplatePrompt(
     'La plantilla debe modelar la identidad de la entidad y el tipo de notificación, no memorizar',
     'la redacción completa ni los valores concretos de una sola muestra.',
     '',
-    'NIVEL 1 — ENTIDAD:',
+    'NIVEL 1 — ENTIDAD Y REGISTRO DE PATRÓN DE REMITENTE (entity_email_pattern):',
     'Identifica como entity_label la marca o entidad que emite directamente la notificación, priorizando el campo "De:", el remitente original, el asunto y el contenido principal.',
     'No infieras la entidad a partir de relaciones corporativas, bancos asociados, propietarios, emisores legales, procesadores ni menciones en pies de página, términos legales o frases como "Producto de...".',
     'Ejemplo: si el correo dice De: RappiCard y al final dice Producto de Davivienda S.A., la entidad es "RappiCard", no Davivienda ni DAVIbank.',
     'La lista de entidades registradas solo sirve para normalizar el nombre cuando la entidad emisora identificada directamente sea inequívocamente equivalente a una entidad registrada. No uses relaciones corporativas para determinar equivalencia.',
     'is_new_entity debe ser true únicamente si la entidad emisora identificada no corresponde a ninguna entidad registrada.',
-    'REGLA ABSOLUTA: antes de proponer una entidad existente, compara el remitente recibido contra los entity_email_patterns de cada entidad registrada. Si una entidad tiene cero patrones, NO puede considerarse coincidencia. Si un patrón coincide, usa esa entidad y no generes otro patrón para ella.',
-    'Si ninguna entidad existente coincide por entity_email_patterns, puedes proponer una entidad nueva solo si la evidencia del correo lo justifica. En ese caso, entity_email_pattern debe contener @ y representar una señal institucional estable.',
+    'REGLA PARA entity_email_pattern (REGISTRO EN BASE DE DATOS):',
+    '- Toda plantilla requiere que el emisor institucional quede registrado en la tabla entity_email_patterns de la entidad.',
+    '- Extrae la dirección institucional o dominio (con @ obligatoria) del emisor original.',
+    '- Si el correo fue REENVIADO (ej. desde tu correo personal o una regla de reenvío), extrae el remitente original en los encabezados del cuerpo (De: / From:).',
+    '- Si la entidad (sea nueva o existente) NO tiene aún registrado este patrón en su lista de patterns, DEBES DEVOLVER el patrón con @ en entity_email_pattern (ej: "alertasynotificaciones@notificacionesbancolombia\\.com" o "@notificacionesbancolombia\\.com") para que el sistema lo registre en la tabla entity_email_patterns.',
+    '- Solo devuelve entity_email_pattern=null si la entidad ya cuenta con un patrón registrado que cubra exactamente esta dirección.',
     '',
     'NIVEL 2 — ASUNTO Y NOMBRE DE LA PLANTILLA:',
     'Analiza el asunto para determinar la clase de notificación y construye subject_pattern únicamente con',
@@ -249,8 +321,7 @@ export function buildTemplatePrompt(
     priorMatchText,
     'REGLAS PARA LOS REGEX:',
     '1. Todos deben ser JavaScript válidos y compilar con new RegExp(regex, "i").',
-    '1A. entity_email_pattern solo puede crearse si ninguna entidad registrada tiene un entity_email_pattern que coincida con el remitente.',
-    'Debe ser una señal estable del correo institucional y debe contener obligatoriamente el carácter @. No generes patrones como "bbva", "bancolombia\\.com\\.co" o cualquier fragmento sin @.',
+    '1A. entity_email_pattern debe contener obligatoriamente el carácter @ (ej: "alertasynotificaciones@notificacionesbancolombia\\.com" o "@notificacionesbancolombia\\.com"). No generes fragmentos sin @ como "bbva" o "bancolombia". Debe incluirse siempre que la dirección institucional detectada no esté ya en la lista de patterns registrados de la entidad.',
     '2. No uses delimitadores /.../ ni flags dentro del valor.',
     '3. Usa sintaxis estándar de JavaScript; para grupos no capturantes usa (?:...).',
     '4. Cada regex de extracción debe tener exactamente UN grupo de captura (...) alrededor del valor a extraer. Si usas alternaciones como (val1)|(val2), asegúrate de que capture el valor.',
@@ -295,7 +366,8 @@ export function buildTemplatePrompt(
     'DATOS DEL CORREO A ANALIZAR:',
     '--- REMITENTE RECIBIDO POR EL SISTEMA ---',
     sender || '(Sin remitente)',
-    ...(forwardedSender ? [`[NOTA IMPORTANTE: En el cuerpo se detectó remitente original reenviado: "${forwardedSender}"]`] : []),
+    ...(forwardedSender ? [`[NOTA CRÍTICA: Correo reenviado detectado. Remitente institucional original en el cuerpo: "${forwardedSender}"]`] : []),
+    ...(detectedInstitutionalEmail ? [`[DIRECCIÓN INSTITUCIONAL DETECTADA: "${detectedInstitutionalEmail}"] -> Si esta dirección no está registrada en patterns de la entidad, colócala en entity_email_pattern.`] : []),
     '',
     '--- ASUNTO RECIBIDO POR EL SISTEMA ---',
     subject || '(Sin asunto)',
@@ -518,6 +590,7 @@ export function buildCorrectionPrompt(
     '3. Cada regex de extracción DEBE tener exactamente UN grupo de captura (...) alrededor del valor limpio (ej: monto, hora, comercio).',
     '4. Si un dato (como hora, comercio o cuenta origen) NO existe en el texto de CUERPO LIMPIO, define su regex correspondiente como null.',
     '5. Si el correo sí incluye la hora (ej: 14:35 o 02:30 p.m.), asegúrate de que time_regex capture la hora limpia con paréntesis y time_format indique su formato.',
-    '6. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
+    '6. Si hay un error de Paso 1 (Nivel 1: Entidad) porque el remitente no coincide con ningún entity_email_pattern de la entidad, extrae la dirección institucional de correo detectada (o del reenvío) y devuélvela en entity_email_pattern (con @) para que el sistema la registre en la tabla entity_email_patterns de esa entidad.',
+    '7. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
   ].join('\n');
 }

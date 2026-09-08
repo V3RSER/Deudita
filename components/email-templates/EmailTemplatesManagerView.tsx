@@ -42,6 +42,8 @@ import {
   buildCorrectionPrompt,
   getHeadLines,
   extractForwardedSenderFromBody,
+  inferEntityEmailPattern,
+  extractEmailAddress,
 } from '@/lib/email-cleaning';
 import {
   CatalogEntity,
@@ -854,9 +856,10 @@ export function EmailTemplatesManagerView({
       source_account_regex: formSourceAccountRegex || null,
       time_regex: formTimeRegex || null,
       time_format: formTimeFormat || 'HH:mm:ss',
-      entity_email_patterns: formEntityEmailPattern
-        ? [formEntityEmailPattern]
-        : (matchedEnt?.patterns || []),
+      entity_email_patterns: Array.from(new Set([
+        ...(matchedEnt?.patterns || []),
+        ...(formEntityEmailPattern ? [sanitizeRegexPattern(formEntityEmailPattern) || formEntityEmailPattern] : []),
+      ])).filter(Boolean),
     };
   }, [
     editingTemplateId,
@@ -1151,9 +1154,12 @@ export function EmailTemplatesManagerView({
       ? (matchedEntity.patterns || []).some(checkEntityPattern)
       : false;
 
-    setFormEntityEmailPattern(
-      senderAlreadyCovered ? '' : (d.entity_email_pattern || '')
-    );
+    let effectivePattern = d.entity_email_pattern ? sanitizeRegexPattern(d.entity_email_pattern) : null;
+    if (!effectivePattern && !senderAlreadyCovered) {
+      effectivePattern = inferEntityEmailPattern(senderForEntity, bodyForEntity);
+    }
+
+    setFormEntityEmailPattern(effectivePattern || '');
 
     setFormName(d.name || '');
     if (matchedEntity) {
@@ -1185,6 +1191,11 @@ export function EmailTemplatesManagerView({
     setIsFormVisible(true);
     setPastedAIResponse('');
 
+    const candidatePatterns = Array.from(new Set([
+      ...(matchedEntity?.patterns || []),
+      ...(effectivePattern ? [effectivePattern] : []),
+    ])).filter(Boolean);
+
     // Evaluación directa e instantánea usando el motor unificado
     const candidateTemplate: CatalogTemplate = {
       id: '__ai_pasted_template__',
@@ -1203,9 +1214,7 @@ export function EmailTemplatesManagerView({
       source_account_regex: d.source_account_regex,
       time_regex: d.time_regex,
       time_format: d.time_format,
-      entity_email_patterns: d.entity_email_pattern
-        ? [d.entity_email_pattern]
-        : (matchedEntity?.patterns || []),
+      entity_email_patterns: candidatePatterns,
     };
 
     const emailToTest = selectedEmail
@@ -1229,7 +1238,13 @@ export function EmailTemplatesManagerView({
     if (emailToTest) {
       const evalResult = evaluateTemplateAgainstEmail(candidateTemplate, emailToTest, entities);
       if (evalResult.overallPassed) {
-        setAiSuccess('JSON verificado con éxito: pasó los 4 niveles (Entidad, Asunto, Desempate y Monto).');
+        if (!senderAlreadyCovered && effectivePattern) {
+          setAiSuccess(
+            `JSON verificado con éxito: pasó los 4 niveles. Se asignó el patrón de remitente "${effectivePattern}" para registrarlo en ${matchedEntity?.name || d.entity_label || 'la entidad'} al guardar.`
+          );
+        } else {
+          setAiSuccess('JSON verificado con éxito: pasó los 4 niveles (Entidad, Asunto, Desempate y Monto).');
+        }
       } else {
         setAiError(
           evalResult.failureReasons[0] ||
@@ -1295,15 +1310,20 @@ export function EmailTemplatesManagerView({
           ? (matched.patterns || []).some(checkEntityPattern)
           : false;
 
+        let effectivePattern = s.entity_email_pattern ? sanitizeRegexPattern(s.entity_email_pattern) : null;
+        if (!effectivePattern && !senderAlreadyCovered) {
+          effectivePattern = inferEntityEmailPattern(senderForEntity, bodyForEntity);
+        }
+
         if (matched) {
           setFormEntityLabel(matched.name);
           setFormEntityId(matched.id);
-          setFormEntityEmailPattern(senderAlreadyCovered ? '' : (s.entity_email_pattern || ''));
+          setFormEntityEmailPattern(effectivePattern || '');
           setFormIsNewEntity(false);
         } else {
           setFormEntityLabel(s.entity_label || '');
           setFormEntityId(null);
-          setFormEntityEmailPattern(s.entity_email_pattern || '');
+          setFormEntityEmailPattern(effectivePattern || '');
           setFormIsNewEntity(true);
         }
         setFormSubjectPattern(s.subject_pattern || '');
@@ -1365,15 +1385,16 @@ export function EmailTemplatesManagerView({
       }
 
       const sender = sampleSender || selectedEmail?.sender || '';
+      const body = sampleBody || selectedEmail?.body || selectedEmail?.plainBody || '';
       const ent = effectiveEntityId ? entities.find((e) => e.id === effectiveEntityId) : null;
       const proposed = sanitizeRegexPattern(formEntityEmailPattern.trim());
-      const alreadyHasPattern = ent?.patterns?.some((p) => {
-        try {
-          return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(sender);
-        } catch {
-          return false;
-        }
-      });
+      const patternAlreadyInEntity = Boolean(
+        proposed && ent?.patterns?.some((p) => p.trim().toLowerCase() === proposed.toLowerCase())
+      );
+      const fallbackInferred = (!proposed && (!ent?.patterns || ent.patterns.length === 0))
+        ? inferEntityEmailPattern(sender, body)
+        : null;
+      const patternToSend = proposed ? (patternAlreadyInEntity ? null : proposed) : fallbackInferred;
 
       const payload = {
         ...(editingTemplateId ? { id: editingTemplateId } : {}),
@@ -1381,7 +1402,7 @@ export function EmailTemplatesManagerView({
         new_entity_name: formEntityLabel.trim() || null,
         new_entity_label: formEntityLabel.trim() || null,
         entity_id: effectiveEntityId,
-        entity_email_pattern: alreadyHasPattern ? null : (proposed || null),
+        entity_email_pattern: patternToSend || null,
         subject_pattern: sanitizeRegexPattern(formSubjectPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(formMatchPattern.trim()) || null,
         amount_regex: sanitizeRegexPattern(formAmountRegex.trim()) || formAmountRegex.trim(),
@@ -1588,7 +1609,11 @@ export function EmailTemplatesManagerView({
       const senderAlreadyCovered = matched
         ? (matched.patterns || []).some(checkModalEntityPattern)
         : false;
-      setModalEntityEmailPattern(senderAlreadyCovered ? '' : (d.entity_email_pattern || ''));
+      let effectiveModalPattern = d.entity_email_pattern ? sanitizeRegexPattern(d.entity_email_pattern) : null;
+      if (!effectiveModalPattern && !senderAlreadyCovered) {
+        effectiveModalPattern = inferEntityEmailPattern(modalSenderForEntity, modalBodyForEntity);
+      }
+      setModalEntityEmailPattern(effectiveModalPattern || '');
       if (matched) {
         setModalEntityId(matched.id);
         setModalIsNewEntity(false);
@@ -1647,16 +1672,18 @@ export function EmailTemplatesManagerView({
         }
       }
 
-      const sender = modalSampleEmailId ? (emails.find((e) => e.id === modalSampleEmailId)?.sender || '') : '';
+      const modalSampleEmail = modalSampleEmailId ? emails.find((e) => e.id === modalSampleEmailId) : null;
+      const sender = modalSampleEmail?.sender || '';
+      const body = modalSampleEmail?.body || modalSampleEmail?.plainBody || '';
       const ent = effectiveEntityId ? entities.find((e) => e.id === effectiveEntityId) : null;
       const proposed = sanitizeRegexPattern(modalEntityEmailPattern.trim());
-      const alreadyHasPattern = ent?.patterns?.some((p) => {
-        try {
-          return new RegExp(sanitizeRegexPattern(p) || p, 'i').test(sender);
-        } catch {
-          return false;
-        }
-      });
+      const patternAlreadyInEntity = Boolean(
+        proposed && ent?.patterns?.some((p) => p.trim().toLowerCase() === proposed.toLowerCase())
+      );
+      const fallbackInferred = (!proposed && (!ent?.patterns || ent.patterns.length === 0))
+        ? inferEntityEmailPattern(sender, body)
+        : null;
+      const patternToSend = proposed ? (patternAlreadyInEntity ? null : proposed) : fallbackInferred;
 
       const payload = {
         id: editingModalId,
@@ -1664,7 +1691,7 @@ export function EmailTemplatesManagerView({
         new_entity_name: modalEntityLabel.trim() || null,
         new_entity_label: modalEntityLabel.trim() || null,
         entity_id: effectiveEntityId,
-        entity_email_pattern: alreadyHasPattern ? null : (proposed || null),
+        entity_email_pattern: patternToSend || null,
         subject_pattern: sanitizeRegexPattern(modalSubjectPattern.trim()) || null,
         match_pattern: sanitizeRegexPattern(modalMatchPattern.trim()) || null,
         amount_regex: sanitizeRegexPattern(modalAmountRegex.trim()) || modalAmountRegex.trim(),
