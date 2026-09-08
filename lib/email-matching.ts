@@ -1,4 +1,11 @@
-import { cleanEmailBody, sanitizeRegexPattern, getHeadLines } from './email-cleaning';
+import {
+  cleanEmailBody,
+  sanitizeRegexPattern,
+  getHeadLines,
+  stripSubjectPrefixes,
+  extractForwardedSenderFromBody,
+  extractForwardedSubjectFromBody,
+} from './email-cleaning';
 
 export interface CatalogEntity {
   id: string;
@@ -327,6 +334,9 @@ export function evaluateTemplateAgainstEmail(
     l1Reason = `La entidad "${entityName}" no tiene patrones de correo configurados (entity_email_patterns); no puede coincidir ningún correo.`;
     criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
   } else {
+    const bodyHeadLines = getHeadLines(cleanBody, 15);
+    const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
+
     for (const pat of entityPatterns) {
       try {
         const re = new RegExp(pat, 'i');
@@ -334,6 +344,12 @@ export function evaluateTemplateAgainstEmail(
           level1Passed = true;
           l1MatchedPattern = pat;
           l1MatchedOn = 'sender';
+          break;
+        }
+        if ((forwardedSender && re.test(forwardedSender)) || re.test(bodyHeadLines)) {
+          level1Passed = true;
+          l1MatchedPattern = pat;
+          l1MatchedOn = 'body';
           break;
         }
       } catch {}
@@ -352,10 +368,10 @@ export function evaluateTemplateAgainstEmail(
   const sanitizedSubject = sanitizeRegexPattern(template.subject_pattern);
   if (sanitizedSubject) {
     try {
-      const re = new RegExp(sanitizedSubject, 'i');
-      if (re.test(subject)) {
+      const matchResult = matchesSubject(sanitizedSubject, subject, cleanBody);
+      if (matchResult.matched) {
         level2Passed = true;
-        l2MatchedOn = 'subject';
+        l2MatchedOn = matchResult.matchedOn || 'subject';
       } else {
         l2Reason = `El asunto ("${subject || 'vacío'}") no coincide con el patrón /${sanitizedSubject}/i.`;
         criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
@@ -560,7 +576,8 @@ export function diagnoseEmailMatching(
   entities: CatalogEntity[]
 ): DiagnosisResult {
   const cleanBody = cleanEmailBody(rawOrCleanBody);
-  const bodyHeadLines = getHeadLines(cleanBody, 10);
+  const bodyHeadLines = getHeadLines(cleanBody, 15);
+  const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
 
   // Mirror Google Apps Script exactly: templates participate only through
   // their persisted entity_id. No fallback by entity label and no virtual
@@ -629,9 +646,9 @@ export function diagnoseEmailMatching(
           matchedOn = 'sender';
           break;
         }
-        // Correo reenviado por regla (p. ej. Outlook): el remitente real
-        // suele quedar en las primeras líneas del cuerpo, no en el sender.
-        if (regex.test(bodyHeadLines)) {
+        // Correo reenviado por regla (p. ej. Outlook/Gmail): el remitente real
+        // suele quedar en las primeras líneas del cuerpo o encabezado reenviado.
+        if ((forwardedSender && regex.test(forwardedSender)) || regex.test(bodyHeadLines)) {
           entityMatched = true;
           matchedPattern = pat;
           matchedOn = 'body';
@@ -710,14 +727,10 @@ export function diagnoseEmailMatching(
       let matchedOn: 'subject' | 'body' | undefined;
 
       try {
-        const regex = new RegExp(subjectPattern, 'i');
-        if (regex.test(subject)) {
+        const matchRes = matchesSubject(subjectPattern, subject, cleanBody);
+        if (matchRes.matched) {
           groupMatched = true;
-          matchedOn = 'subject';
-        } else if (regex.test(cleanBody)) {
-          // Fallback to body for forwarded messages
-          groupMatched = true;
-          matchedOn = 'body';
+          matchedOn = matchRes.matchedOn || 'subject';
         }
       } catch (err: unknown) {
         const errMessage = err instanceof Error ? err.message : String(err);
@@ -1252,15 +1265,59 @@ export function buildConcept(
   return null;
 }
 
-export function matchesEitherSource(pattern: string, directText: string, body: string): boolean {
+/**
+ * Tests whether an email subject pattern matches the given subject or forwarded body.
+ * Robust against standard forward/reply prefixes ("Fwd:", "RV:", "Re:", etc.) and forwarded headers in the body.
+ */
+export function matchesSubject(
+  pattern: string | null | undefined,
+  subject: string,
+  body?: string
+): { matched: boolean; matchedOn?: 'subject' | 'body' } {
   const cleanPat = sanitizeRegexPattern(pattern);
-  if (!cleanPat) return false;
+  if (!cleanPat) return { matched: true };
+
   try {
     const regex = new RegExp(cleanPat, 'i');
-    return regex.test(directText) || regex.test(body);
+
+    // 1. Direct match on subject
+    if (regex.test(subject)) {
+      return { matched: true, matchedOn: 'subject' };
+    }
+
+    // 2. Match on subject without forwarding / reply prefixes (e.g. "Fwd: Alertas" -> "Alertas")
+    const strippedSubject = stripSubjectPrefixes(subject);
+    if (strippedSubject && strippedSubject !== subject && regex.test(strippedSubject)) {
+      return { matched: true, matchedOn: 'subject' };
+    }
+
+    // 3. Match on forwarded subject extracted from body header ("Asunto: ...", "Subject: ...")
+    if (body) {
+      const forwardedSubject = extractForwardedSubjectFromBody(body, 15);
+      if (forwardedSubject && regex.test(forwardedSubject)) {
+        return { matched: true, matchedOn: 'subject' };
+      }
+
+      // 4. Fallback: match directly on body content
+      if (regex.test(body)) {
+        return { matched: true, matchedOn: 'body' };
+      }
+      try {
+        const multilineRegex = new RegExp(cleanPat, 'im');
+        if (multilineRegex.test(body)) {
+          return { matched: true, matchedOn: 'body' };
+        }
+      } catch {}
+    }
+
+    return { matched: false };
   } catch {
-    return false;
+    return { matched: false };
   }
+}
+
+export function matchesEitherSource(pattern: string, directText: string, body: string): boolean {
+  return matchesSubject(pattern, directText, body).matched;
 }
 
 /**
@@ -1286,7 +1343,8 @@ export function simulateGoogleAppsScriptProcess(
   const sender = message.sender || '';
   const subject = message.subject || '';
   const body = cleanEmailBody(message.plainBody);
-  const bodyHeadLines = getHeadLines(body, 10);
+  const bodyHeadLines = getHeadLines(body, 15);
+  const forwardedSender = extractForwardedSenderFromBody(body, 15);
 
   logs.push(`[Google Apps Script] 📧 Procesando correo: "${subject}" | Remitente: ${sender}`);
   logs.push(`[Google Apps Script] Limpieza de cuerpo ejecutada (${body.length} caracteres de texto plano).`);
@@ -1334,15 +1392,18 @@ export function simulateGoogleAppsScriptProcess(
       try {
         const regex = new RegExp(pattern, 'i');
         if (regex.test(sender)) return true;
-        if (regex.test(bodyHeadLines)) { matchedOnBody = true; return true; }
+        if ((forwardedSender && regex.test(forwardedSender)) || regex.test(bodyHeadLines)) {
+          matchedOnBody = true;
+          return true;
+        }
         return false;
       } catch { return false; }
     });
     if (!entityMatch) {
-      logs.push(`  → Entidad "${group.entityName}": descartada, ningún entity_email_pattern coincidió con el remitente ni con las primeras 10 líneas del cuerpo.`);
+      logs.push(`  → Entidad "${group.entityName}": descartada, ningún entity_email_pattern coincidió con el remitente ni con las primeras líneas del cuerpo.`);
       continue;
     }
-    logs.push(`  ✓ Entidad "${group.entityName}": coincidió con entity_email_pattern${matchedOnBody ? ' en las primeras 10 líneas del cuerpo (correo reenviado)' : ''}. Evaluando ${group.templates.length} plantilla(s).`);
+    logs.push(`  ✓ Entidad "${group.entityName}": coincidió con entity_email_pattern${matchedOnBody ? ' en las primeras líneas del cuerpo (correo reenviado)' : ''}. Evaluando ${group.templates.length} plantilla(s).`);
 
     // Agrupar por subject_pattern
     const bySubject = new Map<string, CatalogTemplate[]>();

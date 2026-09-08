@@ -41,6 +41,46 @@ export function cleanEmailBody(body: string | null | undefined): string {
 }
 
 /**
+ * Strips common email forwarding and reply prefixes across multiple languages
+ * (e.g., Fwd:, FW:, Re:, RV:, VS:, TR:, WG:, etc., including bracketed forms [Fwd:] and chained prefixes).
+ */
+export function stripSubjectPrefixes(subject: string | null | undefined): string {
+  if (!subject) return '';
+  let s = String(subject).trim();
+  const prefixRegex = /^(?:\[?(?:fwd?|fw|re|rv|vs|tr|wg|aw|sv|res|enc|doorst)\]?\s*[:：\-]\s*)+/i;
+  while (prefixRegex.test(s)) {
+    s = s.replace(prefixRegex, '').trim();
+  }
+  return s;
+}
+
+/**
+ * Extracts the original sender from forwarded headers in the body (e.g., "De: Bancolombia <alertas@...>" or "From: ...").
+ */
+export function extractForwardedSenderFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
+  if (!body) return null;
+  const head = getHeadLines(body, maxLines);
+  const match = head.match(/^(?:de|from)\s*:\s*([^\n\r]+)/im);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  return null;
+}
+
+/**
+ * Extracts the original subject from forwarded headers in the body (e.g., "Asunto: Alertas y Notificaciones" or "Subject: ...").
+ */
+export function extractForwardedSubjectFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
+  if (!body) return null;
+  const head = getHeadLines(body, maxLines);
+  const match = head.match(/^(?:asunto|subject)\s*:\s*([^\n\r]+)/im);
+  if (match && match[1]) {
+    return stripSubjectPrefixes(match[1].trim());
+  }
+  return null;
+}
+
+/**
  * Returns the first N non-trailing lines of the (cleaned) body. Used to look for
  * the real sender/entity when an email arrived forwarded by a rule (e.g. Outlook),
  * in which case getFrom()/sender points to the personal inbox instead of the
@@ -104,15 +144,24 @@ export interface ParsedAITemplateResult {
  */
 export interface PromptEntity { id: string; name: string; patterns: string[]; }
 
-export function findEntityByEmailPattern(sender: string, entities: PromptEntity[] = []): PromptEntity | null {
+export function findEntityByEmailPattern(
+  sender: string,
+  entities: PromptEntity[] = [],
+  body?: string | null
+): PromptEntity | null {
   const value = (sender || '').trim();
-  if (!value) return null;
+  const bodyHead = body ? getHeadLines(body, 15) : '';
+  const forwardedSender = body ? extractForwardedSenderFromBody(body, 15) : null;
+
   for (const entity of entities) {
     for (const rawPattern of entity.patterns || []) {
       const pattern = sanitizeRegexPattern(rawPattern);
       if (!pattern || !pattern.includes('@')) continue;
       try {
-        if (new RegExp(pattern, 'i').test(value)) return entity;
+        const regex = new RegExp(pattern, 'i');
+        if (value && regex.test(value)) return entity;
+        if (forwardedSender && regex.test(forwardedSender)) return entity;
+        if (bodyHead && regex.test(bodyHead)) return entity;
       } catch {}
     }
   }
@@ -125,12 +174,17 @@ export function buildTemplatePrompt(
   cleanBody: string,
   existingEntities: PromptEntity[] = []
 ): string {
-  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities);
+  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities, cleanBody);
+  const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
+  const strippedSubject = stripSubjectPrefixes(subject);
+  const forwardedSubject = extractForwardedSubjectFromBody(cleanBody, 15);
+  const effectiveSubject = forwardedSubject || (strippedSubject !== subject ? strippedSubject : subject);
+
   const entityListText = existingEntities.length > 0
     ? `ENTIDADES REGISTRADAS Y SUS PATRONES DE CORREO:\n${existingEntities.map(e => `  - "${e.name}" | entity_id=${e.id} | patterns=${JSON.stringify(e.patterns || [])}`).join('\n')}\n`
     : 'Aún no hay entidades registradas en el sistema.\n';
   const priorMatchText = matchedExistingEntity
-    ? `MATCH PREVIO DE ENTIDAD: el remitente coincide con entity_email_patterns de "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}). Usa esta entidad. NO generes entity_email_pattern nuevo.`
+    ? `MATCH PREVIO DE ENTIDAD: el correo (remitente o reenviado) coincide con entity_email_patterns de "${matchedExistingEntity.name}" (entity_id=${matchedExistingEntity.id}). Usa esta entidad. NO generes entity_email_pattern nuevo.`
     : 'MATCH PREVIO DE ENTIDAD: ningún entity_email_pattern existente coincide con el remitente. Solo propone un patrón nuevo si realmente corresponde a una entidad nueva y el patrón contiene @.';
 
   return [
@@ -241,9 +295,11 @@ export function buildTemplatePrompt(
     'DATOS DEL CORREO A ANALIZAR:',
     '--- REMITENTE RECIBIDO POR EL SISTEMA ---',
     sender || '(Sin remitente)',
+    ...(forwardedSender ? [`[NOTA IMPORTANTE: En el cuerpo se detectó remitente original reenviado: "${forwardedSender}"]`] : []),
     '',
     '--- ASUNTO RECIBIDO POR EL SISTEMA ---',
     subject || '(Sin asunto)',
+    ...(effectiveSubject !== subject ? [`[NOTA IMPORTANTE: El asunto contiene prefijos de reenvío/respuesta. El asunto original del banco/entidad es: "${effectiveSubject}"]`] : []),
     '',
     '--- CUERPO LIMPIO ---',
     cleanBody || '(Sin cuerpo)',
