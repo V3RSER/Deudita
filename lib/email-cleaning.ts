@@ -349,16 +349,20 @@ export function buildTemplatePrompt(
     const existingPatterns = matchedExistingEntity.patterns?.filter(Boolean) ?? [];
 
     entityInstructions = [
-      'ENTIDAD IDENTIFICADA POR EL SISTEMA:',
+      'ENTIDAD RESUELTA DETERMINÍSTICAMENTE POR EL SISTEMA:',
       `entity_label="${matchedExistingEntity.name}"`,
       'is_new_entity=false',
-      'La entidad ya fue identificada por el sistema. No vuelvas a evaluarla.',
+      'BLOQUEO DE ENTIDAD: esta entidad fue determinada por una coincidencia de patrón existente en el remitente, remitente reenviado o cuerpo.',
+      'No identifiques, infieras, reevalues, corrijas ni sustituyas la entidad.',
+      'No compares esta entidad con otras entidades registradas para decidir cuál corresponde.',
+      'La respuesta debe conservar exactamente entity_label e is_new_entity indicados arriba.',
+      'entity_email_pattern NO debe crearse ni modificarse para esta entidad. Si ya existe un patrón coincidente, devuelve entity_email_pattern=null.',
       ...(existingPatterns.length
         ? [
           '',
-          'PATRONES EXISTENTES DE ESTA ENTIDAD:',
+          'PATRONES EXISTENTES DE ESTA ENTIDAD (SOLO COMO CONTEXTO PARA EL DESEMPATE):',
           ...existingPatterns.map((pattern, i) => `${i + 1}. ${pattern}`),
-          'Usa estos patrones como referencia para evitar crear un match_pattern redundante o incompatible.',
+          'Estos patrones ya resuelven el NIVEL 1 (Entidad). No los conviertas en un nuevo match_pattern ni generes un patrón de entidad redundante.',
         ]
         : []),
     ].join('\n');
@@ -425,15 +429,16 @@ export function buildTemplatePrompt(
     '',
     '4. MATCH_PATTERN:',
     'match_pattern es obligatorio.',
-    'Debe representar únicamente las características estables del contenido de la notificación que permitan distinguir esta plantilla de otras plantillas de la misma entidad, especialmente cuando compartan subject_pattern.',
-    'Usa como referencia los patrones existentes proporcionados para la entidad cuando estén disponibles.',
-    'No copies un patrón existente. Determina qué rasgo estable distingue la notificación actual de las demás.',
-    'No incluyas valores dinámicos o propios de una instancia: importes, fechas, horas, nombres, personas, comercios, cuentas, tarjetas, referencias, códigos, identificadores, números de operación ni otros valores variables.',
-    'No memorices frases completas si contienen partes variables. Conserva solo los términos y estructuras estables necesarios para distinguir el tipo de notificación.',
-    'Si una parte puede cambiar entre dos correos de la misma clase sin cambiar su significado, es dinámica y debe excluirse.',
-    'El patrón debe ser tan general como sea posible, pero suficientemente específico para evitar confundir esta clase con otra de la misma entidad.',
-    'Cuando existan otros patrones de la misma entidad, compáralos con la notificación actual y construye el patrón a partir de la diferencia estable que realmente la distingue.',
-    'No uses contenido incidental ni datos exclusivos de esta muestra.',
+    'Debe ser una expresión regular JavaScript válida que actúe como discriminante estable del tipo de notificación dentro de la entidad.',
+    'Debe identificar el rasgo semántico o estructural más pequeño que distingue esta clase de notificación dentro de la entidad.',
+    'Usa como referencia los patrones existentes proporcionados para la entidad cuando estén disponibles y busca una diferencia estable respecto de ellos.',
+    'No copies un patrón existente ni intentes describir todo el contenido del correo. El patrón debe expresar la señal distintiva, no una transcripción de la muestra.',
+    'Los valores dinámicos no son estables y no deben fijarse literalmente en el regex. Sin embargo, su carácter dinámico no invalida el texto o la estructura que los introduce: puede ser precisamente esa estructura estable la que distingue el tipo de notificación.',
+    'Trata los valores dinámicos como desconocidos y potencialmente arbitrarios: no supongas su longitud, formato, caracteres permitidos ni contenido. Cuando sea necesario para expresar la estructura distintiva, deja que el regex tolere cualquier contenido dinámico entre elementos estables.',
+    'Prioriza etiquetas, términos funcionales, relaciones semánticas y estructuras que indiquen qué operación ocurrió. Elimina nombres, importes, fechas, horas, cuentas, identificadores y demás valores concretos como valores del patrón, pero conserva las palabras o estructuras estables que los contextualizan.',
+    'Prefiere el patrón mínimo que distingue correctamente la plantilla. No añadas texto estable solo para hacer el patrón más descriptivo si no aporta capacidad de discriminación.',
+    'El patrón debe seguir coincidiendo con futuras instancias de la misma clase aunque cambien completamente los valores dinámicos y aunque esos valores contengan caracteres arbitrarios.',
+    'No uses contenido incidental, texto de cortesía ni detalles exclusivos de esta muestra.',
     'No uses null.',
     '',
     ...(relevantExistingPatterns.length
@@ -445,8 +450,11 @@ export function buildTemplatePrompt(
       ]
       : []),
     'VALIDACIÓN DE MATCH_PATTERN:',
-    'Para cada segmento pregunta: "¿Podría cambiar en otro correo de la misma clase sin cambiar su significado?". Si sí, elimínalo.',
-    'Pregunta también: "¿Si elimino este segmento podría confundirse esta notificación con otra plantilla de la misma entidad?". Si sí, consérvalo.',
+    'Valida que el valor generado compile con new RegExp(match_pattern, "i").',
+    'Valida que coincida con el CUERPO LIMPIO de esta muestra.',
+    'Valida que siga coincidiendo si los valores dinámicos cambian por completo y pueden contener cualquier carácter o formato válido para ese campo.',
+    'Valida que el patrón dependa del rasgo distintivo del tipo de notificación y no de una instancia concreta ni de una frase completa de la muestra.',
+    'Si existe una señal estable suficiente para distinguir la clase por sí sola, no la acompañes con valores dinámicos ni con texto adicional innecesario.',
     '',
     'REGLA CENTRAL:',
     'Clasifica cada característica como DIFERENCIA DE TIPO o VARIACIÓN DE INSTANCIA.',
@@ -486,6 +494,14 @@ export function buildTemplatePrompt(
     'Comprueba también que el patrón no capture accidentalmente otra instancia del mismo tipo de dato presente en el correo.',
     'Si el dato no existe, usa null según las reglas del campo.',
     'No muestres esta validación.',
+    '',
+    'REGLA DE AUTORIDAD PARA ENTIDAD:',
+    matchedExistingEntity
+      ? 'La entidad ya fue resuelta por el sistema antes de generar este prompt. La IA NO participa en la decisión del NIVEL 1.'
+      : 'No existe una coincidencia determinista de entidad. En este caso sí debes identificar la entidad según las reglas anteriores.',
+    matchedExistingEntity
+      ? 'No cambies entity_label, is_new_entity ni entity_email_pattern respecto a la resolución proporcionada por el sistema.'
+      : 'Si ninguna entidad registrada coincide, puedes definir una nueva entidad y construir entity_email_pattern según las reglas.',
     '',
     '8. VALORES SEMÁNTICOS:',
     'expense_type debe representar la naturaleza de la operación usando el vocabulario del sistema, por ejemplo "compra", "transferencia", "retiro" o "pago".',
