@@ -24,8 +24,11 @@ import {
   X,
   Loader2,
   Inbox,
+  Bot,
+  Clock,
   ChevronDown,
-  ChevronRight
+  ChevronUp,
+  ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -34,7 +37,8 @@ import {
   parseAITemplateResponse,
   buildTemplatePrompt,
   buildCorrectionPrompt,
-  resolveEmailEntity
+  resolveEmailEntity,
+  inferEntityEmailPattern,
 } from '@/lib/email-cleaning';
 import {
   CatalogEntity,
@@ -43,7 +47,8 @@ import {
   DiagnosisResult,
   SingleTemplateEvaluation,
   evaluateTemplateAgainstEmail,
-  DiagnosisTemplateReport
+  DiagnosisTemplateReport,
+  extractWithCaptureGroup,
 } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
 
@@ -746,7 +751,7 @@ export function EmailTemplatesManagerView({
   // Inbox & Emails state
   const [emails, setEmails] = useState<IngestedEmail[]>([]);
   const [isLoadingEmails, setIsLoadingEmails] = useState<boolean>(false);
-  const [emailFetchLimit, setEmailFetchLimit] = useState<number>(25);
+  const [emailNextPageToken, setEmailNextPageToken] = useState<string | null>(null);
   const [emailSearchQuery, setEmailSearchQuery] = useState<string>('');
   const [emailStatusFilter, setEmailStatusFilter] = useState<'all' | 'unmatched' | 'matched' | 'conflict'>('all');
   const [emailsError, setEmailsError] = useState<string | null>(null);
@@ -870,17 +875,17 @@ export function EmailTemplatesManagerView({
     }
   }, []);
 
-  // Fetch recent emails from Gmail. Re-fetching with a larger limit gives the
-  // user a simple progressive "Cargar más" flow without introducing a second
-  // pagination state model in the UI.
-  const fetchInboxEmails = useCallback(async (nextLimit = 25, append = false) => {
+  // Fetch emails from Gmail using the API's real page token.
+  const fetchInboxEmails = useCallback(async (pageToken: string | null = null, append = false) => {
     setIsLoadingEmails(true);
     setEmailsError(null);
     try {
       const storedToken = getStoredGoogleToken();
       const headers = buildAuthHeaders(storedToken);
+      const params = new URLSearchParams({ limit: '25' });
+      if (pageToken) params.set('pageToken', pageToken);
 
-      const res = await fetch(`/api/gmail/emails?maxResults=${nextLimit}`, { headers });
+      const res = await fetch(`/api/gmail/emails?${params.toString()}`, { headers });
       const data = await res.json();
 
       if (!res.ok) {
@@ -925,15 +930,14 @@ export function EmailTemplatesManagerView({
 
       setEmails((previous) => {
         if (!append) return normalizedEmails;
-
-        const merged = new Map(previous.map((email: IngestedEmail) => [email.id, email]));
-        normalizedEmails.forEach((email: IngestedEmail) => merged.set(email.id, email));
+        const merged = new Map(previous.map((email) => [email.id, email]));
+        normalizedEmails.forEach((email) => merged.set(email.id, email));
         return Array.from(merged.values());
       });
 
-      setEmailFetchLimit(nextLimit);
+      setEmailNextPageToken(typeof data.nextPageToken === 'string' ? data.nextPageToken : null);
 
-      if (normalizedEmails.length > 0) {
+      if (normalizedEmails.length > 0 && !append) {
         setSelectedEmailId((prev) => prev || normalizedEmails[0].id);
       }
     } catch (err: unknown) {
@@ -945,13 +949,14 @@ export function EmailTemplatesManagerView({
   }, []);
 
   const handleLoadMoreEmails = useCallback(() => {
-    fetchInboxEmails(emailFetchLimit + 25, true);
-  }, [emailFetchLimit, fetchInboxEmails]);
+    if (!emailNextPageToken || isLoadingEmails) return;
+    fetchInboxEmails(emailNextPageToken, true);
+  }, [emailNextPageToken, fetchInboxEmails, isLoadingEmails]);
 
   const handleRefreshEmails = useCallback(() => {
     setSelectedEmailId(null);
-    setEmailFetchLimit(25);
-    fetchInboxEmails(25, false);
+    setEmailNextPageToken(null);
+    fetchInboxEmails(null, false);
   }, [fetchInboxEmails]);
 
   useEffect(() => {
@@ -1867,12 +1872,12 @@ export function EmailTemplatesManagerView({
               <button
                 type="button"
                 onClick={handleLoadMoreEmails}
-                disabled={isLoadingEmails}
+                disabled={isLoadingEmails || !emailNextPageToken}
                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition cursor-pointer disabled:opacity-50"
                 title="Recuperar más correos de Gmail"
               >
                 {isLoadingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                {isLoadingEmails ? 'Cargando...' : 'Cargar más correos'}
+                {isLoadingEmails ? 'Cargando...' : emailNextPageToken ? 'Cargar más correos' : 'No hay más correos'}
               </button>
               <button type="button" onClick={handleRefreshEmails} disabled={isLoadingEmails} className="w-full inline-flex items-center justify-center gap-2 py-1.5 text-[10px] font-semibold text-zinc-500 hover:text-zinc-800 transition cursor-pointer disabled:opacity-50">
                 <RefreshCw className={`w-3 h-3 ${isLoadingEmails ? 'animate-spin' : ''}`} />
