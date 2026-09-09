@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 
-import type { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
+import type { CatalogEntity, CatalogTemplate } from '@/lib/email-templates/email-matching';
 
 export const dynamic = 'force-dynamic';
 

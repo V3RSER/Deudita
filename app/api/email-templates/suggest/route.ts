@@ -6,7 +6,7 @@ import {
   buildTemplatePrompt,
   cleanEmailBody,
   parseAITemplateResponse,
-} from '@/lib/email-cleaning';
+} from '@/lib/email-templates/email-cleaning';
 
 export const dynamic = 'force-dynamic';
 

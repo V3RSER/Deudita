@@ -7,7 +7,8 @@
     "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean"
+    "clean": "next clean",
+    "build:gas": "node scripts/build-google-apps-script.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",

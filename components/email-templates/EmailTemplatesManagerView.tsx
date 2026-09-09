@@ -39,7 +39,7 @@ import {
   buildCorrectionPrompt,
   resolveEmailEntity,
   inferEntityEmailPattern,
-} from '@/lib/email-cleaning';
+} from '@/lib/email-templates/email-cleaning';
 import {
   CatalogEntity,
   CatalogTemplate,
@@ -49,7 +49,7 @@ import {
   evaluateTemplateAgainstEmail,
   DiagnosisTemplateReport,
   extractWithCaptureGroup,
-} from '@/lib/email-matching';
+} from '@/lib/email-templates/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
 
 type TemplateFormState = {

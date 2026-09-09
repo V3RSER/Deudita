@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import type { CatalogEntity, CatalogTemplate } from '@/lib/email-matching';
+import type { CatalogEntity, CatalogTemplate } from '@/lib/email-templates/email-matching';
 
 type TemplateRow = CatalogTemplate & {
   expense_type_id: string | null;

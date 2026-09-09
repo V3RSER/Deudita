@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { cleanEmailBody } from '@/lib/email-cleaning';
+import { cleanEmailBody } from '@/lib/email-templates/email-cleaning';
 
 export const dynamic = 'force-dynamic';
 
