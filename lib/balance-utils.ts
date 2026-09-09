@@ -736,11 +736,11 @@ export interface ThirdPartyTriangulationExpense {
   originalDebtAmount: number;
   allocatedDiscountAmount: number;
   role:
-    | 'debtor_owes_third_party'
-    | 'third_party_owes_creditor'
-    | 'creditor_owes_third_party'
-    | 'third_party_owes_debtor'
-    | 'group_shared';
+  | 'debtor_owes_third_party'
+  | 'third_party_owes_creditor'
+  | 'creditor_owes_third_party'
+  | 'third_party_owes_debtor'
+  | 'group_shared';
   payerName: string;
   payerProfile?: Profile;
   participantName: string;
@@ -757,11 +757,11 @@ export interface ThirdPartyTriangulation {
   amount: number;
   isDiscount: boolean;
   role:
-    | 'debtor_pays_third_party'
-    | 'third_party_pays_creditor'
-    | 'creditor_owes_third_party'
-    | 'mutual_cross_compensation'
-    | 'debt_consolidation';
+  | 'debtor_pays_third_party'
+  | 'third_party_pays_creditor'
+  | 'creditor_owes_third_party'
+  | 'mutual_cross_compensation'
+  | 'debt_consolidation';
   shortSummary: string;
   explanation: string;
   directDebtsWithDebtor: number;
@@ -780,11 +780,11 @@ export interface RealCompensationRelation {
   simplifiedAmount?: number;
   differs?: boolean;
   direction:
-    | 'creditor_owes_third'
-    | 'third_owes_creditor'
-    | 'debtor_owes_third'
-    | 'third_owes_debtor'
-    | 'consolidation';
+  | 'creditor_owes_third'
+  | 'third_owes_creditor'
+  | 'debtor_owes_third'
+  | 'third_owes_debtor'
+  | 'consolidation';
   roleDescription: string;
   operation: '+' | '-';
   expenses: Expense[];
@@ -1348,9 +1348,8 @@ export function calculatePairwiseDebtDetail(
                   simplifiedAmount,
                   differs,
                   direction: 'debtor_owes_third',
-                  roleDescription: `${debtorDisplayName} transfiere directamente a ${b.creditor.full_name || 'Tercero'}${
-                    differs && directAmount > 0 ? ` (deuda directa previa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-                  }`,
+                  roleDescription: `${debtorDisplayName} transfiere directamente a ${b.creditor.full_name || 'Tercero'}${differs && directAmount > 0 ? ` (deuda directa previa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
+                    }`,
                   operation: '+',
                   expenses: getExpensesForPair(b.creditor.id, debtor.id),
                 });
@@ -1626,29 +1625,29 @@ export function calculatePairwiseDebtDetail(
         // 2. SETTLEMENT FORMULA & LABEL: Shown in final modal settlement card (Net Direct +/- Compensation = Final Settlement)
         const settlementFormula = isDiscount
           ? `${formatCurrency(netDirectBalance, currencyForFormatting)} − ${formatCurrency(
-              totalCompensated,
-              currencyForFormatting
-            )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`
+            totalCompensated,
+            currencyForFormatting
+          )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`
           : `${formatCurrency(netDirectBalance, currencyForFormatting)} + ${formatCurrency(
-              totalCompensated,
-              currencyForFormatting
-            )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`;
+            totalCompensated,
+            currencyForFormatting
+          )} = ${formatCurrency(simplifiedAmount, currencyForFormatting)}`;
 
         const settlementLabel = isDiscount
           ? `Saldo directo (${formatCurrency(
-              netDirectBalance,
-              currencyForFormatting
-            )}) − Compensación grupal (- ${formatCurrency(
-              totalCompensated,
-              currencyForFormatting
-            )}) = Saldo restante a liquidar`
+            netDirectBalance,
+            currencyForFormatting
+          )}) − Compensación grupal (- ${formatCurrency(
+            totalCompensated,
+            currencyForFormatting
+          )}) = Saldo restante a liquidar`
           : `Saldo directo (${formatCurrency(
-              netDirectBalance,
-              currencyForFormatting
-            )}) + Consolidación grupal (+ ${formatCurrency(
-              totalCompensated,
-              currencyForFormatting
-            )}) = Saldo final a liquidar`;
+            netDirectBalance,
+            currencyForFormatting
+          )}) + Consolidación grupal (+ ${formatCurrency(
+            totalCompensated,
+            currencyForFormatting
+          )}) = Saldo final a liquidar`;
 
         // Narratives
         let summaryNarrative = '';
@@ -1671,12 +1670,12 @@ export function calculatePairwiseDebtDetail(
             closingSummary =
               simplifiedAmount <= 0.009
                 ? `${debtorDisplayName} no debe transferirle nada a ${creditorDisplayName} (${formatCurrency(0, currencyForFormatting)}). En su lugar, transfiere ${newSuggestedPayments
-                    .map((b) => `${formatCurrency(b.amount, currencyForFormatting)} a ${b.to.full_name || 'Tercero'}`)
-                    .join(' y ')}.`
+                  .map((b) => `${formatCurrency(b.amount, currencyForFormatting)} a ${b.to.full_name || 'Tercero'}`)
+                  .join(' y ')}.`
                 : `De los ${formatCurrency(netDirectBalance, currencyForFormatting)} directos con ${creditorDisplayName}, ${formatCurrency(
-                    totalCompensated,
-                    currencyForFormatting
-                  )} se transfieren a otros acreedores. Quedan ${formatCurrency(simplifiedAmount, currencyForFormatting)} a pagarle a ${creditorDisplayName}.`;
+                  totalCompensated,
+                  currencyForFormatting
+                )} se transfieren a otros acreedores. Quedan ${formatCurrency(simplifiedAmount, currencyForFormatting)} a pagarle a ${creditorDisplayName}.`;
 
             unsimplifiedNarrative = `Sin simplificación, ${debtorDisplayName} tendría que pagarle directamente ${formatCurrency(
               netDirectBalance,
@@ -1689,9 +1688,9 @@ export function calculatePairwiseDebtDetail(
             )} al redirigir el pago directamente a ${newSuggestedPayments
               .map((b) => b.to.full_name || 'Tercero')
               .join(' y ')}. El saldo restante con ${creditorDisplayName} es de ${formatCurrency(
-              simplifiedAmount,
-              currencyForFormatting
-            )}.`;
+                simplifiedAmount,
+                currencyForFormatting
+              )}.`;
           } else {
             summaryNarrative = `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
               netDirectBalance,
@@ -1737,9 +1736,8 @@ export function calculatePairwiseDebtDetail(
           unsimplifiedNarrative = `Sin simplificación, ${debtorDisplayName} tendría que hacer múltiples transferencias por separado: ${formatCurrency(
             netDirectBalance,
             currencyForFormatting
-          )} a ${creditorDisplayName}${
-            thirdPartyList.length > 0 ? `, además de ${thirdPartyList.join(' y ')}` : ''
-          }. En el grupo se acumularían pagos cruzados redundantes.`;
+          )} a ${creditorDisplayName}${thirdPartyList.length > 0 ? `, además de ${thirdPartyList.join(' y ')}` : ''
+            }. En el grupo se acumularían pagos cruzados redundantes.`;
 
           simplifiedNarrative = `Al activar la simplificación, las deudas con intermediarios (${compFormula}) se triangulan y se transfieren directamente a ${creditorDisplayName}. De este modo, en lugar de pagos cruzados dispersos, ${debtorDisplayName} salda todo en un solo pago directo de ${formatCurrency(
             simplifiedAmount,
@@ -1864,7 +1862,7 @@ export interface MemberPeerBalance {
 export interface MemberAccountStatement {
   member: Profile;
   targetCreditor?: Profile;
-  
+
   // 1. Deudas / Consumos
   consumedExpenses: Expense[];
   pendingConsumedExpenses: Expense[];
@@ -1874,7 +1872,7 @@ export interface MemberAccountStatement {
   totalConsumedDebt: number;
   totalPendingDebt: number;
   totalSettledDebt: number;
-  
+
   // 2. Aportes / Lo que recupera
   paidExpenses: Expense[];
   activePaidExpenses: Expense[];
@@ -1888,22 +1886,22 @@ export interface MemberAccountStatement {
   totalRecoverable: number;
   totalActiveRecoverable: number;
   totalSettledRecoverable: number;
-  
+
   // 3. Balance Neto Global
   netGlobalBalance: number; // totalRecoverable - totalConsumedDebt (negativo = es deudor neto)
   totalNetDebt: number; // max(0, totalConsumedDebt - totalRecoverable)
-  
+
   // 4. Distribución entre integrantes
   peerBalances: MemberPeerBalance[];
   finalCreditors: { member: Profile; amount: number }[];
   finalDebtors: { member: Profile; amount: number }[];
-  
+
   // 5. Compensaciones y Triangulaciones
   isSimplified: boolean;
   totalCompensationsApplied: number;
   triangulations: ThirdPartyTriangulation[];
   optimizationDetail?: GroupOptimizationDetail;
-  
+
   // 6. Paso a paso del cálculo
   calculation: {
     totalPendingDebt: number;

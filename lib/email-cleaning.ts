@@ -1,14 +1,12 @@
 /**
  * Utilities for building and validating AI-driven email expense templates.
  *
- * Public exports intentionally preserve the existing API so current consumers
- * do not need to change.
+ * Shared email normalization, entity-resolution, and template-AI utilities.
  */
 
 const DEFAULT_HEAD_LINES = 15;
 
-const EMAIL_PATTERN =
-  String.raw`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`;
+const EMAIL_PATTERN = String.raw`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`;
 
 const EMAIL_ADDRESS_REGEX = new RegExp(`(${EMAIL_PATTERN})`, 'i');
 const ANGLE_BRACKET_EMAIL_REGEX = new RegExp(
@@ -80,6 +78,27 @@ const HTML_RULES: Array<[RegExp, string]> = [
   [/&#39;/g, "'"],
   [/&apos;/gi, "'"],
 ];
+
+export interface EmailContext {
+  cleanBody: string;
+  bodyHeadLines: string;
+  forwardedSender: string | null;
+  forwardedSubject: string | null;
+}
+
+export interface EmailEntityPatternSource {
+  id: string;
+  name: string;
+  patterns: string[];
+}
+
+export interface ResolvedEmailEntity {
+  entity: EmailEntityPatternSource | null;
+  effectivePattern: string | null;
+  senderAlreadyCovered: boolean;
+  matchedBy: 'id' | 'name' | 'pattern' | 'none';
+  matchedPattern?: string;
+}
 
 const CLEAN_BODY_RULES: Array<[RegExp, string]> = [
   [/\[image:[^\]]*\]/gi, ''],
@@ -608,49 +627,124 @@ export interface ParsedAITemplateResult {
   warnings?: string[];
 }
 
-export interface PromptEntity {
-  id: string;
-  name: string;
-  patterns: string[];
+export function buildEmailContext(body: string | null | undefined): EmailContext {
+  const cleanBody = cleanEmailBody(body);
+  return {
+    cleanBody,
+    bodyHeadLines: getHeadLines(cleanBody, DEFAULT_HEAD_LINES),
+    forwardedSender: extractForwardedSenderFromBody(cleanBody, DEFAULT_HEAD_LINES),
+    forwardedSubject: extractForwardedSubjectFromBody(cleanBody, DEFAULT_HEAD_LINES),
+  };
 }
 
-export function findEntityByEmailPattern(
-  sender: string,
-  entities: PromptEntity[] = [],
-  body?: string | null,
-): PromptEntity | null {
-  const value = getNonEmptyString(sender);
-  const bodyHead = body ? getHeadLines(body, DEFAULT_HEAD_LINES) : '';
-  const forwardedSender = body
-    ? extractForwardedSenderFromBody(body, DEFAULT_HEAD_LINES)
-    : null;
+export function matchEmailEntityPatterns(
+  patterns: Array<string | null | undefined>,
+  sender: string | null | undefined,
+  bodyHeadLines: string,
+  forwardedSender: string | null,
+): { matched: boolean; matchedPattern?: string; matchedOn?: 'sender' | 'body' } {
+  const normalizedSender = getNonEmptyString(sender);
+  const candidates = patterns
+    .map((pattern) => sanitizeRegexPattern(pattern))
+    .filter((pattern): pattern is string => Boolean(pattern));
 
-  for (const entity of entities) {
-    for (const rawPattern of entity.patterns?.filter(Boolean) ?? []) {
-      const pattern = sanitizeRegexPattern(rawPattern);
-
-      if (!pattern?.includes('@')) continue;
-
-      try {
-        const regex = new RegExp(pattern, 'i');
-
-        if (value && regex.test(value)) return entity;
-        if (forwardedSender && regex.test(forwardedSender)) return entity;
-        if (bodyHead && regex.test(bodyHead)) return entity;
-      } catch {
-        // Invalid persisted patterns must not block evaluation of other entities.
+  for (const pattern of candidates) {
+    try {
+      const regex = new RegExp(pattern, 'i');
+      if (normalizedSender && regex.test(normalizedSender)) {
+        return { matched: true, matchedPattern: pattern, matchedOn: 'sender' };
       }
+      if (forwardedSender && regex.test(forwardedSender)) {
+        return { matched: true, matchedPattern: pattern, matchedOn: 'body' };
+      }
+      if (bodyHeadLines && regex.test(bodyHeadLines)) {
+        return { matched: true, matchedPattern: pattern, matchedOn: 'body' };
+      }
+    } catch {
+      // Invalid persisted patterns must not prevent other patterns from matching.
     }
   }
 
-  return null;
+  return { matched: false };
+}
+
+export function resolveEmailEntity({
+  entities,
+  entityId,
+  entityLabel,
+  requestedPattern,
+  sender,
+  body,
+  allowPatternFallback = true,
+}: {
+  entities: EmailEntityPatternSource[];
+  entityId?: string | null;
+  entityLabel?: string | null;
+  requestedPattern?: string | null;
+  sender: string | null | undefined;
+  body?: string | null | undefined;
+  allowPatternFallback?: boolean;
+}): ResolvedEmailEntity {
+  const context = buildEmailContext(body);
+  let entity: EmailEntityPatternSource | null = null;
+  let matchedBy: ResolvedEmailEntity['matchedBy'] = 'none';
+  let matchedPattern: string | undefined;
+
+  if (entityId) {
+    entity = entities.find((candidate) => candidate.id === entityId) || null;
+    if (entity) matchedBy = 'id';
+  } else if (entityLabel?.trim()) {
+    const normalizedLabel = entityLabel.trim().toLowerCase();
+    entity = entities.find(
+      (candidate) => candidate.name.trim().toLowerCase() === normalizedLabel,
+    ) || null;
+    if (entity) matchedBy = 'name';
+  }
+
+  if (!entity && allowPatternFallback) {
+    const patternMatch = entities
+      .map((candidate) => ({
+        candidate,
+        match: matchEmailEntityPatterns(
+          candidate.patterns,
+          sender,
+          context.bodyHeadLines,
+          context.forwardedSender,
+        ),
+      }))
+      .find(({ match }) => match.matched);
+
+    if (patternMatch) {
+      entity = patternMatch.candidate;
+      matchedBy = 'pattern';
+      matchedPattern = patternMatch.match.matchedPattern;
+    }
+  }
+
+  const senderAlreadyCovered = Boolean(
+    entity &&
+    matchEmailEntityPatterns(
+      entity.patterns,
+      sender,
+      context.bodyHeadLines,
+      context.forwardedSender,
+    ).matched,
+  );
+
+  const effectivePattern = requestedPattern
+    ? sanitizeRegexPattern(requestedPattern)
+    : !senderAlreadyCovered
+      ? inferEntityEmailPattern(sender, body)
+      : null;
+
+  return { entity, effectivePattern, senderAlreadyCovered, matchedBy, matchedPattern };
 }
 
 export function buildTemplatePrompt(
   sender: string,
   subject: string,
   cleanBody: string,
-  existingEntities: PromptEntity[] = [],
+  existingEntities: EmailEntityPatternSource[] = [],
 ): string {
   const strippedSubject = stripSubjectPrefixes(subject);
   const forwardedSubject = extractForwardedSubjectFromBody(
@@ -661,11 +755,11 @@ export function buildTemplatePrompt(
     forwardedSubject ||
     (strippedSubject !== subject ? strippedSubject : subject);
 
-  const matchedExistingEntity = findEntityByEmailPattern(
+  const matchedExistingEntity = resolveEmailEntity({
+    entities: existingEntities,
     sender,
-    existingEntities,
-    cleanBody,
-  );
+    body: cleanBody,
+  }).entity;
   let entityInstructions: string;
 
   if (matchedExistingEntity) {
