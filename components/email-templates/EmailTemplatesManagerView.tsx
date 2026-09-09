@@ -81,11 +81,10 @@ function TemplateDiagnosticStepsView({
 
   return (
     <div
-      className={`rounded-xl border text-xs overflow-hidden transition ${
-        isPassing
-          ? 'bg-emerald-50/40 border-emerald-200 shadow-2xs'
-          : 'bg-zinc-50/80 border-zinc-200'
-      }`}
+      className={`rounded-xl border text-xs overflow-hidden transition ${isPassing
+        ? 'bg-emerald-50/40 border-emerald-200 shadow-2xs'
+        : 'bg-zinc-50/80 border-zinc-200'
+        }`}
     >
       {/* Cabecera */}
       <div className="p-3 flex items-start justify-between gap-2 border-b border-zinc-200/60 bg-white/60">
@@ -117,11 +116,10 @@ function TemplateDiagnosticStepsView({
             <button
               type="button"
               onClick={onCopyCorrectionPrompt}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
-                copiedPrompt
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white hover:bg-zinc-50 text-indigo-700 border-indigo-200 hover:border-indigo-300'
-              }`}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${copiedPrompt
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'bg-white hover:bg-zinc-50 text-indigo-700 border-indigo-200 hover:border-indigo-300'
+                }`}
               title="Copiar mini-prompt para que la IA corrija esta plantilla"
             >
               {copiedPrompt ? (
@@ -836,8 +834,8 @@ export function EmailTemplatesManagerView({
     const matchedEnt = formEntityId
       ? entities.find((e) => e.id === formEntityId)
       : (formEntityLabel
-          ? entities.find((e) => e.name.trim().toLowerCase() === formEntityLabel.trim().toLowerCase())
-          : null);
+        ? entities.find((e) => e.name.trim().toLowerCase() === formEntityLabel.trim().toLowerCase())
+        : null);
 
     return {
       id: editingTemplateId || '__active_form_template__',
@@ -885,21 +883,21 @@ export function EmailTemplatesManagerView({
   const activeFormEvaluation = useMemo<SingleTemplateEvaluation | null>(() => {
     const emailToTest = selectedEmail
       ? {
-          sender: selectedEmail.sender,
-          subject: selectedEmail.subject,
-          body: selectedEmail.body,
-          plainBody: selectedEmail.plainBody,
-          snippet: selectedEmail.snippet,
-        }
+        sender: selectedEmail.sender,
+        subject: selectedEmail.subject,
+        body: selectedEmail.body,
+        plainBody: selectedEmail.plainBody,
+        snippet: selectedEmail.snippet,
+      }
       : (sampleSender || sampleSubject || sampleBody)
-      ? {
+        ? {
           sender: sampleSender,
           subject: sampleSubject,
           body: sampleBody,
           plainBody: sampleBody,
           snippet: sampleBody.slice(0, 160),
         }
-      : null;
+        : null;
 
     if (!emailToTest) return null;
 
@@ -910,15 +908,15 @@ export function EmailTemplatesManagerView({
   const handleCopyCorrectionPrompt = useCallback(async () => {
     const emailToTest = selectedEmail
       ? {
-          sender: selectedEmail.sender || '',
-          subject: selectedEmail.subject || '',
-          body: selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '',
-        }
+        sender: selectedEmail.sender || '',
+        subject: selectedEmail.subject || '',
+        body: selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '',
+      }
       : {
-          sender: sampleSender || '',
-          subject: sampleSubject || '',
-          body: sampleBody || '',
-        };
+        sender: sampleSender || '',
+        subject: sampleSubject || '',
+        body: sampleBody || '',
+      };
 
     if (!emailToTest.sender && !emailToTest.subject && !emailToTest.body) return;
     if (!activeFormEvaluation) return;
@@ -1219,21 +1217,21 @@ export function EmailTemplatesManagerView({
 
     const emailToTest = selectedEmail
       ? {
-          sender: selectedEmail.sender,
-          subject: selectedEmail.subject,
-          body: selectedEmail.body,
-          plainBody: selectedEmail.plainBody,
-          snippet: selectedEmail.snippet,
-        }
+        sender: selectedEmail.sender,
+        subject: selectedEmail.subject,
+        body: selectedEmail.body,
+        plainBody: selectedEmail.plainBody,
+        snippet: selectedEmail.snippet,
+      }
       : (sampleSender || sampleSubject || sampleBody)
-      ? {
+        ? {
           sender: sampleSender,
           subject: sampleSubject,
           body: sampleBody,
           plainBody: sampleBody,
           snippet: sampleBody.slice(0, 160),
         }
-      : null;
+        : null;
 
     if (emailToTest) {
       const evalResult = evaluateTemplateAgainstEmail(candidateTemplate, emailToTest, entities);
@@ -1955,11 +1953,10 @@ export function EmailTemplatesManagerView({
             <button
               type="button"
               onClick={() => setActiveTab('explorer')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-2 ${
-                activeTab === 'explorer'
-                  ? 'bg-white text-zinc-900 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-2 ${activeTab === 'explorer'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+                }`}
             >
               <Inbox className="w-3.5 h-3.5" />
               <span>Explorador de Correos</span>
@@ -1973,11 +1970,10 @@ export function EmailTemplatesManagerView({
             <button
               type="button"
               onClick={() => setActiveTab('catalog')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-2 ${
-                activeTab === 'catalog'
-                  ? 'bg-white text-zinc-900 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-2 ${activeTab === 'catalog'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+                }`}
             >
               <Layers className="w-3.5 h-3.5" />
               <span>Plantillas Guardadas</span>
@@ -2038,33 +2034,30 @@ export function EmailTemplatesManagerView({
                 <button
                   type="button"
                   onClick={() => setEmailStatusFilter('all')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${
-                    emailStatusFilter === 'all'
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${emailStatusFilter === 'all'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
                 >
                   Todos ({statusCounts.all})
                 </button>
                 <button
                   type="button"
                   onClick={() => setEmailStatusFilter('unmatched')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${
-                    emailStatusFilter === 'unmatched'
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${emailStatusFilter === 'unmatched'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
                 >
                   Sin plantilla ({statusCounts.unmatched})
                 </button>
                 <button
                   type="button"
                   onClick={() => setEmailStatusFilter('matched')}
-                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${
-                    emailStatusFilter === 'matched'
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${emailStatusFilter === 'matched'
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
                 >
                   Coinciden ({statusCounts.matched})
                 </button>
@@ -2072,11 +2065,10 @@ export function EmailTemplatesManagerView({
                   <button
                     type="button"
                     onClick={() => setEmailStatusFilter('conflict')}
-                    className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${
-                      emailStatusFilter === 'conflict'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                    }`}
+                    className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition cursor-pointer ${emailStatusFilter === 'conflict'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                      }`}
                   >
                     Conflictos ({statusCounts.conflict})
                   </button>
@@ -2110,11 +2102,10 @@ export function EmailTemplatesManagerView({
                     <div
                       key={email.id}
                       onClick={() => setSelectedEmailId(email.id)}
-                      className={`p-3.5 rounded-2xl border transition text-left cursor-pointer flex flex-col justify-between space-y-2 ${
-                        isSelected
-                          ? 'bg-indigo-50/40 border-indigo-500 shadow-xs ring-2 ring-indigo-500/20'
-                          : 'bg-white border-zinc-200 hover:border-zinc-300'
-                      }`}
+                      className={`p-3.5 rounded-2xl border transition text-left cursor-pointer flex flex-col justify-between space-y-2 ${isSelected
+                        ? 'bg-indigo-50/40 border-indigo-500 shadow-xs ring-2 ring-indigo-500/20'
+                        : 'bg-white border-zinc-200 hover:border-zinc-300'
+                        }`}
                     >
                       <div className="space-y-1">
                         <div className="flex items-center justify-between gap-2">
@@ -2247,33 +2238,30 @@ export function EmailTemplatesManagerView({
                           <button
                             type="button"
                             onClick={() => setTestResultViewFilter('all')}
-                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
-                              testResultViewFilter === 'all'
-                                ? 'bg-zinc-900 text-white'
-                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${testResultViewFilter === 'all'
+                              ? 'bg-zinc-900 text-white'
+                              : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                              }`}
                           >
                             Todas ({diagnosisForSelectedEmail?.reports?.length || 0})
                           </button>
                           <button
                             type="button"
                             onClick={() => setTestResultViewFilter('matched')}
-                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
-                              testResultViewFilter === 'matched'
-                                ? 'bg-emerald-700 text-white'
-                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${testResultViewFilter === 'matched'
+                              ? 'bg-emerald-700 text-white'
+                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              }`}
                           >
                             Coinciden ({testedMatchedCount})
                           </button>
                           <button
                             type="button"
                             onClick={() => setTestResultViewFilter('failed')}
-                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
-                              testResultViewFilter === 'failed'
-                                ? 'bg-zinc-700 text-white'
-                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${testResultViewFilter === 'failed'
+                              ? 'bg-zinc-700 text-white'
+                              : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                              }`}
                           >
                             Fallan ({testedFailedCount})
                           </button>
@@ -2339,8 +2327,8 @@ export function EmailTemplatesManagerView({
                           {editingTemplateId
                             ? `Modificando: ${formName || 'Plantilla guardada'}`
                             : formName
-                            ? 'Valores completados a partir del JSON'
-                            : 'Plantilla vacía (sin valores por defecto)'}
+                              ? 'Valores completados a partir del JSON'
+                              : 'Plantilla vacía (sin valores por defecto)'}
                         </p>
                       </div>
 
@@ -2478,9 +2466,8 @@ export function EmailTemplatesManagerView({
                             <span className="text-rose-500">*</span>
                           </label>
                           {activeFormEvaluation?.level4.fields.amount && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
-                              activeFormEvaluation.level4.fields.amount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
-                            }`}>
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.amount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              }`}>
                               {activeFormEvaluation.level4.fields.amount.matched
                                 ? `Captura: ${activeFormEvaluation.level4.fields.amount.value}`
                                 : (formAmountRegex ? 'Sin captura' : '')}
@@ -2504,9 +2491,8 @@ export function EmailTemplatesManagerView({
                             <span>Comercio</span>
                           </label>
                           {activeFormEvaluation?.level4.fields.merchant && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
-                              activeFormEvaluation.level4.fields.merchant.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
-                            }`}>
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.merchant.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              }`}>
                               {activeFormEvaluation.level4.fields.merchant.matched
                                 ? `Captura: ${activeFormEvaluation.level4.fields.merchant.value}`
                                 : (formMerchantRegex ? 'Sin captura' : '')}
@@ -2529,9 +2515,8 @@ export function EmailTemplatesManagerView({
                             <span>Cuenta o Tarjeta</span>
                           </label>
                           {activeFormEvaluation?.level4.fields.sourceAccount && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${
-                              activeFormEvaluation.level4.fields.sourceAccount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
-                            }`}>
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.sourceAccount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              }`}>
                               {activeFormEvaluation.level4.fields.sourceAccount.matched
                                 ? `Captura: ${activeFormEvaluation.level4.fields.sourceAccount.value}`
                                 : (formSourceAccountRegex ? 'Sin captura' : '')}
@@ -2555,9 +2540,8 @@ export function EmailTemplatesManagerView({
                               <span>Fecha</span>
                             </label>
                             {activeFormEvaluation?.level4.fields.date && (
-                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${
-                                activeFormEvaluation.level4.fields.date.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
-                              }`}>
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.date.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                                }`}>
                                 {activeFormEvaluation.level4.fields.date.matched
                                   ? activeFormEvaluation.level4.fields.date.value
                                   : (formDateRegex ? 'Sin captura' : '')}
@@ -2596,9 +2580,8 @@ export function EmailTemplatesManagerView({
                               <span>Hora</span>
                             </label>
                             {activeFormEvaluation?.level4.fields.time && (
-                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${
-                                activeFormEvaluation.level4.fields.time.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
-                              }`}>
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.time.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                                }`}>
                                 {activeFormEvaluation.level4.fields.time.matched
                                   ? activeFormEvaluation.level4.fields.time.value
                                   : (formTimeRegex ? 'Sin captura' : '')}
@@ -2696,11 +2679,10 @@ export function EmailTemplatesManagerView({
                       <button
                         type="button"
                         onClick={handleCopyPrompt}
-                        className={`inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer ${
-                          copiedPrompt
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                        }`}
+                        className={`inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer ${copiedPrompt
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                          }`}
                       >
                         {copiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>{copiedPrompt ? '¡Prompt Copiado!' : 'Copiar Prompt'}</span>
@@ -2784,11 +2766,10 @@ export function EmailTemplatesManagerView({
               <button
                 type="button"
                 onClick={() => setSelectedEntityFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                  selectedEntityFilter === 'all'
-                    ? 'bg-zinc-900 text-white'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter === 'all'
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                  }`}
               >
                 Todos ({templates.length})
               </button>
@@ -2797,11 +2778,10 @@ export function EmailTemplatesManagerView({
                   key={name}
                   type="button"
                   onClick={() => setSelectedEntityFilter(name)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                    selectedEntityFilter.toLowerCase() === name.toLowerCase()
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter.toLowerCase() === name.toLowerCase()
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
                 >
                   {name}
                 </button>
@@ -2993,11 +2973,10 @@ export function EmailTemplatesManagerView({
                   <button
                     type="button"
                     onClick={handleModalCopyPrompt}
-                    className={`px-3 py-2 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                      modalCopiedPrompt
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                        : 'bg-white border-zinc-200 hover:bg-zinc-100 text-zinc-700'
-                    }`}
+                    className={`px-3 py-2 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${modalCopiedPrompt
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-white border-zinc-200 hover:bg-zinc-100 text-zinc-700'
+                      }`}
                   >
                     {modalCopiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{modalCopiedPrompt ? '¡Prompt Copiado!' : 'Copiar Prompt con Muestra'}</span>
