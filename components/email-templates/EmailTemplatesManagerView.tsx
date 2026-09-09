@@ -1,8 +1,7 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   Mail,
   Copy,
@@ -18,7 +17,6 @@ import {
   AlertTriangle,
   ExternalLink,
   RefreshCw,
-  ArrowLeft,
   CreditCard,
   Calendar,
   DollarSign,
@@ -43,7 +41,6 @@ import {
   getHeadLines,
   extractForwardedSenderFromBody,
   inferEntityEmailPattern,
-  extractEmailAddress,
 } from '@/lib/email-cleaning';
 import {
   CatalogEntity,
@@ -57,6 +54,89 @@ import {
 } from '@/lib/email-matching';
 import { formatCurrency } from '@/lib/balance-utils';
 
+type TemplateFormState = {
+  name: string;
+  entityLabel: string;
+  entityId: string | null;
+  entityEmailPattern: string;
+  isNewEntity: boolean;
+  subjectPattern: string;
+  matchPattern: string;
+  amountRegex: string;
+  merchantRegex: string;
+  sourceAccountRegex: string;
+  dateRegex: string;
+  dateFormat: string;
+  timeRegex: string;
+  timeFormat: string;
+  currencyRegex: string;
+  expenseType: string;
+};
+
+const EMPTY_TEMPLATE_FORM: TemplateFormState = {
+  name: '',
+  entityLabel: '',
+  entityId: null,
+  entityEmailPattern: '',
+  isNewEntity: false,
+  subjectPattern: '',
+  matchPattern: '',
+  amountRegex: '',
+  merchantRegex: '',
+  sourceAccountRegex: '',
+  dateRegex: '',
+  dateFormat: '',
+  timeRegex: '',
+  timeFormat: '',
+  currencyRegex: '',
+  expenseType: 'compra',
+};
+
+const MODAL_TEMPLATE_FORM_DEFAULTS: TemplateFormState = {
+  ...EMPTY_TEMPLATE_FORM,
+  dateFormat: 'DD/MM/YYYY',
+  timeFormat: 'HH:mm:ss',
+};
+
+function useTemplateFormState(initialState: TemplateFormState) {
+  const [state, setState] = useState<TemplateFormState>(initialState);
+
+  const update = useCallback((patch: Partial<TemplateFormState>) => {
+    setState((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const reset = useCallback(() => {
+    setState({ ...initialState });
+  }, [initialState]);
+
+  return { state, update, reset };
+}
+
+const findEntityByName = (entities: CatalogEntity[], name: string | null | undefined) => {
+  const normalized = (name || '').trim().toLowerCase();
+  if (!normalized) return null;
+  return entities.find((entity) => entity.name.trim().toLowerCase() === normalized) || null;
+};
+
+const entityPatternMatchesEmail = (
+  pattern: string,
+  sender: string,
+  forwardedSender: string,
+  bodyHead: string,
+) => {
+  try {
+    const normalizedPattern = sanitizeRegexPattern(pattern) || pattern;
+    const regex = new RegExp(normalizedPattern, 'i');
+    return Boolean(
+      (sender && regex.test(sender)) ||
+      (forwardedSender && regex.test(forwardedSender)) ||
+      (bodyHead && regex.test(bodyHead)),
+    );
+  } catch {
+    return false;
+  }
+};
+
 interface TemplateDiagnosticStepsViewProps {
   evaluation: SingleTemplateEvaluation;
   isWinner?: boolean;
@@ -67,6 +147,178 @@ interface TemplateDiagnosticStepsViewProps {
   customTitle?: string;
 }
 
+interface DiagnosticLevelRowProps {
+  label: string;
+  passed: boolean;
+  pattern: string;
+  matchedOn?: string | null;
+}
+
+function DiagnosticLevelRow({ label, passed, pattern, matchedOn }: Readonly<DiagnosticLevelRowProps>) {
+  const tone = passed ? 'text-zinc-700' : 'text-rose-700';
+  const location = matchedOn === 'sender' ? 'en remitente' : 'en cuerpo';
+
+  return (
+    <div className={`flex items-center gap-1.5 text-[11px] ${tone}`}>
+      {passed ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> : <X className="w-3 h-3 text-rose-500 shrink-0" />}
+      <span className="font-semibold shrink-0">{label}</span>
+      <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">{pattern}</code>
+      {matchedOn && <span className="text-[10px] text-zinc-500 shrink-0">({location})</span>}
+    </div>
+  );
+}
+
+interface DiagnosticExtractionRowProps {
+  label: string;
+  pattern: string;
+  field: { success: boolean; rawExtracted?: string | null; hasCaptureGroup?: boolean };
+  amount?: number | null;
+}
+
+function DiagnosticExtractionValue({ field, amount }: Readonly<{
+  field: DiagnosticExtractionRowProps['field'];
+  amount?: number | null;
+}>) {
+  if (!field.success) {
+    return <span className="text-zinc-400">sin captura</span>;
+  }
+
+  if (amount !== undefined) {
+    return (
+      <span className="font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+        ${formatCurrency(amount ?? 0)}
+      </span>
+    );
+  }
+
+  return (
+    <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
+      {field.rawExtracted}
+    </span>
+  );
+}
+
+function DiagnosticExtractionRow({ label, pattern, field, amount }: Readonly<DiagnosticExtractionRowProps>) {
+  const valueClass = field.success ? 'text-zinc-700' : 'text-zinc-500';
+  const icon = field.success
+    ? <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+    : <X className="w-3 h-3 text-zinc-400 shrink-0" />;
+
+  return (
+    <div className={`flex items-center gap-1.5 text-[11px] ${valueClass}`}>
+      {icon}
+      <span className="font-semibold shrink-0">{label}</span>
+      <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">/{pattern}/i</code>
+      <span className="text-zinc-400 shrink-0">→</span>
+      <DiagnosticExtractionValue field={field} amount={amount} />
+      {!field.hasCaptureGroup && field.success && (
+        <span className="text-[10px] text-amber-700 font-medium shrink-0">(sin grupo (...))</span>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticStatusBadge({ passed, isWinner }: Readonly<{ passed: boolean; isWinner?: boolean }>) {
+  let label = 'No coincide';
+  let tone = 'text-rose-700 bg-rose-100/90 border-rose-300';
+  let icon = <X className="w-3 h-3 text-rose-600" />;
+
+  if (passed) {
+    label = isWinner ? 'Ganadora / Coincide' : 'Coincide';
+    tone = 'text-emerald-700 bg-emerald-100/90 border-emerald-300';
+    icon = <Check className="w-3 h-3 text-emerald-600" />;
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${tone}`}>
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function EmailCardMatchStatus({
+  survivingCount,
+  winner,
+}: Readonly<{ survivingCount: number; winner?: DiagnosisResult['winner'] }>) {
+  if (survivingCount === 1 && winner) {
+    return (
+      <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md truncate">
+        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+        <span className="truncate">{winner.template.name}</span>
+        {winner.extractedAmount ? (
+          <span className="font-semibold text-emerald-800 ml-1">
+            • ${formatCurrency(winner.extractedAmount)}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+
+  if (survivingCount > 1) {
+    return (
+      <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md">
+        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+        <span>Conflicto ({survivingCount})</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-md">
+      <span>Sin plantilla</span>
+    </span>
+  );
+}
+
+function DiagnosisSummaryBadge({
+  matchedCount,
+  winner,
+}: Readonly<{ matchedCount: number; winner?: DiagnosisResult['winner'] }>) {
+  if (matchedCount === 1 && winner) {
+    return (
+      <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px]">
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        <span className="hidden sm:inline">{winner.template.name}</span>
+        <span className="sm:hidden">Coincide</span>
+      </span>
+    );
+  }
+
+  if (matchedCount > 1) {
+    return (
+      <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg text-[11px]">
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+        <span>{matchedCount} conflictos</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 font-medium text-zinc-600 bg-zinc-100 px-2.5 py-1 rounded-lg text-[11px]">
+      <span>Ninguna plantilla funcionó</span>
+    </span>
+  );
+}
+
+function DiagnosticIssueList({ title, items, kind }: Readonly<{ title: string; items: string[]; kind: 'error' | 'warning' }>) {
+  const isError = kind === 'error';
+  const wrapper = isError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50/80 border-amber-200 text-amber-900';
+  const titleTone = isError ? 'text-rose-900' : 'text-amber-800';
+  const icon = isError ? <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
+
+  return (
+    <div className="p-3 pb-2 pt-1">
+      <div className={`rounded-lg border px-3 py-2 text-[11px] space-y-1 ${wrapper}`}>
+        <span className={`font-bold flex items-center gap-1 ${titleTone}`}>{icon}{title}</span>
+        <ul className="list-disc list-inside space-y-0.5 pl-1">
+          {items.map((item) => <li key={item} className="leading-snug">{item}</li>)}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function TemplateDiagnosticStepsView({
   evaluation,
   isWinner,
@@ -75,317 +327,52 @@ function TemplateDiagnosticStepsView({
   onCopyCorrectionPrompt,
   copiedPrompt,
   customTitle,
-}: TemplateDiagnosticStepsViewProps) {
-  const tmpl = evaluation.template;
+}: Readonly<TemplateDiagnosticStepsViewProps>) {
+  const { template: tmpl, level1, level2, level3, level4 } = evaluation;
   const isPassing = evaluation.overallPassed;
+  const entityName = tmpl.entity?.name || evaluation.level1.entityName;
+  const rows = [
+    { label: '4. Monto', pattern: tmpl.amount_regex, field: level4.fields.amount, amount: level4.extractedAmount },
+    { label: 'Comercio', pattern: tmpl.merchant_regex, field: level4.fields.merchant },
+    { label: 'Cuenta', pattern: tmpl.source_account_regex, field: level4.fields.source_account },
+    { label: 'Fecha', pattern: tmpl.date_regex, field: level4.fields.date },
+    { label: 'Hora', pattern: tmpl.time_regex, field: level4.fields.time },
+  ].filter((row) => Boolean(row.pattern));
 
   return (
-    <div
-      className={`rounded-xl border text-xs overflow-hidden transition ${isPassing
-        ? 'bg-emerald-50/40 border-emerald-200 shadow-2xs'
-        : 'bg-zinc-50/80 border-zinc-200'
-        }`}
-    >
-      {/* Cabecera */}
+    <div className={`rounded-xl border text-xs overflow-hidden transition ${isPassing ? 'bg-emerald-50/40 border-emerald-200 shadow-2xs' : 'bg-zinc-50/80 border-zinc-200'}`}>
       <div className="p-3 flex items-start justify-between gap-2 border-b border-zinc-200/60 bg-white/60">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-          <span className="font-bold text-zinc-900 truncate">
-            {customTitle || tmpl.name || 'Plantilla'}
-          </span>
-          {(tmpl.entity?.name || evaluation.level1.entityName) && (
-            <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded">
-              {tmpl.entity?.name || evaluation.level1.entityName}
-            </span>
-          )}
+          <span className="font-bold text-zinc-900 truncate">{customTitle || tmpl.name || 'Plantilla'}</span>
+          {entityName && <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded">{entityName}</span>}
         </div>
-
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {isPassing ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300">
-              <Check className="w-3 h-3 text-emerald-600" />
-              <span>{isWinner ? 'Ganadora / Coincide' : 'Coincide'}</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-300">
-              <X className="w-3 h-3 text-rose-600" />
-              <span>No coincide</span>
-            </span>
-          )}
-
+          <DiagnosticStatusBadge passed={isPassing} isWinner={isWinner} />
           {onCopyCorrectionPrompt && (
-            <button
-              type="button"
-              onClick={onCopyCorrectionPrompt}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${copiedPrompt
-                ? 'bg-emerald-600 text-white border-emerald-600'
-                : 'bg-white hover:bg-zinc-50 text-indigo-700 border-indigo-200 hover:border-indigo-300'
-                }`}
-              title="Copiar mini-prompt para que la IA corrija esta plantilla"
-            >
-              {copiedPrompt ? (
-                <>
-                  <Check className="w-3 h-3 text-white" />
-                  <span>¡Copiado!</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>Mini-prompt IA</span>
-                </>
-              )}
+            <button type="button" onClick={onCopyCorrectionPrompt} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${copiedPrompt ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white hover:bg-zinc-50 text-indigo-700 border-indigo-200 hover:border-indigo-300'}`} title="Copiar mini-prompt para que la IA corrija esta plantilla">
+              {copiedPrompt ? <><Check className="w-3 h-3 text-white" /><span>¡Copiado!</span></> : <><Sparkles className="w-3 h-3 text-amber-500" /><span>Mini-prompt IA</span></>}
             </button>
           )}
-
-          {onAction && actionLabel && (
-            <button
-              type="button"
-              onClick={onAction}
-              className="text-[11px] font-bold text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:border-zinc-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
-            >
-              {actionLabel}
-            </button>
-          )}
+          {onAction && actionLabel && <button type="button" onClick={onAction} className="text-[11px] font-bold text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:border-zinc-300 px-2.5 py-1 rounded-lg transition cursor-pointer">{actionLabel}</button>}
         </div>
       </div>
 
-      {/* Fallos bloqueantes si no coincide */}
-      {evaluation.criticalFailures.length > 0 && (
-        <div className="p-3 pb-2">
-          <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] text-rose-800 space-y-1">
-            <span className="font-bold flex items-center gap-1 text-rose-900">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-              Motivo(s) por los que no coincide:
-            </span>
-            <ul className="list-disc list-inside space-y-0.5 text-rose-800/90 pl-1">
-              {evaluation.criticalFailures.map((reason, idx) => (
-                <li key={idx} className="leading-snug">{reason}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
+      {evaluation.criticalFailures.length > 0 && <DiagnosticIssueList title="Motivo(s) por los que no coincide:" items={evaluation.criticalFailures} kind="error" />}
+      {evaluation.warnings.length > 0 && <DiagnosticIssueList title="Avisos de extracción:" items={evaluation.warnings} kind="warning" />}
 
-      {/* Avisos en campos opcionales */}
-      {evaluation.warnings.length > 0 && (
-        <div className="p-3 pb-2 pt-1">
-          <div className="rounded-lg bg-amber-50/80 border border-amber-200 px-3 py-1.5 text-[11px] text-amber-900 space-y-0.5">
-            <span className="font-bold flex items-center gap-1 text-amber-800">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              Avisos de extracción:
-            </span>
-            <ul className="list-disc list-inside space-y-0.5 text-amber-800/90 pl-1">
-              {evaluation.warnings.map((warn, idx) => (
-                <li key={idx} className="leading-snug">{warn}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Desglose paso a paso de TODOS los filtros y extracciones */}
       <div className="p-3 space-y-1.5">
-        {/* Paso 1: Entidad */}
-        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level1.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
-          {evaluation.level1.passed ? (
-            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-          ) : (
-            <X className="w-3 h-3 text-rose-500 shrink-0" />
-          )}
-          <span className="font-semibold shrink-0">1. Entidad</span>
-          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
-            {evaluation.level1.matchedPattern ? `/${evaluation.level1.matchedPattern}/i` : evaluation.level1.entityName || tmpl.entity?.name || 'sin patrón'}
-          </code>
-          {evaluation.level1.matchedOn && (
-            <span className="text-[10px] text-zinc-500 shrink-0">
-              ({evaluation.level1.matchedOn === 'sender' ? 'en remitente' : 'en cuerpo'})
-            </span>
-          )}
-        </div>
-
-        {/* Paso 2: Asunto */}
-        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level2.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
-          {evaluation.level2.passed ? (
-            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-          ) : (
-            <X className="w-3 h-3 text-rose-500 shrink-0" />
-          )}
-          <span className="font-semibold shrink-0">2. Asunto</span>
-          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
-            {tmpl.subject_pattern ? `/${tmpl.subject_pattern}/i` : 'sin filtro de asunto'}
-          </code>
-          {evaluation.level2.matchedOn && (
-            <span className="text-[10px] text-zinc-500 shrink-0">
-              ({evaluation.level2.matchedOn === 'subject' ? 'en asunto' : 'en cuerpo'})
-            </span>
-          )}
-        </div>
-
-        {/* Paso 3: Desempate */}
-        <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level3.passed ? 'text-zinc-700' : 'text-rose-700'}`}>
-          {evaluation.level3.passed ? (
-            <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-          ) : (
-            <X className="w-3 h-3 text-rose-500 shrink-0" />
-          )}
-          <span className="font-semibold shrink-0">3. Desempate</span>
-          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">
-            {tmpl.match_pattern ? `/${tmpl.match_pattern}/i` : 'no requerido'}
-          </code>
-        </div>
-
-        {/* 4. Extracción de Monto (Obligatorio) */}
-        {tmpl.amount_regex && (
-          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.amount.success ? 'text-zinc-700' : 'text-rose-700'}`}>
-            {evaluation.level4.fields.amount.success ? (
-              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            ) : (
-              <X className="w-3 h-3 text-rose-500 shrink-0" />
-            )}
-            <span className="font-semibold shrink-0">4. Monto</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-              /{tmpl.amount_regex}/i
-            </code>
-            <span className="text-zinc-400 shrink-0">→</span>
-            {evaluation.level4.fields.amount.success ? (
-              <span className="font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
-                ${formatCurrency(evaluation.level4.extractedAmount)}
-              </span>
-            ) : (
-              <span className="font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shrink-0">
-                sin captura
-              </span>
-            )}
-            {!evaluation.level4.fields.amount.hasCaptureGroup && evaluation.level4.fields.amount.success && (
-              <span className="text-[10px] text-amber-700 font-medium shrink-0" title="Usa paréntesis (...) para capturar exactamente el valor">
-                (sin grupo (...))
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Comercio */}
-        {tmpl.merchant_regex && (
-          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.merchant.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
-            {evaluation.level4.fields.merchant.success ? (
-              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            ) : (
-              <X className="w-3 h-3 text-zinc-400 shrink-0" />
-            )}
-            <span className="font-semibold shrink-0">Comercio</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-              /{tmpl.merchant_regex}/i
-            </code>
-            <span className="text-zinc-400 shrink-0">→</span>
-            {evaluation.level4.fields.merchant.success ? (
-              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
-                {evaluation.level4.fields.merchant.rawExtracted}
-              </span>
-            ) : (
-              <span className="text-zinc-400">sin captura</span>
-            )}
-            {!evaluation.level4.fields.merchant.hasCaptureGroup && evaluation.level4.fields.merchant.success && (
-              <span className="text-[10px] text-amber-700 font-medium shrink-0">
-                (sin grupo (...))
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Cuenta */}
-        {tmpl.source_account_regex && (
-          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.source_account.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
-            {evaluation.level4.fields.source_account.success ? (
-              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            ) : (
-              <X className="w-3 h-3 text-zinc-400 shrink-0" />
-            )}
-            <span className="font-semibold shrink-0">Cuenta</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-              /{tmpl.source_account_regex}/i
-            </code>
-            <span className="text-zinc-400 shrink-0">→</span>
-            {evaluation.level4.fields.source_account.success ? (
-              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
-                {evaluation.level4.fields.source_account.rawExtracted}
-              </span>
-            ) : (
-              <span className="text-zinc-400">sin captura</span>
-            )}
-            {!evaluation.level4.fields.source_account.hasCaptureGroup && evaluation.level4.fields.source_account.success && (
-              <span className="text-[10px] text-amber-700 font-medium shrink-0">
-                (sin grupo (...))
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Fecha */}
-        {tmpl.date_regex && (
-          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.date.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
-            {evaluation.level4.fields.date.success ? (
-              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            ) : (
-              <X className="w-3 h-3 text-zinc-400 shrink-0" />
-            )}
-            <span className="font-semibold shrink-0">Fecha</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-              /{tmpl.date_regex}/i
-            </code>
-            <span className="text-zinc-400 shrink-0">→</span>
-            {evaluation.level4.fields.date.success ? (
-              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
-                {evaluation.level4.fields.date.rawExtracted}
-              </span>
-            ) : (
-              <span className="text-zinc-400">sin captura</span>
-            )}
-            {!evaluation.level4.fields.date.hasCaptureGroup && evaluation.level4.fields.date.success && (
-              <span className="text-[10px] text-amber-700 font-medium shrink-0">
-                (sin grupo (...))
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Hora */}
-        {tmpl.time_regex && (
-          <div className={`flex items-center gap-1.5 text-[11px] ${evaluation.level4.fields.time.success ? 'text-zinc-700' : 'text-zinc-500'}`}>
-            {evaluation.level4.fields.time.success ? (
-              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-            ) : (
-              <X className="w-3 h-3 text-zinc-400 shrink-0" />
-            )}
-            <span className="font-semibold shrink-0">Hora</span>
-            <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-              /{tmpl.time_regex}/i
-            </code>
-            <span className="text-zinc-400 shrink-0">→</span>
-            {evaluation.level4.fields.time.success ? (
-              <span className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
-                {evaluation.level4.fields.time.rawExtracted}
-              </span>
-            ) : (
-              <span className="text-zinc-400">sin captura</span>
-            )}
-            {!evaluation.level4.fields.time.hasCaptureGroup && evaluation.level4.fields.time.success && (
-              <span className="text-[10px] text-amber-700 font-medium shrink-0">
-                (sin grupo (...))
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Moneda */}
+        <DiagnosticLevelRow label="1. Entidad" passed={level1.passed} pattern={level1.matchedPattern ? `/${level1.matchedPattern}/i` : level1.entityName || entityName || 'sin patrón'} matchedOn={level1.matchedOn} />
+        <DiagnosticLevelRow label="2. Asunto" passed={level2.passed} pattern={tmpl.subject_pattern ? `/${tmpl.subject_pattern}/i` : 'sin filtro de asunto'} matchedOn={level2.matchedOn} />
+        <DiagnosticLevelRow label="3. Desempate" passed={level3.passed} pattern={tmpl.match_pattern ? `/${tmpl.match_pattern}/i` : 'no requerido'} />
+        {rows.map((row) => (
+          <DiagnosticExtractionRow key={row.label} label={row.label} pattern={row.pattern || ''} field={row.field} amount={row.amount} />
+        ))}
         <div className="flex items-center gap-1.5 text-[11px] text-zinc-700">
           <Check className="w-3 h-3 text-emerald-600 shrink-0" />
           <span className="font-semibold shrink-0">Moneda</span>
-          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">
-            {tmpl.currency_regex ? `/${tmpl.currency_regex}/i` : 'por defecto'}
-          </code>
+          <code className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">{tmpl.currency_regex ? `/${tmpl.currency_regex}/i` : 'por defecto'}</code>
           <span className="text-zinc-400 shrink-0">→</span>
-          <span className="font-bold text-zinc-800 bg-white border border-zinc-200 px-2 py-0.5 rounded">
-            {evaluation.level4.fields.currency.rawExtracted || '—'}
-          </span>
+          <span className="font-bold text-zinc-800 bg-white border border-zinc-200 px-2 py-0.5 rounded">{evaluation.level4.fields.currency.rawExtracted || '—'}</span>
         </div>
       </div>
     </div>
@@ -408,10 +395,761 @@ interface IngestedEmail {
   matchedAmount?: string;
 }
 
+
+interface TemplateCatalogPanelProps {
+  templates: CatalogTemplate[];
+  entities: CatalogEntity[];
+  isLoadingTemplates: boolean;
+  templateSearchQuery: string;
+  selectedEntityFilter: string;
+  deletingId: string | null;
+  availableEntityNames: string[];
+  filteredTemplates: CatalogTemplate[];
+  onSearchChange: (value: string) => void;
+  onEntityFilterChange: (value: string) => void;
+  onOpenNew: () => void;
+  onEdit: (template: CatalogTemplate) => void;
+  onDelete: (templateId: string) => void;
+}
+
+function TemplateCatalogPanel({
+  templates, entities, isLoadingTemplates, templateSearchQuery, selectedEntityFilter, deletingId,
+  availableEntityNames, filteredTemplates, onSearchChange, onEntityFilterChange, onOpenNew, onEdit, onDelete,
+}: Readonly<TemplateCatalogPanelProps>) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 border border-zinc-200 rounded-2xl shadow-xs">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={templateSearchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Buscar por nombre, banco o asunto..."
+            className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+          />
+        </div>
+
+        <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => onEntityFilterChange('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter === 'all'
+              ? 'bg-zinc-900 text-white'
+              : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+              }`}
+          >
+            Todos ({templates.length})
+          </button>
+          {availableEntityNames.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onEntityFilterChange(name)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter.toLowerCase() === name.toLowerCase()
+                ? 'bg-zinc-900 text-white'
+                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onOpenNew()}
+          className="inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Nueva Plantilla</span>
+        </button>
+      </div>
+
+      {isLoadingTemplates ? (
+        <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-2">
+          <Loader2 className="w-6 h-6 animate-spin text-zinc-500 mx-auto" />
+          <p className="text-xs text-zinc-500">Cargando plantillas guardadas...</p>
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto text-zinc-400">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-zinc-900">No hay plantillas que coincidan</h3>
+            <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+              {templateSearchQuery ? 'Prueba con otro término de búsqueda.' : 'Crea una nueva plantilla para empezar.'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {filteredTemplates.map((t) => (
+            <div
+              key={t.id}
+              className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3 shadow-xs hover:border-zinc-300 transition flex flex-col justify-between"
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
+                      {entities.find((e) => e.id === t.entity_id)?.name || 'General'}
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900">{t.name}</h3>
+                  </div>
+
+                  <div className="flex items-center space-x-1">
+                    {/* AQUI: Al hacer clic en editar, abre el modal sin redireccionar a correos */}
+                    <button
+                      type="button"
+                      onClick={() => onEdit(t)}
+                      className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
+                      title="Editar plantilla"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(t.id)}
+                      disabled={deletingId === t.id}
+                      className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer disabled:opacity-50"
+                      title="Eliminar plantilla"
+                    >
+                      {deletingId === t.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {t.subject_pattern && (
+                  <p className="text-xs text-zinc-500 line-clamp-1">
+                    <span className="font-semibold text-zinc-700">Asunto:</span>{' '}
+                    <code className="text-[11px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-800">
+                      {t.subject_pattern}
+                    </code>
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" />
+                  Monto
+                </span>
+                {t.merchant_regex && (
+                  <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Store className="w-3 h-3 text-zinc-400" />
+                    Comercio
+                  </span>
+                )}
+                {t.source_account_regex && (
+                  <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-zinc-400" />
+                    Cuenta
+                  </span>
+                )}
+                {t.date_regex && (
+                  <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-zinc-400" />
+                    Fecha
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TemplateEditModalProps {
+  modal: TemplateFormState;
+  updateModal: (patch: Partial<TemplateFormState>) => void;
+  editingModalId: string | null;
+  isModalSaving: boolean;
+  modalError: string | null;
+  modalSuccess: string | null;
+  modalCopiedPrompt: boolean;
+  modalPastedJson: string;
+  modalSampleEmailId: string;
+  modalSampleText: string;
+  modalLiveExtraction: {
+    amount: { value: string | null; matched: boolean; error?: string };
+    merchant: { value: string | null; matched: boolean; error?: string };
+    sourceAccount: { value: string | null; matched: boolean; error?: string };
+    date: { value: string | null; matched: boolean; error?: string };
+    time: { value: string | null; matched: boolean; error?: string };
+  };
+  emails: IngestedEmail[];
+  entities: CatalogEntity[];
+  onClose: () => void; onSave: (event: React.SubmitEvent<HTMLFormElement>) => void; onCopyPrompt: () => void; onApplyPastedJson: () => void;
+  onSampleEmailChange: (value: string) => void; onCustomSampleBodyChange: (value: string) => void; onPastedJsonChange: (value: string) => void;
+}
+
+function TemplateEditModal({
+  modal, updateModal, editingModalId, isModalSaving, modalError, modalSuccess, modalCopiedPrompt, modalPastedJson,
+  modalSampleEmailId, modalSampleText, modalLiveExtraction, emails, entities, onClose, onSave, onCopyPrompt,
+  onApplyPastedJson, onSampleEmailChange, onCustomSampleBodyChange, onPastedJsonChange,
+}: Readonly<TemplateEditModalProps>) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-zinc-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
+        {/* Modal Header */}
+        <div className="p-4 sm:p-5 border-b border-zinc-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-zinc-900">
+              {editingModalId ? `Editar Plantilla: ${modal.name}` : 'Nueva Plantilla'}
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Modifica los patrones de extracción y prueba los resultados con un correo de ejemplo.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body (Scrollable) */}
+        <form onSubmit={onSave} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {modalError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{modalError}</span>
+            </div>
+          )}
+          {modalSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{modalSuccess}</span>
+            </div>
+          )}
+
+          {/* SECCIÓN: CARGAR CORREO DE EJEMPLO PARA PROBAR */}
+          <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="email-template-field-1" className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Cargar correo de ejemplo para probar (opcional)</span>
+              </label>
+              {modalSampleText && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Muestra activa
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select id="email-template-field-1"
+                value={modalSampleEmailId}
+                onChange={(e) => onSampleEmailChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+              >
+                <option value="">-- Seleccionar de correos recientes --</option>
+                {emails.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.subject.slice(0, 45)} ({m.sender.split('@')[0]})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={onCopyPrompt}
+                className={`px-3 py-2 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${modalCopiedPrompt
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-100 text-zinc-700'
+                  }`}
+              >
+                {modalCopiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{modalCopiedPrompt ? '¡Prompt Copiado!' : 'Copiar Prompt con Muestra'}</span>
+              </button>
+            </div>
+
+            {/* Pegar respuesta JSON en el modal */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={modalPastedJson}
+                onChange={(e) => onPastedJsonChange(e.target.value)}
+                placeholder="Pega aquí el JSON devuelto por la IA..."
+                className="flex-1 px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg font-mono text-[11px]"
+              />
+              <button
+                type="button"
+                onClick={onApplyPastedJson}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+
+          {/* Campos Básicos */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-1">
+              <label htmlFor="email-template-field-2" className="block text-xs font-bold text-zinc-700 mb-1">
+                Nombre <span className="text-rose-500">*</span>
+              </label>
+              <input id="email-template-field-2"
+                type="text"
+                required
+                value={modal.name}
+                onChange={(e) => updateModal({ name: e.target.value })}
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-medium"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="email-template-field-3" className="text-xs font-bold text-zinc-700">Banco / Entidad</label>
+                <button
+                  type="button"
+                  onClick={() => updateModal({ isNewEntity: !modal.isNewEntity })}
+                  className="text-[11px] font-semibold text-indigo-600"
+                >
+                  {modal.isNewEntity ? 'Elegir' : '+ Nuevo'}
+                </button>
+              </div>
+              {modal.isNewEntity ? (
+                <input id="email-template-field-3"
+                  type="text"
+                  value={modal.entityLabel}
+                  onChange={(e) => updateModal({ entityLabel: e.target.value })}
+                  placeholder="Nombre del banco"
+                  className="w-full px-3 py-2 text-xs bg-amber-50/40 border border-amber-300 rounded-xl font-medium"
+                />
+              ) : (
+                <select
+                  value={modal.entityId || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateModal({ entityId: val || null });
+                    const match = entities.find((ent) => ent.id === val);
+                    if (match) updateModal({ entityLabel: match.name });
+                  }}
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
+                >
+                  {entities.map((ent) => (
+                    <option key={ent.id} value={ent.id}>
+                      {ent.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Asunto y Desempate */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="email-template-field-4" className="block text-xs font-bold text-zinc-700 mb-1">Patrón de Asunto</label>
+              <input id="email-template-field-4"
+                type="text"
+                value={modal.subjectPattern}
+                onChange={(e) => updateModal({ subjectPattern: e.target.value })}
+                placeholder="Palabras clave en el asunto"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="email-template-field-5" className="block text-xs font-bold text-zinc-700 mb-1">
+                Desempate en Cuerpo (opcional)
+              </label>
+              <input id="email-template-field-5"
+                type="text"
+                value={modal.matchPattern}
+                onChange={(e) => updateModal({ matchPattern: e.target.value })}
+                placeholder="Palabra única para diferenciar"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+              />
+            </div>
+          </div>
+
+          {/* Regexes con Validación en Vivo sobre el correo cargado */}
+          <div className="space-y-3 pt-2 border-t border-zinc-100">
+            <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-wider block">
+              Reglas de Extracción
+            </span>
+
+            {/* Monto */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="email-template-field-6" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Monto</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                {modalLiveExtraction.amount.matched && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Captura: ${modalLiveExtraction.amount.value}
+                  </span>
+                )}
+              </div>
+              <input id="email-template-field-6"
+                type="text"
+                required
+                value={modal.amountRegex}
+                onChange={(e) => updateModal({ amountRegex: e.target.value })}
+                placeholder="Regex con grupo de captura () para el monto"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+              />
+            </div>
+
+            {/* Comercio */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="email-template-field-7" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                  <Store className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Comercio</span>
+                </label>
+                {modalLiveExtraction.merchant.matched && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Captura: {modalLiveExtraction.merchant.value}
+                  </span>
+                )}
+              </div>
+              <input id="email-template-field-7"
+                type="text"
+                value={modal.merchantRegex}
+                onChange={(e) => updateModal({ merchantRegex: e.target.value })}
+                placeholder="Regex con grupo de captura () para el comercio"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+              />
+            </div>
+
+            {/* Cuenta */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label htmlFor="email-template-field-8" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                  <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Cuenta o Tarjeta</span>
+                </label>
+                {modalLiveExtraction.sourceAccount.matched && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Captura: {modalLiveExtraction.sourceAccount.value}
+                  </span>
+                )}
+              </div>
+              <input id="email-template-field-8"
+                type="text"
+                value={modal.sourceAccountRegex}
+                onChange={(e) => updateModal({ sourceAccountRegex: e.target.value })}
+                placeholder="Regex con grupo de captura () para la cuenta"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+              />
+            </div>
+
+            {/* Fecha */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              <div className="sm:col-span-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="email-template-field-9" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>Fecha</span>
+                  </label>
+                  {modalLiveExtraction.date.matched && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Captura: {modalLiveExtraction.date.value}
+                    </span>
+                  )}
+                </div>
+                <input id="email-template-field-9"
+                  type="text"
+                  value={modal.dateRegex}
+                  onChange={(e) => updateModal({ dateRegex: e.target.value })}
+                  placeholder="Regex con grupo de captura () para la fecha"
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="email-template-field-10" className="text-xs font-bold text-zinc-700">Formato de Fecha</label>
+                <select id="email-template-field-10"
+                  value={modal.dateFormat}
+                  onChange={(e) => updateModal({ dateFormat: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
+                >
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="email-template-field-11" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>Hora</span>
+                  </label>
+                  {modalLiveExtraction.time.matched && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      Captura: {modalLiveExtraction.time.value}
+                    </span>
+                  )}
+                </div>
+                <input id="email-template-field-11"
+                  type="text"
+                  value={modal.timeRegex}
+                  onChange={(e) => updateModal({ timeRegex: e.target.value })}
+                  placeholder="Regex con grupo de captura () para la hora"
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="email-template-field-12" className="text-xs font-bold text-zinc-700">Formato de Hora</label>
+                <select id="email-template-field-12"
+                  value={modal.timeFormat}
+                  onChange={(e) => updateModal({ timeFormat: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
+                >
+                  <option value="HH:mm:ss">HH:mm:ss</option>
+                  <option value="HH:mm">HH:mm</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold rounded-xl transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="submit"
+              disabled={isModalSaving}
+              className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              {isModalSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 text-emerald-400" />
+              )}
+              <span>Guardar Cambios</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface CustomEmailModalProps {
+  sender: string; subject: string; body: string;
+  onSenderChange: (value: string) => void; onSubjectChange: (value: string) => void; onBodyChange: (value: string) => void;
+  onSubmit: (event: React.SubmitEvent<HTMLFormElement>) => void; onClose: () => void;
+}
+
+function CustomEmailModal({ sender, subject, body, onSenderChange, onSubjectChange, onBodyChange, onSubmit, onClose }: Readonly<CustomEmailModalProps>) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-zinc-200 shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900">Cargar Correo de Ejemplo</h3>
+            <p className="text-xs text-zinc-500">
+              Agrega el contenido de una notificación bancaria para probar o calibrar plantillas.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onClose()}
+            className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="p-5 space-y-3.5">
+          <div>
+            <label htmlFor="email-template-field-13" className="block text-xs font-bold text-zinc-700 mb-1">
+              Remitente <span className="text-zinc-400 font-normal">(opcional)</span>
+            </label>
+            <input id="email-template-field-13"
+              type="text"
+              value={sender}
+              onChange={(e) => onSenderChange(e.target.value)}
+              placeholder="ej: notificaciones@banco.com"
+              className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email-template-field-14" className="block text-xs font-bold text-zinc-700 mb-1">
+              Asunto <span className="text-zinc-400 font-normal">(opcional)</span>
+            </label>
+            <input id="email-template-field-14"
+              type="text"
+              value={subject}
+              onChange={(e) => onSubjectChange(e.target.value)}
+              placeholder="ej: Notificación de compra con tarjeta"
+              className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email-template-field-15" className="block text-xs font-bold text-zinc-700 mb-1">
+              Cuerpo del Correo <span className="text-rose-500">*</span>
+            </label>
+            <textarea id="email-template-field-15"
+              required
+              rows={6}
+              value={body}
+              onChange={(e) => onBodyChange(e.target.value)}
+              placeholder="Pega aquí el texto completo de la notificación bancaria..."
+              className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px] leading-relaxed"
+            />
+          </div>
+
+          <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => onClose()}
+              className="px-4 py-2 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold rounded-xl transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+            >
+              Cargar y Probar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+interface EmailTestData {
+  sender: string;
+  subject: string;
+  body: string;
+  plainBody?: string;
+  snippet?: string;
+}
+
+const toEmailTestData = (
+  selectedEmail: IngestedEmail | null,
+  sampleSender: string,
+  sampleSubject: string,
+  sampleBody: string,
+): EmailTestData | null => {
+  if (selectedEmail) {
+    return {
+      sender: selectedEmail.sender,
+      subject: selectedEmail.subject,
+      body: selectedEmail.body,
+      plainBody: selectedEmail.plainBody,
+      snippet: selectedEmail.snippet,
+    };
+  }
+
+  if (sampleSender || sampleSubject || sampleBody) {
+    return {
+      sender: sampleSender,
+      subject: sampleSubject,
+      body: sampleBody,
+      plainBody: sampleBody,
+      snippet: sampleBody.slice(0, 160),
+    };
+  }
+
+  return null;
+};
+
+interface ResolvedEntityMatch {
+  entity: CatalogEntity | null;
+  effectivePattern: string | null;
+  senderAlreadyCovered: boolean;
+}
+
+const resolveEntityMatch = (
+  entities: CatalogEntity[],
+  entityLabel: string | null | undefined,
+  sender: string,
+  body: string,
+): ResolvedEntityMatch => {
+  const bodyHead = getHeadLines(body, 15);
+  const forwardedSender = extractForwardedSenderFromBody(body, 15);
+  const matchesPattern = (pattern: string) =>
+    entityPatternMatchesEmail(pattern, sender, forwardedSender || '', bodyHead);
+
+  const matchedByName = findEntityByName(entities, entityLabel);
+  const matchedByPattern = entities.find((entity) =>
+    (entity.patterns || []).some(matchesPattern)
+  ) || null;
+  const entity = matchedByName || matchedByPattern;
+  const senderAlreadyCovered = entity
+    ? (entity.patterns || []).some(matchesPattern)
+    : false;
+
+  return { entity, effectivePattern: null, senderAlreadyCovered };
+};
+
+const resolveEntityAndPattern = (
+  entities: CatalogEntity[],
+  entityLabel: string | null | undefined,
+  requestedPattern: string | null | undefined,
+  sender: string,
+  body: string,
+): ResolvedEntityMatch => {
+  const resolved = resolveEntityMatch(entities, entityLabel, sender, body);
+  let effectivePattern = requestedPattern ? sanitizeRegexPattern(requestedPattern) : null;
+
+  if (!effectivePattern && !resolved.senderAlreadyCovered) {
+    effectivePattern = inferEntityEmailPattern(sender, body);
+  }
+
+  return { ...resolved, effectivePattern };
+};
+
+const getStoredGoogleToken = (): string | null => (
+  typeof window === 'undefined' ? null : localStorage.getItem('google_provider_token')
+);
+
+const buildAuthHeaders = (token?: string | null): Record<string, string> => (
+  token ? { 'x-google-token': token } : {}
+);
+
+const buildTemplateCorrectionDetails = (template: CatalogTemplate) => ({
+  name: template.name || 'Plantilla',
+  entity_label: template.entity?.name || null,
+  entity_email_pattern: template.entity_email_patterns?.[0] || null,
+  subject_pattern: template.subject_pattern || null,
+  match_pattern: template.match_pattern || null,
+  amount_regex: template.amount_regex || null,
+  merchant_regex: template.merchant_regex || null,
+  date_regex: template.date_regex || null,
+  date_format: template.date_format || null,
+  time_regex: template.time_regex || null,
+  time_format: template.time_format || null,
+  currency_regex: template.currency_regex || null,
+  source_account_regex: template.source_account_regex || null,
+  expense_type: template.expense_type_label || null,
+});
+
 export function EmailTemplatesManagerView({
   initialMode = 'explorer',
 }: EmailTemplatesManagerViewProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Top level tabs: 'explorer' (2-panel email-driven flow) vs 'catalog' (saved templates list)
@@ -446,29 +1184,20 @@ export function EmailTemplatesManagerView({
   // Selected Email for Right Panel Inspector
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
 
-  // Form State for Explorer panel (WITHOUT default values)
+  // Form State for Explorer panel
   const [isFormVisible, setIsFormVisible] = useState<boolean>(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateTestFilter, setTemplateTestFilter] = useState<string>('all');
   const [testResultViewFilter, setTestResultViewFilter] = useState<'all' | 'matched' | 'failed'>('all');
+  const explorerForm = useTemplateFormState(EMPTY_TEMPLATE_FORM);
+  const form = explorerForm.state;
+  const { update: updateForm, reset: resetForm } = explorerForm;
+  const setFormField = useCallback(<K extends keyof TemplateFormState>(field: K, value: TemplateFormState[K]) => {
+    updateForm({ [field]: value } as Partial<TemplateFormState>);
+  }, [updateForm]);
 
-  const [formName, setFormName] = useState<string>('');
-  const [formEntityLabel, setFormEntityLabel] = useState<string>('');
-  const [formEntityId, setFormEntityId] = useState<string | null>(null);
-  const [formEntityEmailPattern, setFormEntityEmailPattern] = useState<string>('');
-  const [formIsNewEntity, setFormIsNewEntity] = useState<boolean>(false);
-  const [formSubjectPattern, setFormSubjectPattern] = useState<string>('');
-  const [formMatchPattern, setFormMatchPattern] = useState<string>('');
-  const [formAmountRegex, setFormAmountRegex] = useState<string>('');
-  const [formMerchantRegex, setFormMerchantRegex] = useState<string>('');
-  const [formSourceAccountRegex, setFormSourceAccountRegex] = useState<string>('');
-  const [formDateRegex, setFormDateRegex] = useState<string>('');
-  const [formDateFormat, setFormDateFormat] = useState<string>('');
-  const [formTimeRegex, setFormTimeRegex] = useState<string>('');
-  const [formTimeFormat, setFormTimeFormat] = useState<string>('');
-  const [formCurrencyRegex, setFormCurrencyRegex] = useState<string>('');
-  const [formExpenseType, setFormExpenseType] = useState<string>('compra');
   const [copiedCorrectionPrompt, setCopiedCorrectionPrompt] = useState<boolean>(false);
+
 
   // Sample email reference for explorer right panel
   const [sampleSender, setSampleSender] = useState<string>('');
@@ -501,21 +1230,9 @@ export function EmailTemplatesManagerView({
   // ---------------------------------------------------------------------------
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [editingModalId, setEditingModalId] = useState<string | null>(null);
-  const [modalName, setModalName] = useState<string>('');
-  const [modalEntityLabel, setModalEntityLabel] = useState<string>('');
-  const [modalEntityId, setModalEntityId] = useState<string | null>(null);
-  const [modalEntityEmailPattern, setModalEntityEmailPattern] = useState<string>('');
-  const [modalIsNewEntity, setModalIsNewEntity] = useState<boolean>(false);
-  const [modalSubjectPattern, setModalSubjectPattern] = useState<string>('');
-  const [modalMatchPattern, setModalMatchPattern] = useState<string>('');
-  const [modalAmountRegex, setModalAmountRegex] = useState<string>('');
-  const [modalMerchantRegex, setModalMerchantRegex] = useState<string>('');
-  const [modalSourceAccountRegex, setModalSourceAccountRegex] = useState<string>('');
-  const [modalDateRegex, setModalDateRegex] = useState<string>('');
-  const [modalDateFormat, setModalDateFormat] = useState<string>('DD/MM/YYYY');
-  const [modalTimeRegex, setModalTimeRegex] = useState<string>('');
-  const [modalTimeFormat, setModalTimeFormat] = useState<string>('HH:mm:ss');
-  const [modalCurrencyRegex, setModalCurrencyRegex] = useState<string>('');
+  const modalFormState = useTemplateFormState(MODAL_TEMPLATE_FORM_DEFAULTS);
+  const modal = modalFormState.state;
+  const { update: updateModalForm } = modalFormState;
   const [modalSampleEmailId, setModalSampleEmailId] = useState<string>('');
   const [modalCustomSampleBody, setModalCustomSampleBody] = useState<string>('');
   const [isModalSaving, setIsModalSaving] = useState<boolean>(false);
@@ -523,6 +1240,7 @@ export function EmailTemplatesManagerView({
   const [modalSuccess, setModalSuccess] = useState<string | null>(null);
   const [modalCopiedPrompt, setModalCopiedPrompt] = useState<boolean>(false);
   const [modalPastedJson, setModalPastedJson] = useState<string>('');
+
 
   // Check authentication status
   const checkAuthStatus = useCallback(async () => {
@@ -534,11 +1252,8 @@ export function EmailTemplatesManagerView({
         localStorage.setItem('google_provider_token', urlToken);
         document.cookie = `google_provider_token=${encodeURIComponent(urlToken)}; path=/; max-age=604800; SameSite=Lax`;
       }
-      const storedToken = (typeof window !== 'undefined' ? localStorage.getItem('google_provider_token') : null) || urlToken;
-      const headers: Record<string, string> = {};
-      if (storedToken) {
-        headers['x-google-token'] = storedToken;
-      }
+      const storedToken = getStoredGoogleToken() || urlToken;
+      const headers = buildAuthHeaders(storedToken);
 
       const res = await fetch('/api/gmail/status', { headers });
       const data = await res.json();
@@ -608,11 +1323,8 @@ export function EmailTemplatesManagerView({
     setIsLoadingEmails(true);
     setEmailsError(null);
     try {
-      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('google_provider_token') : null;
-      const headers: Record<string, string> = {};
-      if (storedToken) {
-        headers['x-google-token'] = storedToken;
-      }
+      const storedToken = getStoredGoogleToken();
+      const headers = buildAuthHeaders(storedToken);
 
       const res = await fetch('/api/gmail/emails?maxResults=25', { headers });
       const data = await res.json();
@@ -734,35 +1446,7 @@ export function EmailTemplatesManagerView({
   }, [emails, selectedEmailId]);
 
   // Diagnosis for the currently selected email
-  const selectedDiagnosis = useMemo(() => {
-    if (!selectedEmail) return null;
-    return emailDiagnoses.get(selectedEmail.id) || null;
-  }, [selectedEmail, emailDiagnoses]);
-
   // Detect bank from sender or subject
-  const detectEntityFromEmail = useCallback((sender: string, subject: string) => {
-    const s = (sender || '').toLowerCase();
-    const sub = (subject || '').toLowerCase();
-    let detected = 'Bancolombia';
-    if (s.includes('nu') || sub.includes('nu')) detected = 'Nu';
-    else if (s.includes('davivienda') || sub.includes('davivienda')) detected = 'Davivienda';
-    else if (s.includes('daviplata') || sub.includes('daviplata')) detected = 'Daviplata';
-    else if (s.includes('nequi') || sub.includes('nequi')) detected = 'Nequi';
-    else if (s.includes('bbva') || sub.includes('bbva')) detected = 'BBVA';
-    else if (s.includes('lulo') || sub.includes('lulo')) detected = 'Lulo Bank';
-    else if (s.includes('falabella') || sub.includes('falabella')) detected = 'Banco Falabella';
-    else if (s.includes('bogota') || sub.includes('bogota')) detected = 'Banco de Bogotá';
-    else if (s.includes('occidente') || sub.includes('occidente')) detected = 'Banco de Occidente';
-    else if (s.includes('rappi') || sub.includes('rappi')) detected = 'RappiPay';
-
-    const matchedEnt = entities.find((e) => e.name.toLowerCase() === detected.toLowerCase());
-    return {
-      entityName: detected,
-      entityId: matchedEnt ? matchedEnt.id : null,
-      isNewEntity: !matchedEnt,
-    };
-  }, [entities]);
-
   // Sync sample email whenever selected email changes in explorer mode (WITHOUT pre-filling form defaults)
   useEffect(() => {
     if (!selectedEmail) return;
@@ -777,7 +1461,7 @@ export function EmailTemplatesManagerView({
   const templatesToTest = useMemo(() => {
     if (templateTestFilter === 'all') return templates;
     return templates.filter(
-      (t) => (entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase() === templateTestFilter.toLowerCase()
+      (t) => (entities.find((e) => e.id === t.entity_id)?.name ?? '').toLowerCase() === templateTestFilter.toLowerCase()
     );
   }, [templates, templateTestFilter, entities]);
 
@@ -801,7 +1485,7 @@ export function EmailTemplatesManagerView({
 
   // Filtered reports according to view filter ('all' | 'matched' | 'failed')
   const filteredTestReports = useMemo(() => {
-    if (!diagnosisForSelectedEmail || !diagnosisForSelectedEmail.reports) return [];
+    if (!diagnosisForSelectedEmail?.reports) return [];
     if (testResultViewFilter === 'matched') {
       return diagnosisForSelectedEmail.reports.filter(
         (r) => r.level3Passed && r.extractedAmount !== null && r.extractedAmount !== undefined
@@ -816,14 +1500,14 @@ export function EmailTemplatesManagerView({
   }, [diagnosisForSelectedEmail, testResultViewFilter]);
 
   const testedMatchedCount = useMemo(() => {
-    if (!diagnosisForSelectedEmail || !diagnosisForSelectedEmail.reports) return 0;
+    if (!diagnosisForSelectedEmail?.reports) return 0;
     return diagnosisForSelectedEmail.reports.filter(
       (r) => r.level3Passed && r.extractedAmount !== null && r.extractedAmount !== undefined
     ).length;
   }, [diagnosisForSelectedEmail]);
 
   const testedFailedCount = useMemo(() => {
-    if (!diagnosisForSelectedEmail || !diagnosisForSelectedEmail.reports) return 0;
+    if (!diagnosisForSelectedEmail?.reports) return 0;
     return diagnosisForSelectedEmail.reports.filter(
       (r) => !r.level3Passed || r.extractedAmount === null || r.extractedAmount === undefined
     ).length;
@@ -831,73 +1515,55 @@ export function EmailTemplatesManagerView({
 
   // Plantilla activa en el formulario (creación o edición en curso)
   const activeFormTemplate = useMemo<CatalogTemplate>(() => {
-    const matchedEnt = formEntityId
-      ? entities.find((e) => e.id === formEntityId)
-      : (formEntityLabel
-        ? entities.find((e) => e.name.trim().toLowerCase() === formEntityLabel.trim().toLowerCase())
-        : null);
+    const matchedEnt = form.entityId
+      ? entities.find((e) => e.id === form.entityId)
+      : findEntityByName(entities, form.entityLabel);
 
     return {
       id: editingTemplateId || '__active_form_template__',
-      name: formName || 'Nueva Plantilla',
-      subject_pattern: formSubjectPattern || null,
-      amount_regex: formAmountRegex || null,
-      merchant_regex: formMerchantRegex || null,
-      date_regex: formDateRegex || null,
-      date_format: formDateFormat || 'DD/MM/YYYY',
-      entity_id: formEntityId || matchedEnt?.id || null,
-      entity: { name: formEntityLabel || matchedEnt?.name || '' },
-      match_pattern: formMatchPattern || null,
+      name: form.name || 'Nueva Plantilla',
+      subject_pattern: form.subjectPattern || '',
+      amount_regex: form.amountRegex || '',
+      merchant_regex: form.merchantRegex || '',
+      date_regex: form.dateRegex || '',
+      date_format: form.dateFormat || 'DD/MM/YYYY',
+      entity_id: form.entityId || matchedEnt?.id || null,
+      entity: { name: form.entityLabel || matchedEnt?.name || '' },
+      match_pattern: form.matchPattern || '',
       expense_type_id: null,
-      expense_type_label: formExpenseType || 'compra',
-      currency_regex: formCurrencyRegex || null,
-      source_account_regex: formSourceAccountRegex || null,
-      time_regex: formTimeRegex || null,
-      time_format: formTimeFormat || 'HH:mm:ss',
+      expense_type_label: form.expenseType || 'compra',
+      currency_regex: form.currencyRegex || '',
+      source_account_regex: form.sourceAccountRegex || '',
+      time_regex: form.timeRegex || '',
+      time_format: form.timeFormat || 'HH:mm:ss',
       entity_email_patterns: Array.from(new Set([
         ...(matchedEnt?.patterns || []),
-        ...(formEntityEmailPattern ? [sanitizeRegexPattern(formEntityEmailPattern) || formEntityEmailPattern] : []),
+        ...(form.entityEmailPattern ? [sanitizeRegexPattern(form.entityEmailPattern) || form.entityEmailPattern] : []),
       ])).filter(Boolean),
     };
   }, [
     editingTemplateId,
-    formName,
-    formSubjectPattern,
-    formAmountRegex,
-    formMerchantRegex,
-    formDateRegex,
-    formDateFormat,
-    formEntityLabel,
-    formEntityId,
-    formMatchPattern,
-    formExpenseType,
-    formCurrencyRegex,
-    formSourceAccountRegex,
-    formTimeRegex,
-    formTimeFormat,
-    formEntityEmailPattern,
+    form.name,
+    form.subjectPattern,
+    form.amountRegex,
+    form.merchantRegex,
+    form.dateRegex,
+    form.dateFormat,
+    form.entityLabel,
+    form.entityId,
+    form.matchPattern,
+    form.expenseType,
+    form.currencyRegex,
+    form.sourceAccountRegex,
+    form.timeRegex,
+    form.timeFormat,
+    form.entityEmailPattern,
     entities,
   ]);
 
   // Motor de evaluación unificado para la plantilla activa contra el correo seleccionado o muestra
   const activeFormEvaluation = useMemo<SingleTemplateEvaluation | null>(() => {
-    const emailToTest = selectedEmail
-      ? {
-        sender: selectedEmail.sender,
-        subject: selectedEmail.subject,
-        body: selectedEmail.body,
-        plainBody: selectedEmail.plainBody,
-        snippet: selectedEmail.snippet,
-      }
-      : (sampleSender || sampleSubject || sampleBody)
-        ? {
-          sender: sampleSender,
-          subject: sampleSubject,
-          body: sampleBody,
-          plainBody: sampleBody,
-          snippet: sampleBody.slice(0, 160),
-        }
-        : null;
+    const emailToTest = toEmailTestData(selectedEmail, sampleSender, sampleSubject, sampleBody);
 
     if (!emailToTest) return null;
 
@@ -928,20 +1594,20 @@ export function EmailTemplatesManagerView({
       cleanBody,
       {
         template: {
-          name: formName || 'Plantilla',
-          entity_label: formEntityLabel || null,
-          entity_email_pattern: formEntityEmailPattern || null,
-          subject_pattern: formSubjectPattern || null,
-          match_pattern: formMatchPattern || null,
-          amount_regex: formAmountRegex || null,
-          merchant_regex: formMerchantRegex || null,
-          date_regex: formDateRegex || null,
-          date_format: formDateFormat || null,
-          time_regex: formTimeRegex || null,
-          time_format: formTimeFormat || null,
-          currency_regex: formCurrencyRegex || null,
-          source_account_regex: formSourceAccountRegex || null,
-          expense_type: formExpenseType || null,
+          name: form.name || 'Plantilla',
+          entity_label: form.entityLabel || null,
+          entity_email_pattern: form.entityEmailPattern || null,
+          subject_pattern: form.subjectPattern || '',
+          match_pattern: form.matchPattern || '',
+          amount_regex: form.amountRegex || '',
+          merchant_regex: form.merchantRegex || '',
+          date_regex: form.dateRegex || '',
+          date_format: form.dateFormat || null,
+          time_regex: form.timeRegex || '',
+          time_format: form.timeFormat || null,
+          currency_regex: form.currencyRegex || '',
+          source_account_regex: form.sourceAccountRegex || '',
+          expense_type: form.expenseType || null,
         },
         failures: activeFormEvaluation.criticalFailures,
         warnings: activeFormEvaluation.warnings,
@@ -961,20 +1627,20 @@ export function EmailTemplatesManagerView({
     sampleSubject,
     sampleBody,
     activeFormEvaluation,
-    formName,
-    formEntityLabel,
-    formEntityEmailPattern,
-    formSubjectPattern,
-    formMatchPattern,
-    formAmountRegex,
-    formMerchantRegex,
-    formDateRegex,
-    formDateFormat,
-    formTimeRegex,
-    formTimeFormat,
-    formCurrencyRegex,
-    formSourceAccountRegex,
-    formExpenseType,
+    form.name,
+    form.entityLabel,
+    form.entityEmailPattern,
+    form.subjectPattern,
+    form.matchPattern,
+    form.amountRegex,
+    form.merchantRegex,
+    form.dateRegex,
+    form.dateFormat,
+    form.timeRegex,
+    form.timeFormat,
+    form.currencyRegex,
+    form.sourceAccountRegex,
+    form.expenseType,
   ]);
 
   const [copiedReportPromptId, setCopiedReportPromptId] = useState<string | null>(null);
@@ -994,7 +1660,7 @@ export function EmailTemplatesManagerView({
       selectedEmail.subject || '',
       cleanBody,
       {
-        template: report.template,
+        template: buildTemplateCorrectionDetails(report.template),
         failures: evalData.criticalFailures,
         warnings: evalData.warnings,
       }
@@ -1013,21 +1679,24 @@ export function EmailTemplatesManagerView({
   // Load an existing template into the explorer form to edit or inspect
   const handleLoadTemplateIntoForm = useCallback((tmpl: CatalogTemplate) => {
     setEditingTemplateId(tmpl.id);
-    setFormName(tmpl.name);
-    setFormEntityLabel(tmpl.entity?.name || '');
-    setFormEntityId(tmpl.entity_id || null);
-    setFormEntityEmailPattern(tmpl.entity_email_patterns?.[0] || '');
-    setFormIsNewEntity(false);
-    setFormSubjectPattern(tmpl.subject_pattern || '');
-    setFormMatchPattern(tmpl.match_pattern || '');
-    setFormAmountRegex(tmpl.amount_regex || '');
-    setFormMerchantRegex(tmpl.merchant_regex || '');
-    setFormSourceAccountRegex(tmpl.source_account_regex || '');
-    setFormDateRegex(tmpl.date_regex || '');
-    setFormDateFormat(tmpl.date_format || '');
-    setFormTimeRegex(tmpl.time_regex || '');
-    setFormTimeFormat(tmpl.time_format || '');
-    setFormCurrencyRegex(tmpl.currency_regex || '');
+    updateForm({
+      name: tmpl.name,
+      entityLabel: tmpl.entity?.name || '',
+      entityId: tmpl.entity_id || null,
+      entityEmailPattern: tmpl.entity_email_patterns?.[0] || '',
+      isNewEntity: false,
+      subjectPattern: tmpl.subject_pattern || '',
+      matchPattern: tmpl.match_pattern || '',
+      amountRegex: tmpl.amount_regex || '',
+      merchantRegex: tmpl.merchant_regex || '',
+      sourceAccountRegex: tmpl.source_account_regex || '',
+      dateRegex: tmpl.date_regex || '',
+      dateFormat: tmpl.date_format || '',
+      timeRegex: tmpl.time_regex || '',
+      timeFormat: tmpl.time_format || '',
+      currencyRegex: tmpl.currency_regex || '',
+      expenseType: tmpl.expense_type_label || 'compra',
+    });
 
     setIsFormVisible(true);
     setSaveSuccessMessage(null);
@@ -1035,37 +1704,22 @@ export function EmailTemplatesManagerView({
     setAiError(null);
     setAiSuccess(null);
     setAiPreviewDiagnosis(null);
-  }, []);
+  }, [updateForm]);
 
   // Open an empty form to create a template manually (zero defaults)
   const handleOpenEmptyForm = useCallback(() => {
     setEditingTemplateId(null);
-    setFormName('');
-    setFormEntityLabel('');
-    setFormEntityId(null);
-    setFormEntityEmailPattern('');
-    setFormIsNewEntity(false);
-    setFormSubjectPattern('');
-    setFormMatchPattern('');
-    setFormAmountRegex('');
-    setFormMerchantRegex('');
-    setFormSourceAccountRegex('');
-    setFormDateRegex('');
-    setFormDateFormat('');
-    setFormTimeRegex('');
-    setFormTimeFormat('');
-    setFormCurrencyRegex('');
-
+    resetForm();
     setIsFormVisible(true);
     setSaveSuccessMessage(null);
     setSaveErrorMessage(null);
     setAiError(null);
     setAiSuccess(null);
     setAiPreviewDiagnosis(null);
-  }, []);
+  }, [resetForm]);
 
   // Add custom sample email to the list and select it
-  const handleAddCustomEmail = (e: React.FormEvent) => {
+  const handleAddCustomEmail = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customBody.trim()) return;
     const newEmail: IngestedEmail = {
@@ -1123,136 +1777,83 @@ export function EmailTemplatesManagerView({
       return;
     }
 
-    const d = result.data;
-    const senderForEntity = sampleSender || selectedEmail?.sender || '';
-    const bodyForEntity = cleanEmailBody(sampleBody || selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '');
-    const bodyHeadForEntity = getHeadLines(bodyForEntity, 15);
-    const forwardedSender = extractForwardedSenderFromBody(bodyForEntity, 15);
+    const data = result.data;
+    const sender = sampleSender || selectedEmail?.sender || '';
+    const body = cleanEmailBody(sampleBody || selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '');
+    const resolved = resolveEntityAndPattern(entities, data.entity_label, data.entity_email_pattern, sender, body);
 
-    const checkEntityPattern = (p: string) => {
-      try {
-        const pat = sanitizeRegexPattern(p) || p;
-        const re = new RegExp(pat, 'i');
-        if (senderForEntity && re.test(senderForEntity)) return true;
-        if (forwardedSender && re.test(forwardedSender)) return true;
-        if (bodyHeadForEntity && re.test(bodyHeadForEntity)) return true;
-        return false;
-      } catch {
-        return false;
-      }
-    };
-
-    const matchedByName = d.entity_label
-      ? entities.find((e) => e.name.trim().toLowerCase() === d.entity_label!.trim().toLowerCase()) || null
-      : null;
-    const matchedByPattern = entities.find((e) => (e.patterns || []).some(checkEntityPattern)) || null;
-    const matchedEntity = matchedByName || matchedByPattern || null;
-
-    const senderAlreadyCovered = matchedEntity
-      ? (matchedEntity.patterns || []).some(checkEntityPattern)
-      : false;
-
-    let effectivePattern = d.entity_email_pattern ? sanitizeRegexPattern(d.entity_email_pattern) : null;
-    if (!effectivePattern && !senderAlreadyCovered) {
-      effectivePattern = inferEntityEmailPattern(senderForEntity, bodyForEntity);
-    }
-
-    setFormEntityEmailPattern(effectivePattern || '');
-
-    setFormName(d.name || '');
-    if (matchedEntity) {
-      setFormEntityLabel(matchedEntity.name);
-      setFormEntityId(matchedEntity.id);
-      setFormIsNewEntity(false);
-    } else if (d.entity_label) {
-      setFormEntityLabel(d.entity_label);
-      setFormEntityId(null);
-      setFormIsNewEntity(true);
-    } else {
-      setFormEntityLabel('');
-      setFormEntityId(null);
-      setFormIsNewEntity(false);
-    }
-    setFormSubjectPattern(d.subject_pattern || '');
-    setFormMatchPattern(d.match_pattern || '');
-    setFormAmountRegex(d.amount_regex || '');
-    setFormMerchantRegex(d.merchant_regex || '');
-    setFormSourceAccountRegex(d.source_account_regex || '');
-    setFormDateRegex(d.date_regex || '');
-    setFormDateFormat(d.date_format || '');
-    setFormTimeRegex(d.time_regex || '');
-    setFormTimeFormat(d.time_format || '');
-    setFormCurrencyRegex(d.currency_regex || '');
-    setFormExpenseType(d.expense_type || 'compra');
+    updateForm({
+      name: data.name || '',
+      entityLabel: resolved.entity?.name || data.entity_label || '',
+      entityId: resolved.entity?.id || null,
+      entityEmailPattern: resolved.effectivePattern || '',
+      isNewEntity: !resolved.entity && Boolean(data.entity_label),
+      subjectPattern: data.subject_pattern || '',
+      matchPattern: data.match_pattern || '',
+      amountRegex: data.amount_regex || '',
+      merchantRegex: data.merchant_regex || '',
+      sourceAccountRegex: data.source_account_regex || '',
+      dateRegex: data.date_regex || '',
+      dateFormat: data.date_format || '',
+      timeRegex: data.time_regex || '',
+      timeFormat: data.time_format || '',
+      currencyRegex: data.currency_regex || '',
+      expenseType: data.expense_type || 'compra',
+    });
 
     setEditingTemplateId(null);
     setIsFormVisible(true);
     setPastedAIResponse('');
 
-    const candidatePatterns = Array.from(new Set([
-      ...(matchedEntity?.patterns || []),
-      ...(effectivePattern ? [effectivePattern] : []),
-    ])).filter(Boolean);
-
-    // Evaluación directa e instantánea usando el motor unificado
     const candidateTemplate: CatalogTemplate = {
       id: '__ai_pasted_template__',
-      name: d.name || 'Nueva Plantilla',
-      subject_pattern: d.subject_pattern,
-      amount_regex: d.amount_regex,
-      merchant_regex: d.merchant_regex,
-      date_regex: d.date_regex,
-      date_format: d.date_format,
-      entity_id: matchedEntity?.id || null,
-      entity: { name: matchedEntity?.name || d.entity_label || '' },
-      match_pattern: d.match_pattern,
+      name: data.name || 'Nueva Plantilla',
+      subject_pattern: data.subject_pattern,
+      amount_regex: data.amount_regex,
+      merchant_regex: data.merchant_regex,
+      date_regex: data.date_regex,
+      date_format: data.date_format,
+      entity_id: resolved.entity?.id || null,
+      entity: { name: resolved.entity?.name || data.entity_label || '' },
+      match_pattern: data.match_pattern,
       expense_type_id: null,
-      expense_type_label: d.expense_type,
-      currency_regex: d.currency_regex,
-      source_account_regex: d.source_account_regex,
-      time_regex: d.time_regex,
-      time_format: d.time_format,
-      entity_email_patterns: candidatePatterns,
+      expense_type_label: data.expense_type,
+      currency_regex: data.currency_regex,
+      source_account_regex: data.source_account_regex,
+      time_regex: data.time_regex,
+      time_format: data.time_format,
+      entity_email_patterns: Array.from(new Set([
+        ...(resolved.entity?.patterns || []),
+        ...(resolved.effectivePattern ? [resolved.effectivePattern] : []),
+      ])).filter(Boolean),
     };
 
-    const emailToTest = selectedEmail
-      ? {
-        sender: selectedEmail.sender,
-        subject: selectedEmail.subject,
-        body: selectedEmail.body,
-        plainBody: selectedEmail.plainBody,
-        snippet: selectedEmail.snippet,
-      }
-      : (sampleSender || sampleSubject || sampleBody)
-        ? {
-          sender: sampleSender,
-          subject: sampleSubject,
-          body: sampleBody,
-          plainBody: sampleBody,
-          snippet: sampleBody.slice(0, 160),
-        }
-        : null;
-
-    if (emailToTest) {
-      const evalResult = evaluateTemplateAgainstEmail(candidateTemplate, emailToTest, entities);
-      if (evalResult.overallPassed) {
-        if (!senderAlreadyCovered && effectivePattern) {
-          setAiSuccess(
-            `JSON verificado con éxito: pasó los 4 niveles. Se asignó el patrón de remitente "${effectivePattern}" para registrarlo en ${matchedEntity?.name || d.entity_label || 'la entidad'} al guardar.`
-          );
-        } else {
-          setAiSuccess('JSON verificado con éxito: pasó los 4 niveles (Entidad, Asunto, Desempate y Monto).');
-        }
-      } else {
-        setAiError(
-          evalResult.failureReasons[0] ||
-          'La plantilla requiere ajustes en las expresiones regulares para coincidir completamente.'
-        );
-      }
-    } else {
+    const emailToTest = toEmailTestData(selectedEmail, sampleSender, sampleSubject, sampleBody);
+    if (!emailToTest) {
       setAiSuccess('JSON cargado correctamente en el formulario.');
+      return;
     }
+
+    const evaluation = evaluateTemplateAgainstEmail(candidateTemplate, emailToTest, entities);
+    if (!evaluation.overallPassed) {
+      setAiError(
+        evaluation.failureReasons[0] ||
+        'La plantilla requiere ajustes en las expresiones regulares para coincidir completamente.'
+      );
+      return;
+    }
+
+    const hasNewPattern = !resolved.senderAlreadyCovered && Boolean(resolved.effectivePattern);
+    if (hasNewPattern) {
+      setAiSuccess(
+        `JSON verificado con éxito: pasó los 4 niveles. Se asignó el patrón de remitente "${resolved.effectivePattern}" para registrarlo en ${resolved.entity?.name || data.entity_label || 'la entidad'} al guardar.`
+      );
+      return;
+    }
+
+    setAiSuccess('JSON verificado con éxito: pasó los 4 niveles (Entidad, Asunto, Desempate y Monto).');
   };
+
 
   // Direct AI Autocomplete helper (via Gemini API)
   const handleDirectAISuggest = async () => {
@@ -1279,61 +1880,30 @@ export function EmailTemplatesManagerView({
 
       const s = data.suggestion;
       if (s) {
-        setFormName(s.name || '');
         const senderForEntity = selectedEmail.sender || '';
         const bodyForEntity = cleanEmailBody(selectedEmail.body || selectedEmail.plainBody || selectedEmail.snippet || '');
-        const bodyHeadForEntity = getHeadLines(bodyForEntity, 15);
-        const forwardedSender = extractForwardedSenderFromBody(bodyForEntity, 15);
+        const resolved = resolveEntityAndPattern(entities, s.entity_label, s.entity_email_pattern, senderForEntity, bodyForEntity);
+        const matched = resolved.entity;
+        const effectivePattern = resolved.effectivePattern;
 
-        const checkEntityPattern = (p: string) => {
-          try {
-            const pat = sanitizeRegexPattern(p) || p;
-            const re = new RegExp(pat, 'i');
-            if (senderForEntity && re.test(senderForEntity)) return true;
-            if (forwardedSender && re.test(forwardedSender)) return true;
-            if (bodyHeadForEntity && re.test(bodyHeadForEntity)) return true;
-            return false;
-          } catch {
-            return false;
-          }
-        };
-
-        const matchedByName = s.entity_label
-          ? entities.find((e) => e.name.trim().toLowerCase() === s.entity_label!.trim().toLowerCase()) || null
-          : null;
-        const matchedByPattern = entities.find((e) => (e.patterns || []).some(checkEntityPattern)) || null;
-        const matched = matchedByName || matchedByPattern || null;
-
-        const senderAlreadyCovered = matched
-          ? (matched.patterns || []).some(checkEntityPattern)
-          : false;
-
-        let effectivePattern = s.entity_email_pattern ? sanitizeRegexPattern(s.entity_email_pattern) : null;
-        if (!effectivePattern && !senderAlreadyCovered) {
-          effectivePattern = inferEntityEmailPattern(senderForEntity, bodyForEntity);
-        }
-
-        if (matched) {
-          setFormEntityLabel(matched.name);
-          setFormEntityId(matched.id);
-          setFormEntityEmailPattern(effectivePattern || '');
-          setFormIsNewEntity(false);
-        } else {
-          setFormEntityLabel(s.entity_label || '');
-          setFormEntityId(null);
-          setFormEntityEmailPattern(effectivePattern || '');
-          setFormIsNewEntity(true);
-        }
-        setFormSubjectPattern(s.subject_pattern || '');
-        setFormMatchPattern(s.match_pattern || '');
-        setFormAmountRegex(s.amount_regex || '');
-        setFormMerchantRegex(s.merchant_regex || '');
-        setFormSourceAccountRegex(s.source_account_regex || '');
-        setFormDateRegex(s.date_regex || '');
-        setFormDateFormat(s.date_format || '');
-        setFormTimeRegex(s.time_regex || '');
-        setFormTimeFormat(s.time_format || '');
-        setFormCurrencyRegex(s.currency_regex || '');
+        updateForm({
+          name: s.name || '',
+          entityLabel: matched?.name || s.entity_label || '',
+          entityId: matched?.id || null,
+          entityEmailPattern: effectivePattern || '',
+          isNewEntity: !matched,
+          subjectPattern: s.subject_pattern || '',
+          matchPattern: s.match_pattern || '',
+          amountRegex: s.amount_regex || '',
+          merchantRegex: s.merchant_regex || '',
+          sourceAccountRegex: s.source_account_regex || '',
+          dateRegex: s.date_regex || '',
+          dateFormat: s.date_format || '',
+          timeRegex: s.time_regex || '',
+          timeFormat: s.time_format || '',
+          currencyRegex: s.currency_regex || '',
+          expenseType: s.expense_type || 'compra',
+        });
 
         setEditingTemplateId(null);
         setIsFormVisible(true);
@@ -1349,13 +1919,13 @@ export function EmailTemplatesManagerView({
   };
 
   // Save or Create Template from Explorer Panel
-  const handleSaveExplorerTemplate = async (e: React.FormEvent) => {
+  const handleSaveExplorerTemplate = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!formName.trim()) {
+    if (!form.name.trim()) {
       setSaveErrorMessage('El nombre de la plantilla es obligatorio');
       return;
     }
-    if (!formAmountRegex.trim()) {
+    if (!form.amountRegex.trim()) {
       setSaveErrorMessage('Debes definir la expresión regular para el monto');
       return;
     }
@@ -1374,9 +1944,9 @@ export function EmailTemplatesManagerView({
       }
 
       // Resolve entity_id if an entity with this name already exists in catalog
-      let effectiveEntityId = formEntityId || null;
-      if (!effectiveEntityId && formEntityLabel.trim()) {
-        const found = entities.find((ent) => ent.name.trim().toLowerCase() === formEntityLabel.trim().toLowerCase());
+      let effectiveEntityId = form.entityId || null;
+      if (!effectiveEntityId && form.entityLabel.trim()) {
+        const found = entities.find((ent) => ent.name.trim().toLowerCase() === form.entityLabel.trim().toLowerCase());
         if (found) {
           effectiveEntityId = found.id;
         }
@@ -1385,7 +1955,7 @@ export function EmailTemplatesManagerView({
       const sender = sampleSender || selectedEmail?.sender || '';
       const body = sampleBody || selectedEmail?.body || selectedEmail?.plainBody || '';
       const ent = effectiveEntityId ? entities.find((e) => e.id === effectiveEntityId) : null;
-      const proposed = sanitizeRegexPattern(formEntityEmailPattern.trim());
+      const proposed = sanitizeRegexPattern(form.entityEmailPattern.trim());
       const patternAlreadyInEntity = Boolean(
         proposed && ent?.patterns?.some((p) => p.trim().toLowerCase() === proposed.toLowerCase())
       );
@@ -1396,21 +1966,21 @@ export function EmailTemplatesManagerView({
 
       const payload = {
         ...(editingTemplateId ? { id: editingTemplateId } : {}),
-        name: formName.trim(),
-        new_entity_name: formEntityLabel.trim() || null,
-        new_entity_label: formEntityLabel.trim() || null,
+        name: form.name.trim(),
+        new_entity_name: form.entityLabel.trim() || null,
+        new_entity_label: form.entityLabel.trim() || null,
         entity_id: effectiveEntityId,
         entity_email_pattern: patternToSend || null,
-        subject_pattern: sanitizeRegexPattern(formSubjectPattern.trim()) || null,
-        match_pattern: sanitizeRegexPattern(formMatchPattern.trim()) || null,
-        amount_regex: sanitizeRegexPattern(formAmountRegex.trim()) || formAmountRegex.trim(),
-        merchant_regex: sanitizeRegexPattern(formMerchantRegex.trim()) || null,
-        source_account_regex: sanitizeRegexPattern(formSourceAccountRegex.trim()) || null,
-        date_regex: sanitizeRegexPattern(formDateRegex.trim()) || null,
-        date_format: formDateFormat.trim() || 'DD/MM/YYYY',
-        time_regex: sanitizeRegexPattern(formTimeRegex.trim()) || null,
-        time_format: formTimeFormat.trim() || (formTimeRegex.trim() ? 'HH:mm:ss' : null),
-        currency_regex: sanitizeRegexPattern(formCurrencyRegex.trim()) || null,
+        subject_pattern: sanitizeRegexPattern(form.subjectPattern.trim()) || null,
+        match_pattern: sanitizeRegexPattern(form.matchPattern.trim()) || null,
+        amount_regex: sanitizeRegexPattern(form.amountRegex.trim()) || form.amountRegex.trim(),
+        merchant_regex: sanitizeRegexPattern(form.merchantRegex.trim()) || null,
+        source_account_regex: sanitizeRegexPattern(form.sourceAccountRegex.trim()) || null,
+        date_regex: sanitizeRegexPattern(form.dateRegex.trim()) || null,
+        date_format: form.dateFormat.trim() || 'DD/MM/YYYY',
+        time_regex: sanitizeRegexPattern(form.timeRegex.trim()) || null,
+        time_format: form.timeFormat.trim() || (form.timeRegex.trim() ? 'HH:mm:ss' : null),
+        currency_regex: sanitizeRegexPattern(form.currencyRegex.trim()) || null,
       };
 
       const method = editingTemplateId ? 'PUT' : 'POST';
@@ -1446,43 +2016,34 @@ export function EmailTemplatesManagerView({
 
     if (tmpl) {
       setEditingModalId(tmpl.id);
-      setModalName(tmpl.name);
-      setModalEntityLabel(tmpl.entity?.name || '');
-      setModalEntityId(tmpl.entity_id || null);
-      setModalEntityEmailPattern(
-        Array.isArray(tmpl.entity_email_patterns) && tmpl.entity_email_patterns.length > 0
+      updateModalForm({
+        name: tmpl.name,
+        entityLabel: tmpl.entity?.name || '',
+        entityId: tmpl.entity_id || null,
+        entityEmailPattern: Array.isArray(tmpl.entity_email_patterns) && tmpl.entity_email_patterns.length > 0
           ? tmpl.entity_email_patterns[0]
-          : ''
-      );
-      setModalIsNewEntity(false);
-      setModalSubjectPattern(tmpl.subject_pattern || '');
-      setModalMatchPattern(tmpl.match_pattern || '');
-      setModalAmountRegex(tmpl.amount_regex || '');
-      setModalMerchantRegex(tmpl.merchant_regex || '');
-      setModalSourceAccountRegex(tmpl.source_account_regex || '');
-      setModalDateRegex(tmpl.date_regex || '');
-      setModalDateFormat(tmpl.date_format || 'DD/MM/YYYY');
-      setModalTimeRegex(tmpl.time_regex || '');
-      setModalTimeFormat(tmpl.time_format || 'HH:mm:ss');
-      setModalCurrencyRegex(tmpl.currency_regex || '');
+          : '',
+        isNewEntity: false,
+        subjectPattern: tmpl.subject_pattern || '',
+        matchPattern: tmpl.match_pattern || '',
+        amountRegex: tmpl.amount_regex || '',
+        merchantRegex: tmpl.merchant_regex || '',
+        sourceAccountRegex: tmpl.source_account_regex || '',
+        dateRegex: tmpl.date_regex || '',
+        dateFormat: tmpl.date_format || 'DD/MM/YYYY',
+        timeRegex: tmpl.time_regex || '',
+        timeFormat: tmpl.time_format || 'HH:mm:ss',
+        currencyRegex: tmpl.currency_regex || '',
+        expenseType: tmpl.expense_type_label || 'compra',
+      });
     } else {
-      // Create new template from Catalog
       setEditingModalId(null);
-      setModalName('Nueva Plantilla');
-      setModalEntityLabel(entities[0]?.name || 'Bancolombia');
-      setModalEntityId(entities[0]?.id || null);
-      setModalEntityEmailPattern('');
-      setModalIsNewEntity(false);
-      setModalSubjectPattern('');
-      setModalMatchPattern('');
-      setModalAmountRegex('');
-      setModalMerchantRegex('');
-      setModalSourceAccountRegex('');
-      setModalDateRegex('');
-      setModalDateFormat('DD/MM/YYYY');
-      setModalTimeRegex('');
-      setModalTimeFormat('HH:mm:ss');
-      setModalCurrencyRegex('');
+      updateModalForm({
+        ...MODAL_TEMPLATE_FORM_DEFAULTS,
+        name: 'Nueva Plantilla',
+        entityLabel: entities[0]?.name || 'Bancolombia',
+        entityId: entities[0]?.id || null,
+      });
     }
 
     setModalSampleEmailId('');
@@ -1514,7 +2075,7 @@ export function EmailTemplatesManagerView({
     const textToTest = cleanEmailBody(modalSampleText || '');
 
     const runExtraction = (pattern: string | null | undefined): { value: string | null; matched: boolean; error?: string } => {
-      if (!pattern || !pattern.trim() || !textToTest) return { value: null, matched: false };
+      if (!pattern?.trim() || !textToTest) return { value: null, matched: false };
       const res = extractWithCaptureGroup(textToTest, pattern, 'Extracción');
       return {
         value: res.rawExtracted,
@@ -1524,13 +2085,13 @@ export function EmailTemplatesManagerView({
     };
 
     return {
-      amount: runExtraction(modalAmountRegex),
-      merchant: runExtraction(modalMerchantRegex),
-      sourceAccount: runExtraction(modalSourceAccountRegex),
-      date: runExtraction(modalDateRegex),
-      time: runExtraction(modalTimeRegex),
+      amount: runExtraction(modal.amountRegex),
+      merchant: runExtraction(modal.merchantRegex),
+      sourceAccount: runExtraction(modal.sourceAccountRegex),
+      date: runExtraction(modal.dateRegex),
+      time: runExtraction(modal.timeRegex),
     };
-  }, [modalSampleText, modalAmountRegex, modalMerchantRegex, modalSourceAccountRegex, modalDateRegex, modalTimeRegex]);
+  }, [modalSampleText, modal.amountRegex, modal.merchantRegex, modal.sourceAccountRegex, modal.dateRegex, modal.timeRegex]);
 
   // Copy Prompt from Modal
   const handleModalCopyPrompt = async () => {
@@ -1582,54 +2143,48 @@ export function EmailTemplatesManagerView({
     const modalBodyHeadForEntity = getHeadLines(modalBodyForEntity, 15);
     const modalForwardedSender = extractForwardedSenderFromBody(modalBodyForEntity, 15);
 
-    const checkModalEntityPattern = (p: string) => {
-      try {
-        const pat = sanitizeRegexPattern(p) || p;
-        const re = new RegExp(pat, 'i');
-        if (modalSenderForEntity && re.test(modalSenderForEntity)) return true;
-        if (modalForwardedSender && re.test(modalForwardedSender)) return true;
-        if (modalBodyHeadForEntity && re.test(modalBodyHeadForEntity)) return true;
-        return false;
-      } catch {
-        return false;
-      }
-    };
+    const matchesModalEntityPattern = (pattern: string) =>
+      entityPatternMatchesEmail(
+        pattern,
+        modalSenderForEntity,
+        modalForwardedSender || '',
+        modalBodyHeadForEntity,
+      );
 
-    const matchedByName = d.entity_label
-      ? entities.find((e) => e.name.trim().toLowerCase() === d.entity_label!.trim().toLowerCase()) || null
-      : null;
-    const matchedByPattern = entities.find((e) => (e.patterns || []).some(checkModalEntityPattern)) || null;
+    const matchedByName = findEntityByName(entities, d.entity_label);
+    const matchedByPattern = entities.find((e) => (e.patterns || []).some(matchesModalEntityPattern)) || null;
     const matched = matchedByName || matchedByPattern || null;
 
-    if (d.name) setModalName(d.name);
-    if (d.entity_label || matched) {
-      setModalEntityLabel(matched?.name || d.entity_label || '');
-      const senderAlreadyCovered = matched
-        ? (matched.patterns || []).some(checkModalEntityPattern)
-        : false;
-      let effectiveModalPattern = d.entity_email_pattern ? sanitizeRegexPattern(d.entity_email_pattern) : null;
-      if (!effectiveModalPattern && !senderAlreadyCovered) {
-        effectiveModalPattern = inferEntityEmailPattern(modalSenderForEntity, modalBodyForEntity);
-      }
-      setModalEntityEmailPattern(effectiveModalPattern || '');
-      if (matched) {
-        setModalEntityId(matched.id);
-        setModalIsNewEntity(false);
-      } else {
-        setModalEntityId(null);
-        setModalIsNewEntity(true);
-      }
+    let effectiveModalPattern = d.entity_email_pattern
+      ? sanitizeRegexPattern(d.entity_email_pattern)
+      : null;
+    const senderAlreadyCovered = matched
+      ? (matched.patterns || []).some(matchesModalEntityPattern)
+      : false;
+    if (!effectiveModalPattern && !senderAlreadyCovered) {
+      effectiveModalPattern = inferEntityEmailPattern(modalSenderForEntity, modalBodyForEntity);
     }
-    if (d.subject_pattern) setModalSubjectPattern(d.subject_pattern);
-    if (d.match_pattern) setModalMatchPattern(d.match_pattern);
-    if (d.amount_regex) setModalAmountRegex(d.amount_regex);
-    if (d.merchant_regex) setModalMerchantRegex(d.merchant_regex);
-    if (d.source_account_regex) setModalSourceAccountRegex(d.source_account_regex);
-    if (d.date_regex) setModalDateRegex(d.date_regex);
-    if (d.date_format) setModalDateFormat(d.date_format);
-    if (d.time_regex) setModalTimeRegex(d.time_regex);
-    if (d.time_format) setModalTimeFormat(d.time_format);
-    if (d.currency_regex) setModalCurrencyRegex(d.currency_regex);
+
+    const modalPatch: Partial<TemplateFormState> = {};
+    if (d.name) modalPatch.name = d.name;
+    if (d.entity_label || matched) {
+      modalPatch.entityLabel = matched?.name || d.entity_label || '';
+      modalPatch.entityEmailPattern = effectiveModalPattern || '';
+      modalPatch.entityId = matched?.id || null;
+      modalPatch.isNewEntity = !matched;
+    }
+    if (d.subject_pattern) modalPatch.subjectPattern = d.subject_pattern;
+    if (d.match_pattern) modalPatch.matchPattern = d.match_pattern;
+    if (d.amount_regex) modalPatch.amountRegex = d.amount_regex;
+    if (d.merchant_regex) modalPatch.merchantRegex = d.merchant_regex;
+    if (d.source_account_regex) modalPatch.sourceAccountRegex = d.source_account_regex;
+    if (d.date_regex) modalPatch.dateRegex = d.date_regex;
+    if (d.date_format) modalPatch.dateFormat = d.date_format;
+    if (d.time_regex) modalPatch.timeRegex = d.time_regex;
+    if (d.time_format) modalPatch.timeFormat = d.time_format;
+    if (d.currency_regex) modalPatch.currencyRegex = d.currency_regex;
+    if (d.expense_type) modalPatch.expenseType = d.expense_type;
+    updateModalForm(modalPatch);
 
     setModalPastedJson('');
     setModalSuccess('¡Campos completados con la respuesta!');
@@ -1637,13 +2192,13 @@ export function EmailTemplatesManagerView({
   };
 
   // Save Modal Form
-  const handleSaveModal = async (e: React.FormEvent) => {
+  const handleSaveModal = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!modalName.trim()) {
+    if (!modal.name.trim()) {
       setModalError('El nombre de la plantilla es obligatorio');
       return;
     }
-    if (!modalAmountRegex.trim()) {
+    if (!modal.amountRegex.trim()) {
       setModalError('Debes definir el patrón para el monto');
       return;
     }
@@ -1662,9 +2217,9 @@ export function EmailTemplatesManagerView({
       }
 
       // Resolve entity_id if an entity with this name already exists in catalog
-      let effectiveEntityId = modalEntityId || null;
-      if (!effectiveEntityId && modalEntityLabel.trim()) {
-        const found = entities.find((ent) => ent.name.trim().toLowerCase() === modalEntityLabel.trim().toLowerCase());
+      let effectiveEntityId = modal.entityId || null;
+      if (!effectiveEntityId && modal.entityLabel.trim()) {
+        const found = entities.find((ent) => ent.name.trim().toLowerCase() === modal.entityLabel.trim().toLowerCase());
         if (found) {
           effectiveEntityId = found.id;
         }
@@ -1674,7 +2229,7 @@ export function EmailTemplatesManagerView({
       const sender = modalSampleEmail?.sender || '';
       const body = modalSampleEmail?.body || modalSampleEmail?.plainBody || '';
       const ent = effectiveEntityId ? entities.find((e) => e.id === effectiveEntityId) : null;
-      const proposed = sanitizeRegexPattern(modalEntityEmailPattern.trim());
+      const proposed = sanitizeRegexPattern(modal.entityEmailPattern.trim());
       const patternAlreadyInEntity = Boolean(
         proposed && ent?.patterns?.some((p) => p.trim().toLowerCase() === proposed.toLowerCase())
       );
@@ -1685,21 +2240,21 @@ export function EmailTemplatesManagerView({
 
       const payload = {
         id: editingModalId,
-        name: modalName.trim(),
-        new_entity_name: modalEntityLabel.trim() || null,
-        new_entity_label: modalEntityLabel.trim() || null,
+        name: modal.name.trim(),
+        new_entity_name: modal.entityLabel.trim() || null,
+        new_entity_label: modal.entityLabel.trim() || null,
         entity_id: effectiveEntityId,
         entity_email_pattern: patternToSend || null,
-        subject_pattern: sanitizeRegexPattern(modalSubjectPattern.trim()) || null,
-        match_pattern: sanitizeRegexPattern(modalMatchPattern.trim()) || null,
-        amount_regex: sanitizeRegexPattern(modalAmountRegex.trim()) || modalAmountRegex.trim(),
-        merchant_regex: sanitizeRegexPattern(modalMerchantRegex.trim()) || null,
-        source_account_regex: sanitizeRegexPattern(modalSourceAccountRegex.trim()) || null,
-        date_regex: sanitizeRegexPattern(modalDateRegex.trim()) || null,
-        date_format: modalDateFormat.trim() || 'DD/MM/YYYY',
-        time_regex: sanitizeRegexPattern(modalTimeRegex.trim()) || null,
-        time_format: modalTimeFormat.trim() || (modalTimeRegex.trim() ? 'HH:mm:ss' : null),
-        currency_regex: sanitizeRegexPattern(modalCurrencyRegex.trim()) || null,
+        subject_pattern: sanitizeRegexPattern(modal.subjectPattern.trim()) || null,
+        match_pattern: sanitizeRegexPattern(modal.matchPattern.trim()) || null,
+        amount_regex: sanitizeRegexPattern(modal.amountRegex.trim()) || modal.amountRegex.trim(),
+        merchant_regex: sanitizeRegexPattern(modal.merchantRegex.trim()) || null,
+        source_account_regex: sanitizeRegexPattern(modal.sourceAccountRegex.trim()) || null,
+        date_regex: sanitizeRegexPattern(modal.dateRegex.trim()) || null,
+        date_format: modal.dateFormat.trim() || 'DD/MM/YYYY',
+        time_regex: sanitizeRegexPattern(modal.timeRegex.trim()) || null,
+        time_format: modal.timeFormat.trim() || (modal.timeRegex.trim() ? 'HH:mm:ss' : null),
+        currency_regex: sanitizeRegexPattern(modal.currencyRegex.trim()) || null,
       };
 
       const method = editingModalId ? 'PUT' : 'POST';
@@ -1729,11 +2284,8 @@ export function EmailTemplatesManagerView({
     if (!confirm('¿Estás seguro de que deseas eliminar esta plantilla?')) return;
     setDeletingId(templateId);
     try {
-      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('google_provider_token') : null;
-      const headers: Record<string, string> = {};
-      if (storedToken) {
-        headers['x-google-token'] = storedToken;
-      }
+      const storedToken = getStoredGoogleToken();
+      const headers = buildAuthHeaders(storedToken);
 
       const res = await fetch(`/api/email-templates?id=${templateId}`, {
         method: 'DELETE',
@@ -1750,7 +2302,6 @@ export function EmailTemplatesManagerView({
       // used by the diagnostics instead of relying only on local state.
       await fetchTemplatesData();
 
-      setEmailDiagnoses(new Map());
       setAiPreviewDiagnosis(null);
       setAiPreviewEmailId(null);
     } catch (err: unknown) {
@@ -1787,12 +2338,12 @@ export function EmailTemplatesManagerView({
       const matchesSearch =
         templateSearchQuery === '' ||
         t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
-        ((entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase().includes(templateSearchQuery.toLowerCase())) ||
-        (t.subject_pattern && t.subject_pattern.toLowerCase().includes(templateSearchQuery.toLowerCase()));
+        ((entities.find((e) => e.id === t.entity_id)?.name ?? '').toLowerCase().includes(templateSearchQuery.toLowerCase())) ||
+        (t.subject_pattern?.toLowerCase().includes(templateSearchQuery.toLowerCase()));
 
       const matchesEntity =
         selectedEntityFilter === 'all' ||
-        ((entities.find((e) => e.id === t.entity_id)?.name || '').toLowerCase() === selectedEntityFilter.toLowerCase());
+        ((entities.find((e) => e.id === t.entity_id)?.name ?? '').toLowerCase() === selectedEntityFilter.toLowerCase());
 
       return matchesSearch && matchesEntity;
     });
@@ -2132,26 +2683,7 @@ export function EmailTemplatesManagerView({
                       </div>
 
                       <div className="pt-1.5 border-t border-zinc-100 flex items-center justify-between text-[11px]">
-                        {survivingCount === 1 && winner ? (
-                          <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md truncate">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span className="truncate">{winner.template.name}</span>
-                            {winner.extractedAmount ? (
-                              <span className="font-semibold text-emerald-800 ml-1">
-                                • ${formatCurrency(winner.extractedAmount)}
-                              </span>
-                            ) : null}
-                          </span>
-                        ) : survivingCount > 1 ? (
-                          <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md">
-                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                            <span>Conflicto ({survivingCount})</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-md">
-                            <span>Sin plantilla</span>
-                          </span>
-                        )}
+                        <EmailCardMatchStatus survivingCount={survivingCount} winner={winner} />
 
                         <span className="text-zinc-400 font-medium flex items-center text-[10px]">
                           {isSelected ? 'Seleccionado' : 'Ver'}
@@ -2200,22 +2732,10 @@ export function EmailTemplatesManagerView({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {testedMatchedCount === 1 && diagnosisForSelectedEmail?.winner ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px]">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="hidden sm:inline">{diagnosisForSelectedEmail.winner.template.name}</span>
-                          <span className="sm:hidden">Coincide</span>
-                        </span>
-                      ) : testedMatchedCount > 1 ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg text-[11px]">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                          <span>{testedMatchedCount} conflictos</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 font-medium text-zinc-600 bg-zinc-100 px-2.5 py-1 rounded-lg text-[11px]">
-                          <span>Ninguna plantilla funcionó</span>
-                        </span>
-                      )}
+                      <DiagnosisSummaryBadge
+                        matchedCount={testedMatchedCount}
+                        winner={diagnosisForSelectedEmail?.winner}
+                      />
                       {isDiagnosisExpanded ? (
                         <ChevronUp className="w-4 h-4 text-zinc-400" />
                       ) : (
@@ -2325,8 +2845,8 @@ export function EmailTemplatesManagerView({
                         </h3>
                         <p className="text-[11px] text-zinc-500">
                           {editingTemplateId
-                            ? `Modificando: ${formName || 'Plantilla guardada'}`
-                            : formName
+                            ? `Modificando: ${form.name || 'Plantilla guardada'}`
+                            : form.name
                               ? 'Valores completados a partir del JSON'
                               : 'Plantilla vacía (sin valores por defecto)'}
                         </p>
@@ -2354,7 +2874,7 @@ export function EmailTemplatesManagerView({
                       <TemplateDiagnosticStepsView
                         evaluation={activeFormEvaluation}
                         isWinner={activeFormEvaluation.overallPassed}
-                        customTitle={`Prueba en vivo: ${formName || 'Plantilla en edición'}`}
+                        customTitle={`Prueba en vivo: ${form.name || 'Plantilla en edición'}`}
                         onCopyCorrectionPrompt={handleCopyCorrectionPrompt}
                         copiedPrompt={copiedCorrectionPrompt}
                       />
@@ -2383,34 +2903,34 @@ export function EmailTemplatesManagerView({
                     {/* Fila 1: Nombre, Banco y Moneda — todo texto libre, refleja exactamente lo pegado */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="sm:col-span-1">
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        <label htmlFor="email-template-field-16" className="block text-xs font-bold text-zinc-700 mb-1">
                           Nombre <span className="text-rose-500">*</span>
                         </label>
-                        <input
+                        <input id="email-template-field-16"
                           type="text"
                           required
-                          value={formName}
-                          onChange={(e) => setFormName(e.target.value)}
+                          value={form.name}
+                          onChange={(e) => setFormField('name', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-medium"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">Banco / Entidad</label>
-                        <input
+                        <label htmlFor="email-template-field-17" className="block text-xs font-bold text-zinc-700 mb-1">Banco / Entidad</label>
+                        <input id="email-template-field-17"
                           type="text"
                           list="entity-suggestions"
-                          value={formEntityLabel}
+                          value={form.entityLabel}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setFormEntityLabel(val);
+                            setFormField('entityLabel', val);
                             const match = entities.find((ent) => ent.name.toLowerCase() === val.toLowerCase());
                             if (match) {
-                              setFormEntityId(match.id);
-                              setFormIsNewEntity(false);
+                              setFormField('entityId', match.id);
+                              setFormField('isNewEntity', false);
                             } else {
-                              setFormEntityId(null);
-                              setFormIsNewEntity(true);
+                              setFormField('entityId', null);
+                              setFormField('isNewEntity', true);
                             }
                           }}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-medium"
@@ -2420,7 +2940,7 @@ export function EmailTemplatesManagerView({
                             <option key={ent.id} value={ent.name} />
                           ))}
                         </datalist>
-                        {formEntityLabel && formIsNewEntity && (
+                        {form.entityLabel && form.isNewEntity && (
                           <span className="text-[10px] font-semibold text-amber-700 mt-0.5 block">
                             Entidad nueva, no existe en el catálogo
                           </span>
@@ -2431,21 +2951,21 @@ export function EmailTemplatesManagerView({
                     {/* Fila 2: Filtro de Asunto y Desempate */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">Patrón de Asunto</label>
-                        <input
+                        <label htmlFor="email-template-field-18" className="block text-xs font-bold text-zinc-700 mb-1">Patrón de Asunto</label>
+                        <input id="email-template-field-18"
                           type="text"
-                          value={formSubjectPattern}
-                          onChange={(e) => setFormSubjectPattern(e.target.value)}
+                          value={form.subjectPattern}
+                          onChange={(e) => setFormField('subjectPattern', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">Desempate en Cuerpo</label>
-                        <input
+                        <label htmlFor="email-template-field-19" className="block text-xs font-bold text-zinc-700 mb-1">Desempate en Cuerpo</label>
+                        <input id="email-template-field-19"
                           type="text"
-                          value={formMatchPattern}
-                          onChange={(e) => setFormMatchPattern(e.target.value)}
+                          value={form.matchPattern}
+                          onChange={(e) => setFormField('matchPattern', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                         />
                       </div>
@@ -2460,25 +2980,25 @@ export function EmailTemplatesManagerView({
                       {/* Monto */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                          <label htmlFor="email-template-field-20" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                             <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Monto</span>
                             <span className="text-rose-500">*</span>
                           </label>
                           {activeFormEvaluation?.level4.fields.amount && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.amount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.amount.success ? 'text-emerald-700 font-bold' : 'text-zinc-400'
                               }`}>
-                              {activeFormEvaluation.level4.fields.amount.matched
-                                ? `Captura: ${activeFormEvaluation.level4.fields.amount.value}`
-                                : (formAmountRegex ? 'Sin captura' : '')}
+                              {activeFormEvaluation.level4.fields.amount.success
+                                ? `Captura: ${activeFormEvaluation.level4.fields.amount.rawExtracted}`
+                                : (form.amountRegex ? 'Sin captura' : '')}
                             </span>
                           )}
                         </div>
-                        <input
+                        <input id="email-template-field-20"
                           type="text"
                           required
-                          value={formAmountRegex}
-                          onChange={(e) => setFormAmountRegex(e.target.value)}
+                          value={form.amountRegex}
+                          onChange={(e) => setFormField('amountRegex', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                         />
                       </div>
@@ -2486,23 +3006,23 @@ export function EmailTemplatesManagerView({
                       {/* Comercio */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                          <label htmlFor="email-template-field-21" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                             <Store className="w-3.5 h-3.5 text-zinc-500" />
                             <span>Comercio</span>
                           </label>
                           {activeFormEvaluation?.level4.fields.merchant && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.merchant.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.merchant.success ? 'text-emerald-700 font-bold' : 'text-zinc-400'
                               }`}>
-                              {activeFormEvaluation.level4.fields.merchant.matched
-                                ? `Captura: ${activeFormEvaluation.level4.fields.merchant.value}`
-                                : (formMerchantRegex ? 'Sin captura' : '')}
+                              {activeFormEvaluation.level4.fields.merchant.success
+                                ? `Captura: ${activeFormEvaluation.level4.fields.merchant.rawExtracted}`
+                                : (form.merchantRegex ? 'Sin captura' : '')}
                             </span>
                           )}
                         </div>
-                        <input
+                        <input id="email-template-field-21"
                           type="text"
-                          value={formMerchantRegex}
-                          onChange={(e) => setFormMerchantRegex(e.target.value)}
+                          value={form.merchantRegex}
+                          onChange={(e) => setFormField('merchantRegex', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                         />
                       </div>
@@ -2510,23 +3030,23 @@ export function EmailTemplatesManagerView({
                       {/* Cuenta */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                          <label htmlFor="email-template-field-22" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
                             <span>Cuenta o Tarjeta</span>
                           </label>
-                          {activeFormEvaluation?.level4.fields.sourceAccount && (
-                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.sourceAccount.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                          {activeFormEvaluation?.level4.fields.source_account && (
+                            <span className={`text-[11px] font-mono font-medium truncate max-w-[220px] ${activeFormEvaluation.level4.fields.source_account.success ? 'text-emerald-700 font-bold' : 'text-zinc-400'
                               }`}>
-                              {activeFormEvaluation.level4.fields.sourceAccount.matched
-                                ? `Captura: ${activeFormEvaluation.level4.fields.sourceAccount.value}`
-                                : (formSourceAccountRegex ? 'Sin captura' : '')}
+                              {activeFormEvaluation.level4.fields.source_account.success
+                                ? `Captura: ${activeFormEvaluation.level4.fields.source_account.rawExtracted}`
+                                : (form.sourceAccountRegex ? 'Sin captura' : '')}
                             </span>
                           )}
                         </div>
-                        <input
+                        <input id="email-template-field-22"
                           type="text"
-                          value={formSourceAccountRegex}
-                          onChange={(e) => setFormSourceAccountRegex(e.target.value)}
+                          value={form.sourceAccountRegex}
+                          onChange={(e) => setFormField('sourceAccountRegex', e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                         />
                       </div>
@@ -2535,34 +3055,34 @@ export function EmailTemplatesManagerView({
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                            <label htmlFor="email-template-field-23" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                               <Calendar className="w-3.5 h-3.5 text-zinc-500" />
                               <span>Fecha</span>
                             </label>
                             {activeFormEvaluation?.level4.fields.date && (
-                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.date.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.date.success ? 'text-emerald-700 font-bold' : 'text-zinc-400'
                                 }`}>
-                                {activeFormEvaluation.level4.fields.date.matched
-                                  ? activeFormEvaluation.level4.fields.date.value
-                                  : (formDateRegex ? 'Sin captura' : '')}
+                                {activeFormEvaluation.level4.fields.date.success
+                                  ? activeFormEvaluation.level4.fields.date.rawExtracted
+                                  : (form.dateRegex ? 'Sin captura' : '')}
                               </span>
                             )}
                           </div>
-                          <input
+                          <input id="email-template-field-23"
                             type="text"
-                            value={formDateRegex}
-                            onChange={(e) => setFormDateRegex(e.target.value)}
+                            value={form.dateRegex}
+                            onChange={(e) => setFormField('dateRegex', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700">Formato de Fecha</label>
-                          <input
+                          <label htmlFor="email-template-field-24" className="text-xs font-bold text-zinc-700">Formato de Fecha</label>
+                          <input id="email-template-field-24"
                             type="text"
                             list="date-format-suggestions"
-                            value={formDateFormat}
-                            onChange={(e) => setFormDateFormat(e.target.value)}
+                            value={form.dateFormat}
+                            onChange={(e) => setFormField('dateFormat', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono"
                           />
                           <datalist id="date-format-suggestions">
@@ -2575,34 +3095,34 @@ export function EmailTemplatesManagerView({
 
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
+                            <label htmlFor="email-template-field-25" className="text-xs font-bold text-zinc-700 flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5 text-zinc-500" />
                               <span>Hora</span>
                             </label>
                             {activeFormEvaluation?.level4.fields.time && (
-                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.time.matched ? 'text-emerald-700 font-bold' : 'text-zinc-400'
+                              <span className={`text-[11px] font-mono font-medium truncate max-w-[120px] ${activeFormEvaluation.level4.fields.time.success ? 'text-emerald-700 font-bold' : 'text-zinc-400'
                                 }`}>
-                                {activeFormEvaluation.level4.fields.time.matched
-                                  ? activeFormEvaluation.level4.fields.time.value
-                                  : (formTimeRegex ? 'Sin captura' : '')}
+                                {activeFormEvaluation.level4.fields.time.success
+                                  ? activeFormEvaluation.level4.fields.time.rawExtracted
+                                  : (form.timeRegex ? 'Sin captura' : '')}
                               </span>
                             )}
                           </div>
-                          <input
+                          <input id="email-template-field-25"
                             type="text"
-                            value={formTimeRegex}
-                            onChange={(e) => setFormTimeRegex(e.target.value)}
+                            value={form.timeRegex}
+                            onChange={(e) => setFormField('timeRegex', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700">Formato de Hora</label>
-                          <input
+                          <label htmlFor="email-template-field-26" className="text-xs font-bold text-zinc-700">Formato de Hora</label>
+                          <input id="email-template-field-26"
                             type="text"
                             list="time-format-suggestions"
-                            value={formTimeFormat}
-                            onChange={(e) => setFormTimeFormat(e.target.value)}
+                            value={form.timeFormat}
+                            onChange={(e) => setFormField('timeFormat', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono"
                             placeholder="HH:mm:ss"
                           />
@@ -2617,21 +3137,21 @@ export function EmailTemplatesManagerView({
                       {/* Regex adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700">Patrón de Correo de Entidad</label>
-                          <input
+                          <label htmlFor="email-template-field-27" className="text-xs font-bold text-zinc-700">Patrón de Correo de Entidad</label>
+                          <input id="email-template-field-27"
                             type="text"
-                            value={formEntityEmailPattern}
-                            onChange={(e) => setFormEntityEmailPattern(e.target.value)}
+                            value={form.entityEmailPattern}
+                            onChange={(e) => setFormField('entityEmailPattern', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                             placeholder="Se persiste como entity_email_patterns"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-zinc-700">Moneda Regex</label>
-                          <input
+                          <label htmlFor="email-template-field-28" className="text-xs font-bold text-zinc-700">Moneda Regex</label>
+                          <input id="email-template-field-28"
                             type="text"
-                            value={formCurrencyRegex}
-                            onChange={(e) => setFormCurrencyRegex(e.target.value)}
+                            value={form.currencyRegex}
+                            onChange={(e) => setFormField('currencyRegex', e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px]"
                           />
                         </div>
@@ -2746,596 +3266,64 @@ export function EmailTemplatesManagerView({
       )}
 
       {/* ========================================================================= */}
-      {/* VISTA 2: CATÁLOGO DE PLANTILLAS GUARDADAS                                  */}
-      {/* ========================================================================= */}
       {activeTab === 'catalog' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 border border-zinc-200 rounded-2xl shadow-xs">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={templateSearchQuery}
-                onChange={(e) => setTemplateSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, banco o asunto..."
-                className="w-full pl-9 pr-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
-              />
-            </div>
-
-            <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
-              <button
-                type="button"
-                onClick={() => setSelectedEntityFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter === 'all'
-                  ? 'bg-zinc-900 text-white'
-                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                  }`}
-              >
-                Todos ({templates.length})
-              </button>
-              {availableEntityNames.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setSelectedEntityFilter(name)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter.toLowerCase() === name.toLowerCase()
-                    ? 'bg-zinc-900 text-white'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                    }`}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => openEditModal(null)}
-              className="inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Nueva Plantilla</span>
-            </button>
-          </div>
-
-          {isLoadingTemplates ? (
-            <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-2">
-              <Loader2 className="w-6 h-6 animate-spin text-zinc-500 mx-auto" />
-              <p className="text-xs text-zinc-500">Cargando plantillas guardadas...</p>
-            </div>
-          ) : filteredTemplates.length === 0 ? (
-            <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto text-zinc-400">
-                <Layers className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-zinc-900">No hay plantillas que coincidan</h3>
-                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                  {templateSearchQuery ? 'Prueba con otro término de búsqueda.' : 'Crea una nueva plantilla para empezar.'}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {filteredTemplates.map((t) => (
-                <div
-                  key={t.id}
-                  className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3 shadow-xs hover:border-zinc-300 transition flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
-                          {entities.find((e) => e.id === t.entity_id)?.name || 'General'}
-                        </span>
-                        <h3 className="text-sm font-bold text-zinc-900">{t.name}</h3>
-                      </div>
-
-                      <div className="flex items-center space-x-1">
-                        {/* AQUI: Al hacer clic en editar, abre el modal sin redireccionar a correos */}
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(t)}
-                          className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
-                          title="Editar plantilla"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTemplate(t.id)}
-                          disabled={deletingId === t.id}
-                          className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer disabled:opacity-50"
-                          title="Eliminar plantilla"
-                        >
-                          {deletingId === t.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {t.subject_pattern && (
-                      <p className="text-xs text-zinc-500 line-clamp-1">
-                        <span className="font-semibold text-zinc-700">Asunto:</span>{' '}
-                        <code className="text-[11px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-800">
-                          {t.subject_pattern}
-                        </code>
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />
-                      Monto
-                    </span>
-                    {t.merchant_regex && (
-                      <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Store className="w-3 h-3 text-zinc-400" />
-                        Comercio
-                      </span>
-                    )}
-                    {t.source_account_regex && (
-                      <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CreditCard className="w-3 h-3 text-zinc-400" />
-                        Cuenta
-                      </span>
-                    )}
-                    {t.date_regex && (
-                      <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-zinc-400" />
-                        Fecha
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <TemplateCatalogPanel
+          templates={templates}
+          entities={entities}
+          isLoadingTemplates={isLoadingTemplates}
+          templateSearchQuery={templateSearchQuery}
+          selectedEntityFilter={selectedEntityFilter}
+          deletingId={deletingId}
+          availableEntityNames={availableEntityNames}
+          filteredTemplates={filteredTemplates}
+          onSearchChange={setTemplateSearchQuery}
+          onEntityFilterChange={setSelectedEntityFilter}
+          onOpenNew={() => openEditModal(null)}
+          onEdit={openEditModal}
+          onDelete={handleDeleteTemplate}
+        />
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL DE EDICIÓN DE PLANTILLA (ABIERTO DIRECTAMENTE DESDE EL CATÁLOGO)   */}
       {/* ========================================================================= */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-zinc-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-zinc-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-zinc-900">
-                  {editingModalId ? `Editar Plantilla: ${modalName}` : 'Nueva Plantilla'}
-                </h3>
-                <p className="text-xs text-zinc-500">
-                  Modifica los patrones de extracción y prueba los resultados con un correo de ejemplo.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body (Scrollable) */}
-            <form onSubmit={handleSaveModal} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-              {modalError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{modalError}</span>
-                </div>
-              )}
-              {modalSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{modalSuccess}</span>
-                </div>
-              )}
-
-              {/* SECCIÓN: CARGAR CORREO DE EJEMPLO PARA PROBAR */}
-              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Cargar correo de ejemplo para probar (opcional)</span>
-                  </label>
-                  {modalSampleText && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Muestra activa
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select
-                    value={modalSampleEmailId}
-                    onChange={(e) => {
-                      setModalSampleEmailId(e.target.value);
-                      setModalCustomSampleBody('');
-                    }}
-                    className="w-full px-3 py-2 text-xs bg-white border border-zinc-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
-                  >
-                    <option value="">-- Seleccionar de correos recientes --</option>
-                    {emails.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.subject.slice(0, 45)} ({m.sender.split('@')[0]})
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={handleModalCopyPrompt}
-                    className={`px-3 py-2 text-xs font-bold rounded-xl border transition flex items-center justify-center gap-1.5 cursor-pointer ${modalCopiedPrompt
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                      : 'bg-white border-zinc-200 hover:bg-zinc-100 text-zinc-700'
-                      }`}
-                  >
-                    {modalCopiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{modalCopiedPrompt ? '¡Prompt Copiado!' : 'Copiar Prompt con Muestra'}</span>
-                  </button>
-                </div>
-
-                {/* Pegar respuesta JSON en el modal */}
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={modalPastedJson}
-                    onChange={(e) => setModalPastedJson(e.target.value)}
-                    placeholder="Pega aquí el JSON devuelto por la IA..."
-                    className="flex-1 px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-lg font-mono text-[11px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleModalApplyPastedJson}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition cursor-pointer"
-                  >
-                    Aplicar
-                  </button>
-                </div>
-              </div>
-
-              {/* Campos Básicos */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-1">
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Nombre <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={modalName}
-                    onChange={(e) => setModalName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-medium"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-zinc-700">Banco / Entidad</label>
-                    <button
-                      type="button"
-                      onClick={() => setModalIsNewEntity(!modalIsNewEntity)}
-                      className="text-[11px] font-semibold text-indigo-600"
-                    >
-                      {modalIsNewEntity ? 'Elegir' : '+ Nuevo'}
-                    </button>
-                  </div>
-                  {modalIsNewEntity ? (
-                    <input
-                      type="text"
-                      value={modalEntityLabel}
-                      onChange={(e) => setModalEntityLabel(e.target.value)}
-                      placeholder="Nombre del banco"
-                      className="w-full px-3 py-2 text-xs bg-amber-50/40 border border-amber-300 rounded-xl font-medium"
-                    />
-                  ) : (
-                    <select
-                      value={modalEntityId || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setModalEntityId(val || null);
-                        const match = entities.find((ent) => ent.id === val);
-                        if (match) setModalEntityLabel(match.name);
-                      }}
-                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
-                    >
-                      {entities.map((ent) => (
-                        <option key={ent.id} value={ent.id}>
-                          {ent.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              {/* Asunto y Desempate */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">Patrón de Asunto</label>
-                  <input
-                    type="text"
-                    value={modalSubjectPattern}
-                    onChange={(e) => setModalSubjectPattern(e.target.value)}
-                    placeholder="Palabras clave en el asunto"
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Desempate en Cuerpo (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={modalMatchPattern}
-                    onChange={(e) => setModalMatchPattern(e.target.value)}
-                    placeholder="Palabra única para diferenciar"
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-              </div>
-
-              {/* Regexes con Validación en Vivo sobre el correo cargado */}
-              <div className="space-y-3 pt-2 border-t border-zinc-100">
-                <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-wider block">
-                  Reglas de Extracción
-                </span>
-
-                {/* Monto */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Monto</span>
-                      <span className="text-rose-500">*</span>
-                    </label>
-                    {modalLiveExtraction.amount.matched && (
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Captura: ${modalLiveExtraction.amount.value}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={modalAmountRegex}
-                    onChange={(e) => setModalAmountRegex(e.target.value)}
-                    placeholder="Regex con grupo de captura () para el monto"
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-
-                {/* Comercio */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                      <Store className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Comercio</span>
-                    </label>
-                    {modalLiveExtraction.merchant.matched && (
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Captura: {modalLiveExtraction.merchant.value}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={modalMerchantRegex}
-                    onChange={(e) => setModalMerchantRegex(e.target.value)}
-                    placeholder="Regex con grupo de captura () para el comercio"
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-
-                {/* Cuenta */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                      <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Cuenta o Tarjeta</span>
-                    </label>
-                    {modalLiveExtraction.sourceAccount.matched && (
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Captura: {modalLiveExtraction.sourceAccount.value}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    value={modalSourceAccountRegex}
-                    onChange={(e) => setModalSourceAccountRegex(e.target.value)}
-                    placeholder="Regex con grupo de captura () para la cuenta"
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                  />
-                </div>
-
-                {/* Fecha */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                  <div className="sm:col-span-2 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>Fecha</span>
-                      </label>
-                      {modalLiveExtraction.date.matched && (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          Captura: {modalLiveExtraction.date.value}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={modalDateRegex}
-                      onChange={(e) => setModalDateRegex(e.target.value)}
-                      placeholder="Regex con grupo de captura () para la fecha"
-                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-700">Formato de Fecha</label>
-                    <select
-                      value={modalDateFormat}
-                      onChange={(e) => setModalDateFormat(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
-                    >
-                      <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                      <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                      <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-zinc-700 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>Hora</span>
-                      </label>
-                      {modalLiveExtraction.time.matched && (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          Captura: {modalLiveExtraction.time.value}
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={modalTimeRegex}
-                      onChange={(e) => setModalTimeRegex(e.target.value)}
-                      placeholder="Regex con grupo de captura () para la hora"
-                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-[11px]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-zinc-700">Formato de Hora</label>
-                    <select
-                      value={modalTimeFormat}
-                      onChange={(e) => setModalTimeFormat(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
-                    >
-                      <option value="HH:mm:ss">HH:mm:ss</option>
-                      <option value="HH:mm">HH:mm</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer Actions */}
-              <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={closeEditModal}
-                  className="px-4 py-2.5 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold rounded-xl transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isModalSaving}
-                  className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer inline-flex items-center gap-2 disabled:opacity-50"
-                >
-                  {isModalSaving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4 text-emerald-400" />
-                  )}
-                  <span>Guardar Cambios</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <TemplateEditModal
+          modal={modalFormState.state}
+          updateModal={modalFormState.update}
+          editingModalId={editingModalId}
+          isModalSaving={isModalSaving}
+          modalError={modalError}
+          modalSuccess={modalSuccess}
+          modalCopiedPrompt={modalCopiedPrompt}
+          modalPastedJson={modalPastedJson}
+          modalSampleEmailId={modalSampleEmailId}
+          modalSampleText={modalSampleText}
+          modalLiveExtraction={modalLiveExtraction}
+          emails={emails}
+          entities={entities}
+          onClose={closeEditModal}
+          onSave={handleSaveModal}
+          onCopyPrompt={handleModalCopyPrompt}
+          onApplyPastedJson={handleModalApplyPastedJson}
+          onSampleEmailChange={(value) => {
+            setModalSampleEmailId(value);
+            setModalCustomSampleBody('');
+          }}
+          onCustomSampleBodyChange={setModalCustomSampleBody}
+          onPastedJsonChange={setModalPastedJson}
+        />
       )}
 
-      {/* Modal para Cargar Correo de Ejemplo */}
       {isCustomEmailModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900">Cargar Correo de Ejemplo</h3>
-                <p className="text-xs text-zinc-500">
-                  Agrega el contenido de una notificación bancaria para probar o calibrar plantillas.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomEmailModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddCustomEmail} className="p-5 space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Remitente <span className="text-zinc-400 font-normal">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={customSender}
-                  onChange={(e) => setCustomSender(e.target.value)}
-                  placeholder="ej: notificaciones@banco.com"
-                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Asunto <span className="text-zinc-400 font-normal">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={customSubject}
-                  onChange={(e) => setCustomSubject(e.target.value)}
-                  placeholder="ej: Notificación de compra con tarjeta"
-                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Cuerpo del Correo <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  required
-                  rows={6}
-                  value={customBody}
-                  onChange={(e) => setCustomBody(e.target.value)}
-                  placeholder="Pega aquí el texto completo de la notificación bancaria..."
-                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px] leading-relaxed"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomEmailModalOpen(false)}
-                  className="px-4 py-2 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold rounded-xl transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
-                >
-                  Cargar y Probar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CustomEmailModal
+          sender={customSender}
+          subject={customSubject}
+          body={customBody}
+          onSenderChange={setCustomSender}
+          onSubjectChange={setCustomSubject}
+          onBodyChange={setCustomBody}
+          onSubmit={handleAddCustomEmail}
+          onClose={() => setIsCustomEmailModalOpen(false)}
+        />
       )}
     </div>
   );

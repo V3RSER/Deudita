@@ -1,24 +1,17 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
 import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
-import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
-import Link from 'next/link';
 import {
   getEffectiveTransactionDate,
   isDateMatchingFilter,
   getAvailableTransactionMonths,
 } from '@/lib/transaction-date-utils';
-
-import { Expense, Payment, ExpenseDraft } from '@/lib/types';
-import {
-  Receipt,
-  BarChart3,
-  PieChart as PieChartIcon,
-} from 'lucide-react';
+import { Expense, Payment } from '@/lib/types';
+import { Receipt, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -26,31 +19,29 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Cell,
+  Rectangle,
 } from 'recharts';
+import { PageHeader } from '@/components/PageHeader';
 
 interface AllExpensesViewProps {
-  onOpenNewExpense: () => void;
-  onEditExpense?: (expense: Expense) => void;
-  onEditPayment?: (payment: Payment) => void;
+  readonly onOpenNewExpense: () => void;
+  readonly onEditExpense?: (expense: Expense) => void;
+  readonly onEditPayment?: (payment: Payment) => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Comida: '#10b981', // emerald-500
-  Transporte: '#3b82f6', // blue-500
-  Hospedaje: '#8b5cf6', // violet-500
-  Entretenimiento: '#f59e0b', // amber-500
-  Servicios: '#06b6d4', // cyan-500
-  Supermercado: '#ec4899', // pink-500
-  Varios: '#64748b', // slate-500
+  Comida: '#10b981',
+  Transporte: '#3b82f6',
+  Hospedaje: '#8b5cf6',
+  Entretenimiento: '#f59e0b',
+  Servicios: '#06b6d4',
+  Supermercado: '#ec4899',
+  Varios: '#64748b',
 };
 
-import { PageHeader } from '@/components/PageHeader';
-
-export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment }: AllExpensesViewProps) {
-  const { currentProfile, expenses, payments, userGroups, profiles, drafts, discardDraft, deleteExpense, deletePayment } = useExpense();
-
-  const [selectedDraftToConfirm, setSelectedDraftToConfirm] = useState<ExpenseDraft | null>(null);
+export function AllExpensesView(props: AllExpensesViewProps) {
+  const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment } =
+    useExpense();
 
   const [filters, setFilters] = useState<TransactionFilterState>({
     scope: 'all',
@@ -67,124 +58,185 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
     setFilters((prev) => ({ ...prev, ...updates }));
   };
 
-  const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
-  const myExpenses = useMemo(() => expenses.filter((exp) => userGroupIds.has(exp.group_id)), [expenses, userGroupIds]);
-  const myPayments = useMemo(() => payments.filter((p) => userGroupIds.has(p.group_id)), [payments, userGroupIds]);
+  const userGroupIds = useMemo(() => new Set(userGroups.map((group) => group.id)), [userGroups]);
 
-  // Unique categories available
-  const categories = useMemo(() => {
-    return Array.from(new Set(myExpenses.map((e) => e.category || 'Varios'))).filter(Boolean);
-  }, [myExpenses]);
+  const myExpenses = useMemo(
+    () => expenses.filter((expense) => userGroupIds.has(expense.group_id)),
+    [expenses, userGroupIds],
+  );
 
-  // Available months according to selected dateMode
-  const availableMonths = useMemo(() => {
-    return getAvailableTransactionMonths([...myExpenses, ...myPayments], filters.dateMode);
-  }, [myExpenses, myPayments, filters.dateMode]);
+  const myPayments = useMemo(
+    () => payments.filter((payment) => userGroupIds.has(payment.group_id)),
+    [payments, userGroupIds],
+  );
 
-  // Counts for scope buttons
+  const profilesById = useMemo(
+    () => new Map(profiles.map((profile) => [profile.id, profile])),
+    [profiles],
+  );
+
+  const groupsById = useMemo(
+    () => new Map(userGroups.map((group) => [group.id, group])),
+    [userGroups],
+  );
+
+  const categories = useMemo(
+    () => Array.from(new Set(myExpenses.map((expense) => expense.category || 'Varios'))),
+    [myExpenses],
+  );
+
+  const availableMonths = useMemo(
+    () => getAvailableTransactionMonths([...myExpenses, ...myPayments], filters.dateMode),
+    [myExpenses, myPayments, filters.dateMode],
+  );
+
   const totalTransactionsCount = myExpenses.length + myPayments.length;
+
   const myInteractionsCount = useMemo(() => {
-    const myExpCount = myExpenses.filter((exp) => {
-      const isPayer = exp.paid_by === currentProfile?.id;
-      const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
+    const currentProfileId = currentProfile?.id;
+
+    const myExpCount = myExpenses.filter((expense) => {
+      const isPayer = expense.paid_by === currentProfileId;
+      const isParticipant = Boolean(
+        expense.splits?.some(
+          (split) => split.user_id === currentProfileId && split.amount_owed > 0,
+        ),
+      );
+
       return isPayer || isParticipant;
     }).length;
 
-    const myPayCount = myPayments.filter((p) => {
-      return p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
-    }).length;
+    const myPayCount = myPayments.filter(
+      (payment) => payment.paid_by === currentProfileId || payment.paid_to === currentProfileId,
+    ).length;
 
     return myExpCount + myPayCount;
   }, [myExpenses, myPayments, currentProfile?.id]);
 
-  // Filtered expenses
-  const filteredExpenses = useMemo(() => {
-    return myExpenses.filter((exp) => {
-      const group = userGroups.find((g) => g.id === exp.group_id);
-      const paidBy = profiles.find((p) => p.id === exp.paid_by);
+  const searchTerm = filters.searchTerm.trim().toLowerCase();
 
-      // Search term matching
-      const matchesSearch =
-        !filters.searchTerm.trim() ||
-        (exp.description ? exp.description.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-        (group && group.name ? group.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
-        (paidBy && paidBy.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+  const matchesSearch = useMemo(
+    () => (values: Array<string | undefined>) =>
+      !searchTerm || values.some((value) => value?.toLowerCase().includes(searchTerm)),
+    [searchTerm],
+  );
 
-      if (!matchesSearch) return false;
+  const dateFilterOptions = useMemo(
+    () => ({
+      start: filters.customStartDate,
+      end: filters.customEndDate,
+    }),
+    [filters.customEndDate, filters.customStartDate],
+  );
 
-      // Group and category
-      if (filters.groupId !== 'all' && exp.group_id !== filters.groupId) return false;
-      if (filters.category !== 'all' && (exp.category || 'Varios') !== filters.category) return false;
+  const filteredExpenses = useMemo(
+    () =>
+      myExpenses.filter((expense) => {
+        const group = groupsById.get(expense.group_id);
+        const paidBy = profilesById.get(expense.paid_by);
 
-      // Scope (interaction)
-      if (filters.scope === 'mine') {
-        const isPayer = exp.paid_by === currentProfile?.id;
-        const isParticipant = Boolean(exp.splits?.some((s) => s.user_id === currentProfile?.id && s.amount_owed > 0));
-        if (!isPayer && !isParticipant) return false;
-      }
+        if (
+          !matchesSearch([
+            expense.description,
+            group?.name,
+            paidBy?.full_name,
+          ])
+        ) {
+          return false;
+        }
 
-      // Date filtering using effective date (event vs entry/update)
-      const { dateObj } = getEffectiveTransactionDate(exp, filters.dateMode);
-      return isDateMatchingFilter(dateObj, filters.datePreset, {
-        start: filters.customStartDate,
-        end: filters.customEndDate,
-      });
-    });
-  }, [myExpenses, userGroups, profiles, filters, currentProfile?.id]);
+        if (filters.groupId !== 'all' && expense.group_id !== filters.groupId) return false;
+        if (filters.category !== 'all' && (expense.category || 'Varios') !== filters.category) {
+          return false;
+        }
 
-  // Filtered payments
-  const filteredPayments = useMemo(() => {
-    return myPayments.filter((p) => {
-      const group = userGroups.find((g) => g.id === p.group_id);
-      const payer = profiles.find((prof) => prof.id === p.paid_by);
-      const receiver = profiles.find((prof) => prof.id === p.paid_to);
+        if (filters.scope === 'mine') {
+          const currentProfileId = currentProfile?.id;
+          const isPayer = expense.paid_by === currentProfileId;
+          const isParticipant = Boolean(
+            expense.splits?.some(
+              (split) => split.user_id === currentProfileId && split.amount_owed > 0,
+            ),
+          );
 
-      // Search term matching
-      const matchesSearch =
-        !filters.searchTerm.trim() ||
-        (p.note ? p.note.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-        (group && group.name ? group.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
-        (payer && payer.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
-        (receiver && receiver.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+          if (!isPayer && !isParticipant) return false;
+        }
 
-      if (!matchesSearch) return false;
+        const { dateObj } = getEffectiveTransactionDate(expense, filters.dateMode);
+        return isDateMatchingFilter(dateObj, filters.datePreset, dateFilterOptions);
+      }),
+    [
+      myExpenses,
+      groupsById,
+      profilesById,
+      matchesSearch,
+      filters.groupId,
+      filters.category,
+      filters.scope,
+      currentProfile?.id,
+      filters.dateMode,
+      filters.datePreset,
+      dateFilterOptions,
+    ],
+  );
 
-      // Group
-      if (filters.groupId !== 'all' && p.group_id !== filters.groupId) return false;
+  const filteredPayments = useMemo(
+    () =>
+      myPayments.filter((payment) => {
+        const group = groupsById.get(payment.group_id);
+        const payer = profilesById.get(payment.paid_by);
+        const receiver = profilesById.get(payment.paid_to);
 
-      // Scope (interaction)
-      if (filters.scope === 'mine') {
-        const isInteracted = p.paid_by === currentProfile?.id || p.paid_to === currentProfile?.id;
-        if (!isInteracted) return false;
-      }
+        if (!matchesSearch([payment.note, group?.name, payer?.full_name, receiver?.full_name])) {
+          return false;
+        }
 
-      // Date filtering
-      const { dateObj } = getEffectiveTransactionDate(p, filters.dateMode);
-      return isDateMatchingFilter(dateObj, filters.datePreset, {
-        start: filters.customStartDate,
-        end: filters.customEndDate,
-      });
-    });
-  }, [myPayments, userGroups, profiles, filters, currentProfile?.id]);
+        if (filters.groupId !== 'all' && payment.group_id !== filters.groupId) return false;
 
-  // Aggregate stats for Chart
+        if (filters.scope === 'mine') {
+          const currentProfileId = currentProfile?.id;
+          const isInteracted =
+            payment.paid_by === currentProfileId || payment.paid_to === currentProfileId;
+
+          if (!isInteracted) return false;
+        }
+
+        const { dateObj } = getEffectiveTransactionDate(payment, filters.dateMode);
+        return isDateMatchingFilter(dateObj, filters.datePreset, dateFilterOptions);
+      }),
+    [
+      myPayments,
+      groupsById,
+      profilesById,
+      matchesSearch,
+      filters.groupId,
+      filters.scope,
+      currentProfile?.id,
+      filters.dateMode,
+      filters.datePreset,
+      dateFilterOptions,
+    ],
+  );
+
   const categoryStats = useMemo(() => {
     const totals: Record<string, number> = {};
-    filteredExpenses.forEach((exp) => {
-      const cat = exp.category || 'Varios';
-      totals[cat] = (totals[cat] || 0) + exp.total_amount;
+
+    filteredExpenses.forEach((expense) => {
+      const category = expense.category || 'Varios';
+      totals[category] = (totals[category] || 0) + expense.total_amount;
     });
 
     return Object.entries(totals).map(([name, value]) => ({
       name,
       value,
-      color: CATEGORY_COLORS[name] || '#64748b',
+      color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Varios,
     }));
   }, [filteredExpenses]);
 
-  const totalFilteredSpent = useMemo(() => {
-    return filteredExpenses.reduce((acc, curr) => acc + curr.total_amount, 0);
-  }, [filteredExpenses]);
+  const totalFilteredSpent = useMemo(
+    () => filteredExpenses.reduce((acc, expense) => acc + expense.total_amount, 0),
+    [filteredExpenses],
+  );
 
   return (
     <div className="space-y-6">
@@ -196,10 +248,8 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         />
       </div>
 
-      {/* Chart & Summary Dashboard */}
       {filteredExpenses.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Summary Card */}
           <div className="lg:col-span-1 bg-zinc-900 text-white p-6 rounded-[2rem] shadow-sm flex flex-col justify-between space-y-6">
             <div>
               <div className="flex items-center space-x-2 text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -226,23 +276,29 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
             </div>
           </div>
 
-          {/* Category Bar Chart */}
           <div className="lg:col-span-2 bg-white p-6 rounded-[2rem] ring-1 ring-zinc-200 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-zinc-900 text-sm flex items-center space-x-2">
                 <PieChartIcon className="w-4 h-4 text-emerald-600" />
                 <span>Distribución por Categoría</span>
               </h3>
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">Visualización</span>
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">
+                Visualización
+              </span>
             </div>
 
             <div className="h-44 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart
+                  data={categoryStats}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#71717a' }} />
                   <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
                   <Tooltip
-                    formatter={(val) => formatCurrency(Number(val) || 0, currentProfile?.currency || 'COP')}
+                    formatter={(val) =>
+                      formatCurrency(Number(val) || 0, currentProfile?.currency || 'COP')
+                    }
                     contentStyle={{
                       backgroundColor: '#18181b',
                       borderRadius: '12px',
@@ -251,11 +307,20 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
                       border: 'none',
                     }}
                   />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {categoryStats.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
+                  <Bar
+                    dataKey="value"
+                    radius={[8, 8, 0, 0]}
+                    shape={({ x, y, width, height, payload }) => (
+                      <Rectangle
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        radius={8}
+                        fill={payload?.color || CATEGORY_COLORS.Varios}
+                      />
+                    )}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -263,7 +328,6 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         </div>
       )}
 
-      {/* Unified Transaction Filter Bar */}
       <TransactionFilterBar
         filters={filters}
         onFilterChange={handleFilterChange}
@@ -277,7 +341,6 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         myCount={myInteractionsCount}
       />
 
-      {/* Unified Reusable Transaction Feed */}
       <GenericExpenseList
         expenses={filteredExpenses}
         payments={filteredPayments}
@@ -285,19 +348,11 @@ export function AllExpensesView({ onOpenNewExpense, onEditExpense, onEditPayment
         userGroups={userGroups}
         currentProfile={currentProfile}
         dateFilterMode={filters.dateMode}
-        onEditExpense={onEditExpense}
-        onDeleteExpense={(expId) => deleteExpense(expId)}
-        onEditPayment={onEditPayment}
-        onDeletePayment={(payId) => deletePayment(payId)}
+        onEditExpense={props.onEditExpense}
+        onDeleteExpense={deleteExpense}
+        onEditPayment={props.onEditPayment}
+        onDeletePayment={deletePayment}
         showGroupBadge={true}
-      />
-
-
-      {/* Confirm Draft Modal */}
-      <ConfirmDraftModal
-        isOpen={Boolean(selectedDraftToConfirm)}
-        onClose={() => setSelectedDraftToConfirm(null)}
-        draft={selectedDraftToConfirm}
       />
     </div>
   );

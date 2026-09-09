@@ -1,97 +1,375 @@
 /**
- * Exact email body cleaning function used across the expense detection pipeline.
- * Replicated verbatim to guarantee 100% fidelity with production processing.
+ * Utilities for building and validating AI-driven email expense templates.
+ *
+ * Public exports intentionally preserve the existing API so current consumers
+ * do not need to change.
  */
-export function cleanEmailBody(body: string | null | undefined): string {
-  if (!body) return '';
-  let text = String(body);
 
-  // Normalizar saltos de línea primero
-  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+const DEFAULT_HEAD_LINES = 15;
 
-  // Normalizar correos en cabeceras envueltos con saltos de línea dentro de < y >:
-  // Ej: "From: Alertas <\n  alertas@bancolombia.com>" -> "From: Alertas <alertas@bancolombia.com>"
-  text = text.replace(/<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, '<$1>');
-  text = text.replace(/((?:^|\n)\s*(?:from|de|to|para|cc|reply-to)\s*:[^\n\r<]*?)\s*<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gim, '$1 <$2>');
+const EMAIL_PATTERN =
+  String.raw`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`;
 
-  // Proteger direcciones de correo dentro de <...> para que la limpieza de etiquetas HTML no las elimine.
-  // En correos (From, To, etc.), las direcciones vienen entre < y > (RFC 5322).
-  // Un replace(/<[^>]+>/g, '') ingenuo borraría todas las direcciones de correo.
-  const emailTokens = new Map<string, string>();
-  let tokenCounter = 0;
-  text = text.replace(/<\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*>/gi, (_, email) => {
-    const token = `__EMAIL_ADDR_TOKEN_${tokenCounter++}__`;
-    emailTokens.set(token, `<${email.trim()}>`);
-    return token;
-  });
+const EMAIL_ADDRESS_REGEX = new RegExp(`(${EMAIL_PATTERN})`, 'i');
+const ANGLE_BRACKET_EMAIL_REGEX = new RegExp(
+  String.raw`<\s*(${EMAIL_PATTERN})\s*>`,
+  'gi',
+);
+const WRAPPED_HEADER_EMAIL_REGEX = new RegExp(
+  String.raw`<\s*\n\s*(${EMAIL_PATTERN})\s*>`,
+  'gi',
+);
+const WRAPPED_NAMED_HEADER_EMAIL_REGEX = new RegExp(
+  String.raw`((?:^|\n)\s*(?:from|de|to|para|cc|reply-to)\s*:[^\n\r<]*?)\s*<\s*\n\s*(${EMAIL_PATTERN})\s*>`,
+  'gim',
+);
 
-  // Si el texto contiene fragmentos o etiquetas HTML (p. ej. correos sin procesar o pegados directos),
-  // los convertimos a texto plano respetando saltos de línea, idéntico a GmailMessage.getPlainBody() de Google Apps Script.
-  if (/<[a-z!/][\s\S]*>/i.test(text)) {
-    text = text
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
-      .replace(/<br\s*[\/]?>/gi, '\n')
-      .replace(/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n')
-      .replace(/<(td|th)[^>]*>/gi, ' ')
-      .replace(/<https?:\/\/[^\s>]+>/g, '')    // <https://...> (links envueltos)
-      .replace(/<[^>]+>/g, '')                 // Resto de etiquetas HTML (los correos ya están protegidos)
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&apos;/g, "'")
-      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
-  }
+const SUBJECT_PREFIX_TOKENS = new Set([
+  'fwd', 'fw', 're', 'rv', 'vs', 'tr', 'wg', 'aw', 'sv', 'res', 'enc', 'doorst',
+]);
+const SUBJECT_PREFIX_TOKEN_REGEX = /^(?:\[?([a-z]+)\]?\s*[:：-]\s*)/i;
 
-  // Restaurar las direcciones de correo protegidas
-  text = text.replace(/__EMAIL_ADDR_TOKEN_(\d+)__/g, (match) => {
-    return emailTokens.get(match) || match;
-  });
+const FORWARDED_HEADER_REGEX = /^(?:de|from)\s*:\s*([^\n\r<]+)/im;
+const WRAPPED_FORWARDED_SENDER_REGEX = new RegExp(
+  String.raw`^(?:de|from)\s*:\s*([^\n\r<]*?)\s*<\s*\n\s*(${EMAIL_PATTERN})>?(?:\s*\n|$)`,
+  'im',
+);
+const NEXT_LINE_EMAIL_REGEX = new RegExp(
+  String.raw`^\s*(${EMAIL_PATTERN})>?`,
+  'i',
+);
 
-  // Exactas 6 reglas de cleanEmailBody de Google Apps Script:
-  return text
-    .replace(/\[image:[^\]]*\]/gi, '')       // [image: BBVA Logo]
-    .replace(/<https?:\/\/[^\s>]+>/g, '')    // <https://...> (links envueltos)
-    .replace(/https?:\/\/\S+/g, '')          // URLs sueltas
-    .replace(/\*/g, '')                       // asteriscos de negrita
-    .replace(/[ \t]+/g, ' ')                  // colapsa espacios/tabs, conserva \n
-    .replace(/\n{3,}/g, '\n\n')               // colapsa líneas en blanco excesivas
-    .trim();
-}
+const FORWARDED_SEPARATOR = '---';
+const FORWARDED_MESSAGE_MARKERS = ['forwarded message', 'mensaje reenviado'] as const;
+const FORWARDED_DATE_HEADER_REGEX =
+  /^(?:fecha|date|asunto|subject|para|to)\s*:/im;
+const FROM_HEADER_REGEX = /^(?:de|from)\s*:/im;
 
-/**
- * Strips common email forwarding and reply prefixes across multiple languages
- * (e.g., Fwd:, FW:, Re:, RV:, VS:, TR:, WG:, etc., including bracketed forms [Fwd:] and chained prefixes).
- */
-export function stripSubjectPrefixes(subject: string | null | undefined): string {
-  if (!subject) return '';
-  let s = String(subject).trim();
-  const prefixRegex = /^(?:\[?(?:fwd?|fw|re|rv|vs|tr|wg|aw|sv|res|enc|doorst)\]?\s*[:：\-]\s*)+/i;
-  while (prefixRegex.test(s)) {
-    s = s.replace(prefixRegex, '').trim();
-  }
-  return s;
-}
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'outlook.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.es',
+  'icloud.com',
+  'me.com',
+  'proton.me',
+  'protonmail.com',
+]);
 
-/**
- * Detects if an email address belongs to a generic personal webmail provider
- * (Gmail, Outlook, Hotmail, Yahoo, iCloud, Proton, etc.).
- */
-export function isPersonalEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const match = String(email).toLowerCase().match(/@([a-z0-9.-]+)/);
-  if (!match) return false;
-  const domain = match[1];
-  const personalDomains = [
-    'gmail.com', 'googlemail.com', 'hotmail.com', 'outlook.com',
-    'live.com', 'msn.com', 'yahoo.com', 'yahoo.es', 'icloud.com', 'me.com',
-    'proton.me', 'protonmail.com'
+
+const HTML_DOCUMENT_REGEX = /<[a-z!/][\s\S]*>/i;
+const EMAIL_TOKEN_REGEX = /__EMAIL_ADDR_TOKEN_(\d+)__/g;
+
+const HTML_RULES: Array<[RegExp, string]> = [
+  [/<style[^>]*>[\s\S]*?<\/style>/gi, ''],
+  [/<script[^>]*>[\s\S]*?<\/script>/gi, ''],
+  [/<head[^>]*>[\s\S]*?<\/head>/gi, ''],
+  [/<br\s*\/?>/gi, '\n'],
+  [/<\/(p|div|tr|h[1-6]|li|table|blockquote)>/gi, '\n'],
+  [/<(td|th)[^>]*>/gi, ' '],
+  [/<https?:\/\/[^\s>]+>/g, ''],
+  [/&nbsp;/gi, ' '],
+  [/&amp;/gi, '&'],
+  [/&lt;/gi, '<'],
+  [/&gt;/gi, '>'],
+  [/&quot;/gi, '"'],
+  [/&#39;/g, "'"],
+  [/&apos;/gi, "'"],
+];
+
+const CLEAN_BODY_RULES: Array<[RegExp, string]> = [
+  [/\[image:[^\]]*\]/gi, ''],
+  [/<https?:\/\/[^\s>]+>/g, ''],
+  [/https?:\/\/\S+/g, ''],
+  [/\*/g, ''],
+  [/[ \t]+/g, ' '],
+  [/\n{3,}/g, '\n\n'],
+];
+
+const JSON_FIELDS = [
+  'name',
+  'entity_label',
+  'is_new_entity',
+  'entity_email_pattern',
+  'subject_pattern',
+  'match_pattern',
+  'amount_regex',
+  'merchant_regex',
+  'date_regex',
+  'date_format',
+  'time_regex',
+  'time_format',
+  'currency_regex',
+  'source_account_regex',
+  'expense_type',
+] as const;
+
+const EXTRACTION_REGEX_FIELDS: Array<{
+  key: string;
+  label: string;
+  requiresCapture: boolean;
+}> = [
+    { key: 'amount_regex', label: 'Monto', requiresCapture: true },
+    { key: 'merchant_regex', label: 'Comercio', requiresCapture: true },
+    { key: 'date_regex', label: 'Fecha', requiresCapture: true },
+    { key: 'time_regex', label: 'Hora', requiresCapture: true },
+    { key: 'currency_regex', label: 'Moneda', requiresCapture: true },
+    {
+      key: 'source_account_regex',
+      label: 'Cuenta de origen',
+      requiresCapture: true,
+    },
+    { key: 'subject_pattern', label: 'Patrón de Asunto', requiresCapture: false },
+    { key: 'match_pattern', label: 'Patrón de Desempate', requiresCapture: false },
+    {
+      key: 'entity_email_pattern',
+      label: 'Patrón de Correo de Entidad',
+      requiresCapture: false,
+    },
   ];
-  return personalDomains.some((d) => domain === d || domain.endsWith('.' + d));
+
+function getNonEmptyString(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeNewlines(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function countOccurrences(text: string, value: string): number {
+  if (!value) return 0;
+
+  let count = 0;
+  let index = text.indexOf(value);
+
+  while (index !== -1) {
+    count += 1;
+    index = text.indexOf(value, index + value.length);
+  }
+
+  return count;
+}
+
+function applyRules(
+  text: string,
+  rules: ReadonlyArray<[RegExp, string]>,
+): string {
+  return rules.reduce((result, [pattern, replacement]) => {
+    return result.replace(pattern, replacement);
+  }, text);
+}
+
+function createEmailTokenStore(): {
+  protect(text: string): string;
+  restore(text: string): string;
+} {
+  const tokens = new Map<string, string>();
+  let tokenCounter = 0;
+
+  return {
+    protect(text: string): string {
+      return text.replace(ANGLE_BRACKET_EMAIL_REGEX, (_match, email: string) => {
+        const token = `__EMAIL_ADDR_TOKEN_${tokenCounter++}__`;
+        tokens.set(token, `<${email.trim()}>`);
+        return token;
+      });
+    },
+    restore(text: string): string {
+      return text.replace(EMAIL_TOKEN_REGEX, (match) => {
+        return tokens.get(match) || match;
+      });
+    },
+  };
+}
+
+function hasRequiredCaptureGroup(pattern: string): boolean {
+  for (let index = 0; index < pattern.length - 1; index += 1) {
+    if (pattern[index] !== '(' || pattern[index + 1] === '?') continue;
+    return true;
+  }
+
+  return false;
+}
+
+function hasSubjectPrefix(subject: string): boolean {
+  let remaining = subject;
+
+  while (true) {
+    const match = SUBJECT_PREFIX_TOKEN_REGEX.exec(remaining);
+    if (!match) return false;
+
+    const token = match[1].toLowerCase();
+    if (!SUBJECT_PREFIX_TOKENS.has(token)) return false;
+
+    remaining = remaining.slice(match[0].length).trimStart();
+  }
+}
+
+function parseJsonObject(rawText: string): {
+  success: true;
+  value: Record<string, unknown>;
+} | {
+  success: false;
+  error: string;
+} {
+  let cleaned = rawText.trim();
+
+  if (cleaned.startsWith('```')) {
+    const openingEnd = cleaned.indexOf('\n');
+    const closingStart = cleaned.lastIndexOf('```');
+
+    if (openingEnd !== -1 && closingStart > openingEnd) {
+      cleaned = cleaned.slice(openingEnd + 1, closingStart).trim();
+    }
+  }
+
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return {
+      success: false,
+      error:
+        'No se encontró un objeto JSON válido en la respuesta de la IA. Asegúrate de copiar el JSON completo.',
+    };
+  }
+
+  const jsonSubstring = cleaned.slice(firstBrace, lastBrace + 1);
+
+  try {
+    const value: unknown = JSON.parse(jsonSubstring);
+    if (!isJsonRecord(value)) {
+      return {
+        success: false,
+        error: 'La respuesta JSON de la IA no contiene un objeto en el nivel superior.',
+      };
+    }
+    return { success: true, value };
+  } catch (err: unknown) {
+    try {
+      const repaired = repairUnescapedJsonBackslashes(jsonSubstring);
+      const value: unknown = JSON.parse(repaired);
+      if (!isJsonRecord(value)) {
+        return {
+          success: false,
+          error: 'La respuesta JSON de la IA no contiene un objeto en el nivel superior.',
+        };
+      }
+      return { success: true, value };
+    } catch {
+      const message = err instanceof Error ? err.message : 'JSON inválido';
+      return {
+        success: false,
+        error: `Error al interpretar el JSON devuelto por la IA: ${message}. Verifica que el contenido tenga formato JSON correcto.`,
+      };
+    }
+  }
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function repairUnescapedJsonBackslashes(json: string): string {
+  // Preserve valid JSON escapes and double only backslashes that would
+  // otherwise be invalid JSON escape sequences.
+  return json.replace(
+    /\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})/g,
+    '\\\\',
+  );
+}
+
+function normalizeTemplateString(
+  value: unknown,
+  fallback: string | null = null,
+): string | null {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  return value.trim();
+}
+
+function normalizeRegexOrNull(value: unknown): string | null {
+  return sanitizeRegexPattern(
+    typeof value === 'string' ? value : null,
+  );
+}
+
+/**
+ * Exact email body cleaning function used across the expense detection pipeline.
+ * Replicated verbatim to preserve production processing behavior.
+ */
+export function cleanEmailBody(
+  body: string | null | undefined,
+): string {
+  if (!body) return '';
+
+  const tokenStore = createEmailTokenStore();
+
+  let text = normalizeNewlines(String(body));
+
+  // Normalizar correos en cabeceras envueltos con saltos de línea dentro de < y >.
+  text = text.replace(WRAPPED_HEADER_EMAIL_REGEX, '<$1>');
+  text = text.replace(
+    WRAPPED_NAMED_HEADER_EMAIL_REGEX,
+    '$1 <$2>',
+  );
+
+  text = tokenStore.protect(text);
+
+  if (HTML_DOCUMENT_REGEX.test(text)) {
+    text = applyRules(text, HTML_RULES).replace(
+      /&#(\d+);/g,
+      (_match, dec: string) => String.fromCodePoint(Number.parseInt(dec, 10)),
+    );
+  }
+
+  text = tokenStore.restore(text);
+
+  return applyRules(text, CLEAN_BODY_RULES).trim();
+}
+
+/**
+ * Strips common email forwarding and reply prefixes across multiple languages.
+ */
+export function stripSubjectPrefixes(
+  subject: string | null | undefined,
+): string {
+  let normalized = getNonEmptyString(subject);
+
+  while (hasSubjectPrefix(normalized)) {
+    const match = SUBJECT_PREFIX_TOKEN_REGEX.exec(normalized);
+    if (!match) break;
+    normalized = normalized.slice(match[0].length).trim();
+  }
+
+  return normalized;
+}
+
+/**
+ * Detects if an email address belongs to a generic personal webmail provider.
+ */
+export function isPersonalEmail(
+  email: string | null | undefined,
+): boolean {
+  const normalized = getNonEmptyString(email).toLowerCase();
+  const atIndex = normalized.indexOf('@');
+
+  if (atIndex === -1) return false;
+
+  const domain = normalized.slice(atIndex + 1);
+  for (const personalDomain of PERSONAL_EMAIL_DOMAINS) {
+    if (
+      domain === personalDomain ||
+      domain.endsWith(`.${personalDomain}`)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -100,178 +378,211 @@ export function isPersonalEmail(email: string | null | undefined): boolean {
 export function isForwardedEmail(
   sender: string | null | undefined,
   subject: string | null | undefined,
-  body: string | null | undefined
+  body: string | null | undefined,
 ): boolean {
-  const s = (subject || '').trim();
-  const b = (body || '').trim();
-  if (/^(?:\[?(?:fwd?|fw|re|rv|vs|tr|wg|aw|sv|res|enc|doorst)\]?\s*[:：\-]\s*)+/i.test(s)) {
+  const normalizedSubject = getNonEmptyString(subject);
+  const normalizedBody = getNonEmptyString(body);
+
+  if (hasSubjectPrefix(normalizedSubject)) {
     return true;
   }
-  if (/---+\s*(?:forwarded message|mensaje reenviado)\s*---+/i.test(b)) {
+
+  const separatorCount = countOccurrences(normalizedBody, FORWARDED_SEPARATOR);
+  if (separatorCount >= 2) {
+    const bodyLower = normalizedBody.toLowerCase();
+    if (FORWARDED_MESSAGE_MARKERS.some((marker) => bodyLower.includes(marker))) {
+      return true;
+    }
+  }
+
+  const head = getHeadLines(normalizedBody, DEFAULT_HEAD_LINES);
+
+  if (FROM_HEADER_REGEX.test(head) && FORWARDED_DATE_HEADER_REGEX.test(head)) {
     return true;
   }
-  const head = getHeadLines(b, 15);
-  if (/^(?:de|from)\s*:/im.test(head) && /^(?:fecha|date|asunto|subject|para|to)\s*:/im.test(head)) {
+
+  if (
+    sender &&
+    isPersonalEmail(sender) &&
+    FROM_HEADER_REGEX.test(head)
+  ) {
     return true;
   }
-  if (sender && isPersonalEmail(sender) && /^(?:de|from)\s*:/im.test(head)) {
-    return true;
-  }
+
   return false;
 }
 
 /**
  * Extracts the real institutional sender email.
- * If the email is forwarded, it MUST come from the original forwarded headers in the body,
- * NEVER from the outer envelope sender (which is just the user who forwarded the email).
+ *
+ * For forwarded emails, the original sender must come from the forwarded
+ * headers in the body, never from the outer envelope sender.
  */
 export function extractInstitutionalSenderEmail(
   sender: string | null | undefined,
   body: string | null | undefined,
-  isForwarded: boolean
+  isForwarded: boolean,
 ): string | null {
-  // 1. Prioritize forwarded headers in the body
-  const forwardedSender = extractForwardedSenderFromBody(body, 15);
+  const forwardedSender = extractForwardedSenderFromBody(
+    body,
+    DEFAULT_HEAD_LINES,
+  );
   const forwardedEmail = extractEmailAddress(forwardedSender);
+
   if (forwardedEmail && !isPersonalEmail(forwardedEmail)) {
     return forwardedEmail;
   }
 
-  // 2. Look for non-personal email address in the first 15 lines of the body
-  const head = getHeadLines(body, 15);
-  const bodyEmails = head.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g);
-  if (bodyEmails && bodyEmails.length > 0) {
-    for (const em of bodyEmails) {
-      const lower = em.toLowerCase();
-      if (!isPersonalEmail(lower)) {
-        return lower;
-      }
+  const head = getHeadLines(body, DEFAULT_HEAD_LINES);
+  const bodyEmails = head.matchAll(new RegExp(`(${EMAIL_PATTERN})`, 'gi'));
+
+  for (const match of bodyEmails) {
+    const email = match[1];
+    const normalizedEmail = email.toLowerCase();
+    if (!isPersonalEmail(normalizedEmail)) {
+      return normalizedEmail;
     }
   }
 
-  // If forwarded, under NO circumstances use the outer sender as institutional!
   if (isForwarded) {
     return null;
   }
 
-  // 3. Direct non-forwarded email: use sender if it's not a personal email
   const directEmail = extractEmailAddress(sender);
-  if (directEmail && !isPersonalEmail(directEmail)) {
-    return directEmail;
-  }
 
-  return null;
+  return directEmail && !isPersonalEmail(directEmail)
+    ? directEmail
+    : null;
 }
 
 /**
- * Extracts the original sender from forwarded headers in the body (e.g., "De: Bancolombia <alertas@...>" or "From: ...").
+ * Extracts the original sender from forwarded headers in the body.
  */
-export function extractForwardedSenderFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
-  if (!body) return null;
+export function extractForwardedSenderFromBody(
+  body: string | null | undefined,
+  maxLines: number = DEFAULT_HEAD_LINES,
+): string | null {
   const head = getHeadLines(body, maxLines);
+  if (!head) return null;
 
-  // Match wrapped line where '<' is at end of line and email is on next line
-  const wrappedMatch = head.match(/^(?:de|from)\s*:\s*([^\n\r<]*?)\s*<\s*\n\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?(?:\s*\n|$)/im);
+  const wrappedMatch = WRAPPED_FORWARDED_SENDER_REGEX.exec(head);
+
   if (wrappedMatch) {
     const name = wrappedMatch[1].trim();
     const email = wrappedMatch[2].trim();
+
     return name ? `${name} <${email}>` : `<${email}>`;
   }
 
-  const match = head.match(/^(?:de|from)\s*:\s*([^\n\r]+)/im);
-  if (match && match[1]) {
-    let senderStr = match[1].trim();
-    // If sender ends with '<' without closing '>', check if next line has the email
-    if (senderStr.includes('<') && !senderStr.includes('>')) {
-      const rest = head.slice(match.index! + match[0].length);
-      const nextLineEmail = rest.match(/^\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i);
-      if (nextLineEmail) {
-        senderStr = `${senderStr} ${nextLineEmail[1]}>`;
-      }
+  const match = FORWARDED_HEADER_REGEX.exec(head);
+
+  if (!match?.[1]) return null;
+
+  let senderStr = match[1].trim();
+
+  if (senderStr.includes('<') && !senderStr.includes('>')) {
+    const rest = head.slice((match.index ?? 0) + match[0].length);
+    const nextLineEmail = NEXT_LINE_EMAIL_REGEX.exec(rest);
+
+    if (nextLineEmail) {
+      senderStr = `${senderStr} ${nextLineEmail[1]}>`;
     }
-    return senderStr;
   }
-  return null;
+
+  return senderStr;
 }
 
 /**
- * Extracts a standard email address from arbitrary text (e.g. "Bancolombia <alertas@bancolombia.com>" -> "alertas@bancolombia.com").
+ * Extracts a standard email address from arbitrary text.
  */
-export function extractEmailAddress(text: string | null | undefined): string | null {
+export function extractEmailAddress(
+  text: string | null | undefined,
+): string | null {
   if (!text) return null;
-  const match = String(text).match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+
+  const match = EMAIL_ADDRESS_REGEX.exec(String(text));
   return match ? match[1].toLowerCase() : null;
 }
 
 /**
- * Escapes special regex characters in an email address so it can safely be used as an exact regex pattern.
+ * Escapes special regex characters in an email address.
  */
 export function escapeRegexEmail(email: string): string {
-  return email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return email.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**
- * Infers an entity_email_pattern from the email sender or forwarded headers in the body.
- * If the email is forwarded (e.g., from Outlook or personal rule), prefers the forwarded institutional sender.
+ * Infers an entity_email_pattern from the email sender or forwarded headers.
  */
 export function inferEntityEmailPattern(
   sender: string | null | undefined,
-  body?: string | null | undefined
+  body?: string | null | undefined,
 ): string | null {
-  const isFwd = isForwardedEmail(sender, null, body);
-  const institutional = extractInstitutionalSenderEmail(sender, body, isFwd);
-  if (institutional) {
-    return escapeRegexEmail(institutional);
-  }
-  return null;
+  const forwarded = isForwardedEmail(sender, null, body);
+  const institutionalEmail = extractInstitutionalSenderEmail(
+    sender,
+    body,
+    forwarded,
+  );
+
+  return institutionalEmail
+    ? escapeRegexEmail(institutionalEmail)
+    : null;
 }
 
 /**
- * Extracts the original subject from forwarded headers in the body (e.g., "Asunto: Alertas y Notificaciones" or "Subject: ...").
+ * Extracts the original subject from forwarded headers in the body.
  */
-export function extractForwardedSubjectFromBody(body: string | null | undefined, maxLines: number = 15): string | null {
-  if (!body) return null;
+export function extractForwardedSubjectFromBody(
+  body: string | null | undefined,
+  maxLines: number = DEFAULT_HEAD_LINES,
+): string | null {
   const head = getHeadLines(body, maxLines);
-  const match = head.match(/^(?:asunto|subject)\s*:\s*([^\n\r]+)/im);
-  if (match && match[1]) {
-    return stripSubjectPrefixes(match[1].trim());
-  }
-  return null;
+  const match = /^(?:asunto|subject)\s*:\s*([^\n\r]+)/im.exec(head);
+
+  return match?.[1]
+    ? stripSubjectPrefixes(match[1].trim())
+    : null;
 }
 
 /**
- * Returns the first N non-trailing lines of the (cleaned) body. Used to look for
- * the real sender/entity when an email arrived forwarded by a rule (e.g. Outlook),
- * in which case getFrom()/sender points to the personal inbox instead of the
- * original sender, and the subject may have been rewritten too.
+ * Returns the first N lines of the body.
  */
-export function getHeadLines(body: string | null | undefined, maxLines: number = 10): string {
+export function getHeadLines(
+  body: string | null | undefined,
+  maxLines: number = 10,
+): string {
   if (!body) return '';
   return String(body).split('\n').slice(0, maxLines).join('\n');
 }
 
 /**
- * Sanitizes regex strings by removing leading/trailing forward slashes (/.../i)
- * and accidental outer quotes that LLMs or users might introduce.
+ * Sanitizes regex strings by removing leading/trailing /.../flags and
+ * accidental outer quotes.
  */
-export function sanitizeRegexPattern(pattern: string | null | undefined): string | null {
+export function sanitizeRegexPattern(
+  pattern: string | null | undefined,
+): string | null {
   if (!pattern || typeof pattern !== 'string') return null;
-  let p = pattern.trim();
-  // Strip surrounding quotes if present
-  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
-    p = p.slice(1, -1).trim();
+
+  let sanitized = pattern.trim();
+
+  if (
+    (sanitized.startsWith('"') && sanitized.endsWith('"')) ||
+    (sanitized.startsWith("'") && sanitized.endsWith("'"))
+  ) {
+    sanitized = sanitized.slice(1, -1).trim();
   }
-  // Strip enclosing regex slashes: e.g. /pattern/i or /pattern/
-  const slashMatch = p.match(/^\/([\s\S]*)\/([gimsuy]*)$/);
+
+  const slashMatch = /^\/([^\n\r]*)\/([gimsuy]*)$/.exec(sanitized);
   if (slashMatch) {
-    p = slashMatch[1];
+    sanitized = slashMatch[1];
   }
 
-  // Common LLM typo: (?\:...) is invalid JavaScript regex syntax; the intended
-  // non-capturing group is (?:...). Repair only this unambiguous typo.
-  p = p.replace(/\(\?\\:/g, '(?:');
+  // Common LLM typo: (?\\:...) -> (?:...).
+  sanitized = sanitized.replace(/\(\?\\:/g, '(?:');
 
-  return p.trim() || null;
+  return sanitized.trim() || null;
 }
 
 export interface ParsedAITemplateResult {
@@ -297,33 +608,41 @@ export interface ParsedAITemplateResult {
   warnings?: string[];
 }
 
-/**
- * Builds the exact prompt used to create a new expense extraction template.
- * Includes entity matching logic, level 1-3 filtering, and required database fields.
- */
-export interface PromptEntity { id: string; name: string; patterns: string[]; }
+export interface PromptEntity {
+  id: string;
+  name: string;
+  patterns: string[];
+}
 
 export function findEntityByEmailPattern(
   sender: string,
   entities: PromptEntity[] = [],
-  body?: string | null
+  body?: string | null,
 ): PromptEntity | null {
-  const value = (sender || '').trim();
-  const bodyHead = body ? getHeadLines(body, 15) : '';
-  const forwardedSender = body ? extractForwardedSenderFromBody(body, 15) : null;
+  const value = getNonEmptyString(sender);
+  const bodyHead = body ? getHeadLines(body, DEFAULT_HEAD_LINES) : '';
+  const forwardedSender = body
+    ? extractForwardedSenderFromBody(body, DEFAULT_HEAD_LINES)
+    : null;
 
   for (const entity of entities) {
-    for (const rawPattern of entity.patterns || []) {
+    for (const rawPattern of entity.patterns?.filter(Boolean) ?? []) {
       const pattern = sanitizeRegexPattern(rawPattern);
-      if (!pattern || !pattern.includes('@')) continue;
+
+      if (!pattern?.includes('@')) continue;
+
       try {
         const regex = new RegExp(pattern, 'i');
+
         if (value && regex.test(value)) return entity;
         if (forwardedSender && regex.test(forwardedSender)) return entity;
         if (bodyHead && regex.test(bodyHead)) return entity;
-      } catch { }
+      } catch {
+        // Invalid persisted patterns must not block evaluation of other entities.
+      }
     }
   }
+
   return null;
 }
 
@@ -331,19 +650,23 @@ export function buildTemplatePrompt(
   sender: string,
   subject: string,
   cleanBody: string,
-  existingEntities: PromptEntity[] = []
+  existingEntities: PromptEntity[] = [],
 ): string {
-  const isFwd = isForwardedEmail(sender, subject, cleanBody);
-  const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
   const strippedSubject = stripSubjectPrefixes(subject);
-  const forwardedSubject = extractForwardedSubjectFromBody(cleanBody, 15);
+  const forwardedSubject = extractForwardedSubjectFromBody(
+    cleanBody,
+    DEFAULT_HEAD_LINES,
+  );
   const effectiveSubject =
-    forwardedSubject || (strippedSubject !== subject ? strippedSubject : subject);
+    forwardedSubject ||
+    (strippedSubject !== subject ? strippedSubject : subject);
 
-  const matchedExistingEntity = findEntityByEmailPattern(sender, existingEntities, cleanBody);
-  const detectedInstitutionalEmail = extractInstitutionalSenderEmail(sender, cleanBody, isFwd);
-
-  let entityInstructions = '';
+  const matchedExistingEntity = findEntityByEmailPattern(
+    sender,
+    existingEntities,
+    cleanBody,
+  );
+  let entityInstructions: string;
 
   if (matchedExistingEntity) {
     const existingPatterns = matchedExistingEntity.patterns?.filter(Boolean) ?? [];
@@ -361,15 +684,20 @@ export function buildTemplatePrompt(
         ? [
           '',
           'PATRONES EXISTENTES DE ESTA ENTIDAD (SOLO COMO CONTEXTO PARA EL DESEMPATE):',
-          ...existingPatterns.map((pattern, i) => `${i + 1}. ${pattern}`),
+          ...existingPatterns.map(
+            (pattern, index) => `${index + 1}. ${pattern}`,
+          ),
           'Estos patrones ya resuelven el NIVEL 1 (Entidad). No los conviertas en un nuevo match_pattern ni generes un patrón de entidad redundante.',
         ]
         : []),
     ].join('\n');
   } else {
-    const entityNames = existingEntities.map((e) => e.name).filter(Boolean);
+    const entityNames = existingEntities
+      .map((entity) => entity.name)
+      .filter(Boolean);
+
     const namesList = entityNames.length
-      ? `ENTIDADES REGISTRADAS:\n${entityNames.map((n) => `- "${n}"`).join('\n')}`
+      ? `ENTIDADES REGISTRADAS:\n${formatEntityNames(entityNames)}`
       : 'No hay entidades registradas.';
 
     entityInstructions = [
@@ -391,7 +719,8 @@ export function buildTemplatePrompt(
     ].join('\n');
   }
 
-  const relevantExistingPatterns = matchedExistingEntity?.patterns?.filter(Boolean) ?? [];
+  const relevantExistingPatterns =
+    matchedExistingEntity?.patterns?.filter(Boolean) ?? [];
 
   return [
     'Eres un asistente especializado en diseñar plantillas de extracción para un sistema de finanzas personales que procesa notificaciones bancarias y de billeteras digitales de Colombia y Latinoamérica.',
@@ -431,7 +760,7 @@ export function buildTemplatePrompt(
     'match_pattern es obligatorio.',
     'Debe ser una expresión regular JavaScript válida que actúe como discriminante estable del tipo de notificación dentro de la entidad.',
     'Debe identificar el rasgo semántico o estructural más pequeño que distingue esta clase de notificación dentro de la entidad.',
-    'Usa como referencia los patrones existentes proporcionados para la entidad cuando estén disponibles y busca una diferencia estable respecto de ellos.',
+    'Usa como referencia los patrones existentes proporcionados para la entidad cuando estén disponibles y busca una diferencia estable respecto a ellos.',
     'No copies un patrón existente ni intentes describir todo el contenido del correo. El patrón debe expresar la señal distintiva, no una transcripción de la muestra.',
     'Los valores dinámicos no son estables y no deben fijarse literalmente en el regex. Sin embargo, su carácter dinámico no invalida el texto o la estructura que los introduce: puede ser precisamente esa estructura estable la que distingue el tipo de notificación.',
     'Trata los valores dinámicos como desconocidos y potencialmente arbitrarios: no supongas su longitud, formato, caracteres permitidos ni contenido. Cuando sea necesario para expresar la estructura distintiva, deja que el regex tolere cualquier contenido dinámico entre elementos estables.',
@@ -444,7 +773,9 @@ export function buildTemplatePrompt(
     ...(relevantExistingPatterns.length
       ? [
         'PATRONES EXISTENTES PARA COMPARACIÓN:',
-        ...relevantExistingPatterns.map((pattern, i) => `${i + 1}. ${pattern}`),
+        ...relevantExistingPatterns.map(
+          (pattern, index) => `${index + 1}. ${pattern}`,
+        ),
         'Estos patrones sirven para identificar diferencias existentes entre tipos de notificación de la misma entidad. No los copies literalmente si contienen partes dinámicas.',
         '',
       ]
@@ -516,8 +847,7 @@ export function buildTemplatePrompt(
     '',
     'SALIDA:',
     'Responde exclusivamente con un objeto JSON válido, sin markdown ni explicaciones.',
-    'Debe contener exactamente:',
-    'name, entity_label, is_new_entity, entity_email_pattern, subject_pattern, match_pattern, amount_regex, merchant_regex, date_regex, date_format, time_regex, time_format, currency_regex, source_account_regex, expense_type.',
+    `Debe contener exactamente: ${JSON_FIELDS.join(', ')}.`,
     'No copies valores de estas instrucciones como datos del correo.',
     'No inventes valores ni propiedades.',
     'Usa null únicamente cuando una regla lo indique.',
@@ -539,116 +869,126 @@ export function buildTemplatePrompt(
     '--- FIN DEL CORREO ---',
   ].join('\n');
 }
+
 /**
  * Parses, cleans, and validates the AI response text when creating a template.
- * Tolerant to markdown code blocks, conversational prefixes/suffixes, and unescaped characters.
  */
-export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult {
-  if (!rawText || !rawText.trim()) {
-    return { success: false, error: 'El texto ingresado está vacío' };
-  }
-
-  let cleaned = rawText.trim();
-
-  // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (codeBlockMatch && codeBlockMatch[1]) {
-    cleaned = codeBlockMatch[1].trim();
-  }
-
-  // Find first { and last } to isolate json payload
-  const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+export function parseAITemplateResponse(
+  rawText: string,
+): ParsedAITemplateResult {
+  if (!rawText.trim()) {
     return {
       success: false,
-      error: 'No se encontró un objeto JSON válido en la respuesta de la IA. Asegúrate de copiar el JSON completo.',
+      error: 'El texto ingresado está vacío',
     };
   }
 
-  const jsonSubstring = cleaned.substring(firstBrace, lastBrace + 1);
+  const parsedResult = parseJsonObject(rawText);
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(jsonSubstring);
-  } catch (err: unknown) {
-    // Attempt fallback repair for commonly unescaped backslashes in regex (e.g. "\$" or "\d")
-    try {
-      const repaired = jsonSubstring
-        .replace(/\\/g, '\\\\')
-        .replace(/\\\\"/g, '\\"')
-        .replace(/\\\\\\/g, '\\\\');
-      parsed = JSON.parse(repaired);
-    } catch {
-      const msg = err instanceof Error ? err.message : 'JSON inválido';
-      return {
-        success: false,
-        error: `Error al interpretar el JSON devuelto por la IA: ${msg}. Verifica que el contenido tenga formato JSON correcto.`,
-      };
-    }
+  if (!parsedResult.success) {
+    return parsedResult;
   }
 
+  const parsed = parsedResult.value;
   const warnings: string[] = [];
 
-  // Required field checks
-  if (!parsed.name || typeof parsed.name !== 'string' || !parsed.name.trim()) {
-    warnings.push('La IA no especificó un nombre para la plantilla; se asignará uno por defecto.');
-    parsed.name = `${parsed.entity_label || 'Banco'} - Plantilla`;
+  if (
+    !parsed.name ||
+    typeof parsed.name !== 'string' ||
+    !parsed.name.trim()
+  ) {
+    warnings.push(
+      'La IA no especificó un nombre para la plantilla; se asignará uno por defecto.',
+    );
+    const entityLabel =
+      typeof parsed.entity_label === 'string' && parsed.entity_label.trim()
+        ? parsed.entity_label.trim()
+        : 'Banco';
+    parsed.name = `${entityLabel} - Plantilla`;
   }
 
-  if (!parsed.amount_regex || typeof parsed.amount_regex !== 'string' || !parsed.amount_regex.trim()) {
+  if (
+    !parsed.amount_regex ||
+    typeof parsed.amount_regex !== 'string' ||
+    !parsed.amount_regex.trim()
+  ) {
     return {
       success: false,
-      error: 'El campo "amount_regex" es obligatorio en la plantilla para poder capturar el valor del gasto.',
+      error:
+        'El campo "amount_regex" es obligatorio en la plantilla para poder capturar el valor del gasto.',
     };
   }
-
-  // Validate regex syntax
-  const regexFields: Array<{ key: string; label: string; reqGroup: boolean }> = [
-    { key: 'amount_regex', label: 'Monto', reqGroup: true },
-    { key: 'merchant_regex', label: 'Comercio', reqGroup: true },
-    { key: 'date_regex', label: 'Fecha', reqGroup: true },
-    { key: 'time_regex', label: 'Hora', reqGroup: true },
-    { key: 'currency_regex', label: 'Moneda', reqGroup: true },
-    { key: 'source_account_regex', label: 'Cuenta de origen', reqGroup: true },
-    { key: 'subject_pattern', label: 'Patrón de Asunto', reqGroup: false },
-    { key: 'match_pattern', label: 'Patrón de Desempate', reqGroup: false },
-    { key: 'entity_email_pattern', label: 'Patrón de Correo de Entidad', reqGroup: false },
-  ];
 
   const validationErrors: string[] = [];
 
-  for (const { key, label, reqGroup } of regexFields) {
+  for (const { key, label, requiresCapture } of EXTRACTION_REGEX_FIELDS) {
     const rawPattern = parsed[key];
-    const pattern = sanitizeRegexPattern(rawPattern);
-    if (pattern) {
-      parsed[key] = pattern;
-      try {
-        new RegExp(pattern, 'i');
-        if (reqGroup && !/\([^?].*?\)/.test(pattern)) {
-          validationErrors.push(`El patrón de "${label}" no tiene un grupo de captura (...) válido.`);
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        validationErrors.push(`El patrón de "${label}" es inválido: ${msg}`);
+    const pattern = normalizeRegexOrNull(rawPattern);
+
+    if (!pattern) {
+      const optional =
+        key === 'currency_regex' ||
+        key === 'source_account_regex' ||
+        key === 'time_regex' ||
+        key === 'date_regex' ||
+        key === 'merchant_regex';
+
+      if (requiresCapture && !optional) {
+        validationErrors.push(`El patrón de "${label}" es obligatorio.`);
       }
-    } else if (reqGroup && key !== 'currency_regex' && key !== 'source_account_regex' && key !== 'time_regex' && key !== 'date_regex' && key !== 'merchant_regex') {
-      validationErrors.push(`El patrón de "${label}" es obligatorio.`);
+
+      continue;
+    }
+
+    parsed[key] = pattern;
+
+    try {
+      new RegExp(pattern, 'i');
+
+      if (requiresCapture && !hasRequiredCaptureGroup(pattern)) {
+        validationErrors.push(
+          `El patrón de "${label}" no tiene un grupo de captura (...) válido.`,
+        );
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      validationErrors.push(
+        `El patrón de "${label}" es inválido: ${message}`,
+      );
     }
   }
 
-  if (parsed.time_regex && !parsed.time_format) validationErrors.push('Si existe time_regex, time_format es obligatorio.');
+  if (parsed.time_regex && !parsed.time_format) {
+    validationErrors.push(
+      'Si existe time_regex, time_format es obligatorio.',
+    );
+  }
 
-  const entityPattern = sanitizeRegexPattern(parsed.entity_email_pattern);
+  const entityPattern = normalizeRegexOrNull(parsed.entity_email_pattern);
+
   if (entityPattern) {
-    if (!entityPattern.includes('@')) validationErrors.push('El entity_email_pattern debe contener @ y representar un correo/dominio institucional.');
-    else { try { new RegExp(entityPattern, 'i'); } catch { validationErrors.push('El entity_email_pattern no es un regex válido.'); } }
+    if (!entityPattern.includes('@')) {
+      validationErrors.push(
+        'El entity_email_pattern debe contener @ y representar un correo/dominio institucional.',
+      );
+    } else {
+      try {
+        new RegExp(entityPattern, 'i');
+      } catch {
+        validationErrors.push(
+          'El entity_email_pattern no es un regex válido.',
+        );
+      }
+    }
   }
 
   if (validationErrors.length > 0) {
     return {
       success: false,
-      error: `La respuesta de la IA contiene errores que deben corregirse:\n${validationErrors.map((e) => `• ${e}`).join('\n')}`,
+      error: [
+        'La respuesta de la IA contiene errores que deben corregirse:',
+        ...validationErrors.map((error) => `• ${error}`),
+      ].join('\n'),
       warnings,
     };
   }
@@ -657,20 +997,27 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
     success: true,
     data: {
       name: String(parsed.name).trim(),
-      entity_label: parsed.entity_label ? String(parsed.entity_label).trim() : null,
+      entity_label: normalizeTemplateString(parsed.entity_label),
       is_new_entity: Boolean(parsed.is_new_entity),
-      entity_email_pattern: sanitizeRegexPattern(parsed.entity_email_pattern),
-      subject_pattern: sanitizeRegexPattern(parsed.subject_pattern),
-      match_pattern: sanitizeRegexPattern(parsed.match_pattern),
-      amount_regex: sanitizeRegexPattern(parsed.amount_regex) || String(parsed.amount_regex).trim(),
-      merchant_regex: sanitizeRegexPattern(parsed.merchant_regex),
-      date_regex: sanitizeRegexPattern(parsed.date_regex),
-      date_format: parsed.date_format ? String(parsed.date_format).trim() : 'DD/MM/YYYY',
-      time_regex: sanitizeRegexPattern(parsed.time_regex),
-      time_format: parsed.time_format ? String(parsed.time_format).trim() : null,
-      currency_regex: sanitizeRegexPattern(parsed.currency_regex),
-      source_account_regex: sanitizeRegexPattern(parsed.source_account_regex),
-      expense_type: parsed.expense_type ? String(parsed.expense_type).toLowerCase().trim() : null,
+      entity_email_pattern: entityPattern,
+      subject_pattern: normalizeRegexOrNull(parsed.subject_pattern),
+      match_pattern: normalizeRegexOrNull(parsed.match_pattern),
+      amount_regex:
+        normalizeRegexOrNull(parsed.amount_regex) ||
+        String(parsed.amount_regex).trim(),
+      merchant_regex: normalizeRegexOrNull(parsed.merchant_regex),
+      date_regex: normalizeRegexOrNull(parsed.date_regex),
+      date_format: normalizeTemplateString(
+        parsed.date_format,
+        'DD/MM/YYYY',
+      ),
+      time_regex: normalizeRegexOrNull(parsed.time_regex),
+      time_format: normalizeTemplateString(parsed.time_format),
+      currency_regex: normalizeRegexOrNull(parsed.currency_regex),
+      source_account_regex: normalizeRegexOrNull(
+        parsed.source_account_regex,
+      ),
+      expense_type: normalizeTemplateString(parsed.expense_type)?.toLowerCase() ?? null,
     },
     warnings: warnings.length > 0 ? warnings : undefined,
   };
@@ -679,6 +1026,7 @@ export function parseAITemplateResponse(rawText: string): ParsedAITemplateResult
 export interface TemplateCorrectionDetails {
   template: {
     name?: string | null;
+    is_new_entity?: boolean | null;
     entity_label?: string | null;
     entity_email_pattern?: string | null;
     subject_pattern?: string | null;
@@ -698,36 +1046,50 @@ export interface TemplateCorrectionDetails {
 }
 
 /**
- * Builds a concise targeted correction prompt with the exact failures detected
- * so the AI can fix the regex patterns and re-generate the JSON template.
+ * Builds a concise targeted correction prompt.
  */
 export function buildCorrectionPrompt(
   sender: string,
   subject: string,
   cleanBody: string,
-  details: TemplateCorrectionDetails
+  details: TemplateCorrectionDetails,
 ): string {
   const sections: string[] = [];
 
-  if (details.failures && details.failures.length > 0) {
-    sections.push('ERRORES BLOQUEANTES QUE IMPIDEN QUE LA PLANTILLA COINCIDA:');
-    sections.push(...details.failures.map((f) => `• ${f}`));
+  if (details.failures?.length) {
+    sections.push(
+      'ERRORES BLOQUEANTES QUE IMPIDEN QUE LA PLANTILLA COINCIDA:',
+      ...details.failures.map((failure) => `• ${failure}`),
+    );
   }
 
-  if (details.warnings && details.warnings.length > 0) {
+  const warnings = details.warnings ?? [];
+
+  if (warnings.length) {
     if (sections.length > 0) sections.push('');
-    sections.push('AVISOS EN CAMPOS DE EXTRACCIÓN (Revisa los patrones o define null si no aparecen en el correo):');
-    sections.push(...details.warnings.map((w) => `• ${w}`));
+
+    sections.push(
+      'AVISOS EN CAMPOS DE EXTRACCIÓN (Revisa los patrones o define null si no aparecen en el correo):',
+      ...warnings.map((warning) => `• ${warning}`),
+    );
   }
 
   if (sections.length === 0) {
-    sections.push('• Revisa la coincidencia exacta de los patrones de extracción sobre el texto real.');
+    sections.push(
+      '• Revisa la coincidencia exacta de los patrones de extracción sobre el texto real.',
+    );
   }
 
-  const isFwd = isForwardedEmail(sender, subject, cleanBody);
-  const forwardedSender = extractForwardedSenderFromBody(cleanBody, 15);
-  const detectedInstitutionalEmail = extractInstitutionalSenderEmail(sender, cleanBody, isFwd);
-
+  const isForwarded = isForwardedEmail(sender, subject, cleanBody);
+  const forwardedSender = extractForwardedSenderFromBody(
+    cleanBody,
+    DEFAULT_HEAD_LINES,
+  );
+  const detectedInstitutionalEmail = extractInstitutionalSenderEmail(
+    sender,
+    cleanBody,
+    isForwarded,
+  );
   return [
     'Corrige la siguiente plantilla JSON para extracción de notificaciones de correo.',
     'La plantilla fue evaluada contra el correo real y se obtuvieron los siguientes resultados:',
@@ -735,14 +1097,28 @@ export function buildCorrectionPrompt(
     ...sections,
     '',
     'PLANTILLA ACTUAL:',
-    JSON.stringify(details.template, null, 2),
+    JSON.stringify(
+      pickTemplateFields(details.template),
+      null,
+      2,
+    ),
     '',
     'DATOS REALES DEL CORREO:',
     '--- REMITENTE EXTERNO RECIBIDO ---',
     sender || '(Sin remitente)',
-    ...(isFwd ? [`[AVISO: Mensaje reenviado. El remitente externo "${sender}" corresponde a quien reenvió el correo, NO al emisor original.]`] : []),
-    ...(forwardedSender ? [`[REMITENTE ORIGINAL EN EL CUERPO: "${forwardedSender}"]`] : []),
-    ...(detectedInstitutionalEmail ? [`[DIRECCIÓN INSTITUCIONAL ORIGINAL: "${detectedInstitutionalEmail}"]`] : []),
+    ...(isForwarded
+      ? [
+        `[AVISO: Mensaje reenviado. El remitente externo "${sender}" corresponde a quien reenvió el correo, NO al emisor original.]`,
+      ]
+      : []),
+    ...(forwardedSender
+      ? [`[REMITENTE ORIGINAL EN EL CUERPO: "${forwardedSender}"]`]
+      : []),
+    ...(detectedInstitutionalEmail
+      ? [
+        `[DIRECCIÓN INSTITUCIONAL ORIGINAL: "${detectedInstitutionalEmail}"]`,
+      ]
+      : []),
     '',
     '--- ASUNTO RECIBIDO ---',
     subject || '(Sin asunto)',
@@ -760,4 +1136,18 @@ export function buildCorrectionPrompt(
     '6. Si el Nivel 1 (Entidad) falla porque el remitente no coincide con ningún patrón de la entidad, extrae la dirección de correo institucional real del remitente (o del encabezado De:/From: del cuerpo si fue reenviado) y devuélvela en entity_email_pattern para su registro. NUNCA uses la dirección personal de quien reenvió el correo.',
     '7. Responde ÚNICAMENTE con el objeto JSON completo y corregido, sin explicaciones ni markdown adicional.',
   ].join('\n');
+}
+
+function formatEntityNames(entityNames: string[]): string {
+  return entityNames.map((name) => `- "${name}"`).join('\n');
+}
+
+function pickTemplateFields(
+  template: TemplateCorrectionDetails['template'],
+): TemplateCorrectionDetails['template'] {
+  const entries = JSON_FIELDS
+    .filter((key) => key in template)
+    .map((key) => [key, template[key]] as const);
+
+  return Object.fromEntries(entries) as TemplateCorrectionDetails['template'];
 }

@@ -1,18 +1,24 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
 import { formatCurrency, distributeAmountEqually } from '@/lib/balance-utils';
-import { X, MailCheck, CheckCircle2, Loader2, Trash2, Edit3, DollarSign, Calendar, Users } from 'lucide-react';
+import {
+  X,
+  MailCheck,
+  CheckCircle2,
+  Loader2,
+  Trash2,
+} from 'lucide-react';
 import Image from 'next/image';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface ConfirmDraftModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  draft: ExpenseDraft | null;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly draft: ExpenseDraft | null;
 }
 
 export function ConfirmDraftModal({
@@ -20,84 +26,113 @@ export function ConfirmDraftModal({
   onClose,
   draft,
 }: ConfirmDraftModalProps) {
-  const { currentProfile, userGroups, members, profiles, confirmDraft, discardDraft } = useExpense();
+  const {
+    currentProfile,
+    userGroups,
+    members,
+    profiles,
+    confirmDraft,
+    discardDraft,
+  } = useExpense();
 
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [paidBy, setPaidBy] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [amount, setAmount] = useState<number>(0);
-  const [expenseDate, setExpenseDate] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [paidBy, setPaidBy] = useState('');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState(0);
+  const [expenseDate, setExpenseDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const prevIsOpenRef = useRef(false);
-  const prevDraftIdRef = useRef<string | null>(null);
+  const profileById = useMemo(
+    () => new Map(profiles.map((profile) => [profile.id, profile])),
+    [profiles],
+  );
+
+  const membersByGroupId = useMemo(() => {
+    const groupedMembers = new Map<string, typeof members>();
+
+    members.forEach((member) => {
+      const groupMembers = groupedMembers.get(member.group_id) ?? [];
+      groupMembers.push(member);
+      groupedMembers.set(member.group_id, groupMembers);
+    });
+
+    return groupedMembers;
+  }, [members]);
+
+  const selectedGroupMemberProfiles = useMemo(() => {
+    const groupMembers = membersByGroupId.get(selectedGroupId) ?? [];
+
+    return groupMembers
+      .map((member) => profileById.get(member.user_id))
+      .filter((profile): profile is NonNullable<typeof profile> => profile !== undefined);
+  }, [membersByGroupId, profileById, selectedGroupId]);
 
   useEffect(() => {
     if (!isOpen || !draft) {
-      prevIsOpenRef.current = false;
-      prevDraftIdRef.current = null;
       return;
     }
 
-    const isOpening = !prevIsOpenRef.current;
-    const isDraftChanged = draft.id !== prevDraftIdRef.current;
+    const initialGroupId = userGroups[0]?.id ?? '';
+    setErrorMsg(null);
+    setIsSubmitting(false);
+    setIsDiscarding(false);
+    setDescription(draft.detected_merchant || 'Gasto detectado');
+    setAmount(draft.detected_amount || 0);
+    setExpenseDate(
+      draft.detected_date || new Date().toISOString().split('T')[0],
+    );
+    setSelectedGroupId(initialGroupId);
+  }, [draft, isOpen, userGroups]);
 
-    if (isOpening || isDraftChanged) {
-      prevIsOpenRef.current = true;
-      prevDraftIdRef.current = draft.id;
-      setErrorMsg(null);
-      setIsSubmitting(false);
-      setIsDiscarding(false);
-
-      setDescription(draft.detected_merchant || 'Gasto detectado');
-      setAmount(draft.detected_amount || 0);
-      setExpenseDate(draft.detected_date || new Date().toISOString().split('T')[0]);
-
-      const initialGroupId = userGroups.length > 0 ? userGroups[0].id : '';
-      setSelectedGroupId(initialGroupId);
-
-      const groupMembers = members.filter((m) => m.group_id === initialGroupId);
-      const groupProfiles = groupMembers
-        .map((m) => profiles.find((p) => p.id === m.user_id))
-        .filter((p): p is NonNullable<typeof p> => p !== undefined);
-
-      if (groupProfiles.length > 0) {
-        const inGroup = currentProfile && groupProfiles.some((p) => p.id === currentProfile.id);
-        setPaidBy(inGroup && currentProfile ? currentProfile.id : groupProfiles[0].id);
-      } else {
-        setPaidBy(currentProfile?.id ?? '');
-      }
-    }
-  }, [isOpen, draft, userGroups, members, profiles, currentProfile]);
-
-  // Update paidBy when selectedGroupId changes
   useEffect(() => {
-    if (!isOpen) return;
-    const groupMembers = members.filter((m) => m.group_id === selectedGroupId);
-    const groupProfiles = groupMembers
-      .map((m) => profiles.find((p) => p.id === m.user_id))
-      .filter((p): p is NonNullable<typeof p> => p !== undefined);
-
-    if (groupProfiles.length > 0) {
-      if (!groupProfiles.some((p) => p.id === paidBy)) {
-        const inGroup = currentProfile && groupProfiles.some((p) => p.id === currentProfile.id);
-        setPaidBy(inGroup && currentProfile ? currentProfile.id : groupProfiles[0].id);
-      }
+    if (!isOpen || !selectedGroupId) {
+      return;
     }
-  }, [selectedGroupId, members, profiles, currentProfile, isOpen, paidBy]);
 
-  if (!isOpen || !draft) return null;
+    const firstMemberProfile = selectedGroupMemberProfiles[0];
 
-  const groupMembers = members.filter((m) => m.group_id === selectedGroupId);
-  const memberProfiles = groupMembers
-    .map((m) => profiles.find((p) => p.id === m.user_id))
-    .filter((p): p is NonNullable<typeof p> => p !== undefined);
+    if (!firstMemberProfile) {
+      setPaidBy(currentProfile?.id ?? '');
+      return;
+    }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting || isDiscarding) return;
+    const currentProfileInGroup = currentProfile
+      ? selectedGroupMemberProfiles.some(
+        (profile) => profile.id === currentProfile.id,
+      )
+      : false;
+
+    if (
+      !selectedGroupMemberProfiles.some((profile) => profile.id === paidBy)
+    ) {
+      setPaidBy(
+        currentProfileInGroup && currentProfile
+          ? currentProfile.id
+          : firstMemberProfile.id,
+      );
+    }
+  }, [
+    currentProfile,
+    isOpen,
+    paidBy,
+    selectedGroupId,
+    selectedGroupMemberProfiles,
+  ]);
+
+  if (!isOpen || !draft) {
+    return null;
+  }
+
+  const handleSubmit = async (
+    event: React.SyntheticEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    if (isSubmitting || isDiscarding) {
+      return;
+    }
 
     setErrorMsg(null);
 
@@ -106,7 +141,7 @@ export function ConfirmDraftModal({
       return;
     }
 
-    if (memberProfiles.length === 0) {
+    if (selectedGroupMemberProfiles.length === 0) {
       setErrorMsg('El grupo seleccionado no tiene integrantes');
       return;
     }
@@ -117,14 +152,19 @@ export function ConfirmDraftModal({
     }
 
     setIsSubmitting(true);
+
     try {
-      // Default equal split among selected group members with exact cent precision
-      const rawSplits = distributeAmountEqually(amount, memberProfiles.map((p) => p.id), paidBy);
-      const splits: ExpenseSplit[] = rawSplits.map((s) => ({
+      const rawSplits = distributeAmountEqually(
+        amount,
+        selectedGroupMemberProfiles.map((profile) => profile.id),
+        paidBy,
+      );
+
+      const splits: ExpenseSplit[] = rawSplits.map((split) => ({
         id: '',
         expense_id: '',
-        user_id: s.user_id,
-        amount_owed: s.amount_owed,
+        user_id: split.user_id,
+        amount_owed: split.amount_owed,
         created_at: new Date().toISOString(),
       }));
 
@@ -133,23 +173,36 @@ export function ConfirmDraftModal({
         totalAmount: amount,
         expenseDate: expenseDate || undefined,
       });
+
       onClose();
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al confirmar borrador');
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Error al confirmar borrador',
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDiscard = async () => {
-    if (isDiscarding || isSubmitting) return;
+    if (isDiscarding || isSubmitting) {
+      return;
+    }
+
     setIsDiscarding(true);
     setErrorMsg(null);
+
     try {
       await discardDraft(draft.id);
       onClose();
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al descartar borrador');
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Error al descartar borrador',
+      );
     } finally {
       setIsDiscarding(false);
     }
@@ -158,27 +211,31 @@ export function ConfirmDraftModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/70 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white rounded-3xl ring-1 ring-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden my-auto">
-        {/* Header */}
         <div className="bg-zinc-900 text-white p-6 flex items-center justify-between">
           <div className="flex items-center space-x-3.5">
             <div className="w-10 h-10 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
               <MailCheck className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold tracking-tight text-zinc-50">Confirmar y Asignar Gasto</h2>
-              <p className="text-xs text-zinc-400">Detectado automáticamente desde tu correo</p>
+              <h2 className="text-lg font-bold tracking-tight text-zinc-50">
+                Confirmar y Asignar Gasto
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Detectado automáticamente desde tu correo
+              </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar modal"
             className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Draft Details Box */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {errorMsg && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
@@ -186,7 +243,6 @@ export function ConfirmDraftModal({
             </div>
           )}
 
-          {/* Snippet Card */}
           <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100 space-y-2">
             <div className="flex justify-between items-center text-xs font-bold text-indigo-950 uppercase tracking-wider">
               <div className="flex items-center space-x-2">
@@ -198,9 +254,14 @@ export function ConfirmDraftModal({
                 )}
               </div>
               <span className="text-xs font-extrabold text-indigo-700">
-                {draft.currency || 'COP'} {formatCurrency(draft.detected_amount, draft.currency || 'COP')}
+                {draft.currency || 'COP'}{' '}
+                {formatCurrency(
+                  draft.detected_amount,
+                  draft.currency || 'COP',
+                )}
               </span>
             </div>
+
             {draft.raw_snippet && (
               <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed bg-white/70 p-2 rounded-xl border border-indigo-100/60 font-mono text-[11px]">
                 &quot;{draft.raw_snippet}&quot;
@@ -208,80 +269,91 @@ export function ConfirmDraftModal({
             )}
           </div>
 
-          {/* Editable Fields: Description & Amount */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="space-y-1 sm:col-span-2">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+              <label
+                htmlFor="confirm-draft-description"
+                className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+              >
                 Descripción / Comercio
               </label>
               <input
+                id="confirm-draft-description"
                 type="text"
                 required
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(event) => setDescription(event.target.value)}
                 className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+              <label
+                htmlFor="confirm-draft-amount"
+                className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+              >
                 Monto ({draft.currency || 'COP'})
               </label>
               <input
+                id="confirm-draft-amount"
                 type="number"
                 step="any"
                 required
                 value={amount}
-                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                onChange={(event) =>
+                  setAmount(Number.parseFloat(event.target.value) || 0)
+                }
                 className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-emerald-800 focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+              <label
+                htmlFor="confirm-draft-expense-date"
+                className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
+              >
                 Fecha del Gasto
               </label>
               <input
+                id="confirm-draft-expense-date"
                 type="date"
                 required
                 value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
+                onChange={(event) => setExpenseDate(event.target.value)}
                 className="w-full px-3.5 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
           </div>
 
-          {/* Group selection (mandatory) */}
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+            <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
               Asignar al Grupo <span className="text-rose-500">*</span>
-            </label>
+            </span>
             <CustomSelect
               value={selectedGroupId}
-              onChange={(val) => setSelectedGroupId(val)}
-              options={userGroups.map((g) => ({
-                value: g.id,
-                label: g.name,
+              onChange={setSelectedGroupId}
+              options={userGroups.map((group) => ({
+                value: group.id,
+                label: group.name,
               }))}
               size="md"
               placeholder="Seleccionar grupo..."
             />
           </div>
-          
-          {/* Paid by selection */}
+
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+            <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
               ¿Quién pagó?
-            </label>
+            </span>
             <CustomSelect
               value={paidBy}
-              onChange={(val) => setPaidBy(val)}
-              options={memberProfiles.map((p) => ({
-                value: p.id,
-                label: p.full_name,
-                icon: p.avatar_url ? (
+              onChange={setPaidBy}
+              options={selectedGroupMemberProfiles.map((profile) => ({
+                value: profile.id,
+                label: profile.full_name,
+                icon: profile.avatar_url ? (
                   <Image
-                    src={p.avatar_url}
+                    src={profile.avatar_url}
                     alt=""
                     width={20}
                     height={20}
@@ -290,7 +362,7 @@ export function ConfirmDraftModal({
                   />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
-                    {(p.full_name || 'U').charAt(0).toUpperCase()}
+                    {(profile.full_name || 'U').charAt(0).toUpperCase()}
                   </div>
                 ),
               }))}
@@ -301,14 +373,23 @@ export function ConfirmDraftModal({
 
           <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-xs text-zinc-600 flex items-center justify-between">
             <span>
-              División entre <strong className="text-zinc-900">{memberProfiles.length} integrantes</strong>:
+              División entre{' '}
+              <strong className="text-zinc-900">
+                {selectedGroupMemberProfiles.length} integrantes
+              </strong>
+              :
             </span>
             <span className="font-bold text-zinc-900">
-              {formatCurrency(memberProfiles.length > 0 ? amount / memberProfiles.length : 0, draft.currency || 'COP')} c/u
+              {formatCurrency(
+                selectedGroupMemberProfiles.length > 0
+                  ? amount / selectedGroupMemberProfiles.length
+                  : 0,
+                draft.currency || 'COP',
+              )}{' '}
+              c/u
             </span>
           </div>
 
-          {/* Submit & Discard actions */}
           <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
             <button
               type="button"
@@ -342,7 +423,9 @@ export function ConfirmDraftModal({
                 ) : (
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 )}
-                <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}</span>
+                <span>
+                  {isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}
+                </span>
               </button>
             </div>
           </div>
