@@ -543,6 +543,14 @@ export async function PUT(req: NextRequest) {
           : value;
     }
 
+    if (body.expense_type !== undefined || body.expense_type_id !== undefined) {
+      payload.expense_type_id = await resolveExpenseTypeId(
+        supabase,
+        body.expense_type_id,
+        body.expense_type,
+      );
+    }
+
     if (payload.amount_regex === null) {
       return NextResponse.json(
         { error: 'amount_regex es obligatorio' },

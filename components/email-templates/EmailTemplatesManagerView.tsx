@@ -69,6 +69,7 @@ type TemplateFormState = {
   timeFormat: string;
   currencyRegex: string;
   expenseType: string;
+  expenseTypeId: string | null;
 };
 
 const EMPTY_TEMPLATE_FORM: TemplateFormState = {
@@ -88,6 +89,7 @@ const EMPTY_TEMPLATE_FORM: TemplateFormState = {
   timeFormat: '',
   currencyRegex: '',
   expenseType: 'compra',
+  expenseTypeId: null,
 };
 
 function useTemplateFormState(initialState: TemplateFormState) {
@@ -702,6 +704,7 @@ const buildTemplateSavePayload = (
   editingTemplateId: string | null,
   entityId: string | null,
   entityEmailPattern: string | null,
+  expenseTypeId?: string | null,
 ) => ({
   ...(editingTemplateId ? { id: editingTemplateId } : {}),
   name: form.name.trim(),
@@ -719,6 +722,8 @@ const buildTemplateSavePayload = (
   time_regex: sanitizeRegexPattern(form.timeRegex.trim()) || null,
   time_format: form.timeFormat.trim() || (form.timeRegex.trim() ? 'HH:mm:ss' : null),
   currency_regex: sanitizeRegexPattern(form.currencyRegex.trim()) || null,
+  expense_type: form.expenseType.trim() || null,
+  expense_type_id: expenseTypeId || form.expenseTypeId || null,
 });
 
 export function EmailTemplatesManagerView({
@@ -743,6 +748,7 @@ export function EmailTemplatesManagerView({
   // Templates list state
   const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
   const [entities, setEntities] = useState<CatalogEntity[]>([]);
+  const [expenseTypes, setExpenseTypes] = useState<Array<{ id: string; name: string | null; label: string | null }>>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState<boolean>(false);
   const [templateSearchQuery, setTemplateSearchQuery] = useState<string>('');
   const [selectedEntityFilter, setSelectedEntityFilter] = useState<string>('all');
@@ -867,6 +873,9 @@ export function EmailTemplatesManagerView({
         if (Array.isArray(catData.entities)) {
           setEntities(catData.entities);
         }
+        if (Array.isArray(catData.expense_types)) {
+          setExpenseTypes(catData.expense_types);
+        }
       }
     } catch (err) {
       console.error('[EmailTemplatesManagerView] Error fetching templates:', err);
@@ -960,14 +969,31 @@ export function EmailTemplatesManagerView({
   }, [fetchInboxEmails]);
 
   useEffect(() => {
-    checkAuthStatus();
+    let isMounted = true;
+    const run = async () => {
+      if (isMounted) {
+        await checkAuthStatus();
+      }
+    };
+    void run();
+    return () => {
+      isMounted = false;
+    };
   }, [checkAuthStatus]);
 
   useEffect(() => {
-    if (isAuthorized) {
-      fetchTemplatesData();
-      fetchInboxEmails();
-    }
+    if (!isAuthorized) return;
+    let isMounted = true;
+    const run = async () => {
+      if (isMounted) {
+        await fetchTemplatesData();
+        await fetchInboxEmails();
+      }
+    };
+    void run();
+    return () => {
+      isMounted = false;
+    };
   }, [isAuthorized, fetchTemplatesData, fetchInboxEmails]);
 
   // Handle OAuth Connect
@@ -1037,9 +1063,18 @@ export function EmailTemplatesManagerView({
   // Detect bank from sender or subject
   // Reset transient AI preview when the selected email changes.
   useEffect(() => {
-    setAiPreviewDiagnosis(null);
-    setAiPreviewEmailId(null);
-  }, [selectedEmail]);
+    let active = true;
+    const timer = setTimeout(() => {
+      if (active) {
+        setAiPreviewDiagnosis(null);
+        setAiPreviewEmailId(null);
+      }
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [selectedEmail?.id]);
 
   // Templates to test against the selected email (default: 'all')
   const templatesToTest = useMemo(() => {
@@ -1100,6 +1135,12 @@ export function EmailTemplatesManagerView({
       ? entities.find((entity) => entity.id === form.entityId) || null
       : entities.find((entity) => entity.name.trim().toLowerCase() === form.entityLabel.trim().toLowerCase()) || null;
 
+    const matchedExpenseType = expenseTypes.find((et) =>
+      (form.expenseTypeId && et.id === form.expenseTypeId) ||
+      et.name?.toLowerCase() === form.expenseType.trim().toLowerCase() ||
+      et.label?.toLowerCase() === form.expenseType.trim().toLowerCase()
+    );
+
     return {
       id: editingTemplateId || '__active_form_template__',
       name: form.name || 'Nueva Plantilla',
@@ -1111,8 +1152,8 @@ export function EmailTemplatesManagerView({
       entity_id: form.entityId || matchedEnt?.id || null,
       entity: { name: form.entityLabel || matchedEnt?.name || '' },
       match_pattern: form.matchPattern || '',
-      expense_type_id: null,
-      expense_type_label: form.expenseType || 'compra',
+      expense_type_id: matchedExpenseType?.id || form.expenseTypeId || null,
+      expense_type_label: form.expenseType || matchedExpenseType?.label || 'compra',
       currency_regex: form.currencyRegex || '',
       source_account_regex: form.sourceAccountRegex || '',
       time_regex: form.timeRegex || '',
@@ -1134,12 +1175,14 @@ export function EmailTemplatesManagerView({
     form.entityId,
     form.matchPattern,
     form.expenseType,
+    form.expenseTypeId,
     form.currencyRegex,
     form.sourceAccountRegex,
     form.timeRegex,
     form.timeFormat,
     form.entityEmailPattern,
     entities,
+    expenseTypes,
   ]);
 
   // Motor de evaluación unificado para la plantilla activa contra el correo seleccionado o muestra
@@ -1175,20 +1218,7 @@ export function EmailTemplatesManagerView({
   }, [
     selectedEmail,
     activeFormEvaluation,
-    form.name,
-    form.entityLabel,
-    form.entityEmailPattern,
-    form.subjectPattern,
-    form.matchPattern,
-    form.amountRegex,
-    form.merchantRegex,
-    form.dateRegex,
-    form.dateFormat,
-    form.timeRegex,
-    form.timeFormat,
-    form.currencyRegex,
-    form.sourceAccountRegex,
-    form.expenseType,
+    activeFormTemplate,
   ]);
 
   const [copiedReportPromptId, setCopiedReportPromptId] = useState<string | null>(null);
@@ -1245,6 +1275,7 @@ export function EmailTemplatesManagerView({
       timeFormat: tmpl.time_format || '',
       currencyRegex: tmpl.currency_regex || '',
       expenseType: tmpl.expense_type_label || 'compra',
+      expenseTypeId: tmpl.expense_type_id || null,
     });
 
     setIsFormVisible(true);
@@ -1335,6 +1366,11 @@ export function EmailTemplatesManagerView({
     const body = cleanEmailBody(selectedEmail?.body || selectedEmail?.plainBody || selectedEmail?.snippet || '');
     const resolved = resolveEmailEntity({ entities, entityLabel: data.entity_label, requestedPattern: data.entity_email_pattern, sender, body });
 
+    const matchedExpenseType = expenseTypes.find((et) =>
+      et.name?.toLowerCase() === (data.expense_type || '').toLowerCase() ||
+      et.label?.toLowerCase() === (data.expense_type || '').toLowerCase()
+    );
+
     updateForm({
       name: data.name || '',
       entityLabel: resolved.entity?.name || data.entity_label || '',
@@ -1352,6 +1388,7 @@ export function EmailTemplatesManagerView({
       timeFormat: data.time_format || '',
       currencyRegex: data.currency_regex || '',
       expenseType: data.expense_type || 'compra',
+      expenseTypeId: matchedExpenseType?.id || null,
     });
 
     setEditingTemplateId(null);
@@ -1369,8 +1406,8 @@ export function EmailTemplatesManagerView({
       entity_id: resolved.entity?.id || null,
       entity: { name: resolved.entity?.name || data.entity_label || '' },
       match_pattern: data.match_pattern,
-      expense_type_id: null,
-      expense_type_label: data.expense_type,
+      expense_type_id: matchedExpenseType?.id || null,
+      expense_type_label: data.expense_type || matchedExpenseType?.label || null,
       currency_regex: data.currency_regex,
       source_account_regex: data.source_account_regex,
       time_regex: data.time_regex,
@@ -1437,6 +1474,11 @@ export function EmailTemplatesManagerView({
         const matched = resolved.entity;
         const effectivePattern = resolved.effectivePattern;
 
+        const matchedExpenseType = expenseTypes.find((et) =>
+          et.name?.toLowerCase() === (s.expense_type || '').toLowerCase() ||
+          et.label?.toLowerCase() === (s.expense_type || '').toLowerCase()
+        );
+
         updateForm({
           name: s.name || '',
           entityLabel: matched?.name || s.entity_label || '',
@@ -1454,6 +1496,7 @@ export function EmailTemplatesManagerView({
           timeFormat: s.time_format || '',
           currencyRegex: s.currency_regex || '',
           expenseType: s.expense_type || 'compra',
+          expenseTypeId: matchedExpenseType?.id || null,
         });
 
         setEditingTemplateId(null);
@@ -1504,11 +1547,17 @@ export function EmailTemplatesManagerView({
         sender,
         body,
       });
+      const matchedExpenseType = expenseTypes.find((et) =>
+        (form.expenseTypeId && et.id === form.expenseTypeId) ||
+        et.name?.toLowerCase() === form.expenseType.trim().toLowerCase() ||
+        et.label?.toLowerCase() === form.expenseType.trim().toLowerCase()
+      );
       const payload = buildTemplateSavePayload(
         form,
         editingTemplateId,
         resolved.entity?.id || null,
         resolved.effectivePattern || null,
+        matchedExpenseType?.id || form.expenseTypeId || null,
       );
 
       const method = editingTemplateId ? 'PUT' : 'POST';
@@ -1959,7 +2008,35 @@ export function EmailTemplatesManagerView({
                       <div className="space-y-1"><label htmlFor="email-template-field-24" className="text-xs font-bold text-zinc-700">Fecha</label><input id="email-template-field-24" value={form.dateRegex} onChange={(e) => setFormField('dateRegex', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" /></div>
                       <div className="space-y-1"><label htmlFor="email-template-field-25" className="text-xs font-bold text-zinc-700">Hora</label><input id="email-template-field-25" value={form.timeRegex} onChange={(e) => setFormField('timeRegex', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" /></div>
                       <div className="space-y-1"><label htmlFor="email-template-field-26" className="text-xs font-bold text-zinc-700">Patrón de correo de entidad</label><input id="email-template-field-26" value={form.entityEmailPattern} onChange={(e) => setFormField('entityEmailPattern', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" /></div>
-                      <div className="space-y-1"><label htmlFor="email-template-field-27" className="text-xs font-bold text-zinc-700">Tipo de gasto</label><input id="email-template-field-27" value={form.expenseType} onChange={(e) => setFormField('expenseType', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl" /></div>
+                      <div className="space-y-1">
+                        <label htmlFor="email-template-field-27" className="text-xs font-bold text-zinc-700">Tipo de gasto</label>
+                        <input
+                          id="email-template-field-27"
+                          list="expense-type-suggestions"
+                          value={form.expenseType}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = expenseTypes.find(
+                              (et) =>
+                                et.name?.toLowerCase() === val.trim().toLowerCase() ||
+                                et.label?.toLowerCase() === val.trim().toLowerCase()
+                            );
+                            setFormField('expenseType', val);
+                            setFormField('expenseTypeId', matched?.id || null);
+                          }}
+                          className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
+                        />
+                        <datalist id="expense-type-suggestions">
+                          {expenseTypes.map((et) => (
+                            <option key={et.id} value={et.label || et.name || ''} />
+                          ))}
+                          <option value="Compra" />
+                          <option value="Transferencia" />
+                          <option value="Pago" />
+                          <option value="Retiro" />
+                          <option value="Transporte" />
+                        </datalist>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div className="space-y-1"><label htmlFor="email-template-field-28" className="text-xs font-bold text-zinc-700">Formato de fecha</label><input id="email-template-field-28" list="date-format-suggestions" value={form.dateFormat} onChange={(e) => setFormField('dateFormat', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" /><datalist id="date-format-suggestions"><option value="DD/MM/YYYY" /><option value="YYYY-MM-DD" /><option value="YYYY/MM/DD" /><option value="MM/DD/YYYY" /></datalist></div>
