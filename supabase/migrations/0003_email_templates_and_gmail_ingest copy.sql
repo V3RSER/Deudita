@@ -13,12 +13,7 @@ create table if not exists public.expense_types (
   created_at timestamptz not null default now()
 );
 
-insert into public.expense_types (name, label) values
-  ('compra', 'Compra'),
-  ('transferencia', 'Transferencia'),
-  ('pago', 'Pago'),
-  ('transporte', 'Transporte')
-on conflict (name) do nothing;
+
 
 alter table public.expense_types enable row level security;
 

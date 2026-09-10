@@ -740,6 +740,7 @@ export function resolveEmailEntity({
   return { entity, effectivePattern, senderAlreadyCovered, matchedBy, matchedPattern };
 }
 
+
 export function buildTemplatePrompt(
   sender: string,
   subject: string,
@@ -760,30 +761,17 @@ export function buildTemplatePrompt(
     sender,
     body: cleanBody,
   }).entity;
+
   let entityInstructions: string;
 
   if (matchedExistingEntity) {
-    const existingPatterns = matchedExistingEntity.patterns?.filter(Boolean) ?? [];
-
     entityInstructions = [
       'ENTIDAD RESUELTA DETERMINÍSTICAMENTE POR EL SISTEMA:',
-      `entity_label="${matchedExistingEntity.name}"`,
+      `entity_label = "${matchedExistingEntity.name}"`,
       'is_new_entity=false',
-      'BLOQUEO DE ENTIDAD: esta entidad fue determinada por una coincidencia de patrón existente en el remitente, remitente reenviado o cuerpo.',
-      'No identifiques, infieras, reevalues, corrijas ni sustituyas la entidad.',
-      'No compares esta entidad con otras entidades registradas para decidir cuál corresponde.',
-      'La respuesta debe conservar exactamente entity_label e is_new_entity indicados arriba.',
-      'entity_email_pattern NO debe crearse ni modificarse para esta entidad. Si ya existe un patrón coincidente, devuelve entity_email_pattern=null.',
-      ...(existingPatterns.length
-        ? [
-          '',
-          'PATRONES EXISTENTES DE ESTA ENTIDAD (SOLO COMO CONTEXTO PARA EL DESEMPATE):',
-          ...existingPatterns.map(
-            (pattern, index) => `${index + 1}. ${pattern}`,
-          ),
-          'Estos patrones ya resuelven el NIVEL 1 (Entidad). No los conviertas en un nuevo match_pattern ni generes un patrón de entidad redundante.',
-        ]
-        : []),
+      'entity_email_pattern=null',
+      'No analices, infieras, reevalues, corrijas, compares ni sustituyas la entidad.',
+      'Conserva exactamente estos valores y continúa con el análisis del tipo de notificación y sus campos.',
     ].join('\n');
   } else {
     const entityNames = existingEntities
@@ -791,7 +779,7 @@ export function buildTemplatePrompt(
       .filter(Boolean);
 
     const namesList = entityNames.length
-      ? `ENTIDADES REGISTRADAS:\n${formatEntityNames(entityNames)}`
+      ? `ENTIDADES REGISTRADAS: \n${ formatEntityNames(entityNames) } `
       : 'No hay entidades registradas.';
 
     entityInstructions = [
@@ -830,11 +818,6 @@ export function buildTemplatePrompt(
     'Si no hay reenvío, usa el remitente, asunto y contenido del correo recibido.',
     '',
     '1. ENTIDAD:',
-    'entity_label identifica la marca o entidad que emite directamente la notificación.',
-    'Prioriza la identidad explícita del emisor sobre relaciones corporativas, bancos asociados, propietarios, emisores legales, procesadores o menciones secundarias.',
-    'La lista de entidades registradas solo sirve para normalizar la entidad emisora cuando exista equivalencia inequívoca.',
-    'is_new_entity=true únicamente cuando la entidad emisora no corresponda a una entidad registrada.',
-    '',
     entityInstructions,
     '',
     '2. ASUNTO Y CLASE DE NOTIFICACIÓN:',
@@ -866,13 +849,13 @@ export function buildTemplatePrompt(
     '',
     ...(relevantExistingPatterns.length
       ? [
-        'PATRONES EXISTENTES PARA COMPARACIÓN:',
-        ...relevantExistingPatterns.map(
-          (pattern, index) => `${index + 1}. ${pattern}`,
-        ),
-        'Estos patrones sirven para identificar diferencias existentes entre tipos de notificación de la misma entidad. No los copies literalmente si contienen partes dinámicas.',
-        '',
-      ]
+          'PATRONES EXISTENTES PARA COMPARACIÓN:',
+          ...relevantExistingPatterns.map(
+            (pattern, index) => `${ index + 1 }. ${ pattern } `,
+          ),
+          'Estos patrones sirven para identificar diferencias existentes entre tipos de notificación de la misma entidad. No los copies literalmente si contienen partes dinámicas.',
+          '',
+        ]
       : []),
     'VALIDACIÓN DE MATCH_PATTERN:',
     'Valida que el valor generado compile con new RegExp(match_pattern, "i").',
@@ -898,8 +881,8 @@ export function buildTemplatePrompt(
     'time_regex debe capturar únicamente la hora tal como aparece en la notificación original, admitiendo formatos de 12/24 horas y segundos opcionales.',
     'time_format debe describir exactamente el formato en que esa hora aparece en el correo. No conviertas, normalices ni reformatees la hora.',
     'Si la fecha u hora no aparece en la notificación original, usa null en su regex y formato correspondientes.',
-    'currency_regex debe capturar la moneda únicamente si aparece explícitamente en la notificación en formato ISO 4217; si no, usa null.',
-    'source_account_regex debe capturar la cuenta de origen tal como aparece cuando esté explícitamente presente; si no, usa null.',
+    'currency_regex debe capturar únicamente el código de moneda ISO 4217 de tres letras ([A-Z]{3}) cuando aparezca explícitamente asociado al importe o a una cantidad monetaria dentro de la notificación. El grupo de captura debe contener únicamente el código ISO 4217, sin símbolo de moneda, importe ni etiquetas. La moneda es un valor dinámico de la instancia: nunca fijes en el regex una moneda concreta como COP, USD, EUR u otra. El regex debe aceptar cualquier código que cumpla [A-Z]{3}. Si no aparece explícitamente una moneda ISO 4217 asociada a un importe, usa null.',
+    'source_account_regex debe capturar el identificador de la cuenta o instrumento de pago de origen tal como aparece explícitamente en la notificación. Puede corresponder a una cuenta bancaria, tarjeta, billetera u otro medio de pago, y puede estar completo, parcialmente oculto o representado mediante cualquier formato utilizado por la entidad. La captura debe contener únicamente el identificador del origen, sin etiquetas, tipo de instrumento ni texto adicional. Si no se identifica explícitamente el origen del pago, usa null.',
     'Los regex se aplican sobre el CUERPO LIMPIO. HTML y tablas pueden convertir ":" en espacios o saltos de línea; usa separadores flexibles como `(?:\\s*:\\s*|\\s+)` cuando corresponda.',
     'Los regex deben usar únicamente el contexto mínimo, estable y necesario para localizar el campo objetivo.',
     'Evita incorporar datos concretos de la instancia o segmentos accidentales que puedan variar entre correos de la misma clase.',
@@ -941,7 +924,7 @@ export function buildTemplatePrompt(
     '',
     'SALIDA:',
     'Responde exclusivamente con un objeto JSON válido, sin markdown ni explicaciones.',
-    `Debe contener exactamente: ${JSON_FIELDS.join(', ')}.`,
+    `Debe contener exactamente: ${ JSON_FIELDS.join(', ') }.`,
     'No copies valores de estas instrucciones como datos del correo.',
     'No inventes valores ni propiedades.',
     'Usa null únicamente cuando una regla lo indique.',
