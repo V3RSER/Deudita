@@ -1,13 +1,14 @@
 -- ============================================================================
--- 01_core_schema.sql
+-- 01_core_schema.sql (IDEMPOTENTE)
 -- Núcleo: perfiles, grupos, membresía, invitaciones, storage de uploads.
 -- Consolidado desde 0001 (secciones 1, 2, 10) — estado final.
+-- Seguro de re-ejecutar cuantas veces sea necesario.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
 -- PERFILES
 -- ----------------------------------------------------------------------------
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid primary key,
   email text,
   full_name text,
@@ -27,7 +28,7 @@ create table public.profiles (
 -- ----------------------------------------------------------------------------
 -- GRUPOS Y MEMBRESÍA
 -- ----------------------------------------------------------------------------
-create table public.groups (
+create table if not exists public.groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   category text not null default 'home',
@@ -37,7 +38,7 @@ create table public.groups (
   created_at timestamptz not null default now()
 );
 
-create table public.group_members (
+create table if not exists public.group_members (
   group_id uuid not null references public.groups(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
   invited_by uuid references public.profiles(id),
@@ -46,7 +47,7 @@ create table public.group_members (
   primary key (group_id, user_id)
 );
 
-create table public.group_invites (
+create table if not exists public.group_invites (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.groups(id) on delete cascade,
   email text,
@@ -59,7 +60,7 @@ create table public.group_invites (
     check (email is not null or invitee_profile_id is not null)
 );
 
-create unique index group_invites_token_key on public.group_invites (token);
+create unique index if not exists group_invites_token_key on public.group_invites (token);
 
 -- ----------------------------------------------------------------------------
 -- FUNCIÓN AUXILIAR: chequeo de membresía sin recursión de RLS
@@ -84,12 +85,15 @@ insert into storage.buckets (id, name, public)
 values ('uploads', 'uploads', true)
 on conflict (id) do update set public = true;
 
+drop policy if exists "Public Access Uploads" on storage.objects;
 create policy "Public Access Uploads" on storage.objects
   for select using (bucket_id = 'uploads');
 
+drop policy if exists "Authenticated Insert Uploads" on storage.objects;
 create policy "Authenticated Insert Uploads" on storage.objects
   for insert with check (bucket_id = 'uploads' and auth.role() = 'authenticated');
 
+drop policy if exists "Authenticated Update Uploads" on storage.objects;
 create policy "Authenticated Update Uploads" on storage.objects
   for update using (bucket_id = 'uploads' and auth.role() = 'authenticated');
 
@@ -102,11 +106,14 @@ alter table public.group_members enable row level security;
 alter table public.group_invites enable row level security;
 
 -- ---- profiles ----
+drop policy if exists "select_profiles" on public.profiles;
 create policy "select_profiles" on public.profiles for select using (true);
 
+drop policy if exists "insert_profiles" on public.profiles;
 create policy "insert_profiles" on public.profiles
   for insert with check (auth.uid() = id or is_temp = true);
 
+drop policy if exists "update_profiles" on public.profiles;
 create policy "update_profiles" on public.profiles
   for update using (
     auth.uid() = id
@@ -121,6 +128,7 @@ create policy "update_profiles" on public.profiles
     )
   );
 
+drop policy if exists "delete_profiles" on public.profiles;
 create policy "delete_profiles" on public.profiles
   for delete using (
     auth.uid() = id
@@ -136,6 +144,7 @@ create policy "delete_profiles" on public.profiles
   );
 
 -- ---- groups ----
+drop policy if exists "select_own_groups" on public.groups;
 create policy "select_own_groups" on public.groups
   for select using (
     public.is_group_member(id, auth.uid())
@@ -143,16 +152,20 @@ create policy "select_own_groups" on public.groups
     or exists (select 1 from public.group_invites gi where gi.group_id = groups.id and gi.status = 'pending')
   );
 
+drop policy if exists "insert_own_groups" on public.groups;
 create policy "insert_own_groups" on public.groups
   for insert with check (auth.uid() = owner_id);
 
+drop policy if exists "update_own_groups" on public.groups;
 create policy "update_own_groups" on public.groups
   for update using (auth.uid() = owner_id);
 
+drop policy if exists "delete_own_groups" on public.groups;
 create policy "delete_own_groups" on public.groups
   for delete using (auth.uid() = owner_id);
 
 -- ---- group_members ----
+drop policy if exists "select_group_members" on public.group_members;
 create policy "select_group_members" on public.group_members
   for select using (
     public.is_group_member(group_id, auth.uid())
@@ -160,6 +173,7 @@ create policy "select_group_members" on public.group_members
     or user_id = auth.uid()
   );
 
+drop policy if exists "insert_group_members" on public.group_members;
 create policy "insert_group_members" on public.group_members
   for insert with check (
     user_id = auth.uid()
@@ -167,6 +181,7 @@ create policy "insert_group_members" on public.group_members
     or public.is_group_member(group_id, auth.uid())
   );
 
+drop policy if exists "update_group_members" on public.group_members;
 create policy "update_group_members" on public.group_members
   for update using (
     user_id = auth.uid()
@@ -176,15 +191,18 @@ create policy "update_group_members" on public.group_members
     or group_id in (select id from public.groups where owner_id = auth.uid())
   );
 
+drop policy if exists "delete_group_members" on public.group_members;
 create policy "delete_group_members" on public.group_members
   for delete using (
     user_id = auth.uid() or group_id in (select id from public.groups where owner_id = auth.uid())
   );
 
 -- ---- group_invites ----
+drop policy if exists "select_group_invites" on public.group_invites;
 create policy "select_group_invites" on public.group_invites
   for select using (true);
 
+drop policy if exists "insert_group_invites" on public.group_invites;
 create policy "insert_group_invites" on public.group_invites
   for insert with check (
     invited_by = auth.uid()
@@ -194,6 +212,7 @@ create policy "insert_group_invites" on public.group_invites
     )
   );
 
+drop policy if exists "update_group_invites" on public.group_invites;
 create policy "update_group_invites" on public.group_invites
   for update using (
     auth.role() = 'authenticated'

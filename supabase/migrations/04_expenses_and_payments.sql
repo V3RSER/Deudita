@@ -1,8 +1,9 @@
 -- ============================================================================
--- 04_expenses_and_payments.sql
+-- 04_expenses_and_payments.sql (IDEMPOTENTE)
 -- Gastos, ítems, splits, pagos, auditoría, vista de balances, realtime
 -- y función de ingesta webhook insert_expense_for_webhook.
 -- Consolidado desde 0001 (§3-4, 7), 0002 (§4-6), 0009, 0010 — estado final.
+-- Seguro de re-ejecutar cuantas veces sea necesario.
 --
 -- NOTA: incluye group_id nullable (gastos personales / sin grupo, 0009) y
 -- todas las columnas de ingesta por Gmail directamente en public.expenses,
@@ -12,7 +13,7 @@
 -- ----------------------------------------------------------------------------
 -- GASTOS
 -- ----------------------------------------------------------------------------
-create table public.expenses (
+create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   group_id uuid references public.groups(id) on delete cascade,  -- nullable: gasto personal/borrador (0009)
   paid_by uuid not null references public.profiles(id),
@@ -40,15 +41,15 @@ create table public.expenses (
   updated_by uuid references public.profiles(id)
 );
 
-create unique index idx_expenses_gmail_message_id
+create unique index if not exists idx_expenses_gmail_message_id
   on public.expenses(gmail_message_id)
   where gmail_message_id is not null;
 
-create index idx_expenses_is_draft_user
+create index if not exists idx_expenses_is_draft_user
   on public.expenses(created_by, is_draft)
   where is_draft = true;
 
-create table public.expense_items (
+create table if not exists public.expense_items (
   id uuid primary key default gen_random_uuid(),
   expense_id uuid not null references public.expenses(id) on delete cascade,
   description text not null,
@@ -56,7 +57,7 @@ create table public.expense_items (
   created_at timestamptz not null default now()
 );
 
-create table public.expense_splits (
+create table if not exists public.expense_splits (
   id uuid primary key default gen_random_uuid(),
   expense_id uuid not null references public.expenses(id) on delete cascade,
   user_id uuid not null references public.profiles(id),
@@ -68,7 +69,7 @@ create table public.expense_splits (
 -- ----------------------------------------------------------------------------
 -- PAGOS
 -- ----------------------------------------------------------------------------
-create table public.payments (
+create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.groups(id) on delete cascade,
   paid_by uuid not null references public.profiles(id),
@@ -86,7 +87,7 @@ create table public.payments (
 -- ----------------------------------------------------------------------------
 -- AUDITORÍA DE GASTOS (tabla + trigger)
 -- ----------------------------------------------------------------------------
-create table public.expense_audit_logs (
+create table if not exists public.expense_audit_logs (
   id uuid primary key default gen_random_uuid(),
   expense_id uuid not null,   -- sin FK: permite loguear deletes sin romper referencia
   group_id uuid references public.groups(id) on delete cascade,
@@ -144,6 +145,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_log_expense_changes on public.expenses;
 create trigger trg_log_expense_changes
 after insert or update or delete on public.expenses
 for each row
@@ -152,6 +154,7 @@ execute function public.log_expense_changes();
 -- ----------------------------------------------------------------------------
 -- VISTA DE BALANCES NETOS
 -- ----------------------------------------------------------------------------
+drop view if exists public.net_balances;
 create view public.net_balances as
 with expense_debts as (
   select e.group_id, e.paid_by as creditor, s.user_id as debtor, sum(s.amount_owed) as amount
@@ -180,8 +183,27 @@ full outer join payment_totals pt
 alter table public.expenses replica identity full;
 alter table public.payments replica identity full;
 
-alter publication supabase_realtime add table public.expenses;
-alter publication supabase_realtime add table public.payments;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'expenses'
+  ) then
+    alter publication supabase_realtime add table public.expenses;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'payments'
+  ) then
+    alter publication supabase_realtime add table public.payments;
+  end if;
+end;
+$$;
 
 -- ============================================================================
 -- ROW LEVEL SECURITY
@@ -193,18 +215,21 @@ alter table public.payments enable row level security;
 alter table public.expense_audit_logs enable row level security;
 
 -- ---- expenses (soporta group_id nulo: gastos personales/borrador, 0009) ----
+drop policy if exists "select_expenses" on public.expenses;
 create policy "select_expenses" on public.expenses
   for select using (
     (group_id is not null and public.is_group_member(group_id, auth.uid()))
     or (created_by = auth.uid() or paid_by = auth.uid())
   );
 
+drop policy if exists "insert_expenses" on public.expenses;
 create policy "insert_expenses" on public.expenses
   for insert with check (
     (group_id is not null and public.is_group_member(group_id, auth.uid()))
     or (group_id is null and (created_by = auth.uid() or paid_by = auth.uid()))
   );
 
+drop policy if exists "update_expenses" on public.expenses;
 create policy "update_expenses" on public.expenses
   for update using (
     (group_id is not null and exists (
@@ -215,10 +240,12 @@ create policy "update_expenses" on public.expenses
     or (created_by = auth.uid() or paid_by = auth.uid())
   );
 
+drop policy if exists "delete_expenses" on public.expenses;
 create policy "delete_expenses" on public.expenses
   for delete using (created_by = auth.uid() or paid_by = auth.uid());
 
 -- ---- expense_items ----
+drop policy if exists "select_expense_items" on public.expense_items;
 create policy "select_expense_items" on public.expense_items
   for select using (
     expense_id in (
@@ -228,6 +255,7 @@ create policy "select_expense_items" on public.expense_items
     )
   );
 
+drop policy if exists "insert_expense_items" on public.expense_items;
 create policy "insert_expense_items" on public.expense_items
   for insert with check (
     expense_id in (
@@ -237,6 +265,7 @@ create policy "insert_expense_items" on public.expense_items
     )
   );
 
+drop policy if exists "update_expense_items" on public.expense_items;
 create policy "update_expense_items" on public.expense_items
   for update using (
     expense_id in (
@@ -246,6 +275,7 @@ create policy "update_expense_items" on public.expense_items
     )
   );
 
+drop policy if exists "delete_expense_items" on public.expense_items;
 create policy "delete_expense_items" on public.expense_items
   for delete using (
     expense_id in (
@@ -256,6 +286,7 @@ create policy "delete_expense_items" on public.expense_items
   );
 
 -- ---- expense_splits ----
+drop policy if exists "select_expense_splits" on public.expense_splits;
 create policy "select_expense_splits" on public.expense_splits
   for select using (
     expense_id in (
@@ -265,6 +296,7 @@ create policy "select_expense_splits" on public.expense_splits
     )
   );
 
+drop policy if exists "insert_expense_splits" on public.expense_splits;
 create policy "insert_expense_splits" on public.expense_splits
   for insert with check (
     expense_id in (
@@ -275,6 +307,7 @@ create policy "insert_expense_splits" on public.expense_splits
   );
 
 -- ---- expense_audit_logs ----
+drop policy if exists "select_expense_audit_logs" on public.expense_audit_logs;
 create policy "select_expense_audit_logs" on public.expense_audit_logs
   for select using (
     exists (
@@ -284,6 +317,7 @@ create policy "select_expense_audit_logs" on public.expense_audit_logs
     )
   );
 
+drop policy if exists "insert_expense_audit_logs" on public.expense_audit_logs;
 create policy "insert_expense_audit_logs" on public.expense_audit_logs
   for insert with check (
     exists (
@@ -294,12 +328,15 @@ create policy "insert_expense_audit_logs" on public.expense_audit_logs
   );
 
 -- ---- payments ----
+drop policy if exists "select_group_payments" on public.payments;
 create policy "select_group_payments" on public.payments
   for select using (public.is_group_member(group_id, auth.uid()));
 
+drop policy if exists "insert_group_payments" on public.payments;
 create policy "insert_group_payments" on public.payments
   for insert with check (public.is_group_member(group_id, auth.uid()));
 
+drop policy if exists "update_group_payments" on public.payments;
 create policy "update_group_payments" on public.payments
   for update using (
     public.is_group_member(group_id, auth.uid())
@@ -307,6 +344,7 @@ create policy "update_group_payments" on public.payments
     or paid_to = auth.uid()
   );
 
+drop policy if exists "delete_group_payments" on public.payments;
 create policy "delete_group_payments" on public.payments
   for delete using (
     public.is_group_member(group_id, auth.uid())
@@ -472,4 +510,3 @@ begin
   );
 end;
 $$;
-

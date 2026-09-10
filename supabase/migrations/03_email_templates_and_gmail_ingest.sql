@@ -1,8 +1,9 @@
 -- ============================================================================
--- 03_email_templates_and_gmail_ingest.sql
+-- 03_email_templates_and_gmail_ingest.sql (IDEMPOTENTE)
 -- Entidades financieras, patrones de correo, plantillas de extracción,
 -- conexiones de ingesta Gmail y helpers de resolución de webhook.
 -- Consolidado desde 0003, 0005, 0006, 0007, 0008, 0009, 0010 — estado final.
+-- Seguro de re-ejecutar cuantas veces sea necesario.
 --
 -- NOTA: La función insert_expense_for_webhook se define en
 -- 04_expenses_and_payments.sql para satisfacer la dependencia sobre
@@ -12,7 +13,7 @@
 -- ----------------------------------------------------------------------------
 -- ENTIDADES FINANCIERAS / EMISORES
 -- ----------------------------------------------------------------------------
-create table public.entities (
+create table if not exists public.entities (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   country text not null default 'CO',
@@ -24,20 +25,20 @@ create table public.entities (
 -- ----------------------------------------------------------------------------
 -- PATRONES DE CORREO DE ENTIDADES (remitentes)
 -- ----------------------------------------------------------------------------
-create table public.entity_email_patterns (
+create table if not exists public.entity_email_patterns (
   id uuid primary key default gen_random_uuid(),
   entity_id uuid not null references public.entities(id) on delete cascade,
   pattern text not null check (position('@' in pattern) > 0),
   created_at timestamptz not null default now()
 );
 
-create unique index entity_email_patterns_entity_pattern_uidx
+create unique index if not exists entity_email_patterns_entity_pattern_uidx
   on public.entity_email_patterns(entity_id, pattern);
 
 -- ----------------------------------------------------------------------------
 -- TIPOS DE GASTOS DINÁMICOS
 -- ----------------------------------------------------------------------------
-create table public.expense_types (
+create table if not exists public.expense_types (
   id uuid primary key default gen_random_uuid(),
   key text not null unique,
   label text not null,
@@ -50,7 +51,7 @@ create table public.expense_types (
 -- PLANTILLAS DE EXTRACCIÓN DE CORREOS
 -- (sin sender_pattern / entity_name / default_currency / active: eliminadas en 0007)
 -- ----------------------------------------------------------------------------
-create table public.email_templates (
+create table if not exists public.email_templates (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   entity_id uuid references public.entities(id) on delete set null,
@@ -73,7 +74,7 @@ create table public.email_templates (
 -- ----------------------------------------------------------------------------
 -- CONEXIONES DE INGESTA DE GMAIL POR USUARIO
 -- ----------------------------------------------------------------------------
-create table public.email_ingest_connections (
+create table if not exists public.email_ingest_connections (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references public.profiles(id) on delete cascade,
   webhook_token text not null unique,
@@ -86,7 +87,7 @@ create table public.email_ingest_connections (
 -- ----------------------------------------------------------------------------
 -- PREFERENCIAS DE USUARIO PARA PLANTILLAS ACTIVAS/DESACTIVADAS
 -- ----------------------------------------------------------------------------
-create table public.user_template_preferences (
+create table if not exists public.user_template_preferences (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   template_id uuid not null references public.email_templates(id) on delete cascade,
@@ -105,34 +106,45 @@ alter table public.email_templates enable row level security;
 alter table public.email_ingest_connections enable row level security;
 alter table public.user_template_preferences enable row level security;
 
+drop policy if exists "select_entities" on public.entities;
 create policy "select_entities" on public.entities for select using (true);
 
+drop policy if exists "insert_entities" on public.entities;
 create policy "insert_entities" on public.entities
   for insert to authenticated with check (true);
 
+drop policy if exists "select_entity_email_patterns" on public.entity_email_patterns;
 create policy "select_entity_email_patterns" on public.entity_email_patterns for select using (true);
 
+drop policy if exists "insert_entity_email_patterns" on public.entity_email_patterns;
 create policy "insert_entity_email_patterns" on public.entity_email_patterns
   for insert to authenticated with check (true);
 
+drop policy if exists "select_expense_types" on public.expense_types;
 create policy "select_expense_types" on public.expense_types for select using (true);
 
 -- email_templates: RLS final según 0006 (abierta a authenticated en las 4 operaciones)
+drop policy if exists "select_email_templates" on public.email_templates;
 create policy "select_email_templates" on public.email_templates
   for select to authenticated using (true);
 
+drop policy if exists "insert_email_templates" on public.email_templates;
 create policy "insert_email_templates" on public.email_templates
   for insert to authenticated with check (true);
 
+drop policy if exists "update_email_templates" on public.email_templates;
 create policy "update_email_templates" on public.email_templates
   for update to authenticated using (true) with check (true);
 
+drop policy if exists "delete_email_templates" on public.email_templates;
 create policy "delete_email_templates" on public.email_templates
   for delete to authenticated using (true);
 
+drop policy if exists "email_ingest_connections_policy" on public.email_ingest_connections;
 create policy "email_ingest_connections_policy" on public.email_ingest_connections
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists "user_template_preferences_policy" on public.user_template_preferences;
 create policy "user_template_preferences_policy" on public.user_template_preferences
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -227,4 +239,3 @@ begin
   order by t.created_at asc;
 end;
 $$;
-

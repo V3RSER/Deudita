@@ -1,9 +1,10 @@
 -- ============================================================================
--- 05_auth_triggers.sql
+-- 05_auth_triggers.sql (IDEMPOTENTE)
 -- Lógica de alta de usuario: fusión de perfiles temporales por token/email,
 -- unión a grupos vía invitación, y trigger sobre auth.users.
 -- Consolidado desde 0001 (§9) — estado final. Depende de 01_core_schema.sql
 -- y 02_notifications_and_managed_users.sql (usa public.notifications).
+-- Seguro de re-ejecutar cuantas veces sea necesario.
 -- ============================================================================
 
 create or replace function public.claim_temp_profile(temp_id uuid, real_id uuid)
@@ -202,6 +203,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
