@@ -2,20 +2,20 @@
 
 import React from 'react';
 import Image from 'next/image';
-import {useExpense} from '@/lib/expense-context';
-import {Group} from '@/lib/types';
-import {calculateUserSummaries, formatCurrency} from '@/lib/balance-utils';
-import {ChevronRight, MinusCircle, Plus, TrendingDown, TrendingUp, Users,} from 'lucide-react';
+import { useExpense } from '@/lib/expense-context';
+import { Group } from '@/lib/types';
+import { calculateUserSummaries, formatCurrency } from '@/lib/balance-utils';
+import { ChevronRight, MinusCircle, Plus, TrendingDown, TrendingUp, Users, } from 'lucide-react';
 
-import {getGroupCategoryConfig, getGroupImage} from '@/lib/group-utils';
-import {PageHeader} from '@/components/PageHeader';
+import { getGroupCategoryConfig, getGroupImage } from '@/lib/group-utils';
+import { PageHeader } from '@/components/PageHeader';
 
 interface GroupListProps {
     onSelectGroup: (group: Group) => void;
     onOpenNewGroup?: () => void;
 }
 
-export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
+export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
     const {
         currentProfile,
         userGroups,
@@ -55,14 +55,14 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
             <PageHeader
                 title="Mis Grupos"
                 subtitle="Administra los grupos donde compartes gastos."
-                icon={<Users className="w-5 h-5"/>}
+                icon={<Users className="w-5 h-5" />}
                 actions={
                     onOpenNewGroup && (
                         <button
                             onClick={onOpenNewGroup}
                             className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-xs transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
                         >
-                            <Plus className="w-4 h-4 stroke-[2.5]"/>
+                            <Plus className="w-4 h-4 stroke-[2.5]" />
                             <span>Crear grupo</span>
                         </button>
                     )
@@ -74,10 +74,10 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
                 <div
                     className="bg-amber-50 text-amber-900 rounded-[1.5rem] p-5 shadow-sm border border-amber-200/60 space-y-4">
                     <div className="flex items-center space-x-2">
-            <span
-                className="bg-amber-200/50 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
-              Invitación Pendiente
-            </span>
+                        <span
+                            className="bg-amber-200/50 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                            Invitación Pendiente
+                        </span>
                     </div>
 
                     {pendingInvites.map((invite) => {
@@ -86,11 +86,11 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
 
                         return (
                             <div key={invite.id}
-                                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
                                 <div>
                                     <h4 className="font-semibold text-zinc-900 text-sm">
                                         Te han invitado al grupo <span
-                                        className="font-bold">&quot;{groupName}&quot;</span>
+                                            className="font-bold">&quot;{groupName}&quot;</span>
                                     </h4>
                                     <p className="text-xs text-zinc-500 mt-0.5">
                                         Invitado por <strong className="text-zinc-700">{inviterName}</strong>
@@ -125,7 +125,7 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
                     className="text-center py-16 bg-white rounded-3xl border border-zinc-200/80 p-8 shadow-sm space-y-4">
                     <div
                         className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
-                        <Users className="w-8 h-8"/>
+                        <Users className="w-8 h-8" />
                     </div>
                     <h3 className="text-base font-bold text-zinc-900">Aún no perteneces a ningún grupo</h3>
                     <p className="text-zinc-500 text-sm max-w-md mx-auto">
@@ -137,7 +137,7 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
                                 onClick={onOpenNewGroup}
                                 className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-xs transition-all active:scale-95 cursor-pointer"
                             >
-                                <Plus className="w-4 h-4 stroke-[2.5]"/>
+                                <Plus className="w-4 h-4 stroke-[2.5]" />
                                 <span>Crear mi primer grupo</span>
                             </button>
                         </div>
@@ -166,11 +166,11 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
                                     className={`relative w-14 h-14 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? catConfig.bgColor : ''}`}>
                                     {groupImg ? (
                                         <Image src={groupImg} alt={group.name} fill
-                                               className="object-cover group-hover:scale-105 transition-transform duration-300"
-                                               unoptimized referrerPolicy="no-referrer"/>
+                                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                            unoptimized referrerPolicy="no-referrer" />
                                     ) : (
                                         <div className={catConfig.textColor}>
-                                            <CategoryIcon className="w-6 h-6"/>
+                                            <CategoryIcon className="w-6 h-6" />
                                         </div>
                                     )}
                                 </div>
@@ -185,23 +185,23 @@ export function GroupList({onSelectGroup, onOpenNewGroup}: GroupListProps) {
                                     <div className="mt-1 text-xs">
                                         {Math.abs(netBalance) < 0.5 ? (
                                             <span className="font-medium text-zinc-500 flex items-center">
-                        <MinusCircle className="w-3.5 h-3.5 mr-1"/> Al día
-                      </span>
+                                                <MinusCircle className="w-3.5 h-3.5 mr-1" /> Al día
+                                            </span>
                                         ) : netBalance > 0 ? (
                                             <span className="font-bold text-emerald-600 flex items-center">
-                        <TrendingUp className="w-3.5 h-3.5 mr-1"/> Te deben {formatCurrency(netBalance, group.currency)}
-                      </span>
+                                                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Te deben {formatCurrency(netBalance, group.currency)}
+                                            </span>
                                         ) : (
                                             <span className="font-bold text-rose-600 flex items-center">
-                        <TrendingDown
-                            className="w-3.5 h-3.5 mr-1"/> Debes {formatCurrency(Math.abs(netBalance), group.currency)}
-                      </span>
+                                                <TrendingDown
+                                                    className="w-3.5 h-3.5 mr-1" /> Debes {formatCurrency(Math.abs(netBalance), group.currency)}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
 
                                 <ChevronRight
-                                    className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0"/>
+                                    className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
                             </div>
                         );
                     })}

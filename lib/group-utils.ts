@@ -1,5 +1,5 @@
-import {Briefcase, Calculator, Calendar, Folder, Heart, Home, LucideIcon, Plane, Users} from 'lucide-react';
-import {Expense, Group, GroupCategory, Payment} from './types';
+import { Briefcase, Calculator, Calendar, Folder, Heart, Home, LucideIcon, Plane, Users } from 'lucide-react';
+import { Expense, Group, GroupCategory, Payment } from './types';
 
 export interface GroupCategoryConfig {
     id: GroupCategory;

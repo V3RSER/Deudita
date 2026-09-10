@@ -1,4 +1,4 @@
-import {Expense, ExpenseSplitConfig} from './types';
+import { Expense, ExpenseSplitConfig } from './types';
 
 const SPLIT_CONFIG_REGEX = /<!--\s*SPLIT_CONFIG:([\s\S]*?)-->/;
 
@@ -11,7 +11,7 @@ export function extractNotesAndConfig(rawNotes?: string | null): {
     splitConfig: ExpenseSplitConfig | null;
 } {
     if (!rawNotes || typeof rawNotes !== 'string') {
-        return {userNote: '', splitConfig: null};
+        return { userNote: '', splitConfig: null };
     }
 
     const trimmed = rawNotes.trim();
@@ -21,7 +21,7 @@ export function extractNotesAndConfig(rawNotes?: string | null): {
         try {
             const parsed = JSON.parse(trimmed);
             if (parsed && typeof parsed === 'object' && (parsed.splitType || parsed.version || parsed.selectedMembers)) {
-                return {userNote: '', splitConfig: parsed as ExpenseSplitConfig};
+                return { userNote: '', splitConfig: parsed as ExpenseSplitConfig };
             }
         } catch {
             // not JSON
@@ -49,7 +49,7 @@ export function extractNotesAndConfig(rawNotes?: string | null): {
         userNote = '';
     }
 
-    return {userNote, splitConfig};
+    return { userNote, splitConfig };
 }
 
 /**
@@ -144,7 +144,7 @@ export function inferSplitConfig(expense: Partial<Expense>): ExpenseSplitConfig 
     if (amounts.length <= 1 || (maxAmt - minAmt <= 1)) {
         const splitRecord: Record<string, { exact: string; pct: string; shares: string }> = {};
         splits.forEach((s) => {
-            splitRecord[s.user_id] = {exact: '', pct: '', shares: '1'};
+            splitRecord[s.user_id] = { exact: '', pct: '', shares: '1' };
         });
         return {
             version: 1,
@@ -253,23 +253,23 @@ export function getExpenseSplitConfig(expense: Partial<Expense> | null | undefin
         };
     }
 
-    const {userNote, splitConfig: notesConfig} = extractNotesAndConfig(expense.notes);
+    const { userNote, splitConfig: notesConfig } = extractNotesAndConfig(expense.notes);
 
     if (notesConfig) {
-        return {userNote, splitConfig: notesConfig};
+        return { userNote, splitConfig: notesConfig };
     }
 
     if (expense.split_config) {
-        return {userNote, splitConfig: expense.split_config};
+        return { userNote, splitConfig: expense.split_config };
     }
 
     if (expense.id) {
         const local = getLocalSplitConfig(expense.id);
         if (local) {
-            return {userNote, splitConfig: local};
+            return { userNote, splitConfig: local };
         }
     }
 
     const inferred = inferSplitConfig(expense);
-    return {userNote, splitConfig: inferred};
+    return { userNote, splitConfig: inferred };
 }

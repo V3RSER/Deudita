@@ -2,7 +2,7 @@
 
 import React, {useState} from 'react';
 import {DashboardSummary} from '@/components/DashboardSummary';
-import {CreateGroupModal} from '@/components/CreateGroupModal';
+import {CreateGroupModal} from '@/components/groups/CreateGroupModal';
 import {NewExpenseModal} from '@/components/NewExpenseModal';
 import {SettleDebtModal} from '@/components/SettleDebtModal';
 

@@ -1,12 +1,12 @@
 'use client';
 
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import {useExpense} from '@/lib/expense-context';
-import {Profile} from '@/lib/types';
-import {formatDisplayEmail, isTempEmail} from '@/lib/utils';
-import {AlertCircle, CheckCircle2, Loader2, Mail, Plus, Search, UserPlus, Users, X,} from 'lucide-react';
-import {CustomSelect} from '@/components/ui/CustomSelect';
+import { useExpense } from '@/lib/expense-context';
+import { Profile } from '@/lib/types';
+import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
+import { AlertCircle, CheckCircle2, Loader2, Mail, Plus, Search, UserPlus, Users, X, } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface AddMemberModalProps {
     isOpen: boolean;
@@ -16,10 +16,10 @@ interface AddMemberModalProps {
 }
 
 export function AddMemberModal({
-                                   isOpen,
-                                   onClose,
-                                   groupId,
-                               }: AddMemberModalProps) {
+    isOpen,
+    onClose,
+    groupId,
+}: Readonly<AddMemberModalProps>) {
     const {
         currentProfile,
         profiles,
@@ -158,7 +158,7 @@ export function AddMemberModal({
                     <div className="flex items-center space-x-3">
                         <div
                             className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-zinc-100 font-bold shrink-0">
-                            <UserPlus className="w-4 h-4 text-emerald-400"/>
+                            <UserPlus className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div>
                             <h2 className="text-base font-bold text-white">
@@ -174,7 +174,7 @@ export function AddMemberModal({
                         onClick={handleCloseModal}
                         className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
                     >
-                        <X className="w-5 h-5"/>
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -183,7 +183,7 @@ export function AddMemberModal({
                     {errorMsg && (
                         <div
                             className="p-3.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs flex items-center space-x-2">
-                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600"/>
+                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                             <span>{errorMsg}</span>
                         </div>
                     )}
@@ -213,7 +213,7 @@ export function AddMemberModal({
                         <div className="space-y-4 py-2">
                             <div
                                 className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-4 flex items-center space-x-3">
-                                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0"/>
+                                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                                 <div>
                                     <p className="text-xs font-bold text-emerald-950">
                                         {addedMemberName} ahora forma parte del grupo
@@ -266,7 +266,7 @@ export function AddMemberModal({
                                         Correo Electrónico (Opcional)
                                     </label>
                                     <div className="relative">
-                                        <Mail className="w-3.5 h-3.5 text-zinc-400 absolute left-3.5 top-3"/>
+                                        <Mail className="w-3.5 h-3.5 text-zinc-400 absolute left-3.5 top-3" />
                                         <input
                                             type="email"
                                             placeholder="mateo@ejemplo.com"
@@ -284,12 +284,12 @@ export function AddMemberModal({
                                 >
                                     {isSubmitting ? (
                                         <>
-                                            <Loader2 className="w-4 h-4 animate-spin text-emerald-400"/>
+                                            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
                                             <span>Añadiendo...</span>
                                         </>
                                     ) : (
                                         <>
-                                            <Plus className="w-4 h-4 text-emerald-400"/>
+                                            <Plus className="w-4 h-4 text-emerald-400" />
                                             <span>Añadir al Grupo</span>
                                         </>
                                     )}
@@ -300,16 +300,16 @@ export function AddMemberModal({
                             {availableFriends.length > 0 && (
                                 <div className="pt-3 border-t border-zinc-100 space-y-2.5">
                                     <div className="flex items-center justify-between">
-                    <span
-                        className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center space-x-1">
-                      <Users className="w-3.5 h-3.5"/>
-                      <span>O añade desde tus amigos ({availableFriends.length})</span>
-                    </span>
+                                        <span
+                                            className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center space-x-1">
+                                            <Users className="w-3.5 h-3.5" />
+                                            <span>O añade desde tus amigos ({availableFriends.length})</span>
+                                        </span>
                                     </div>
 
                                     {availableFriends.length > 4 && (
                                         <div className="relative">
-                                            <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5"/>
+                                            <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
                                             <input
                                                 type="text"
                                                 placeholder="Buscar amigo..."
@@ -363,7 +363,7 @@ export function AddMemberModal({
                                                         disabled={isSubmitting}
                                                         className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[11px] font-semibold rounded-lg shrink-0 transition-colors flex items-center space-x-1 cursor-pointer"
                                                     >
-                                                        <Plus className="w-3 h-3"/>
+                                                        <Plus className="w-3 h-3" />
                                                         <span>Añadir</span>
                                                     </button>
                                                 </div>

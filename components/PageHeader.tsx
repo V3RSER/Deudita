@@ -7,7 +7,7 @@ interface PageHeaderProps {
     actions?: React.ReactNode;
 }
 
-export function PageHeader({title, subtitle, icon, actions}: PageHeaderProps) {
+export function PageHeader({ title, subtitle, icon, actions }: PageHeaderProps) {
     return (
         <div
             className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200/80 mb-5">

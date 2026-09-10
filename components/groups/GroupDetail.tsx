@@ -1,11 +1,11 @@
 'use client';
 
-import React, {useMemo, useState} from 'react';
-import {useRouter, useSearchParams} from 'next/navigation';
+import React, { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import {useExpense} from '@/lib/expense-context';
+import { useExpense } from '@/lib/expense-context';
 
-import {Expense, ExpenseAuditLog, Group, PairwiseBalance, Payment, Profile} from '@/lib/types';
+import { Expense, ExpenseAuditLog, Group, PairwiseBalance, Payment, Profile } from '@/lib/types';
 import {
     calculateDirectBalances,
     calculateSimplifiedBalances,
@@ -33,23 +33,23 @@ import {
     X,
 } from 'lucide-react';
 
-import {getGroupImage} from '@/lib/group-utils';
-import {formatDisplayEmail} from '@/lib/utils';
-import {UserAvatar} from '@/components/UserAvatar';
+import { getGroupImage } from '@/lib/group-utils';
+import { formatDisplayEmail } from '@/lib/utils';
+import { UserAvatar } from '@/components/UserAvatar';
 
-import {MemberDetailModal} from '@/components/MemberDetailModal';
-import {GroupExpenseFilterSheet} from '@/components/GroupExpenseFilterSheet';
-import {TransactionFilterState} from '@/components/TransactionFilterBar';
+import { MemberDetailModal } from '@/components/MemberDetailModal';
+import { GroupExpenseFilterSheet } from '@/components/GroupExpenseFilterSheet';
+import { TransactionFilterState } from '@/components/TransactionFilterBar';
 import {
     getAvailableTransactionMonths,
     getEffectiveTransactionDate,
     isDateMatchingFilter,
 } from '@/lib/transaction-date-utils';
-import {EditGroupModal} from '@/components/EditGroupModal';
-import {GroupSettingsModal} from '@/components/GroupSettingsModal';
-import {ConfirmModal} from '@/components/ConfirmModal';
-import {PairwiseDetailModal} from '@/components/PairwiseDetailModal';
-import {GenericExpenseList} from '@/components/GenericExpenseList';
+import { EditGroupModal } from '@/components/EditGroupModal';
+import { GroupSettingsModal } from '@/components/GroupSettingsModal';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 
 interface GroupDetailProps {
     group: Group;
@@ -61,115 +61,6 @@ interface GroupDetailProps {
     onOpenSettleModal: (groupId: string, debtorId?: string, creditorId?: string, amount?: number) => void;
     onOpenAddMember: (groupId: string) => void;
     onOpenInviteLink: (groupId: string) => void;
-}
-
-const MONTH_NAMES_ES = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-];
-
-const MONTH_ABBR_ES = [
-    'ENE',
-    'FEB',
-    'MAR',
-    'ABR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AGO',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DIC',
-];
-
-const MONTH_SHORT_LOWER_ES = [
-    'ene',
-    'feb',
-    'mar',
-    'abr',
-    'may',
-    'jun',
-    'jul',
-    'ago',
-    'sep',
-    'oct',
-    'nov',
-    'dic',
-];
-
-function parseTxDate(dateInput: string | Date) {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    if (!isNaN(d.getTime())) {
-        const year = d.getFullYear();
-        const monthIndex = d.getMonth();
-        const dayNum = d.getDate();
-        const dayStr = dayNum < 10 ? `0${dayNum}` : `${dayNum}`;
-        const monthAbbr = MONTH_ABBR_ES[monthIndex];
-        const monthLabel = `${MONTH_NAMES_ES[monthIndex]} ${year}`;
-        const key = `${year}-${monthIndex < 9 ? '0' : ''}${monthIndex}`;
-        return {year, monthIndex, dayStr, monthAbbr, monthLabel, key};
-    }
-    return {year: 2026, monthIndex: 0, dayStr: '01', monthAbbr: 'ENE', monthLabel: 'Enero 2026', key: '2026-00'};
-}
-
-function formatShortDateWithTime(dateStr?: string | null, timeStr?: string | null): string {
-    if (!dateStr) return '';
-
-    let day = 1;
-    let month = 'sep';
-    let hours = '20';
-    let minutes = '00';
-    let hasTime = false;
-
-    if (timeStr && timeStr.trim()) {
-        const cleanTime = timeStr.trim().slice(0, 5);
-        const parts = cleanTime.split(':');
-        if (parts.length >= 2) {
-            hours = parts[0].padStart(2, '0');
-            minutes = parts[1].padStart(2, '0');
-            hasTime = true;
-        }
-    }
-
-    if (dateStr.includes('T')) {
-        const d = new Date(dateStr);
-        if (!isNaN(d.getTime())) {
-            day = d.getDate();
-            month = MONTH_SHORT_LOWER_ES[d.getMonth()] || 'sep';
-            if (!hasTime) {
-                hours = String(d.getHours()).padStart(2, '0');
-                minutes = String(d.getMinutes()).padStart(2, '0');
-            }
-            return `${day} ${month}, ${hours}:${minutes}`;
-        }
-    }
-
-    const cleanDate = dateStr.split('T')[0];
-    const parts = cleanDate.split('-');
-    if (parts.length >= 3) {
-        day = parseInt(parts[2], 10);
-        const mIdx = Math.max(0, Math.min(11, (parseInt(parts[1], 10) || 1) - 1));
-        month = MONTH_SHORT_LOWER_ES[mIdx] || 'sep';
-    } else {
-        const d = new Date(dateStr);
-        if (!isNaN(d.getTime())) {
-            day = d.getDate();
-            month = MONTH_SHORT_LOWER_ES[d.getMonth()] || 'sep';
-        }
-    }
-
-    return `${day} ${month}, ${hours}:${minutes}`;
 }
 
 function formatActivityDateTime(dateStr: string | null | undefined): string {
@@ -189,30 +80,17 @@ function formatActivityDateTime(dateStr: string | null | undefined): string {
     return `${dateFormatted}, ${timeFormatted}`;
 }
 
-type UnifiedTransaction =
-    | {
-    type: 'expense';
-    dateObj: Date;
-    data: Expense;
-}
-    | {
-    type: 'payment';
-    dateObj: Date;
-    data: Payment;
-};
-
 export function GroupDetail({
-                                group,
-                                onBack,
-                                onOpenNewExpense,
-                                onEditExpense,
-                                onEditPayment,
-                                onDeletePayment,
-                                onOpenSettleModal,
-                                onOpenAddMember,
-                                onOpenInviteLink,
-                            }: GroupDetailProps) {
-    const router = useRouter();
+    group,
+    onBack,
+    onOpenNewExpense,
+    onEditExpense,
+    onEditPayment,
+    onDeletePayment,
+    onOpenSettleModal,
+    onOpenAddMember,
+    onOpenInviteLink,
+}: Readonly<GroupDetailProps>) {
     const searchParams = useSearchParams();
     const initialExpenseId = searchParams.get('expenseId');
 
@@ -224,9 +102,6 @@ export function GroupDetail({
         members,
         profiles,
         userGroups,
-        pendingInvites,
-        managedUserIds,
-        sponsorshipMap,
         deleteExpense,
         deletePayment,
         deleteGroup,
@@ -245,7 +120,7 @@ export function GroupDetail({
     });
 
     const handleFilterChange = (updates: Partial<TransactionFilterState>) => {
-        setFilters((prev) => ({...prev, ...updates}));
+        setFilters((prev) => ({ ...prev, ...updates }));
     };
 
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -301,7 +176,7 @@ export function GroupDetail({
         const matchesSearch =
             !filters.searchTerm.trim() ||
             (exp.description ? exp.description.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-            (paidBy && paidBy.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+            (paidBy?.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
 
         if (!matchesSearch) return false;
         if (filters.category !== 'all' && (exp.category || 'Varios') !== filters.category) return false;
@@ -312,7 +187,7 @@ export function GroupDetail({
             if (!isPayer && !isParticipant) return false;
         }
 
-        const {dateObj} = getEffectiveTransactionDate(exp, filters.dateMode);
+        const { dateObj } = getEffectiveTransactionDate(exp, filters.dateMode);
         return isDateMatchingFilter(dateObj, filters.datePreset, {
             start: filters.customStartDate,
             end: filters.customEndDate,
@@ -325,8 +200,8 @@ export function GroupDetail({
         const matchesSearch =
             !filters.searchTerm.trim() ||
             (p.note ? p.note.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-            (payer && payer.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
-            (receiver && receiver.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+            (payer?.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
+            (receiver?.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
 
         if (!matchesSearch) return false;
 
@@ -335,7 +210,7 @@ export function GroupDetail({
             if (!isInteracted) return false;
         }
 
-        const {dateObj} = getEffectiveTransactionDate(p, filters.dateMode);
+        const { dateObj } = getEffectiveTransactionDate(p, filters.dateMode);
         return isDateMatchingFilter(dateObj, filters.datePreset, {
             start: filters.customStartDate,
             end: filters.customEndDate,
@@ -372,7 +247,7 @@ export function GroupDetail({
                 <div className="flex flex-col gap-1 pt-1">
                     {changes.details.map((detail: string, idx: number) => (
                         <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"/>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                             <span>{detail}</span>
                         </div>
                     ))}
@@ -384,49 +259,49 @@ export function GroupDetail({
         if (changes.amount_before !== undefined && changes.amount_after !== undefined && Number(changes.amount_before) !== Number(changes.amount_after)) {
             detailsList.push(
                 <span key="amount" className="inline-flex items-center gap-1">
-          <span className="text-zinc-500">Monto:</span>
-          <span className="line-through text-zinc-400">{formatCurrency(changes.amount_before, effectiveCurrency)}</span>
-          <span
-              className="font-semibold text-zinc-800">➔ {formatCurrency(changes.amount_after, effectiveCurrency)}</span>
-        </span>
+                    <span className="text-zinc-500">Monto:</span>
+                    <span className="line-through text-zinc-400">{formatCurrency(changes.amount_before, effectiveCurrency)}</span>
+                    <span
+                        className="font-semibold text-zinc-800">➔ {formatCurrency(changes.amount_after, effectiveCurrency)}</span>
+                </span>
             );
         }
 
         if (changes.payer_name_before && changes.payer_name_after && changes.payer_name_before !== changes.payer_name_after) {
             detailsList.push(
                 <span key="payer" className="inline-flex items-center gap-1">
-          <span className="text-zinc-500">Pagador:</span>
-          <span className="line-through text-zinc-400">{changes.payer_name_before}</span>
-          <span className="font-semibold text-zinc-800">➔ {changes.payer_name_after}</span>
-        </span>
+                    <span className="text-zinc-500">Pagador:</span>
+                    <span className="line-through text-zinc-400">{changes.payer_name_before}</span>
+                    <span className="font-semibold text-zinc-800">➔ {changes.payer_name_after}</span>
+                </span>
             );
         }
 
         if (changes.description_before && changes.description_after && changes.description_before !== changes.description_after) {
             detailsList.push(
                 <span key="desc" className="inline-flex items-center gap-1">
-          <span className="text-zinc-500">Concepto:</span>
-          <span className="line-through text-zinc-400">&ldquo;{changes.description_before}&rdquo;</span>
-          <span className="font-semibold text-zinc-800">➔ &ldquo;{changes.description_after}&rdquo;</span>
-        </span>
+                    <span className="text-zinc-500">Concepto:</span>
+                    <span className="line-through text-zinc-400">&ldquo;{changes.description_before}&rdquo;</span>
+                    <span className="font-semibold text-zinc-800">➔ &ldquo;{changes.description_after}&rdquo;</span>
+                </span>
             );
         }
 
         if (Array.isArray(changes.added_names) && changes.added_names.length > 0) {
             detailsList.push(
                 <span key="added"
-                      className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
-          + Agregó a: {changes.added_names.join(', ')}
-        </span>
+                    className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                    + Agregó a: {changes.added_names.join(', ')}
+                </span>
             );
         }
 
         if (Array.isArray(changes.removed_names) && changes.removed_names.length > 0) {
             detailsList.push(
                 <span key="removed"
-                      className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
-          - Quitó a: {changes.removed_names.join(', ')}
-        </span>
+                    className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                    - Quitó a: {changes.removed_names.join(', ')}
+                </span>
             );
         }
 
@@ -438,30 +313,30 @@ export function GroupDetail({
             if (oldObj.total_amount !== undefined && newObj.total_amount !== undefined && Number(oldObj.total_amount) !== Number(newObj.total_amount)) {
                 detailsList.push(
                     <span key="pg_amount" className="inline-flex items-center gap-1">
-            <span className="text-zinc-500">Monto:</span>
-            <span
-                className="line-through text-zinc-400">{formatCurrency(Number(oldObj.total_amount), effectiveCurrency)}</span>
-            <span
-                className="font-semibold text-zinc-800">➔ {formatCurrency(Number(newObj.total_amount), effectiveCurrency)}</span>
-          </span>
+                        <span className="text-zinc-500">Monto:</span>
+                        <span
+                            className="line-through text-zinc-400">{formatCurrency(Number(oldObj.total_amount), effectiveCurrency)}</span>
+                        <span
+                            className="font-semibold text-zinc-800">➔ {formatCurrency(Number(newObj.total_amount), effectiveCurrency)}</span>
+                    </span>
                 );
             }
             if (oldObj.description && newObj.description && oldObj.description !== newObj.description) {
                 detailsList.push(
                     <span key="pg_desc" className="inline-flex items-center gap-1">
-            <span className="text-zinc-500">Concepto:</span>
-            <span className="line-through text-zinc-400">&ldquo;{oldObj.description}&rdquo;</span>
-            <span className="font-semibold text-zinc-800">➔ &ldquo;{newObj.description}&rdquo;</span>
-          </span>
+                        <span className="text-zinc-500">Concepto:</span>
+                        <span className="line-through text-zinc-400">&ldquo;{oldObj.description}&rdquo;</span>
+                        <span className="font-semibold text-zinc-800">➔ &ldquo;{newObj.description}&rdquo;</span>
+                    </span>
                 );
             }
             if (oldObj.category && newObj.category && oldObj.category !== newObj.category) {
                 detailsList.push(
                     <span key="pg_cat" className="inline-flex items-center gap-1">
-            <span className="text-zinc-500">Categoría:</span>
-            <span className="line-through text-zinc-400">{oldObj.category}</span>
-            <span className="font-semibold text-zinc-800">➔ {newObj.category}</span>
-          </span>
+                        <span className="text-zinc-500">Categoría:</span>
+                        <span className="line-through text-zinc-400">{oldObj.category}</span>
+                        <span className="font-semibold text-zinc-800">➔ {newObj.category}</span>
+                    </span>
                 );
             }
         }
@@ -481,8 +356,8 @@ export function GroupDetail({
                     <div className="flex flex-wrap gap-1 pt-1 text-[11px] text-zinc-600">
                         {keys.map((k) => (
                             <span key={k} className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-md font-medium">
-                {k === 'paid_by' ? 'Pagador modificado' : k === 'category' ? 'Categoría modificada' : k === 'splits' ? 'Reparto modificado' : `Modificado: ${k}`}
-              </span>
+                                {k === 'paid_by' ? 'Pagador modificado' : k === 'category' ? 'Categoría modificada' : k === 'splits' ? 'Reparto modificado' : `Modificado: ${k}`}
+                            </span>
                         ))}
                     </div>
                 );
@@ -494,7 +369,7 @@ export function GroupDetail({
             <div className="flex flex-col gap-1 pt-1 text-xs text-zinc-700">
                 {detailsList.map((node, i) => (
                     <div key={i} className="flex items-center gap-1.5 flex-wrap">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"/>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                         {node}
                     </div>
                 ))}
@@ -518,11 +393,11 @@ export function GroupDetail({
                         referrerPolicy="no-referrer"
                     />
                 ) : (
-                    <div className="absolute inset-0 bg-gradient-to-tr from-zinc-950 via-zinc-900 to-zinc-800"/>
+                    <div className="absolute inset-0 bg-gradient-to-tr from-zinc-950 via-zinc-900 to-zinc-800" />
                 )}
 
                 {/* Gradient overlay to ensure sharp contrast with foreground elements */}
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/70 to-black/40"/>
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/70 to-black/40" />
 
                 {/* Content */}
                 <div className="relative z-10 p-4 sm:p-5 space-y-3 sm:space-y-3.5">
@@ -533,7 +408,7 @@ export function GroupDetail({
                                 {group.name}
                             </h1>
                             <p className="text-xs text-zinc-300 font-medium flex items-center gap-1.5 mt-0.5">
-                                <Users className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                <Users className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                 <span>{memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}</span>
                             </p>
                         </div>
@@ -545,32 +420,31 @@ export function GroupDetail({
                             title="Ajustes del grupo"
                             aria-label="Ajustes del grupo"
                         >
-                            <Settings className="w-4.5 h-4.5"/>
+                            <Settings className="w-4.5 h-4.5" />
                         </button>
                     </div>
 
                     {/* Bottom Row: Balance Status & Action Buttons (Saldar + Nuevo gasto) */}
                     <div className="pt-2.5 border-t border-white/10 flex items-center justify-between gap-2.5">
                         <div className="min-w-0 flex flex-col justify-center">
-              <span
-                  className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-400 leading-tight">
-                {myNetBalance > 0.01
-                    ? 'Tú recuperas'
-                    : myNetBalance < -0.01
-                        ? 'Tú debes'
-                        : 'Estás al día'}
-              </span>
                             <span
-                                className={`text-lg sm:text-2xl font-black tracking-tight leading-tight mt-0.5 truncate ${
-                                    myNetBalance > 0.01
-                                        ? 'text-emerald-400'
-                                        : myNetBalance < -0.01
-                                            ? 'text-rose-400'
-                                            : 'text-zinc-200'
-                                }`}
+                                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-zinc-400 leading-tight">
+                                {myNetBalance > 0.01
+                                    ? 'Tú recuperas'
+                                    : myNetBalance < -0.01
+                                        ? 'Tú debes'
+                                        : 'Estás al día'}
+                            </span>
+                            <span
+                                className={`text-lg sm:text-2xl font-black tracking-tight leading-tight mt-0.5 truncate ${myNetBalance > 0.01
+                                    ? 'text-emerald-400'
+                                    : myNetBalance < -0.01
+                                        ? 'text-rose-400'
+                                        : 'text-zinc-200'
+                                    }`}
                             >
-                {formatCurrency(Math.abs(myNetBalance), effectiveCurrency)}
-              </span>
+                                {formatCurrency(Math.abs(myNetBalance), effectiveCurrency)}
+                            </span>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
@@ -579,7 +453,7 @@ export function GroupDetail({
                                 onClick={() => onOpenSettleModal(group.id)}
                                 className="h-9 sm:h-10 px-3 sm:px-3.5 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white border border-white/20 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 backdrop-blur-md cursor-pointer"
                             >
-                                <Wallet className="w-4 h-4 text-white shrink-0"/>
+                                <Wallet className="w-4 h-4 text-white shrink-0" />
                                 <span>Saldar</span>
                             </button>
 
@@ -588,7 +462,7 @@ export function GroupDetail({
                                 onClick={() => onOpenNewExpense(group.id)}
                                 className="h-9 sm:h-10 px-3.5 sm:px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-950/40 cursor-pointer"
                             >
-                                <Plus className="w-4 h-4 stroke-[2.5] shrink-0"/>
+                                <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
                                 <span>Nuevo gasto</span>
                             </button>
                         </div>
@@ -601,56 +475,52 @@ export function GroupDetail({
                 <button
                     type="button"
                     onClick={() => setActiveTab('expenses')}
-                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
-                        activeTab === 'expenses'
-                            ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
-                            : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
-                    }`}
+                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${activeTab === 'expenses'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+                        }`}
                 >
                     <DollarSign
-                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'expenses' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`}/>
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'expenses' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
                     <span className="truncate">Gastos</span>
                 </button>
 
                 <button
                     type="button"
                     onClick={() => setActiveTab('balances')}
-                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
-                        activeTab === 'balances'
-                            ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
-                            : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
-                    }`}
+                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${activeTab === 'balances'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+                        }`}
                 >
                     <Scale
-                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'balances' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`}/>
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'balances' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
                     <span className="truncate">Balances</span>
                 </button>
 
                 <button
                     type="button"
                     onClick={() => setActiveTab('members')}
-                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
-                        activeTab === 'members'
-                            ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
-                            : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
-                    }`}
+                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${activeTab === 'members'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+                        }`}
                 >
                     <Users
-                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'members' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`}/>
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'members' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
                     <span className="truncate">Miembros</span>
                 </button>
 
                 <button
                     type="button"
                     onClick={() => setActiveTab('activity')}
-                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${
-                        activeTab === 'activity'
-                            ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
-                            : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
-                    }`}
+                    className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1 rounded-xl text-[11px] sm:text-xs md:text-sm font-semibold transition-all cursor-pointer select-none ${activeTab === 'activity'
+                        ? 'bg-white text-emerald-800 shadow-xs border border-zinc-200/60 font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 hover:bg-white/40'
+                        }`}
                 >
                     <History
-                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'activity' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`}/>
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${activeTab === 'activity' ? 'text-emerald-700 stroke-[2.5]' : 'text-zinc-400'}`} />
                     <span className="truncate">Historial</span>
                 </button>
             </div>
@@ -662,22 +532,22 @@ export function GroupDetail({
                     <div className="flex items-center gap-2">
                         <div className="relative flex-1">
                             <Search
-                                className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                                className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <input
                                 type="text"
                                 value={filters.searchTerm}
-                                onChange={(e) => handleFilterChange({searchTerm: e.target.value})}
+                                onChange={(e) => handleFilterChange({ searchTerm: e.target.value })}
                                 placeholder="Buscar gastos"
                                 className="w-full h-11 pl-10 pr-9 bg-white border border-zinc-200/90 rounded-xl text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-300 focus:ring-1 focus:ring-emerald-500/20 shadow-2xs transition"
                             />
                             {filters.searchTerm && (
                                 <button
                                     type="button"
-                                    onClick={() => handleFilterChange({searchTerm: ''})}
+                                    onClick={() => handleFilterChange({ searchTerm: '' })}
                                     className="p-1 text-zinc-400 hover:text-zinc-600 absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
                                     aria-label="Borrar búsqueda"
                                 >
-                                    <X className="w-3.5 h-3.5"/>
+                                    <X className="w-3.5 h-3.5" />
                                 </button>
                             )}
                         </div>
@@ -685,20 +555,19 @@ export function GroupDetail({
                         <button
                             type="button"
                             onClick={() => setIsFiltersOpen(true)}
-                            className={`relative h-11 w-11 rounded-xl border transition flex items-center justify-center cursor-pointer shadow-2xs shrink-0 ${
-                                activeFiltersCount > 0
-                                    ? 'border-zinc-300 bg-white text-zinc-900'
-                                    : 'border-zinc-200/90 bg-white text-zinc-700 hover:bg-zinc-50'
-                            }`}
+                            className={`relative h-11 w-11 rounded-xl border transition flex items-center justify-center cursor-pointer shadow-2xs shrink-0 ${activeFiltersCount > 0
+                                ? 'border-zinc-300 bg-white text-zinc-900'
+                                : 'border-zinc-200/90 bg-white text-zinc-700 hover:bg-zinc-50'
+                                }`}
                             aria-label="Abrir filtros"
                             title="Filtros"
                         >
-                            <SlidersHorizontal className="w-4 h-4 text-zinc-700 rotate-90"/>
+                            <SlidersHorizontal className="w-4 h-4 text-zinc-700 rotate-90" />
                             {activeFiltersCount > 0 && (
                                 <span
                                     className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
-                  {activeFiltersCount}
-                </span>
+                                    {activeFiltersCount}
+                                </span>
                             )}
                         </button>
                     </div>
@@ -733,21 +602,20 @@ export function GroupDetail({
                 <div className="space-y-4 pt-1">
                     {/* Non-invasive mode switcher */}
                     <div className="flex items-center justify-between px-1 py-1">
-            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-              {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
-            </span>
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                            {isSimplifiedBalances ? 'Deudas simplificadas' : 'Deudas directas'}
+                        </span>
 
                         <div
                             className="inline-flex items-center p-0.5 bg-zinc-100 rounded-xl border border-zinc-200 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setIsSimplifiedBalances(true)}
-                                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    isSimplifiedBalances ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'
-                                }`}
+                                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isSimplifiedBalances ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'
+                                    }`}
                             >
                                 <Sparkles
-                                    className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`}/>
+                                    className={`w-3 h-3 ${isSimplifiedBalances ? 'text-emerald-600' : 'text-zinc-400'}`} />
                                 <span>Simplificado</span>
                                 <span className="text-[10px] opacity-60">({simplifiedGroupPairwise.length})</span>
                             </button>
@@ -755,12 +623,11 @@ export function GroupDetail({
                             <button
                                 type="button"
                                 onClick={() => setIsSimplifiedBalances(false)}
-                                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    !isSimplifiedBalances ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'
-                                }`}
+                                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${!isSimplifiedBalances ? 'bg-white text-zinc-900 shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'
+                                    }`}
                             >
                                 <Layers
-                                    className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`}/>
+                                    className={`w-3 h-3 ${!isSimplifiedBalances ? 'text-zinc-900' : 'text-zinc-400'}`} />
                                 <span>Directo</span>
                                 <span className="text-[10px] opacity-60">({directGroupPairwise.length})</span>
                             </button>
@@ -772,7 +639,7 @@ export function GroupDetail({
                             className="bg-white rounded-2xl p-10 border border-zinc-200/80 text-center space-y-2 shadow-2xs">
                             <div
                                 className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                                <CheckCircle2 className="w-5 h-5"/>
+                                <CheckCircle2 className="w-5 h-5" />
                             </div>
                             <h4 className="font-bold text-zinc-900 text-sm">¡Todas las cuentas están al día!</h4>
                             <p className="text-zinc-500 text-xs">No hay deudas pendientes entre los integrantes de este
@@ -790,9 +657,8 @@ export function GroupDetail({
                                     <div
                                         key={idx}
                                         onClick={() => setSelectedPairwiseForDetail(p)}
-                                        className={`bg-white rounded-2xl border shadow-2xs p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-zinc-300 transition-all ${
-                                            isOwedToMe ? 'border-emerald-200' : isMyDebt ? 'border-rose-200' : 'border-zinc-200/80'
-                                        }`}
+                                        className={`bg-white rounded-2xl border shadow-2xs p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-zinc-300 transition-all ${isOwedToMe ? 'border-emerald-200' : isMyDebt ? 'border-rose-200' : 'border-zinc-200/80'
+                                            }`}
                                     >
                                         <div className="flex items-center space-x-3 min-w-0">
                                             <div className="flex items-center -space-x-2 shrink-0">
@@ -815,7 +681,7 @@ export function GroupDetail({
                                                     className="flex items-center space-x-1.5 text-sm font-semibold text-zinc-900 truncate">
                                                     <span
                                                         className={isMyDebt ? 'text-[#c25a3a] font-bold' : ''}>{debtorName}</span>
-                                                    <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                    <ArrowRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                                     <span
                                                         className={isOwedToMe ? 'text-emerald-700 font-bold' : ''}>{creditorName}</span>
                                                 </div>
@@ -854,14 +720,14 @@ export function GroupDetail({
                                 onClick={() => onOpenInviteLink(group.id)}
                                 className="h-9 px-3 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1.5"
                             >
-                                <LinkIcon className="w-3.5 h-3.5 text-emerald-600"/>
+                                <LinkIcon className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Invitar</span>
                             </button>
                             <button
                                 onClick={() => onOpenAddMember(group.id)}
                                 className="h-9 px-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1.5"
                             >
-                                <UserPlus className="w-3.5 h-3.5 text-emerald-400"/>
+                                <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>Añadir</span>
                             </button>
                         </div>
@@ -891,15 +757,15 @@ export function GroupDetail({
                                                 {isGroupOwner && (
                                                     <span
                                                         className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase px-1.5 py-0.2 rounded-md">
-                            Admin
-                          </span>
+                                                        Admin
+                                                    </span>
                                                 )}
                                             </div>
                                             <p className="text-xs text-zinc-500 truncate mt-0.5">{formatDisplayEmail(p.email)}</p>
                                         </div>
                                     </div>
 
-                                    <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                    <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
                                 </div>
                             );
                         })}
@@ -913,7 +779,7 @@ export function GroupDetail({
                     {sortedGroupAuditLogs.length === 0 ? (
                         <div
                             className="bg-white rounded-2xl border border-zinc-200 p-10 text-center text-zinc-500 shadow-2xs space-y-2">
-                            <History className="w-10 h-10 text-zinc-300 mx-auto"/>
+                            <History className="w-10 h-10 text-zinc-300 mx-auto" />
                             <h3 className="font-semibold text-zinc-900 text-sm">Sin historial</h3>
                             <p className="text-xs text-zinc-500">Aún no hay registros de movimientos en este grupo.</p>
                         </div>
@@ -942,14 +808,13 @@ export function GroupDetail({
                                                 setTimeout(() => {
                                                     const el = document.getElementById(`expense-${associatedExpense.id}`);
                                                     if (el) {
-                                                        el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                                     }
                                                 }, 100);
                                             }
                                         }}
-                                        className={`p-3.5 sm:p-4 flex items-start justify-between gap-3 transition ${
-                                            isClickable ? 'cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/70' : ''
-                                        }`}
+                                        className={`p-3.5 sm:p-4 flex items-start justify-between gap-3 transition ${isClickable ? 'cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/70' : ''
+                                            }`}
                                     >
                                         <div className="flex items-start space-x-3 min-w-0 flex-1">
                                             <UserAvatar
@@ -964,18 +829,18 @@ export function GroupDetail({
                                                         className="font-semibold text-zinc-900">{userName}</strong>{' '}
                                                     {log.action === 'create' && (
                                                         <span className="text-zinc-600">
-                              agregó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
-                            </span>
+                                                            agregó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                                                        </span>
                                                     )}
                                                     {log.action === 'update' && (
                                                         <span className="text-zinc-600">
-                              editó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
-                            </span>
+                                                            editó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                                                        </span>
                                                     )}
                                                     {log.action === 'delete' && (
                                                         <span className="text-zinc-600">
-                              eliminó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
-                            </span>
+                                                            eliminó el gasto <strong className="text-zinc-900 font-semibold">&ldquo;{expenseTitle}&rdquo;</strong>
+                                                        </span>
                                                     )}
                                                 </p>
 
@@ -983,14 +848,14 @@ export function GroupDetail({
                                                     {expenseAmount !== undefined && expenseAmount !== null && (
                                                         <span
                                                             className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md text-[11px]">
-                              {formatCurrency(expenseAmount, effectiveCurrency)}
-                            </span>
+                                                            {formatCurrency(expenseAmount, effectiveCurrency)}
+                                                        </span>
                                                     )}
                                                     {associatedExpense?.category && (
                                                         <span
                                                             className="text-zinc-500 bg-zinc-50 border border-zinc-200/60 px-2 py-0.5 rounded-md text-[11px]">
-                              {associatedExpense.category}
-                            </span>
+                                                            {associatedExpense.category}
+                                                        </span>
                                                     )}
                                                 </div>
 
@@ -998,7 +863,7 @@ export function GroupDetail({
                                                 {renderLogChanges(log)}
 
                                                 <p className="text-[10px] text-zinc-400 flex items-center gap-1 pt-0.5">
-                                                    <Clock className="w-2.5 h-2.5"/>
+                                                    <Clock className="w-2.5 h-2.5" />
                                                     <span>{formatActivityDateTime(log.created_at)}</span>
                                                 </p>
                                             </div>
@@ -1006,7 +871,7 @@ export function GroupDetail({
 
                                         {isClickable && (
                                             <div className="shrink-0 text-zinc-400 self-center pl-1">
-                                                <ChevronRight className="w-4 h-4 text-zinc-400"/>
+                                                <ChevronRight className="w-4 h-4 text-zinc-400" />
                                             </div>
                                         )}
                                     </div>

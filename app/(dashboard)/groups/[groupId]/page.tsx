@@ -1,20 +1,20 @@
 'use client';
 
-import React, {useState} from 'react';
-import {GroupDetail} from '@/components/GroupDetail';
-import {useExpense} from '@/lib/expense-context';
-import {Expense, Payment} from '@/lib/types';
-import {useParams, useRouter} from 'next/navigation';
-import {NewExpenseModal} from '@/components/NewExpenseModal';
-import {SettleDebtModal} from '@/components/SettleDebtModal';
-import {AddMemberModal} from '@/components/AddMemberModal';
-import {InviteLinkModal} from '@/components/InviteLinkModal';
+import React, { useState } from 'react';
+import { GroupDetail } from '@/components/groups/GroupDetail';
+import { useExpense } from '@/lib/expense-context';
+import { Expense, Payment } from '@/lib/types';
+import { useParams, useRouter } from 'next/navigation';
+import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { SettleDebtModal } from '@/components/SettleDebtModal';
+import { AddMemberModal } from '@/components/groups/AddMemberModal';
+import { InviteLinkModal } from '@/components/groups/InviteLinkModal';
 
 export default function GroupDetailPage() {
     const router = useRouter();
     const params = useParams();
     const groupId = params.groupId as string;
-    const {groups, deletePayment} = useExpense();
+    const { groups, deletePayment } = useExpense();
 
     const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState<Expense | null>(null);
@@ -53,7 +53,7 @@ export default function GroupDetailPage() {
         amount?: number
     ) => {
         setPaymentToEdit(null);
-        setSettleParams({debtorId, creditorId, amount});
+        setSettleParams({ debtorId, creditorId, amount });
         setIsSettleOpen(true);
     };
 

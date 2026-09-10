@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import {AlertTriangle, Loader2, Trash2, X} from 'lucide-react';
+import { AlertTriangle, Loader2, Trash2, X } from 'lucide-react';
 
 interface ConfirmModalProps {
     isOpen: boolean;
@@ -16,16 +16,16 @@ interface ConfirmModalProps {
 }
 
 export function ConfirmModal({
-                                 isOpen,
-                                 onClose,
-                                 onConfirm,
-                                 title,
-                                 description,
-                                 confirmText = 'Eliminar',
-                                 cancelText = 'Cancelar',
-                                 variant = 'danger',
-                                 isLoading = false,
-                             }: ConfirmModalProps) {
+    isOpen,
+    onClose,
+    onConfirm,
+    title,
+    description,
+    confirmText = 'Eliminar',
+    cancelText = 'Cancelar',
+    variant = 'danger',
+    isLoading = false,
+}: ConfirmModalProps) {
     if (!isOpen) return null;
 
     const isDanger = variant === 'danger';
@@ -37,16 +37,15 @@ export function ConfirmModal({
                 className="bg-white rounded-3xl ring-1 ring-zinc-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150 p-6 space-y-5">
                 <div className="flex items-start justify-between">
                     <div
-                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                            isDanger
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isDanger
                                 ? 'bg-rose-100 text-rose-600'
                                 : 'bg-amber-100 text-amber-600'
-                        }`}
+                            }`}
                     >
                         {isDanger ? (
-                            <Trash2 className="w-6 h-6"/>
+                            <Trash2 className="w-6 h-6" />
                         ) : (
-                            <AlertTriangle className="w-6 h-6"/>
+                            <AlertTriangle className="w-6 h-6" />
                         )}
                     </div>
                     <button
@@ -54,7 +53,7 @@ export function ConfirmModal({
                         disabled={isLoading}
                         className="p-1.5 text-zinc-400 hover:text-zinc-600 rounded-full hover:bg-zinc-100 transition-colors"
                     >
-                        <X className="w-4 h-4"/>
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -76,13 +75,12 @@ export function ConfirmModal({
                         type="button"
                         onClick={onConfirm}
                         disabled={isLoading}
-                        className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-1.5 ${
-                            isDanger
+                        className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-1.5 ${isDanger
                                 ? 'bg-rose-600 hover:bg-rose-700'
                                 : 'bg-zinc-900 hover:bg-zinc-800'
-                        }`}
+                            }`}
                     >
-                        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1 text-white"/>}
+                        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1 text-white" />}
                         <span>{isLoading ? 'Procesando...' : confirmText}</span>
                     </button>
                 </div>

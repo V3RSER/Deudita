@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import {Link as LinkIcon, Pencil, Trash2, UserPlus, X} from 'lucide-react';
+import { Link as LinkIcon, Pencil, Trash2, UserPlus, X } from 'lucide-react';
 
 interface GroupSettingsModalProps {
     isOpen: boolean;
@@ -14,14 +14,14 @@ interface GroupSettingsModalProps {
 }
 
 export function GroupSettingsModal({
-                                       isOpen,
-                                       onClose,
-                                       onEditGroup,
-                                       onAddMembers,
-                                       onInviteLink,
-                                       onDeleteGroup,
-                                       canEdit = true,
-                                   }: GroupSettingsModalProps) {
+    isOpen,
+    onClose,
+    onEditGroup,
+    onAddMembers,
+    onInviteLink,
+    onDeleteGroup,
+    canEdit = true,
+}: GroupSettingsModalProps) {
     if (!isOpen) return null;
 
     return (
@@ -33,8 +33,8 @@ export function GroupSettingsModal({
                         Configuración del grupo
                     </h2>
                     <button onClick={onClose}
-                            className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
-                        <X className="w-5 h-5"/>
+                        className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -46,7 +46,7 @@ export function GroupSettingsModal({
                         >
                             <div
                                 className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mr-4 shrink-0">
-                                <Pencil className="w-5 h-5"/>
+                                <Pencil className="w-5 h-5" />
                             </div>
                             <div>
                                 <div className="font-semibold text-zinc-900 text-sm">Editar grupo</div>
@@ -61,7 +61,7 @@ export function GroupSettingsModal({
                     >
                         <div
                             className="w-10 h-10 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center mr-4 shrink-0">
-                            <UserPlus className="w-5 h-5"/>
+                            <UserPlus className="w-5 h-5" />
                         </div>
                         <div>
                             <div className="font-semibold text-zinc-900 text-sm">Añadir personas</div>
@@ -75,7 +75,7 @@ export function GroupSettingsModal({
                     >
                         <div
                             className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mr-4 shrink-0">
-                            <LinkIcon className="w-5 h-5"/>
+                            <LinkIcon className="w-5 h-5" />
                         </div>
                         <div>
                             <div className="font-semibold text-zinc-900 text-sm">Enlace de invitación</div>
@@ -92,7 +92,7 @@ export function GroupSettingsModal({
                         >
                             <div
                                 className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center mr-4 shrink-0">
-                                <Trash2 className="w-5 h-5"/>
+                                <Trash2 className="w-5 h-5" />
                             </div>
                             <div>
                                 <div className="font-bold text-sm">Eliminar grupo</div>

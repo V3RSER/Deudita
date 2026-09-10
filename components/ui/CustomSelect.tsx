@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
-import {Check, ChevronDown, Search} from 'lucide-react';
-import {AnimatePresence, motion} from 'motion/react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, Search } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 
 export interface SelectOption {
     value: string;
@@ -40,20 +40,20 @@ function isGroup(item: SelectItem): item is SelectGroup {
 }
 
 export function CustomSelect({
-                                 id,
-                                 value,
-                                 onChange,
-                                 options,
-                                 placeholder = 'Seleccionar...',
-                                 disabled = false,
-                                 searchable,
-                                 className = '',
-                                 triggerClassName = '',
-                                 dropdownClassName = '',
-                                 size = 'md',
-                                 ariaLabel,
-                                 renderTrigger,
-                             }: CustomSelectProps) {
+    id,
+    value,
+    onChange,
+    options,
+    placeholder = 'Seleccionar...',
+    disabled = false,
+    searchable,
+    className = '',
+    triggerClassName = '',
+    dropdownClassName = '',
+    size = 'md',
+    ariaLabel,
+    renderTrigger,
+}: Readonly<CustomSelectProps>) {
     const [isOpen, setIsOpen] = useState(false);
     const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
     const [searchQuery, setSearchQuery] = useState('');
@@ -247,30 +247,26 @@ export function CustomSelect({
                     aria-label={ariaLabel || placeholder}
                     disabled={disabled}
                     onClick={() => !disabled && (isOpen ? closeDropdown() : openDropdown())}
-                    className={`w-full flex items-center justify-between gap-2 border bg-white text-zinc-900 shadow-2xs transition-all duration-150 cursor-pointer ${
-                        sizeStyles[size]
-                    } ${
-                        isOpen
+                    className={`w-full flex items-center justify-between gap-2 border bg-white text-zinc-900 shadow-2xs transition-all duration-150 cursor-pointer ${sizeStyles[size]
+                        } ${isOpen
                             ? 'border-emerald-500 ring-2 ring-emerald-500/20'
                             : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/50'
-                    } ${disabled ? 'opacity-50 cursor-not-allowed bg-zinc-100' : ''} ${triggerClassName}`}
+                        } ${disabled ? 'opacity-50 cursor-not-allowed bg-zinc-100' : ''} ${triggerClassName}`}
                 >
                     <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
                         {selectedOption?.icon && (
                             <span className="shrink-0 text-zinc-500">{selectedOption.icon}</span>
                         )}
                         <span
-                            className={`truncate font-semibold ${
-                                selectedOption ? 'text-zinc-900' : 'text-zinc-400 font-normal'
-                            }`}
+                            className={`truncate font-semibold ${selectedOption ? 'text-zinc-900' : 'text-zinc-400 font-normal'
+                                }`}
                         >
-              {selectedOption ? selectedOption.label : placeholder}
-            </span>
+                            {selectedOption ? selectedOption.label : placeholder}
+                        </span>
                     </div>
                     <ChevronDown
-                        className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
-                            isOpen ? 'rotate-180 text-emerald-600' : ''
-                        }`}
+                        className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-emerald-600' : ''
+                            }`}
                     />
                 </button>
             )}
@@ -279,21 +275,20 @@ export function CustomSelect({
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        initial={{opacity: 0, y: placement === 'top' ? 4 : -4, scale: 0.98}}
-                        animate={{opacity: 1, y: 0, scale: 1}}
-                        exit={{opacity: 0, y: placement === 'top' ? 4 : -4, scale: 0.98}}
-                        transition={{duration: 0.15, ease: 'easeOut'}}
-                        className={`absolute z-50 left-0 right-0 ${
-                            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                        } min-w-[180px] bg-white border border-zinc-200/90 rounded-xl shadow-xl overflow-hidden backdrop-blur-xs p-1 ${dropdownClassName}`}
-                        style={{maxHeight: '280px'}}
+                        initial={{ opacity: 0, y: placement === 'top' ? 4 : -4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: placement === 'top' ? 4 : -4, scale: 0.98 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                        className={`absolute z-50 left-0 right-0 ${placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                            } min-w-[180px] bg-white border border-zinc-200/90 rounded-xl shadow-xl overflow-hidden backdrop-blur-xs p-1 ${dropdownClassName}`}
+                        style={{ maxHeight: '280px' }}
                     >
                         {/* Optional search field */}
                         {shouldShowSearch && (
                             <div className="p-1.5 border-b border-zinc-100">
                                 <div className="relative flex items-center">
                                     <Search
-                                        className="absolute left-2.5 w-3.5 h-3.5 text-zinc-400 pointer-events-none"/>
+                                        className="absolute left-2.5 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
                                     <input
                                         ref={searchInputRef}
                                         type="text"
@@ -365,10 +360,10 @@ export function CustomSelect({
 }
 
 function OptionRow({
-                       option,
-                       isSelected,
-                       onSelect,
-                   }: {
+    option,
+    isSelected,
+    onSelect,
+}: {
     option: SelectOption;
     isSelected: boolean;
     onSelect: () => void;
@@ -378,13 +373,12 @@ function OptionRow({
             role="option"
             aria-selected={isSelected}
             onClick={onSelect}
-            className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-colors duration-100 ${
-                option.disabled
-                    ? 'opacity-40 cursor-not-allowed text-zinc-400'
-                    : isSelected
-                        ? 'bg-emerald-50 text-emerald-950 font-semibold'
-                        : 'text-zinc-700 hover:bg-zinc-100/80 hover:text-zinc-900'
-            }`}
+            className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium rounded-lg cursor-pointer transition-colors duration-100 ${option.disabled
+                ? 'opacity-40 cursor-not-allowed text-zinc-400'
+                : isSelected
+                    ? 'bg-emerald-50 text-emerald-950 font-semibold'
+                    : 'text-zinc-700 hover:bg-zinc-100/80 hover:text-zinc-900'
+                }`}
         >
             <div className="flex items-center gap-2 min-w-0 flex-1">
                 {option.icon && <span className="shrink-0">{option.icon}</span>}
@@ -392,13 +386,13 @@ function OptionRow({
                     <span className="block truncate">{option.label}</span>
                     {option.description && (
                         <span className="block text-[10px] text-zinc-400 font-normal truncate">
-              {option.description}
-            </span>
+                            {option.description}
+                        </span>
                     )}
                 </div>
             </div>
             {isSelected && (
-                <Check className="shrink-0 w-3.5 h-3.5 text-emerald-600 ml-1.5"/>
+                <Check className="shrink-0 w-3.5 h-3.5 text-emerald-600 ml-1.5" />
             )}
         </div>
     );

@@ -1,8 +1,8 @@
 'use client';
 
 import React, {useState} from 'react';
-import {GroupList} from '@/components/GroupList';
-import {CreateGroupModal} from '@/components/CreateGroupModal';
+import {GroupList} from '@/components/groups/GroupList';
+import {CreateGroupModal} from '@/components/groups/CreateGroupModal';
 import {useRouter} from 'next/navigation';
 
 export default function GroupsPage() {

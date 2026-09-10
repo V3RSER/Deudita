@@ -1,19 +1,19 @@
 'use client';
 
-import {useMemo, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {formatCurrency} from '@/lib/balance-utils';
-import {GenericExpenseList} from '@/components/GenericExpenseList';
-import {TransactionFilterBar, TransactionFilterState} from '@/components/TransactionFilterBar';
+import { useMemo, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { formatCurrency } from '@/lib/balance-utils';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
 import {
     getAvailableTransactionMonths,
     getEffectiveTransactionDate,
     isDateMatchingFilter,
 } from '@/lib/transaction-date-utils';
-import {Expense, Payment} from '@/lib/types';
-import {BarChart3, PieChart as PieChartIcon, Receipt} from 'lucide-react';
-import {Bar, BarChart, Rectangle, ResponsiveContainer, Tooltip, XAxis, YAxis,} from 'recharts';
-import {PageHeader} from '@/components/PageHeader';
+import { Expense, Payment } from '@/lib/types';
+import { BarChart3, PieChart as PieChartIcon, Receipt } from 'lucide-react';
+import { Bar, BarChart, Rectangle, ResponsiveContainer, Tooltip, XAxis, YAxis, } from 'recharts';
+import { PageHeader } from '@/components/PageHeader';
 
 interface AllExpensesViewProps {
     readonly onOpenNewExpense: () => void;
@@ -32,7 +32,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function AllExpensesView(props: AllExpensesViewProps) {
-    const {currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment} =
+    const { currentProfile, expenses, payments, userGroups, profiles, deleteExpense, deletePayment } =
         useExpense();
 
     const [filters, setFilters] = useState<TransactionFilterState>({
@@ -47,7 +47,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
     });
 
     const handleFilterChange = (updates: Partial<TransactionFilterState>) => {
-        setFilters((prev) => ({...prev, ...updates}));
+        setFilters((prev) => ({ ...prev, ...updates }));
     };
 
     const userGroupIds = useMemo(() => new Set(userGroups.map((group) => group.id)), [userGroups]);
@@ -154,7 +154,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                     if (!isPayer && !isParticipant) return false;
                 }
 
-                const {dateObj} = getEffectiveTransactionDate(expense, filters.dateMode);
+                const { dateObj } = getEffectiveTransactionDate(expense, filters.dateMode);
                 return isDateMatchingFilter(dateObj, filters.datePreset, dateFilterOptions);
             }),
         [
@@ -193,7 +193,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                     if (!isInteracted) return false;
                 }
 
-                const {dateObj} = getEffectiveTransactionDate(payment, filters.dateMode);
+                const { dateObj } = getEffectiveTransactionDate(payment, filters.dateMode);
                 return isDateMatchingFilter(dateObj, filters.datePreset, dateFilterOptions);
             }),
         [
@@ -236,7 +236,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                 <PageHeader
                     title="Historial de Gastos y Movimientos"
                     subtitle="Revisa, filtra por fecha, y gestiona tus gastos confirmados y detectados por correo."
-                    icon={<Receipt className="w-5 h-5"/>}
+                    icon={<Receipt className="w-5 h-5" />}
                 />
             </div>
 
@@ -247,7 +247,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                         <div>
                             <div
                                 className="flex items-center space-x-2 text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                                <BarChart3 className="w-4 h-4 text-emerald-400"/>
+                                <BarChart3 className="w-4 h-4 text-emerald-400" />
                                 <span>Resumen de Gastos</span>
                             </div>
                             <p className="text-3xl font-black text-white tracking-tight">
@@ -274,22 +274,22 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                         className="lg:col-span-2 bg-white p-6 rounded-[2rem] ring-1 ring-zinc-200 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="font-bold text-zinc-900 text-sm flex items-center space-x-2">
-                                <PieChartIcon className="w-4 h-4 text-emerald-600"/>
+                                <PieChartIcon className="w-4 h-4 text-emerald-600" />
                                 <span>Distribución por Categoría</span>
                             </h3>
                             <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">
-                Visualización
-              </span>
+                                Visualización
+                            </span>
                         </div>
 
                         <div className="h-44 w-full pt-2">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
                                     data={categoryStats}
-                                    margin={{top: 10, right: 10, left: -20, bottom: 0}}
+                                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                                 >
-                                    <XAxis dataKey="name" tick={{fontSize: 11, fill: '#71717a'}}/>
-                                    <YAxis tick={{fontSize: 10, fill: '#71717a'}}/>
+                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#71717a' }} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
                                     <Tooltip
                                         formatter={(val) =>
                                             formatCurrency(Number(val) || 0, currentProfile?.currency || 'COP')
@@ -305,7 +305,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                                     <Bar
                                         dataKey="value"
                                         radius={[8, 8, 0, 0]}
-                                        shape={({x, y, width, height, payload}) => (
+                                        shape={({ x, y, width, height, payload }) => (
                                             <Rectangle
                                                 x={x}
                                                 y={y}

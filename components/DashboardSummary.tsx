@@ -3,10 +3,10 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import {useRouter} from 'next/navigation';
-import {useExpense} from '@/lib/expense-context';
-import {calculatePairwiseBalances, calculateUserSummaries, formatCurrency} from '@/lib/balance-utils';
-import {getGroupCategoryConfig, getGroupImage} from '@/lib/group-utils';
+import { useRouter } from 'next/navigation';
+import { useExpense } from '@/lib/expense-context';
+import { calculatePairwiseBalances, calculateUserSummaries, formatCurrency } from '@/lib/balance-utils';
+import { getGroupCategoryConfig, getGroupImage } from '@/lib/group-utils';
 import {
     ArrowRight,
     ArrowRightLeft,
@@ -21,7 +21,7 @@ import {
     Users,
     Wallet,
 } from 'lucide-react';
-import {PageHeader} from '@/components/PageHeader';
+import { PageHeader } from '@/components/PageHeader';
 
 interface DashboardSummaryProps {
     onOpenNewExpense: () => void;
@@ -30,9 +30,9 @@ interface DashboardSummaryProps {
 }
 
 export function DashboardSummary({
-                                     onOpenNewExpense,
-                                     onOpenSettleModal,
-                                 }: DashboardSummaryProps) {
+    onOpenNewExpense,
+    onOpenSettleModal,
+}: DashboardSummaryProps) {
     const router = useRouter();
     const {
         currentProfile,
@@ -89,7 +89,7 @@ export function DashboardSummary({
             <PageHeader
                 title={`¡Hola, ${firstName}!`}
                 subtitle="Aquí tienes el resumen actualizado de tus balances."
-                icon={<Sparkles className="w-4 h-4"/>}
+                icon={<Sparkles className="w-4 h-4" />}
             />
 
             {/* Pending Invites Alert */}
@@ -97,10 +97,10 @@ export function DashboardSummary({
                 <div
                     className="bg-amber-50 text-amber-900 rounded-2xl p-5 shadow-sm ring-1 ring-amber-200/70 space-y-3">
                     <div className="flex items-center space-x-2">
-            <span
-                className="bg-amber-200/60 text-amber-900 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
-              Invitación Pendiente ({pendingInvites.length})
-            </span>
+                        <span
+                            className="bg-amber-200/60 text-amber-900 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                            Invitación Pendiente ({pendingInvites.length})
+                        </span>
                     </div>
 
                     {pendingInvites.map((invite) => {
@@ -115,7 +115,7 @@ export function DashboardSummary({
                                 <div>
                                     <h4 className="font-semibold text-zinc-900 text-sm">
                                         Te han invitado a unirte a <span
-                                        className="font-bold">&quot;{groupName}&quot;</span>
+                                            className="font-bold">&quot;{groupName}&quot;</span>
                                     </h4>
                                     <p className="text-xs text-zinc-500 mt-0.5">
                                         Enviada por <strong className="text-zinc-700">{inviterName}</strong>
@@ -147,43 +147,42 @@ export function DashboardSummary({
             {/* Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
-          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
-            Te deben
-          </span>
+                    <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+                        Te deben
+                    </span>
                     <div className="flex items-center space-x-2 mt-2">
-                        <TrendingUp className="w-5 h-5 text-emerald-500 shrink-0"/>
+                        <TrendingUp className="w-5 h-5 text-emerald-500 shrink-0" />
                         <span className="text-2xl font-bold text-zinc-900 tracking-tight">
-              {formatCurrency(totalOwedToMe)}
-            </span>
+                            {formatCurrency(totalOwedToMe)}
+                        </span>
                     </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
-          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
-            Debes
-          </span>
+                    <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+                        Debes
+                    </span>
                     <div className="flex items-center space-x-2 mt-2">
-                        <TrendingDown className="w-5 h-5 text-rose-500 shrink-0"/>
+                        <TrendingDown className="w-5 h-5 text-rose-500 shrink-0" />
                         <span className="text-2xl font-bold text-zinc-900 tracking-tight">
-              {formatCurrency(totalIOwe)}
-            </span>
+                            {formatCurrency(totalIOwe)}
+                        </span>
                     </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 ring-1 ring-zinc-200 shadow-sm flex flex-col justify-center">
-          <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
-            Balance neto
-          </span>
+                    <span className="text-xs text-zinc-500 uppercase font-bold tracking-wider block">
+                        Balance neto
+                    </span>
                     <div className="flex items-center space-x-2 mt-2">
-                        <ArrowRightLeft className="w-5 h-5 text-zinc-400 shrink-0"/>
+                        <ArrowRightLeft className="w-5 h-5 text-zinc-400 shrink-0" />
                         <span
-                            className={`text-2xl font-bold tracking-tight ${
-                                netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                            }`}
+                            className={`text-2xl font-bold tracking-tight ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                }`}
                         >
-              {netBalance >= 0 ? '+' : ''}
+                            {netBalance >= 0 ? '+' : ''}
                             {formatCurrency(netBalance)}
-            </span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -196,7 +195,7 @@ export function DashboardSummary({
                 >
                     <div
                         className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Plus className="w-5 h-5"/>
+                        <Plus className="w-5 h-5" />
                     </div>
                     <div>
                         <p className="font-semibold text-zinc-900 text-sm">Nuevo Gasto</p>
@@ -209,7 +208,7 @@ export function DashboardSummary({
                 >
                     <div
                         className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Wallet className="w-5 h-5"/>
+                        <Wallet className="w-5 h-5" />
                     </div>
                     <div>
                         <p className="font-semibold text-zinc-900 text-sm">Saldar Cuenta</p>
@@ -222,7 +221,7 @@ export function DashboardSummary({
                 >
                     <div
                         className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Inbox className="w-5 h-5"/>
+                        <Inbox className="w-5 h-5" />
                     </div>
                     <div>
                         <p className="font-semibold text-zinc-900 text-sm">Tickets y Borradores</p>
@@ -235,7 +234,7 @@ export function DashboardSummary({
                 >
                     <div
                         className="w-10 h-10 rounded-xl bg-zinc-800 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <ArrowRightLeft className="w-5 h-5"/>
+                        <ArrowRightLeft className="w-5 h-5" />
                     </div>
                     <div>
                         <p className="font-semibold text-zinc-900 text-sm">Ver Balances</p>
@@ -248,7 +247,7 @@ export function DashboardSummary({
                 >
                     <div
                         className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <Receipt className="w-5 h-5"/>
+                        <Receipt className="w-5 h-5" />
                     </div>
                     <div>
                         <p className="font-semibold text-zinc-900 text-sm">Historial Gastos</p>
@@ -262,7 +261,7 @@ export function DashboardSummary({
                     <div className="flex items-center space-x-2.5">
                         <div
                             className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                            <Users className="w-4 h-4"/>
+                            <Users className="w-4 h-4" />
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
@@ -279,7 +278,7 @@ export function DashboardSummary({
                         className="inline-flex items-center space-x-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 transition"
                     >
                         <span>Ver todos</span>
-                        <ArrowRight className="w-3.5 h-3.5"/>
+                        <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                 </div>
 
@@ -287,7 +286,7 @@ export function DashboardSummary({
                     <div className="bg-white rounded-2xl p-8 ring-1 ring-zinc-200 shadow-sm text-center">
                         <div
                             className="w-12 h-12 bg-zinc-100 text-zinc-400 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                            <Users className="w-6 h-6"/>
+                            <Users className="w-6 h-6" />
                         </div>
                         <p className="text-sm font-medium text-zinc-600">No perteneces a ningún grupo actualmente.</p>
                     </div>
@@ -311,9 +310,8 @@ export function DashboardSummary({
                                 >
                                     {/* Thumbnail / Image */}
                                     <div
-                                        className={`relative w-14 h-14 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${
-                                            !groupImg ? catConfig.bgColor : ''
-                                        }`}
+                                        className={`relative w-14 h-14 shrink-0 rounded-xl flex items-center justify-center overflow-hidden border border-zinc-100 ${!groupImg ? catConfig.bgColor : ''
+                                            }`}
                                     >
                                         {groupImg ? (
                                             <Image
@@ -326,7 +324,7 @@ export function DashboardSummary({
                                             />
                                         ) : (
                                             <div className={catConfig.textColor}>
-                                                <CategoryIcon className="w-6 h-6"/>
+                                                <CategoryIcon className="w-6 h-6" />
                                             </div>
                                         )}
                                     </div>
@@ -339,24 +337,24 @@ export function DashboardSummary({
                                         <div className="mt-1 text-xs">
                                             {Math.abs(groupNetBalance) < 0.5 ? (
                                                 <span className="font-medium text-zinc-500 flex items-center">
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-zinc-400"/> Al día
-                        </span>
+                                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-zinc-400" /> Al día
+                                                </span>
                                             ) : groupNetBalance > 0 ? (
                                                 <span className="font-bold text-emerald-600 flex items-center">
-                          <TrendingUp className="w-3.5 h-3.5 mr-1 text-emerald-500"/> Te deben{' '}
+                                                    <TrendingUp className="w-3.5 h-3.5 mr-1 text-emerald-500" /> Te deben{' '}
                                                     {formatCurrency(groupNetBalance, group.currency)}
-                        </span>
+                                                </span>
                                             ) : (
                                                 <span className="font-bold text-rose-600 flex items-center">
-                          <TrendingDown className="w-3.5 h-3.5 mr-1 text-rose-500"/> Debes{' '}
+                                                    <TrendingDown className="w-3.5 h-3.5 mr-1 text-rose-500" /> Debes{' '}
                                                     {formatCurrency(Math.abs(groupNetBalance), group.currency)}
-                        </span>
+                                                </span>
                                             )}
                                         </div>
                                     </div>
 
                                     <ChevronRight
-                                        className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0"/>
+                                        className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
                                 </div>
                             );
                         })}

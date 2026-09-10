@@ -1,5 +1,5 @@
 import React from 'react';
-import {SplitSquareHorizontal} from 'lucide-react';
+import { SplitSquareHorizontal } from 'lucide-react';
 
 export type DeuditaLogoSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 
@@ -49,22 +49,21 @@ const sizeConfig: Record<
 };
 
 export function DeuditaLogo({
-                                size = 'md',
-                                className = '',
-                                iconClassName = '',
-                                withHoverEffect = false,
-                                showText = false,
-                                textClassName = '',
-                            }: DeuditaLogoProps) {
+    size = 'md',
+    className = '',
+    iconClassName = '',
+    withHoverEffect = false,
+    showText = false,
+    textClassName = '',
+}: DeuditaLogoProps) {
     const config = sizeConfig[size] || sizeConfig.md;
 
     const logoIcon = (
         <div
-            className={`bg-zinc-950 flex items-center justify-center shadow-xs shrink-0 ${config.container} ${
-                withHoverEffect ? 'group-hover:scale-105 transition-transform duration-300' : ''
-            } ${className}`}
+            className={`bg-zinc-950 flex items-center justify-center shadow-xs shrink-0 ${config.container} ${withHoverEffect ? 'group-hover:scale-105 transition-transform duration-300' : ''
+                } ${className}`}
         >
-            <SplitSquareHorizontal className={`text-white ${config.icon} ${iconClassName}`}/>
+            <SplitSquareHorizontal className={`text-white ${config.icon} ${iconClassName}`} />
         </div>
     );
 
@@ -78,8 +77,8 @@ export function DeuditaLogo({
             <span
                 className={`font-bold text-zinc-900 leading-tight tracking-tight ${config.text} ${textClassName}`}
             >
-        Deudita
-      </span>
+                Deudita
+            </span>
         </div>
     );
 }

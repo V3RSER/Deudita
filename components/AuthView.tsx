@@ -1,12 +1,12 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
-import {createClient} from '@/lib/supabase/client';
-import {AlertCircle, Loader2} from 'lucide-react';
-import {useRouter} from 'next/navigation';
-import {DeuditaLogo} from '@/components/DeuditaLogo';
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { DeuditaLogo } from '@/components/DeuditaLogo';
 
-export function AuthView({error}: { error?: string }) {
+export function AuthView({ error }: { error?: string }) {
     const supabase = createClient();
     const router = useRouter();
     const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -36,10 +36,10 @@ export function AuthView({error}: { error?: string }) {
                 // Fast local session check with a strict timeout to avoid hanging
                 const sessionPromise = supabase.auth.getSession();
                 const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-                    setTimeout(() => resolve({data: {session: null}}), 1500)
+                    setTimeout(() => resolve({ data: { session: null } }), 1500)
                 );
 
-                const {data} = await Promise.race([sessionPromise, timeoutPromise]);
+                const { data } = await Promise.race([sessionPromise, timeoutPromise]);
                 if (!isMounted) return;
 
                 if (data?.session?.user) {
@@ -59,8 +59,8 @@ export function AuthView({error}: { error?: string }) {
                         try {
                             const claimRes = await fetch('/api/invites/claim', {
                                 method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({token: activeToken}),
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: activeToken }),
                             });
                             const claimData = await claimRes.json();
                             if (claimData?.groupId && isMounted) {
@@ -122,7 +122,7 @@ export function AuthView({error}: { error?: string }) {
         <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 p-4">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
                 <div className="flex justify-center mb-6">
-                    <DeuditaLogo size="xl" className="shadow-lg"/>
+                    <DeuditaLogo size="xl" className="shadow-lg" />
                 </div>
 
                 <h1 className="text-3xl font-bold text-zinc-900 mb-2">Deudita</h1>
@@ -131,7 +131,7 @@ export function AuthView({error}: { error?: string }) {
                 {error && (
                     <div
                         className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl flex items-center gap-3 text-sm text-left">
-                        <AlertCircle className="w-5 h-5 flex-shrink-0"/>
+                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
                         <span>{error}</span>
                     </div>
                 )}
@@ -142,7 +142,7 @@ export function AuthView({error}: { error?: string }) {
                     className="w-full bg-zinc-900 text-white rounded-xl py-3 px-4 font-semibold hover:bg-zinc-800 transition-all active:scale-95 shadow-sm flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
                     {isLoggingIn ? (
-                        <Loader2 className="w-5 h-5 animate-spin"/>
+                        <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                         <svg className="w-5 h-5" viewBox="0 0 24 24">
                             <path

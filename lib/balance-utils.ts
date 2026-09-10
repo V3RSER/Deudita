@@ -424,9 +424,9 @@ function simplifySingleScopeBalances(
     netMap.forEach((net, userId) => {
         const rounded = Math.round(net * 100) / 100;
         if (rounded > 0.01) {
-            creditors.push({id: userId, amount: rounded});
+            creditors.push({ id: userId, amount: rounded });
         } else if (rounded < -0.01) {
-            debtors.push({id: userId, amount: Math.abs(rounded)});
+            debtors.push({ id: userId, amount: Math.abs(rounded) });
         }
     });
 
@@ -745,11 +745,11 @@ export interface ThirdPartyTriangulationExpense {
     originalDebtAmount: number;
     allocatedDiscountAmount: number;
     role:
-        | 'debtor_owes_third_party'
-        | 'third_party_owes_creditor'
-        | 'creditor_owes_third_party'
-        | 'third_party_owes_debtor'
-        | 'group_shared';
+    | 'debtor_owes_third_party'
+    | 'third_party_owes_creditor'
+    | 'creditor_owes_third_party'
+    | 'third_party_owes_debtor'
+    | 'group_shared';
     payerName: string;
     payerProfile?: Profile;
     participantName: string;
@@ -766,11 +766,11 @@ export interface ThirdPartyTriangulation {
     amount: number;
     isDiscount: boolean;
     role:
-        | 'debtor_pays_third_party'
-        | 'third_party_pays_creditor'
-        | 'creditor_owes_third_party'
-        | 'mutual_cross_compensation'
-        | 'debt_consolidation';
+    | 'debtor_pays_third_party'
+    | 'third_party_pays_creditor'
+    | 'creditor_owes_third_party'
+    | 'mutual_cross_compensation'
+    | 'debt_consolidation';
     shortSummary: string;
     explanation: string;
     directDebtsWithDebtor: number;
@@ -789,11 +789,11 @@ export interface RealCompensationRelation {
     simplifiedAmount?: number;
     differs?: boolean;
     direction:
-        | 'creditor_owes_third'
-        | 'third_owes_creditor'
-        | 'debtor_owes_third'
-        | 'third_owes_debtor'
-        | 'consolidation';
+    | 'creditor_owes_third'
+    | 'third_owes_creditor'
+    | 'debtor_owes_third'
+    | 'third_owes_debtor'
+    | 'consolidation';
     roleDescription: string;
     operation: '+' | '-';
     expenses: Expense[];
@@ -1111,7 +1111,7 @@ export function calculatePairwiseDebtDetail(
                 debtRemaining = Math.round((debtRemaining - take) * 100) / 100;
                 debtPaid = Math.round((debtPaid + take) * 100) / 100;
                 offset.remainingAmount = Math.round((offset.remainingAmount - take) * 100) / 100;
-                currentMatches.push({offset, amount: take});
+                currentMatches.push({ offset, amount: take });
             }
         }
 
@@ -1359,7 +1359,7 @@ export function calculatePairwiseDebtDetail(
                                     differs,
                                     direction: 'debtor_owes_third',
                                     roleDescription: `${debtorDisplayName} transfiere directamente a ${b.creditor.full_name || 'Tercero'}${differs && directAmount > 0 ? ` (deuda directa previa: ${formatCurrency(directAmount, currencyForFormatting)})` : ''
-                                    }`,
+                                        }`,
                                     operation: '+',
                                     expenses: getExpensesForPair(b.creditor.id, debtor.id),
                                 });
@@ -1698,9 +1698,9 @@ export function calculatePairwiseDebtDetail(
                         )} al redirigir el pago directamente a ${newSuggestedPayments
                             .map((b) => b.to.full_name || 'Tercero')
                             .join(' y ')}. El saldo restante con ${creditorDisplayName} es de ${formatCurrency(
-                            simplifiedAmount,
-                            currencyForFormatting
-                        )}.`;
+                                simplifiedAmount,
+                                currencyForFormatting
+                            )}.`;
                     } else {
                         summaryNarrative = `La cuenta directa 1 a 1 entre ${debtorDisplayName} y ${creditorDisplayName} es de ${formatCurrency(
                             netDirectBalance,
@@ -1747,7 +1747,7 @@ export function calculatePairwiseDebtDetail(
                         netDirectBalance,
                         currencyForFormatting
                     )} a ${creditorDisplayName}${thirdPartyList.length > 0 ? `, además de ${thirdPartyList.join(' y ')}` : ''
-                    }. En el grupo se acumularían pagos cruzados redundantes.`;
+                        }. En el grupo se acumularían pagos cruzados redundantes.`;
 
                     simplifiedNarrative = `Al activar la simplificación, las deudas con intermediarios (${compFormula}) se triangulan y se transfieren directamente a ${creditorDisplayName}. De este modo, en lugar de pagos cruzados dispersos, ${debtorDisplayName} salda todo en un solo pago directo de ${formatCurrency(
                         simplifiedAmount,
@@ -2335,11 +2335,11 @@ export function calculateMemberAccountStatement(
 
     const finalCreditors = activePairwise
         .filter((pb) => pb.debtor.id === memberId)
-        .map((pb) => ({member: pb.creditor, amount: pb.amount}));
+        .map((pb) => ({ member: pb.creditor, amount: pb.amount }));
 
     const finalDebtors = activePairwise
         .filter((pb) => pb.creditor.id === memberId)
-        .map((pb) => ({member: pb.debtor, amount: pb.amount}));
+        .map((pb) => ({ member: pb.debtor, amount: pb.amount }));
 
     // Triangulation / Compensation calculation when targetCreditor is specified
     let optimizationDetail: GroupOptimizationDetail | undefined = undefined;

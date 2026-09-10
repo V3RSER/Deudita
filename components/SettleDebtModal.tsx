@@ -1,13 +1,13 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {calculatePairwiseBalances, formatCurrency} from '@/lib/balance-utils';
-import {PaymentInstructionsView} from '@/components/PaymentInstructionsView';
-import {FormattedCurrencyInput} from '@/components/FormattedCurrencyInput';
-import {ConfirmModal} from '@/components/ConfirmModal';
-import {Payment} from '@/lib/types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
+import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
+import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { Payment } from '@/lib/types';
 import {
     AlertCircle,
     ArrowLeftRight,
@@ -23,7 +23,7 @@ import {
     Wallet,
     X
 } from 'lucide-react';
-import {CustomSelect} from '@/components/ui/CustomSelect';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import Image from 'next/image';
 import {
     combineDateAndTimeToISO,
@@ -45,22 +45,22 @@ interface SettleDebtModalProps {
 }
 
 const PAYMENT_METHODS = [
-    {id: 'transfer', label: 'Transferencia'},
-    {id: 'nequi', label: 'Nequi'},
-    {id: 'daviplata', label: 'Daviplata'},
-    {id: 'cash', label: 'Efectivo'},
-    {id: 'bizum', label: 'Bizum'},
+    { id: 'transfer', label: 'Transferencia' },
+    { id: 'nequi', label: 'Nequi' },
+    { id: 'daviplata', label: 'Daviplata' },
+    { id: 'cash', label: 'Efectivo' },
+    { id: 'bizum', label: 'Bizum' },
 ];
 
 export function SettleDebtModal({
-                                    isOpen,
-                                    onClose,
-                                    defaultGroupId,
-                                    defaultDebtorId,
-                                    defaultCreditorId,
-                                    defaultAmount,
-                                    paymentToEdit,
-                                }: SettleDebtModalProps) {
+    isOpen,
+    onClose,
+    defaultGroupId,
+    defaultDebtorId,
+    defaultCreditorId,
+    defaultAmount,
+    paymentToEdit,
+}: Readonly<SettleDebtModalProps>) {
     const {
         currentProfile,
         userGroups,
@@ -169,7 +169,7 @@ export function SettleDebtModal({
             const pair = groupPairwise.find((p) => p.debtor.id === payerId && p.creditor.id === receiverId);
             const debt = pair ? pair.amount : 0;
             if (debt > 0 || isLockedToGroup) {
-                groupDebts.push({group, debt});
+                groupDebts.push({ group, debt });
             }
         });
 
@@ -340,7 +340,7 @@ export function SettleDebtModal({
                     if (remaining <= 0) break;
                     const alloc = Math.min(remaining, item.debt > 0 ? item.debt : remaining);
                     if (alloc > 0) {
-                        allocations.push({groupId: item.group.id, amount: alloc});
+                        allocations.push({ groupId: item.group.id, amount: alloc });
                         remaining -= alloc;
                     }
                 }
@@ -350,7 +350,7 @@ export function SettleDebtModal({
                         allocations[0].amount += remaining;
                     } else if (userGroups.length > 0) {
                         const fallbackGroup = targetGroup || userGroups[0];
-                        allocations.push({groupId: fallbackGroup.id, amount: remaining});
+                        allocations.push({ groupId: fallbackGroup.id, amount: remaining });
                     }
                 }
 
@@ -408,7 +408,7 @@ export function SettleDebtModal({
                     <div className="flex items-center space-x-3">
                         <div
                             className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs ring-1 ring-emerald-100">
-                            <Wallet className="w-5 h-5"/>
+                            <Wallet className="w-5 h-5" />
                         </div>
                         <div>
                             <h2 className="text-base font-extrabold text-zinc-900 tracking-tight">
@@ -423,7 +423,7 @@ export function SettleDebtModal({
                         onClick={onClose}
                         className="p-2 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition"
                     >
-                        <X className="w-5 h-5"/>
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -431,7 +431,7 @@ export function SettleDebtModal({
                 {errorMsg && (
                     <div
                         className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-xs font-semibold text-rose-700">
-                        <AlertCircle className="w-4 h-4 mr-2 shrink-0"/> {errorMsg}
+                        <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMsg}
                     </div>
                 )}
 
@@ -456,11 +456,10 @@ export function SettleDebtModal({
                                     ariaLabel="Seleccionar pagador"
                                     renderTrigger={(_, isOpen) => (
                                         <div
-                                            className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${
-                                                isOpen
-                                                    ? 'border-rose-400 ring-2 ring-rose-500/20 shadow-xs'
-                                                    : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
-                                            }`}>
+                                            className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${isOpen
+                                                ? 'border-rose-400 ring-2 ring-rose-500/20 shadow-xs'
+                                                : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
+                                                }`}>
                                             <div className="relative shrink-0">
                                                 {payerProfile?.avatar_url ? (
                                                     <Image
@@ -479,8 +478,8 @@ export function SettleDebtModal({
                                                 )}
                                                 <span
                                                     className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                          PAGA
-                        </span>
+                                                    PAGA
+                                                </span>
                                             </div>
 
                                             <div className="min-w-0 flex-1 text-left">
@@ -493,9 +492,8 @@ export function SettleDebtModal({
                                             </div>
 
                                             <ChevronDown
-                                                className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
-                                                    isOpen ? 'rotate-180 text-rose-600' : ''
-                                                }`}
+                                                className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-rose-600' : ''
+                                                    }`}
                                             />
                                         </div>
                                     )}
@@ -511,7 +509,7 @@ export function SettleDebtModal({
                                     title="Invertir pagador y receptor"
                                     aria-label="Invertir pagador y receptor"
                                 >
-                                    <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4"/>
+                                    <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 </button>
                             </div>
 
@@ -524,11 +522,10 @@ export function SettleDebtModal({
                                     ariaLabel="Seleccionar receptor"
                                     renderTrigger={(_, isOpen) => (
                                         <div
-                                            className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${
-                                                isOpen
-                                                    ? 'border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
-                                                    : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
-                                            }`}>
+                                            className={`relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border transition-all min-w-0 group cursor-pointer ${isOpen
+                                                ? 'border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs'
+                                                : 'border-zinc-200 shadow-2xs hover:border-zinc-300 hover:bg-zinc-50/50'
+                                                }`}>
                                             <div className="relative shrink-0">
                                                 {receiverProfile?.avatar_url ? (
                                                     <Image
@@ -547,8 +544,8 @@ export function SettleDebtModal({
                                                 )}
                                                 <span
                                                     className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                          RECIBE
-                        </span>
+                                                    RECIBE
+                                                </span>
                                             </div>
 
                                             <div className="min-w-0 flex-1 text-left">
@@ -561,9 +558,8 @@ export function SettleDebtModal({
                                             </div>
 
                                             <ChevronDown
-                                                className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
-                                                    isOpen ? 'rotate-180 text-emerald-600' : ''
-                                                }`}
+                                                className={`shrink-0 w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-emerald-600' : ''
+                                                    }`}
                                             />
                                         </div>
                                     )}
@@ -576,7 +572,7 @@ export function SettleDebtModal({
                             <div className="mt-2.5 flex items-center justify-center">
                                 <div
                                     className="inline-flex items-center space-x-1.5 bg-emerald-100/70 border border-emerald-200/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-emerald-800 shadow-2xs">
-                                    <Sparkles className="w-3 h-3 text-emerald-600"/>
+                                    <Sparkles className="w-3 h-3 text-emerald-600" />
                                     <span>Deuda pendiente: {formatCurrency(totalOwed, currency)}</span>
                                 </div>
                             </div>
@@ -590,13 +586,13 @@ export function SettleDebtModal({
                     {/* Amount Stage */}
                     <div className="bg-white rounded-3xl p-5 border border-zinc-200/90 shadow-xs text-center space-y-3">
                         <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
-                Monto transferido
-              </span>
+                            <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
+                                Monto transferido
+                            </span>
                             <span
                                 className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                Moneda: {currency}
-              </span>
+                                Moneda: {currency}
+                            </span>
                         </div>
 
                         <div className="py-1">
@@ -616,11 +612,10 @@ export function SettleDebtModal({
                                 <button
                                     type="button"
                                     onClick={() => setAmount(totalOwed.toString())}
-                                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                                        numericAmount === totalOwed
-                                            ? 'bg-emerald-600 text-white shadow-xs'
-                                            : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700'
-                                    }`}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${numericAmount === totalOwed
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700'
+                                        }`}
                                 >
                                     Pagar total (100%)
                                 </button>
@@ -644,7 +639,7 @@ export function SettleDebtModal({
 
                     {/* Receiver Instructions Card (If profile has bank / phone data) */}
                     {receiverProfile?.payment_instructions && (
-                        <PaymentInstructionsView instructions={receiverProfile.payment_instructions}/>
+                        <PaymentInstructionsView instructions={receiverProfile.payment_instructions} />
                     )}
 
                     {/* Payment Method / Concept */}
@@ -662,11 +657,10 @@ export function SettleDebtModal({
                                         key={method.id}
                                         type="button"
                                         onClick={() => setNotes(method.label)}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                                            isSelected
-                                                ? 'bg-zinc-900 text-white shadow-xs'
-                                                : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 border border-zinc-200/50'
-                                        }`}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isSelected
+                                            ? 'bg-zinc-900 text-white shadow-xs'
+                                            : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 border border-zinc-200/50'
+                                            }`}
                                     >
                                         {method.label}
                                     </button>
@@ -694,7 +688,7 @@ export function SettleDebtModal({
                                 onClick={() => setShowTimeInput(!showTimeInput)}
                                 className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
                             >
-                                <Clock className="w-3.5 h-3.5"/>
+                                <Clock className="w-3.5 h-3.5" />
                                 <span>{time || 'Ajustar hora'}</span>
                             </button>
                         </div>
@@ -719,11 +713,11 @@ export function SettleDebtModal({
                             <div
                                 className="p-3 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-2 animate-in fade-in duration-150">
                                 <div className="flex items-center justify-between">
-                  <span
-                      className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-emerald-600"/>
-                    Hora del pago (zona horaria local)
-                  </span>
+                                    <span
+                                        className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                                        <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                                        Hora del pago (zona horaria local)
+                                    </span>
                                     <div className="flex items-center gap-1">
                                         <button
                                             type="button"
@@ -758,8 +752,8 @@ export function SettleDebtModal({
                                         className="flex-1 px-3.5 py-2 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
                                     />
                                     <span className="text-xs text-zinc-500 font-medium shrink-0">
-                    {date === getTodayDateString() ? 'Hoy' : 'Día seleccionado'}
-                  </span>
+                                        {date === getTodayDateString() ? 'Hoy' : 'Día seleccionado'}
+                                    </span>
                                 </div>
                             </div>
                         )}
@@ -787,7 +781,7 @@ export function SettleDebtModal({
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-xs font-bold text-emerald-950 flex items-center space-x-1">
-                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600"/>
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                             <span>Comprobante adjuntado</span>
                                         </div>
                                         <p className="text-[10px] text-emerald-700/80 truncate">
@@ -811,7 +805,7 @@ export function SettleDebtModal({
                                         className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition"
                                         title="Quitar"
                                     >
-                                        <Trash2 className="w-4 h-4"/>
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
@@ -823,9 +817,9 @@ export function SettleDebtModal({
                                 className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-zinc-50/70 hover:bg-zinc-100/80 border border-dashed border-zinc-300 rounded-2xl text-xs font-bold text-zinc-600 hover:text-zinc-900 transition-all shadow-2xs group cursor-pointer"
                             >
                                 {isUploading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600"/>
+                                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
                                 ) : (
-                                    <Camera className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600"/>
+                                    <Camera className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600" />
                                 )}
                                 <span>{isUploading ? 'Subiendo comprobante...' : 'Subir foto o captura del comprobante'}</span>
                             </button>
@@ -845,7 +839,7 @@ export function SettleDebtModal({
                         <div className="bg-zinc-50/80 border border-zinc-200/70 rounded-2xl p-4 space-y-2.5">
                             <div
                                 className="flex items-center space-x-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
-                                <Layers className="w-3.5 h-3.5 text-zinc-400"/>
+                                <Layers className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Distribución del pago entre tus grupos:</span>
                             </div>
                             <div className="space-y-1.5">
@@ -876,7 +870,7 @@ export function SettleDebtModal({
                             className="p-3 rounded-2xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-colors border border-transparent hover:border-rose-200 cursor-pointer"
                             title="Eliminar este pago"
                         >
-                            {isDeleting ? <Loader2 className="w-5 h-5 animate-spin"/> : <Trash2 className="w-5 h-5"/>}
+                            {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                         </button>
                     ) : (
                         <button
@@ -894,9 +888,9 @@ export function SettleDebtModal({
                         className="px-6 sm:px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold rounded-2xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer ml-auto"
                     >
                         {(isSubmitting || isMutating) ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2"/>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
                         ) : (
-                            <Check className="w-4 h-4 mr-1.5"/>
+                            <Check className="w-4 h-4 mr-1.5" />
                         )}
                         <span>{isEditing ? 'Guardar Cambios' : 'Confirmar Pago'}</span>
                     </button>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Image from 'next/image';
-import {Profile} from '@/lib/types';
+import { Profile } from '@/lib/types';
 
 export type AvatarBadge = 'debe' | 'aportó' | 'pago' | null;
 
@@ -16,13 +16,13 @@ interface UserAvatarProps {
 }
 
 export function UserAvatar({
-                               profile,
-                               name,
-                               email,
-                               size = 'md',
-                               badge,
-                               className = '',
-                           }: UserAvatarProps) {
+    profile,
+    name,
+    email,
+    size = 'md',
+    badge,
+    className = '',
+}: UserAvatarProps) {
     const displayName = profile?.full_name || name || profile?.email || email || 'Usuario';
     const initial = (displayName.trim()[0] || 'U').toUpperCase();
     const avatarUrl = profile?.avatar_url;
@@ -65,15 +65,15 @@ export function UserAvatar({
             {badge === 'debe' && (
                 <span
                     className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#dc2626] sm:bg-[#e11d48] text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-tight shadow-xs whitespace-nowrap lowercase">
-          debe
-        </span>
+                    debe
+                </span>
             )}
 
             {(badge === 'aportó' || badge === 'pago') && (
                 <span
                     className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full leading-tight shadow-xs whitespace-nowrap lowercase">
-          {badge === 'pago' ? 'pagó' : 'aportó'}
-        </span>
+                    {badge === 'pago' ? 'pagó' : 'aportó'}
+                </span>
             )}
         </div>
     );

@@ -1,4 +1,4 @@
-import {Expense, Payment} from './types';
+import { Expense, Payment } from './types';
 
 export type DateFilterMode = 'expense_date' | 'entry_date';
 
@@ -119,12 +119,12 @@ export function getRecordEventDateInfo(record: {
             const d = new Date(record.expense_time);
             if (!isNaN(d.getTime())) {
                 const timeStr = extractTimeFromISO(record.expense_time);
-                return {timestamp: record.expense_time, dateObj: d, hasExplicitTime: timeStr !== '00:00'};
+                return { timestamp: record.expense_time, dateObj: d, hasExplicitTime: timeStr !== '00:00' };
             }
         }
         const [year, month, day] = record.expense_date.split('-').map(Number);
         const d = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0);
-        return {timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false};
+        return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
     }
 
     // Payment check
@@ -133,17 +133,17 @@ export function getRecordEventDateInfo(record: {
             const d = new Date(record.payment_time);
             if (!isNaN(d.getTime())) {
                 const timeStr = extractTimeFromISO(record.payment_time);
-                return {timestamp: record.payment_time, dateObj: d, hasExplicitTime: timeStr !== '00:00'};
+                return { timestamp: record.payment_time, dateObj: d, hasExplicitTime: timeStr !== '00:00' };
             }
         }
         const [year, month, day] = record.payment_date.split('-').map(Number);
         const d = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0);
-        return {timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false};
+        return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
     }
 
     // Fallback to created_at
     const d = new Date(record.created_at);
-    return {timestamp: record.created_at, dateObj: isNaN(d.getTime()) ? new Date() : d, hasExplicitTime: true};
+    return { timestamp: record.created_at, dateObj: isNaN(d.getTime()) ? new Date() : d, hasExplicitTime: true };
 }
 
 /**
@@ -229,7 +229,7 @@ export function getAvailableTransactionMonths(
     const map = new Map<string, string>();
 
     transactions.forEach((tx) => {
-        const {dateObj} = getEffectiveTransactionDate(tx, mode);
+        const { dateObj } = getEffectiveTransactionDate(tx, mode);
         if (!isNaN(dateObj.getTime())) {
             const year = dateObj.getFullYear();
             const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -242,7 +242,7 @@ export function getAvailableTransactionMonths(
 
     return Array.from(map.entries())
         .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([value, label]) => ({value, label}));
+        .map(([value, label]) => ({ value, label }));
 }
 
 export type DatePreset = 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'custom';

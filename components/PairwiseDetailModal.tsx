@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useMemo, useState} from 'react';
+import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import {Expense, Group, PairwiseBalance, Payment, Profile} from '@/lib/types';
-import {calculatePairwiseDebtDetail, formatCurrency,} from '@/lib/balance-utils';
-import {GenericExpenseList} from '@/components/GenericExpenseList';
+import { Expense, Group, PairwiseBalance, Payment, Profile } from '@/lib/types';
+import { calculatePairwiseDebtDetail, formatCurrency, } from '@/lib/balance-utils';
+import { GenericExpenseList } from '@/components/GenericExpenseList';
 import {
     ArrowLeft,
     ArrowRight,
@@ -52,22 +52,22 @@ function getInitials(name?: string | null): string {
 }
 
 export function PairwiseDetailModal({
-                                        isOpen,
-                                        onClose,
-                                        pairwise,
-                                        currentProfile,
-                                        expenses,
-                                        payments,
-                                        profiles,
-                                        groups,
-                                        isSimplified,
-                                        groupId,
-                                        onOpenSettleModal,
-                                        onEditPayment,
-                                        onEditExpense,
-                                        onDeleteExpense,
-                                        onDeletePayment,
-                                    }: PairwiseDetailModalProps) {
+    isOpen,
+    onClose,
+    pairwise,
+    currentProfile,
+    expenses,
+    payments,
+    profiles,
+    groups,
+    isSimplified,
+    groupId,
+    onOpenSettleModal,
+    onEditPayment,
+    onEditExpense,
+    onDeleteExpense,
+    onDeletePayment,
+}: PairwiseDetailModalProps) {
     // Collapsed by default
     const [expandedSections, setExpandedSections] = useState({
         debts: false,
@@ -224,7 +224,7 @@ export function PairwiseDetailModal({
                 {/* TOP MODAL HEADER */}
                 <div className="bg-white px-4 sm:px-6 pt-3 pb-3.5 sm:py-4 border-b border-zinc-200/80 shrink-0">
                     {/* Mobile Handle Indicator */}
-                    <div className="w-12 h-1 bg-zinc-200 rounded-full mx-auto mb-2.5 sm:hidden"/>
+                    <div className="w-12 h-1 bg-zinc-200 rounded-full mx-auto mb-2.5 sm:hidden" />
 
                     {/* Top Row: Navigation + Perspective + Close */}
                     <div className="flex items-center justify-between gap-2.5">
@@ -235,7 +235,7 @@ export function PairwiseDetailModal({
                                 aria-label="Cerrar detalle"
                                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-300 text-zinc-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                             >
-                                <ArrowLeft className="w-4 h-4"/>
+                                <ArrowLeft className="w-4 h-4" />
                             </button>
 
                             {/* Double Avatars */}
@@ -287,40 +287,39 @@ export function PairwiseDetailModal({
 
                         {/* Status Chip (Por pagar / A tu favor) */}
                         <span
-                            className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold shrink-0 border ${
-                                isCreditor
+                            className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold shrink-0 border ${isCreditor
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : isDebtor
                                         ? 'bg-amber-50 text-amber-800 border-amber-200'
                                         : 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                            }`}
+                                }`}
                         >
-              {isCreditor ? 'A tu favor' : isDebtor ? 'Por pagar' : 'Detalle'}
-            </span>
+                            {isCreditor ? 'A tu favor' : isDebtor ? 'Por pagar' : 'Detalle'}
+                        </span>
                     </div>
 
                     {/* Counts pill (Consumos directos & Aportes) */}
                     <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px] text-zinc-500">
-            <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-zinc-100 border border-zinc-200/80 font-medium text-zinc-700">
-              <span className="font-bold text-zinc-900">{pendingConsumedExpenses.length}</span> consumos directos
-              <span className="text-zinc-300">•</span>
-              <span
-                  className="font-bold text-zinc-900">{activeReverseExpenses.length + activeDirectPayments.length}</span> aportes directos
-            </span>
+                        <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-zinc-100 border border-zinc-200/80 font-medium text-zinc-700">
+                            <span className="font-bold text-zinc-900">{pendingConsumedExpenses.length}</span> consumos directos
+                            <span className="text-zinc-300">•</span>
+                            <span
+                                className="font-bold text-zinc-900">{activeReverseExpenses.length + activeDirectPayments.length}</span> aportes directos
+                        </span>
                     </div>
 
                     {/* Liquidation Bar: Saldo a liquidar + Saldar button */}
                     <div
                         className="mt-3 pt-2.5 sm:pt-3 border-t border-zinc-100 flex items-center justify-between gap-3">
                         <div>
-              <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider block leading-tight">
-                SALDO A LIQUIDAR
-              </span>
+                            <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider block leading-tight">
+                                SALDO A LIQUIDAR
+                            </span>
                             <span
                                 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight block mt-0.5">
-                {formatCurrency(finalSettlementAmount, currency)}
-              </span>
+                                {formatCurrency(finalSettlementAmount, currency)}
+                            </span>
                         </div>
 
                         <button
@@ -349,18 +348,18 @@ export function PairwiseDetailModal({
                         onClick={toggleAllSections}
                         className="flex items-center space-x-1.5 font-bold text-zinc-700 hover:text-zinc-900 transition-colors cursor-pointer"
                     >
-                        <Layers className="w-3.5 h-3.5"/>
+                        <Layers className="w-3.5 h-3.5" />
                         <span>{allSectionsExpanded ? 'Colapsar todas las secciones' : 'Expandir todas las secciones'}</span>
                         {allSectionsExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 ml-0.5"/>
+                            <ChevronUp className="w-3.5 h-3.5 ml-0.5" />
                         ) : (
-                            <ChevronDown className="w-3.5 h-3.5 ml-0.5"/>
+                            <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
                         )}
                     </button>
 
                     <div className="flex items-center space-x-1 text-zinc-500 text-[11px] font-medium hidden sm:flex">
                         <span>Haz clic en cada sección o gasto para ver su detalle</span>
-                        <Info className="w-3.5 h-3.5 text-zinc-400"/>
+                        <Info className="w-3.5 h-3.5 text-zinc-400" />
                     </div>
                 </div>
 
@@ -371,7 +370,7 @@ export function PairwiseDetailModal({
                         {/* Section Header */}
                         <div
                             onClick={() =>
-                                setExpandedSections((prev) => ({...prev, debts: !prev.debts}))
+                                setExpandedSections((prev) => ({ ...prev, debts: !prev.debts }))
                             }
                             className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
                         >
@@ -379,7 +378,7 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <User className="w-4 h-4"/>
+                                        <User className="w-4 h-4" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
@@ -394,9 +393,9 @@ export function PairwiseDetailModal({
                                 <div
                                     className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                                     {expandedSections.debts ? (
-                                        <ChevronUp className="w-4 h-4"/>
+                                        <ChevronUp className="w-4 h-4" />
                                     ) : (
-                                        <ChevronDown className="w-4 h-4"/>
+                                        <ChevronDown className="w-4 h-4" />
                                     )}
                                 </div>
                             </div>
@@ -404,12 +403,12 @@ export function PairwiseDetailModal({
                             {/* Amount row */}
                             <div
                                 className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                  Total consumos directos
-                </span>
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                    Total consumos directos
+                                </span>
                                 <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
-                  + {formatCurrency(totalDirectConsumption, currency)}
-                </span>
+                                    + {formatCurrency(totalDirectConsumption, currency)}
+                                </span>
                             </div>
                         </div>
 
@@ -419,7 +418,7 @@ export function PairwiseDetailModal({
                                 {pendingConsumedExpenses.length === 0 ? (
                                     <div
                                         className="p-5 text-center text-zinc-500 text-xs bg-white rounded-xl border border-zinc-200">
-                                        <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-1.5"/>
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-1.5" />
                                         <p className="font-semibold text-zinc-700">No hay consumos directos pendientes
                                             entre {debtorName} y {creditorName}.</p>
                                     </div>
@@ -447,7 +446,7 @@ export function PairwiseDetailModal({
                         {/* Section Header */}
                         <div
                             onClick={() =>
-                                setExpandedSections((prev) => ({...prev, recovers: !prev.recovers}))
+                                setExpandedSections((prev) => ({ ...prev, recovers: !prev.recovers }))
                             }
                             className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
                         >
@@ -455,7 +454,7 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <Wallet className="w-4 h-4"/>
+                                        <Wallet className="w-4 h-4" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
@@ -471,9 +470,9 @@ export function PairwiseDetailModal({
                                 <div
                                     className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                                     {expandedSections.recovers ? (
-                                        <ChevronUp className="w-4 h-4"/>
+                                        <ChevronUp className="w-4 h-4" />
                                     ) : (
-                                        <ChevronDown className="w-4 h-4"/>
+                                        <ChevronDown className="w-4 h-4" />
                                     )}
                                 </div>
                             </div>
@@ -481,12 +480,12 @@ export function PairwiseDetailModal({
                             {/* Amount row */}
                             <div
                                 className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                  Total aportes directos
-                </span>
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                    Total aportes directos
+                                </span>
                                 <span className="text-sm sm:text-base font-black text-emerald-600 font-mono">
-                  - {formatCurrency(totalActiveRecoverable, currency)}
-                </span>
+                                    - {formatCurrency(totalActiveRecoverable, currency)}
+                                </span>
                             </div>
                         </div>
 
@@ -526,7 +525,7 @@ export function PairwiseDetailModal({
                             {/* Section Header */}
                             <div
                                 onClick={() =>
-                                    setExpandedSections((prev) => ({...prev, distribution: !prev.distribution}))
+                                    setExpandedSections((prev) => ({ ...prev, distribution: !prev.distribution }))
                                 }
                                 className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
                             >
@@ -534,7 +533,7 @@ export function PairwiseDetailModal({
                                     <div className="flex items-start space-x-3 min-w-0 flex-1">
                                         <div
                                             className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 text-sky-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                            <Users className="w-4 h-4"/>
+                                            <Users className="w-4 h-4" />
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
@@ -549,28 +548,27 @@ export function PairwiseDetailModal({
                                     <div
                                         className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
                                         {expandedSections.distribution ? (
-                                            <ChevronUp className="w-4 h-4"/>
+                                            <ChevronUp className="w-4 h-4" />
                                         ) : (
-                                            <ChevronDown className="w-4 h-4"/>
+                                            <ChevronDown className="w-4 h-4" />
                                         )}
                                     </div>
                                 </div>
 
                                 <div
                                     className="mt-2.5 pt-2 border-t border-zinc-100/90 flex items-center justify-between text-xs">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                    {detail.optimizationDetail?.isDiscount
-                        ? 'Descuento aplicado'
-                        : 'Consolidación aplicada'}
-                  </span>
+                                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                        {detail.optimizationDetail?.isDiscount
+                                            ? 'Descuento aplicado'
+                                            : 'Consolidación aplicada'}
+                                    </span>
                                     <span
-                                        className={`text-sm sm:text-base font-black font-mono ${
-                                            detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
-                                        }`}
+                                        className={`text-sm sm:text-base font-black font-mono ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                                            }`}
                                     >
-                    {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
+                                        {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                                         {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
-                  </span>
+                                    </span>
                                 </div>
                             </div>
 
@@ -594,7 +592,7 @@ export function PairwiseDetailModal({
                                                 } else {
                                                     x = 110 + i * (320 / (numTP - 1));
                                                 }
-                                                return {...tp, x, y: 190};
+                                                return { ...tp, x, y: 190 };
                                             });
 
                                             return (
@@ -603,10 +601,10 @@ export function PairwiseDetailModal({
                                                     <div
                                                         className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1 border-b border-zinc-100">
                                                         <div className="flex items-center space-x-2">
-                                                            <GitMerge className="w-4 h-4 text-purple-600 shrink-0"/>
+                                                            <GitMerge className="w-4 h-4 text-purple-600 shrink-0" />
                                                             <span className="text-xs font-bold text-zinc-800">
-                                Visualización del flujo de deudas
-                              </span>
+                                                                Visualización del flujo de deudas
+                                                            </span>
                                                         </div>
 
                                                         <div
@@ -614,11 +612,10 @@ export function PairwiseDetailModal({
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setGraphMode('simplified')}
-                                                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                                                    graphMode === 'simplified'
+                                                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${graphMode === 'simplified'
                                                                         ? 'bg-white text-emerald-800 shadow-2xs font-bold'
                                                                         : 'text-zinc-500 hover:text-zinc-900'
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 <span
                                                                     className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -627,11 +624,10 @@ export function PairwiseDetailModal({
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setGraphMode('unsimplified')}
-                                                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                                                    graphMode === 'unsimplified'
+                                                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${graphMode === 'unsimplified'
                                                                         ? 'bg-white text-rose-800 shadow-2xs font-bold'
                                                                         : 'text-zinc-500 hover:text-zinc-900'
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 <span
                                                                     className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
@@ -657,7 +653,7 @@ export function PairwiseDetailModal({
                                                                         orient="auto"
                                                                     >
                                                                         <path d="M 0 1.5 L 6 4 L 0 6.5 z"
-                                                                              fill="#2563eb"/>
+                                                                            fill="#2563eb" />
                                                                     </marker>
                                                                     <marker
                                                                         id="arrow-red"
@@ -668,7 +664,7 @@ export function PairwiseDetailModal({
                                                                         orient="auto"
                                                                     >
                                                                         <path d="M 0 1.5 L 6 4 L 0 6.5 z"
-                                                                              fill="#e11d48"/>
+                                                                            fill="#e11d48" />
                                                                     </marker>
                                                                     <marker
                                                                         id="arrow-amber"
@@ -679,7 +675,7 @@ export function PairwiseDetailModal({
                                                                         orient="auto"
                                                                     >
                                                                         <path d="M 0 1.5 L 6 4 L 0 6.5 z"
-                                                                              fill="#d97706"/>
+                                                                            fill="#d97706" />
                                                                     </marker>
                                                                     <marker
                                                                         id="arrow-purple"
@@ -690,7 +686,7 @@ export function PairwiseDetailModal({
                                                                         orient="auto"
                                                                     >
                                                                         <path d="M 0 1.5 L 6 4 L 0 6.5 z"
-                                                                              fill="#7c3aed"/>
+                                                                            fill="#7c3aed" />
                                                                     </marker>
                                                                     <marker
                                                                         id="arrow-emerald"
@@ -701,19 +697,19 @@ export function PairwiseDetailModal({
                                                                         orient="auto"
                                                                     >
                                                                         <path d="M 0 1.5 L 6 4 L 0 6.5 z"
-                                                                              fill="#059669"/>
+                                                                            fill="#059669" />
                                                                     </marker>
 
                                                                     <clipPath id="clip-debtor-modal">
-                                                                        <circle cx="75" cy="55" r="22"/>
+                                                                        <circle cx="75" cy="55" r="22" />
                                                                     </clipPath>
                                                                     <clipPath id="clip-creditor-modal">
-                                                                        <circle cx="465" cy="55" r="22"/>
+                                                                        <circle cx="465" cy="55" r="22" />
                                                                     </clipPath>
                                                                     {tpPositions.map((tp, idx) => (
                                                                         <clipPath key={`clip-tp-${idx}`}
-                                                                                  id={`clip-tp-${idx}`}>
-                                                                            <circle cx={tp.x} cy={tp.y} r="22"/>
+                                                                            id={`clip-tp-${idx}`}>
+                                                                            <circle cx={tp.x} cy={tp.y} r="22" />
                                                                         </clipPath>
                                                                     ))}
                                                                 </defs>
@@ -1200,7 +1196,7 @@ export function PairwiseDetailModal({
                                                     className="bg-emerald-50/90 rounded-2xl p-4 sm:p-5 border border-emerald-200/90 space-y-3">
                                                     <div
                                                         className="flex items-center space-x-2 text-emerald-900 font-extrabold text-xs sm:text-sm">
-                                                        <Sparkles className="w-4 h-4 text-emerald-600 shrink-0"/>
+                                                        <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
                                                         <span>Transferencia directa sugerida (reemplaza el pago a {creditorName})</span>
                                                     </div>
                                                     <div className="space-y-2">
@@ -1214,7 +1210,7 @@ export function PairwiseDetailModal({
                                                                     <div
                                                                         className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
                                                                         <ArrowRight
-                                                                            className="w-4 h-4 text-emerald-700"/>
+                                                                            className="w-4 h-4 text-emerald-700" />
                                                                     </div>
                                                                     <div>
                                                                         <div
@@ -1230,9 +1226,9 @@ export function PairwiseDetailModal({
                                                                 </div>
                                                                 <div
                                                                     className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
-                                  <span className="text-base sm:text-lg font-black text-emerald-700 font-mono">
-                                    {formatCurrency(sug.amount, currency)}
-                                  </span>
+                                                                    <span className="text-base sm:text-lg font-black text-emerald-700 font-mono">
+                                                                        {formatCurrency(sug.amount, currency)}
+                                                                    </span>
                                                                     {onOpenSettleModal && (
                                                                         <button
                                                                             type="button"
@@ -1274,14 +1270,14 @@ export function PairwiseDetailModal({
                                                         }
                                                         className="w-full py-2 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-colors flex items-center justify-center space-x-1.5 cursor-pointer border border-zinc-200"
                                                     >
-                            <span>
-                              {expandedTriangulationIndexes.has(999)
-                                  ? 'Ocultar gastos vinculados a las compensaciones'
-                                  : 'Ver gastos vinculados a las compensaciones'}
-                            </span>
+                                                        <span>
+                                                            {expandedTriangulationIndexes.has(999)
+                                                                ? 'Ocultar gastos vinculados a las compensaciones'
+                                                                : 'Ver gastos vinculados a las compensaciones'}
+                                                        </span>
                                                         <ChevronDown
                                                             className={`w-4 h-4 transition-transform ${expandedTriangulationIndexes.has(999) ? 'rotate-180' : ''
-                                                            }`}
+                                                                }`}
                                                         />
                                                     </button>
 
@@ -1296,12 +1292,12 @@ export function PairwiseDetailModal({
                                                                     >
                                                                         <div
                                                                             className="flex items-center justify-between text-xs font-bold text-zinc-700">
-                                      <span>
-                                        Gastos entre {rel.from.full_name} y {rel.to.full_name}
-                                      </span>
+                                                                            <span>
+                                                                                Gastos entre {rel.from.full_name} y {rel.to.full_name}
+                                                                            </span>
                                                                             <span className="font-mono">
-                                        {formatCurrency(rel.amount, currency)}
-                                      </span>
+                                                                                {formatCurrency(rel.amount, currency)}
+                                                                            </span>
                                                                         </div>
                                                                         <GenericExpenseList
                                                                             expenses={rel.expenses}
@@ -1330,7 +1326,7 @@ export function PairwiseDetailModal({
                         {/* Header */}
                         <div
                             onClick={() =>
-                                setExpandedSections((prev) => ({...prev, calculation: !prev.calculation}))
+                                setExpandedSections((prev) => ({ ...prev, calculation: !prev.calculation }))
                             }
                             className="p-3.5 sm:p-4.5 cursor-pointer hover:bg-zinc-50/70 transition-colors select-none"
                         >
@@ -1338,7 +1334,7 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <Calculator className="w-4 h-4"/>
+                                        <Calculator className="w-4 h-4" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
@@ -1351,16 +1347,16 @@ export function PairwiseDetailModal({
                                 </div>
 
                                 <div className="flex items-center space-x-2 shrink-0">
-                  <span
-                      className="bg-zinc-100 text-zinc-700 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border border-zinc-200">
-                    {isSimplified ? 'Simplificado' : 'Directo'}
-                  </span>
+                                    <span
+                                        className="bg-zinc-100 text-zinc-700 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border border-zinc-200">
+                                        {isSimplified ? 'Simplificado' : 'Directo'}
+                                    </span>
                                     <div
                                         className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
                                         {expandedSections.calculation ? (
-                                            <ChevronUp className="w-4 h-4"/>
+                                            <ChevronUp className="w-4 h-4" />
                                         ) : (
-                                            <ChevronDown className="w-4 h-4"/>
+                                            <ChevronDown className="w-4 h-4" />
                                         )}
                                     </div>
                                 </div>
@@ -1374,45 +1370,44 @@ export function PairwiseDetailModal({
                                     {/* Consumos directos */}
                                     <div className="flex items-center justify-between gap-2 text-zinc-700">
                                         <div className="flex items-center space-x-2 min-w-0">
-                                            <User className="w-3.5 h-3.5 text-rose-600 shrink-0"/>
+                                            <User className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                                             <span
                                                 className="font-semibold text-zinc-800 truncate">Consumos directos con {creditorName}</span>
                                         </div>
                                         <span className="font-black text-rose-600 shrink-0 font-mono">
-                      + {formatCurrency(totalDirectConsumption, currency)}
-                    </span>
+                                            + {formatCurrency(totalDirectConsumption, currency)}
+                                        </span>
                                     </div>
 
                                     {/* Aportes directos */}
                                     <div className="flex items-center justify-between gap-2 text-zinc-700">
                                         <div className="flex items-center space-x-2 min-w-0">
-                                            <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0"/>
+                                            <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                             <span className="font-semibold text-zinc-800 truncate">Aportes y pagos directos</span>
                                         </div>
                                         <span className="font-black text-emerald-600 shrink-0 font-mono">
-                      - {formatCurrency(totalActiveRecoverable, currency)}
-                    </span>
+                                            - {formatCurrency(totalActiveRecoverable, currency)}
+                                        </span>
                                     </div>
 
                                     {/* Descuento o aumento por compensación con integrantes */}
                                     {hasCompensations && (
                                         <div className="flex items-center justify-between gap-2 text-zinc-700">
                                             <div className="flex items-center space-x-2 min-w-0">
-                                                <Network className="w-3.5 h-3.5 text-sky-600 shrink-0"/>
+                                                <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                                                 <span className="font-semibold text-zinc-800 truncate">
-                          {detail.optimizationDetail?.isDiscount
-                              ? 'Compensación grupal (descuento)'
-                              : 'Consolidación de grupo'}
-                        </span>
+                                                    {detail.optimizationDetail?.isDiscount
+                                                        ? 'Compensación grupal (descuento)'
+                                                        : 'Consolidación de grupo'}
+                                                </span>
                                             </div>
                                             <span
-                                                className={`font-black font-mono shrink-0 ${
-                                                    detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
-                                                }`}
+                                                className={`font-black font-mono shrink-0 ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                                                    }`}
                                             >
-                        {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
+                                                {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                                                 {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
-                      </span>
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -1423,13 +1418,13 @@ export function PairwiseDetailModal({
                                         <span
                                             className="text-base font-black text-zinc-400 font-mono select-none">=</span>
                                         <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                      Saldo final a liquidar
-                    </span>
+                                            Saldo final a liquidar
+                                        </span>
                                     </div>
                                     <span
                                         className="text-lg sm:text-xl font-black text-emerald-700 tracking-tight font-mono shrink-0">
-                    {formatCurrency(finalSettlementAmount, currency)}
-                  </span>
+                                        {formatCurrency(finalSettlementAmount, currency)}
+                                    </span>
                                 </div>
                             </div>
                         )}

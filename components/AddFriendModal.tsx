@@ -1,16 +1,16 @@
 'use client';
 
-import React, {useEffect, useRef, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {AlertCircle, CheckCircle2, Loader2, Sparkles, UserPlus, X} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { AlertCircle, CheckCircle2, Loader2, Sparkles, UserPlus, X } from 'lucide-react';
 
 interface AddFriendModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-export function AddFriendModal({isOpen, onClose}: AddFriendModalProps) {
-    const {addFriend} = useExpense();
+export function AddFriendModal({ isOpen, onClose }: AddFriendModalProps) {
+    const { addFriend } = useExpense();
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,7 +78,7 @@ export function AddFriendModal({isOpen, onClose}: AddFriendModalProps) {
                     <div className="flex items-center space-x-3">
                         <div
                             className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-sm">
-                            <UserPlus className="w-5 h-5 text-emerald-400"/>
+                            <UserPlus className="w-5 h-5 text-emerald-400" />
                         </div>
                         <div>
                             <h3 className="font-semibold text-lg text-zinc-900 tracking-tight">Agregar Amigo</h3>
@@ -89,14 +89,14 @@ export function AddFriendModal({isOpen, onClose}: AddFriendModalProps) {
                         onClick={handleClose}
                         className="p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-full transition-colors"
                     >
-                        <X className="w-5 h-5"/>
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {errorMessage && (
                     <div
                         className="p-3.5 bg-rose-50 ring-1 ring-rose-200 text-rose-800 rounded-xl text-xs font-medium flex items-center space-x-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0"/>
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                         <span>{errorMessage}</span>
                     </div>
                 )}
@@ -105,7 +105,7 @@ export function AddFriendModal({isOpen, onClose}: AddFriendModalProps) {
                     <div className="space-y-5 py-2">
                         <div
                             className="p-4 bg-emerald-50 ring-1 ring-emerald-200 text-emerald-900 rounded-2xl text-xs font-medium flex items-center space-x-3">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0"/>
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                             <span className="leading-relaxed">{successMessage}</span>
                         </div>
                         <div className="flex items-center justify-end space-x-3 pt-2">
@@ -174,12 +174,12 @@ export function AddFriendModal({isOpen, onClose}: AddFriendModalProps) {
                             >
                                 {isSubmitting ? (
                                     <>
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400"/>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                                         <span>Guardando...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Sparkles className="w-3.5 h-3.5 text-emerald-400"/>
+                                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                                         <span>Guardar Amigo</span>
                                     </>
                                 )}

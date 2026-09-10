@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useState} from 'react';
-import {Profile} from '@/lib/types';
-import {formatCurrency} from '@/lib/balance-utils';
-import {ArrowRightLeft, ChevronDown, ChevronUp, Users} from 'lucide-react';
-import {UserAvatar} from '@/components/UserAvatar';
+import React, { useState } from 'react';
+import { Profile } from '@/lib/types';
+import { formatCurrency } from '@/lib/balance-utils';
+import { ArrowRightLeft, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { UserAvatar } from '@/components/UserAvatar';
 
 export interface ParticipantItemBreakdown {
     desc: string;
@@ -74,21 +74,21 @@ export function formatSimpleFraction(val: number): string {
     // Only single-character vulgar fractions for values strictly between 0 and 1
     if (val > 0 && val < 1) {
         const singleCharFractions: { val: number; char: string }[] = [
-            {val: 1 / 2, char: '½'},
-            {val: 1 / 3, char: '⅓'},
-            {val: 2 / 3, char: '⅔'},
-            {val: 1 / 4, char: '¼'},
-            {val: 3 / 4, char: '¾'},
-            {val: 1 / 5, char: '⅕'},
-            {val: 2 / 5, char: '⅖'},
-            {val: 3 / 5, char: '⅗'},
-            {val: 4 / 5, char: '⅘'},
-            {val: 1 / 6, char: '⅙'},
-            {val: 5 / 6, char: '⅚'},
-            {val: 1 / 8, char: '⅛'},
-            {val: 3 / 8, char: '⅜'},
-            {val: 5 / 8, char: '⅝'},
-            {val: 7 / 8, char: '⅞'},
+            { val: 1 / 2, char: '½' },
+            { val: 1 / 3, char: '⅓' },
+            { val: 2 / 3, char: '⅔' },
+            { val: 1 / 4, char: '¼' },
+            { val: 3 / 4, char: '¾' },
+            { val: 1 / 5, char: '⅕' },
+            { val: 2 / 5, char: '⅖' },
+            { val: 3 / 5, char: '⅗' },
+            { val: 4 / 5, char: '⅘' },
+            { val: 1 / 6, char: '⅙' },
+            { val: 5 / 6, char: '⅚' },
+            { val: 1 / 8, char: '⅛' },
+            { val: 3 / 8, char: '⅜' },
+            { val: 5 / 8, char: '⅝' },
+            { val: 7 / 8, char: '⅞' },
         ];
 
         for (const f of singleCharFractions) {
@@ -104,12 +104,12 @@ export function formatSimpleFraction(val: number): string {
 }
 
 export function ExpenseParticipantSummary({
-                                              participants,
-                                              currency,
-                                              title = 'Resumen por participante',
-                                              splitTypeLabel,
-                                              defaultExpanded = false,
-                                          }: ExpenseParticipantSummaryProps) {
+    participants,
+    currency,
+    title = 'Resumen por participante',
+    splitTypeLabel,
+    defaultExpanded = false,
+}: ExpenseParticipantSummaryProps) {
     const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
         const initial: Record<string, boolean> = {};
         participants.forEach((p) => {
@@ -135,15 +135,15 @@ export function ExpenseParticipantSummary({
                 <div
                     className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                        <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                         <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              {title}
-            </span>
+                            {title}
+                        </span>
                     </div>
                     {splitTypeLabel && (
                         <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-2 py-0.5 rounded-md">
-              {splitTypeLabel}
-            </span>
+                            {splitTypeLabel}
+                        </span>
                     )}
                 </div>
             )}
@@ -158,11 +158,10 @@ export function ExpenseParticipantSummary({
 
                     return (
                         <div key={p.userId}
-                             className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
+                            className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
                             <div
-                                className={`flex items-center justify-between gap-2 ${
-                                    hasBreakdown ? 'cursor-pointer select-none' : ''
-                                }`}
+                                className={`flex items-center justify-between gap-2 ${hasBreakdown ? 'cursor-pointer select-none' : ''
+                                    }`}
                                 onClick={() => hasBreakdown && toggleUser(p.userId)}
                             >
                                 {/* Avatar and Name */}
@@ -175,29 +174,29 @@ export function ExpenseParticipantSummary({
 
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-zinc-900 truncate">
-                        {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
-                      </span>
+                                            <span className="text-xs font-bold text-zinc-900 truncate">
+                                                {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
+                                            </span>
                                             {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
                                                 <span
                                                     className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
-                          {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
-                        </span>
+                                                    {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
+                                                </span>
                                             )}
                                         </div>
                                         {hasBreakdown && (
                                             <span className="text-[10px] text-zinc-400 font-medium block">
-                        {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
-                      </span>
+                                                {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Amount and Chevron */}
                                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                    {formatCurrency(p.amount, currency)}
-                  </span>
+                                    <span className="text-xs sm:text-sm font-bold text-zinc-900">
+                                        {formatCurrency(p.amount, currency)}
+                                    </span>
                                     {hasBreakdown && (
                                         <button
                                             type="button"
@@ -208,8 +207,8 @@ export function ExpenseParticipantSummary({
                                                 toggleUser(p.userId);
                                             }}
                                         >
-                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5"/> :
-                                                <ChevronDown className="w-3.5 h-3.5"/>}
+                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> :
+                                                <ChevronDown className="w-3.5 h-3.5" />}
                                         </button>
                                     )}
                                 </div>
@@ -231,8 +230,8 @@ export function ExpenseParticipantSummary({
                                                     <span className="truncate">{item.desc}</span>
                                                 </div>
                                                 <span className="font-semibold text-zinc-800 shrink-0 text-[11px]">
-                          {formatCurrency(item.cost, currency)}
-                        </span>
+                                                    {formatCurrency(item.cost, currency)}
+                                                </span>
                                             </div>
                                         );
                                     })}
@@ -255,12 +254,12 @@ interface ExpenseMoneyFlowProps {
 }
 
 export function ExpenseMoneyFlow({
-                                     totalAmount,
-                                     currency,
-                                     payerProfile,
-                                     participants,
-                                     defaultExpanded = false,
-                                 }: ExpenseMoneyFlowProps) {
+    totalAmount,
+    currency,
+    payerProfile,
+    participants,
+    defaultExpanded = false,
+}: ExpenseMoneyFlowProps) {
     const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
         const initial: Record<string, boolean> = {};
         participants.forEach((p) => {
@@ -289,7 +288,7 @@ export function ExpenseMoneyFlow({
                 next[p.userId] = nextState;
             }
         });
-        setExpandedUsers((prev) => ({...prev, ...next}));
+        setExpandedUsers((prev) => ({ ...prev, ...next }));
     };
 
     const payerAvatarColor = getParticipantAvatarColor(payerProfile?.id || payerProfile?.full_name || 'payer');
@@ -301,10 +300,10 @@ export function ExpenseMoneyFlow({
             <div
                 className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                    <ArrowRightLeft className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-            Flujo del dinero
-          </span>
+                        Flujo del dinero
+                    </span>
                 </div>
             </div>
 
@@ -321,28 +320,28 @@ export function ExpenseMoneyFlow({
                             {payerProfile?.full_name || (payerProfile?.email || 'Usuario').split('@')[0]}
                         </div>
                         <span className="text-[10px] text-zinc-500 font-medium block">
-              Pagó el total del gasto
-            </span>
+                            Pagó el total del gasto
+                        </span>
                     </div>
                 </div>
 
                 {/* Total pagado number - styled with identical visual style and color */}
                 <div className="text-right shrink-0">
-          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
-            Total pagado
-          </span>
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                        Total pagado
+                    </span>
                     <span className="text-xs sm:text-sm font-bold text-zinc-900">
-            {formatCurrency(totalAmount, currency)}
-          </span>
+                        {formatCurrency(totalAmount, currency)}
+                    </span>
                 </div>
             </div>
 
             {/* Participants Distribution */}
             <div className="p-2 sm:p-2.5 space-y-1">
                 <div className="px-2 pt-1 pb-1 flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-            Distribución de participantes ({participants.length})
-          </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        Distribución de participantes ({participants.length})
+                    </span>
                     {hasAnyBreakdown && (
                         <button
                             type="button"
@@ -351,12 +350,12 @@ export function ExpenseMoneyFlow({
                         >
                             {allBreakdownsExpanded ? (
                                 <>
-                                    <ChevronUp className="w-3 h-3 text-emerald-700"/>
+                                    <ChevronUp className="w-3 h-3 text-emerald-700" />
                                     <span>Colapsar artículos</span>
                                 </>
                             ) : (
                                 <>
-                                    <ChevronDown className="w-3 h-3 text-emerald-700"/>
+                                    <ChevronDown className="w-3 h-3 text-emerald-700" />
                                     <span>Desplegar artículos</span>
                                 </>
                             )}
@@ -374,11 +373,10 @@ export function ExpenseMoneyFlow({
 
                         return (
                             <div key={p.userId}
-                                 className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/50">
+                                className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/50">
                                 <div
-                                    className={`flex items-center justify-between gap-2 ${
-                                        hasBreakdown ? 'cursor-pointer select-none' : ''
-                                    }`}
+                                    className={`flex items-center justify-between gap-2 ${hasBreakdown ? 'cursor-pointer select-none' : ''
+                                        }`}
                                     onClick={() => hasBreakdown && toggleUser(p.userId)}
                                 >
                                     {/* Avatar and Name */}
@@ -391,29 +389,29 @@ export function ExpenseMoneyFlow({
 
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-zinc-900 truncate">
-                          {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
-                        </span>
+                                                <span className="text-xs font-bold text-zinc-900 truncate">
+                                                    {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
+                                                </span>
                                                 {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
                                                     <span
                                                         className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
-                            {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
-                          </span>
+                                                        {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
+                                                    </span>
                                                 )}
                                             </div>
                                             {hasBreakdown && (
                                                 <span className="text-[10px] text-zinc-400 font-medium block">
-                          {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
-                        </span>
+                                                    {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
+                                                </span>
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Amount and Expand Button - matching styling and color */}
                                     <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                      {formatCurrency(p.amount, currency)}
-                    </span>
+                                        <span className="text-xs sm:text-sm font-bold text-zinc-900">
+                                            {formatCurrency(p.amount, currency)}
+                                        </span>
                                         {hasBreakdown && (
                                             <button
                                                 type="button"
@@ -424,8 +422,8 @@ export function ExpenseMoneyFlow({
                                                     toggleUser(p.userId);
                                                 }}
                                             >
-                                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5"/> :
-                                                    <ChevronDown className="w-3.5 h-3.5"/>}
+                                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> :
+                                                    <ChevronDown className="w-3.5 h-3.5" />}
                                             </button>
                                         )}
                                     </div>
@@ -448,8 +446,8 @@ export function ExpenseMoneyFlow({
                                                         <span className="truncate">{item.desc}</span>
                                                     </div>
                                                     <span className="font-semibold text-zinc-800 shrink-0 text-xs">
-                            {formatCurrency(item.cost, currency)}
-                          </span>
+                                                        {formatCurrency(item.cost, currency)}
+                                                    </span>
                                                 </div>
                                             );
                                         })}

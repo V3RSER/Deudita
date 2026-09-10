@@ -1,25 +1,25 @@
 'use client';
 
-import React, {useMemo, useState} from 'react';
+import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import {useExpense} from '@/lib/expense-context';
-import {PairwiseBalance, Payment, Profile} from '@/lib/types';
-import {calculateDirectBalances, calculateSimplifiedBalances, formatCurrency,} from '@/lib/balance-utils';
+import { useExpense } from '@/lib/expense-context';
+import { PairwiseBalance, Payment, Profile } from '@/lib/types';
+import { calculateDirectBalances, calculateSimplifiedBalances, formatCurrency, } from '@/lib/balance-utils';
 import {
-  ArrowRightLeft,
-  CheckCircle2,
-  ChevronRight,
-  Layers,
-  Search,
-  Shield,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  UserCheck,
-  X,
+    ArrowRightLeft,
+    CheckCircle2,
+    ChevronRight,
+    Layers,
+    Search,
+    Shield,
+    Sparkles,
+    TrendingDown,
+    TrendingUp,
+    UserCheck,
+    X,
 } from 'lucide-react';
-import {PageHeader} from '@/components/PageHeader';
-import {PairwiseDetailModal} from '@/components/PairwiseDetailModal';
+import { PageHeader } from '@/components/PageHeader';
+import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
 
 interface ConsolidatedBalancesProps {
     onOpenSettleModal: (groupId?: string, debtorId?: string, creditorId?: string, amount?: number) => void;
@@ -44,12 +44,12 @@ interface BalanceCardProps {
 }
 
 function UnifiedBalanceCard({
-                                pairwise,
-                                currentProfile,
-                                isSimplified,
-                                onOpenSettleModal,
-                                onSelectPairwise,
-                            }: BalanceCardProps) {
+    pairwise,
+    currentProfile,
+    isSimplified,
+    onOpenSettleModal,
+    onSelectPairwise,
+}: BalanceCardProps) {
     const isDebtor =
         pairwise.debtor.id === currentProfile?.id ||
         (!isSimplified && pairwise.debtorSponsor?.id === currentProfile?.id);
@@ -149,11 +149,11 @@ function UnifiedBalanceCard({
                         {/* Names & Narrative */}
                         <div className="min-w-0 space-y-1">
                             <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                <span
-                    className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-black border tracking-wide uppercase ${cardTheme.badgeClass}`}
-                >
-                  {cardTheme.badgeText}
-                </span>
+                                <span
+                                    className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-black border tracking-wide uppercase ${cardTheme.badgeClass}`}
+                                >
+                                    {cardTheme.badgeText}
+                                </span>
                             </div>
 
                             {/* Relationship description */}
@@ -161,27 +161,27 @@ function UnifiedBalanceCard({
                                 className="text-sm font-extrabold text-zinc-900 tracking-tight flex items-center space-x-1.5 flex-wrap">
                                 {isCreditor ? (
                                     <>
-                    <span className="text-zinc-900 font-black">
-                      {pairwise.debtor.full_name || 'Usuario'}
-                    </span>
+                                        <span className="text-zinc-900 font-black">
+                                            {pairwise.debtor.full_name || 'Usuario'}
+                                        </span>
                                         <span className="text-zinc-500 font-medium">te debe dinero</span>
                                     </>
                                 ) : isDebtor ? (
                                     <>
                                         <span className="text-zinc-500 font-medium">Le debes a</span>
                                         <span className="text-zinc-900 font-black">
-                      {pairwise.creditor.full_name || 'Usuario'}
-                    </span>
+                                            {pairwise.creditor.full_name || 'Usuario'}
+                                        </span>
                                     </>
                                 ) : (
                                     <>
-                    <span className="text-zinc-900 font-bold">
-                      {pairwise.debtor.full_name || 'Usuario'}
-                    </span>
+                                        <span className="text-zinc-900 font-bold">
+                                            {pairwise.debtor.full_name || 'Usuario'}
+                                        </span>
                                         <span className="text-zinc-500 font-medium">le debe a</span>
                                         <span className="text-zinc-900 font-bold">
-                      {pairwise.creditor.full_name || 'Usuario'}
-                    </span>
+                                            {pairwise.creditor.full_name || 'Usuario'}
+                                        </span>
                                     </>
                                 )}
                             </div>
@@ -190,15 +190,15 @@ function UnifiedBalanceCard({
                             {!isSimplified && (pairwise.debtorSponsor || pairwise.creditorSponsor) && (
                                 <div
                                     className="flex items-center space-x-1 text-[10px] text-indigo-700 font-semibold pt-0.5">
-                                    <Shield className="w-3 h-3 shrink-0"/>
+                                    <Shield className="w-3 h-3 shrink-0" />
                                     <span>
-                    {isDebtorMyDependent && 'Deuda de persona vinculada a ti'}
+                                        {isDebtorMyDependent && 'Deuda de persona vinculada a ti'}
                                         {isCreditorMyDependent && 'Cobro de persona vinculada a ti'}
                                         {!isDebtorMyDependent &&
                                             !isCreditorMyDependent &&
                                             pairwise.debtorSponsor &&
                                             `Deudor vinculado a ${pairwise.debtorSponsor.full_name}`}
-                  </span>
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -208,14 +208,14 @@ function UnifiedBalanceCard({
                     <div
                         className="flex items-center sm:items-end justify-between sm:justify-end gap-3 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
                         <div className="text-left sm:text-right">
-              <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">
-                {isCreditor ? 'A tu favor' : isDebtor ? 'Total a pagar' : 'Saldo total'}
-              </span>
+                            <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">
+                                {isCreditor ? 'A tu favor' : isDebtor ? 'Total a pagar' : 'Saldo total'}
+                            </span>
                             <span
                                 className={`text-xl sm:text-2xl font-black tracking-tight ${cardTheme.amountClass} block`}>
-                {cardTheme.sign}
+                                {cardTheme.sign}
                                 {formatCurrency(pairwise.amount)}
-              </span>
+                            </span>
                         </div>
 
                         <button
@@ -239,27 +239,27 @@ function UnifiedBalanceCard({
                         <div className="pt-2 border-t border-zinc-100 text-[11px] text-zinc-500 space-y-1">
                             {pairwise.debtorBreakdown && pairwise.debtorBreakdown.length > 1 ? (
                                 <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                  <span className="font-semibold text-zinc-700 flex items-center space-x-1">
-                    <UserCheck className="w-3 h-3 text-indigo-600"/>
-                    <span>Desglose por personas:</span>
-                  </span>
+                                    <span className="font-semibold text-zinc-700 flex items-center space-x-1">
+                                        <UserCheck className="w-3 h-3 text-indigo-600" />
+                                        <span>Desglose por personas:</span>
+                                    </span>
                                     {pairwise.debtorBreakdown.map((b, bIdx) => (
                                         <span
                                             key={bIdx}
                                             className="inline-flex items-center space-x-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-zinc-700 font-medium shadow-2xs"
                                         >
-                      <span>{b.profile.full_name}:</span>
-                      <strong className="text-zinc-900">{formatCurrency(b.amount)}</strong>
-                    </span>
+                                            <span>{b.profile.full_name}:</span>
+                                            <strong className="text-zinc-900">{formatCurrency(b.amount)}</strong>
+                                        </span>
                                     ))}
                                 </div>
                             ) : pairwise.includedDebtors && pairwise.includedDebtors.length > 0 ? (
                                 <div className="flex items-center space-x-1.5 text-zinc-600">
-                                    <Shield className="w-3 h-3 text-indigo-600 shrink-0"/>
+                                    <Shield className="w-3 h-3 text-indigo-600 shrink-0" />
                                     <span>
-                    Incluye consumo de personas vinculadas:{' '}
+                                        Incluye consumo de personas vinculadas:{' '}
                                         <strong>{pairwise.includedDebtors.map((d) => d.full_name).join(', ')}</strong>
-                  </span>
+                                    </span>
                                 </div>
                             ) : null}
                         </div>
@@ -268,12 +268,12 @@ function UnifiedBalanceCard({
                 {/* Bottom click affordance */}
                 <div
                     className="pt-2 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 group-hover:text-zinc-800 transition-colors">
-          <span className="font-medium text-[11px] text-zinc-400 group-hover:text-zinc-600">
-            Haz clic para ver el desglose detallado de cuentas
-          </span>
+                    <span className="font-medium text-[11px] text-zinc-400 group-hover:text-zinc-600">
+                        Haz clic para ver el desglose detallado de cuentas
+                    </span>
                     <div className="flex items-center space-x-1 text-xs font-bold text-indigo-700">
                         <span>Ver desglose</span>
-                        <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform"/>
+                        <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </div>
                 </div>
             </div>
@@ -281,8 +281,8 @@ function UnifiedBalanceCard({
     );
 }
 
-export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesProps) {
-    const {currentProfile, expenses, payments, profiles, userGroups} = useExpense();
+export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalancesProps) {
+    const { currentProfile, expenses, payments, profiles, userGroups } = useExpense();
     const [isSimplified, setIsSimplified] = useState(true);
     const [activeFilter, setActiveFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -390,14 +390,13 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                             <button
                                 type="button"
                                 onClick={() => setIsSimplified(true)}
-                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    isSimplified
+                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isSimplified
                                         ? 'bg-white text-indigo-950 shadow-2xs'
                                         : 'text-zinc-500 hover:text-zinc-800'
-                                }`}
+                                    }`}
                             >
                                 <Sparkles
-                                    className={`w-3.5 h-3.5 ${isSimplified ? 'text-indigo-600' : 'text-zinc-400'}`}/>
+                                    className={`w-3.5 h-3.5 ${isSimplified ? 'text-indigo-600' : 'text-zinc-400'}`} />
                                 <span>Simplificado</span>
                                 <span
                                     className="text-[10px] opacity-60 font-bold">({simplifiedTransactionsCount})</span>
@@ -406,13 +405,12 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                             <button
                                 type="button"
                                 onClick={() => setIsSimplified(false)}
-                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    !isSimplified
+                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${!isSimplified
                                         ? 'bg-white text-zinc-900 shadow-2xs'
                                         : 'text-zinc-500 hover:text-zinc-800'
-                                }`}
+                                    }`}
                             >
-                                <Layers className={`w-3.5 h-3.5 ${!isSimplified ? 'text-zinc-900' : 'text-zinc-400'}`}/>
+                                <Layers className={`w-3.5 h-3.5 ${!isSimplified ? 'text-zinc-900' : 'text-zinc-400'}`} />
                                 <span>Directo</span>
                                 <span className="text-[10px] opacity-60 font-bold">({directTransactionsCount})</span>
                             </button>
@@ -426,25 +424,24 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                 {/* Por cobrar (Suma +) */}
                 <div
                     onClick={() => setActiveFilter('to_receive')}
-                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
-                        activeFilter === 'to_receive'
+                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${activeFilter === 'to_receive'
                             ? 'ring-2 ring-emerald-500 bg-emerald-50/80 border-emerald-300'
                             : 'bg-gradient-to-br from-emerald-500/10 via-white to-emerald-500/5 border-emerald-200/80'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
-              + Te deben
-            </span>
+                        <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
+                            + Te deben
+                        </span>
                         <div
                             className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                            <TrendingUp className="w-5 h-5"/>
+                            <TrendingUp className="w-5 h-5" />
                         </div>
                     </div>
                     <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight block">
-              +{formatCurrency(totalOwedToMe)}
-            </span>
+                        <span className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight block">
+                            +{formatCurrency(totalOwedToMe)}
+                        </span>
                         <p className="text-xs text-emerald-800/80 font-medium mt-1">
                             {myOwedToMe.length === 1
                                 ? '1 cobro pendiente'
@@ -456,25 +453,24 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                 {/* Por pagar (Resta -) */}
                 <div
                     onClick={() => setActiveFilter('to_pay')}
-                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
-                        activeFilter === 'to_pay'
+                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${activeFilter === 'to_pay'
                             ? 'ring-2 ring-rose-500 bg-rose-50/80 border-rose-300'
                             : 'bg-gradient-to-br from-rose-500/10 via-white to-rose-500/5 border-rose-200/80'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-rose-800 uppercase tracking-wider">
-              - Debes
-            </span>
+                        <span className="text-xs font-black text-rose-800 uppercase tracking-wider">
+                            - Debes
+                        </span>
                         <div
                             className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
-                            <TrendingDown className="w-5 h-5"/>
+                            <TrendingDown className="w-5 h-5" />
                         </div>
                     </div>
                     <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight block">
-              -{formatCurrency(totalIOwe)}
-            </span>
+                        <span className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight block">
+                            -{formatCurrency(totalIOwe)}
+                        </span>
                         <p className="text-xs text-rose-800/80 font-medium mt-1">
                             {myIOwe.length === 1 ? '1 pago pendiente' : `${myIOwe.length} pagos pendientes`}
                         </p>
@@ -484,34 +480,32 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                 {/* Balance neto */}
                 <div
                     onClick={() => setActiveFilter('mine')}
-                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
-                        activeFilter === 'mine'
+                    className={`rounded-3xl p-5 border shadow-xs relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${activeFilter === 'mine'
                             ? 'ring-2 ring-zinc-900 bg-zinc-100/90 border-zinc-400'
                             : 'bg-gradient-to-br from-zinc-100/90 via-white to-zinc-50 border-zinc-200/90'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-zinc-600 uppercase tracking-wider">
-              = Tu balance neto
-            </span>
+                        <span className="text-xs font-black text-zinc-600 uppercase tracking-wider">
+                            = Tu balance neto
+                        </span>
                         <div
                             className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-xs">
-                            <ArrowRightLeft className="w-5 h-5"/>
+                            <ArrowRightLeft className="w-5 h-5" />
                         </div>
                     </div>
                     <div className="mt-3">
-            <span
-                className={`text-2xl sm:text-3xl font-black tracking-tight block ${
-                    netConsolidated > 0
-                        ? 'text-emerald-700'
-                        : netConsolidated < 0
-                            ? 'text-rose-600'
-                            : 'text-zinc-900'
-                }`}
-            >
-              {netConsolidated > 0 ? '+' : ''}
-                {formatCurrency(netConsolidated)}
-            </span>
+                        <span
+                            className={`text-2xl sm:text-3xl font-black tracking-tight block ${netConsolidated > 0
+                                    ? 'text-emerald-700'
+                                    : netConsolidated < 0
+                                        ? 'text-rose-600'
+                                        : 'text-zinc-900'
+                                }`}
+                        >
+                            {netConsolidated > 0 ? '+' : ''}
+                            {formatCurrency(netConsolidated)}
+                        </span>
                         <p className="text-xs text-zinc-500 font-medium mt-1">
                             {netConsolidated > 0
                                 ? 'Balance a tu favor'
@@ -533,11 +527,10 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         <button
                             type="button"
                             onClick={() => setActiveFilter('all')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                activeFilter === 'all'
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${activeFilter === 'all'
                                     ? 'bg-zinc-900 text-white shadow-xs'
                                     : 'bg-zinc-100/80 text-zinc-600 hover:bg-zinc-200/70'
-                            }`}
+                                }`}
                         >
                             <span>Todos los saldos</span>
                             <span className="text-[10px] opacity-70">({activePairwise.length})</span>
@@ -546,11 +539,10 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         <button
                             type="button"
                             onClick={() => setActiveFilter('mine')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                activeFilter === 'mine'
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${activeFilter === 'mine'
                                     ? 'bg-zinc-900 text-white shadow-xs'
                                     : 'bg-zinc-100/80 text-zinc-600 hover:bg-zinc-200/70'
-                            }`}
+                                }`}
                         >
                             <span>Mis saldos</span>
                             <span className="text-[10px] opacity-70">({myOwedToMe.length + myIOwe.length})</span>
@@ -559,11 +551,10 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         <button
                             type="button"
                             onClick={() => setActiveFilter('to_receive')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                activeFilter === 'to_receive'
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${activeFilter === 'to_receive'
                                     ? 'bg-emerald-600 text-white shadow-xs'
                                     : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100/80 border border-emerald-200/60'
-                            }`}
+                                }`}
                         >
                             <span>+ Por cobrar</span>
                             <span className="text-[10px] opacity-80">({myOwedToMe.length})</span>
@@ -572,11 +563,10 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         <button
                             type="button"
                             onClick={() => setActiveFilter('to_pay')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                activeFilter === 'to_pay'
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${activeFilter === 'to_pay'
                                     ? 'bg-rose-600 text-white shadow-xs'
                                     : 'bg-rose-50 text-rose-800 hover:bg-rose-100/80 border border-rose-200/60'
-                            }`}
+                                }`}
                         >
                             <span>- Por pagar</span>
                             <span className="text-[10px] opacity-80">({myIOwe.length})</span>
@@ -585,11 +575,10 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         <button
                             type="button"
                             onClick={() => setActiveFilter('third_party')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
-                                activeFilter === 'third_party'
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${activeFilter === 'third_party'
                                     ? 'bg-zinc-700 text-white shadow-xs'
                                     : 'bg-zinc-100/80 text-zinc-600 hover:bg-zinc-200/70'
-                            }`}
+                                }`}
                         >
                             <span>Entre otros</span>
                             <span className="text-[10px] opacity-70">({otherPairwise.length})</span>
@@ -598,7 +587,7 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
 
                     {/* Search Input */}
                     <div className="relative shrink-0 sm:w-60">
-                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2"/>
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                             type="text"
                             value={searchQuery}
@@ -615,7 +604,7 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                         className="bg-white rounded-3xl p-10 border border-zinc-200/80 text-center space-y-3 shadow-2xs">
                         <div
                             className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto ring-1 ring-emerald-200/60 shadow-xs">
-                            <CheckCircle2 className="w-6 h-6"/>
+                            <CheckCircle2 className="w-6 h-6" />
                         </div>
                         <h3 className="font-black text-zinc-900 text-base">
                             {searchQuery ? 'No se encontraron resultados' : '¡Todas las cuentas están al día!'}
@@ -685,7 +674,7 @@ export function ConsolidatedBalances({onOpenSettleModal}: ConsolidatedBalancesPr
                                 onClick={() => setSelectedProofUrl(null)}
                                 className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
                             >
-                                <X className="w-5 h-5"/>
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
                         <div className="relative w-full h-[70vh] bg-zinc-900">

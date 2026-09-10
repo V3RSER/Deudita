@@ -10,7 +10,7 @@ interface InviteLinkModalProps {
     groupId: string;
 }
 
-export function InviteLinkModal({isOpen, onClose, groupId}: InviteLinkModalProps) {
+export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkModalProps>) {
     const {userGroups, getGroupInviteLink, regenerateGroupInviteLink} = useExpense();
 
     const [linkData, setLinkData] = useState<{

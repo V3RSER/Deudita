@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useEffect, useRef, useState} from 'react';
-import {useRouter} from 'next/navigation';
-import {useExpense} from '@/lib/expense-context';
+import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useExpense } from '@/lib/expense-context';
 import {
     ArrowRight,
     Bell,
@@ -29,12 +29,12 @@ function formatNotificationTime(dateStr?: string): string {
     if (diffSec < 3600) return `Hace ${Math.floor(diffSec / 60)} min`;
     if (diffSec < 86400) return `Hace ${Math.floor(diffSec / 3600)} h`;
     if (diffSec < 86400 * 2) return 'Ayer';
-    return d.toLocaleDateString('es-ES', {day: 'numeric', month: 'short'});
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
 export function NotificationCenter() {
     const router = useRouter();
-    const {pendingInvites, notifications, acceptGroupInvite, rejectGroupInvite, markNotificationAsRead} = useExpense();
+    const { pendingInvites, notifications, acceptGroupInvite, rejectGroupInvite, markNotificationAsRead } = useExpense();
     const [isOpen, setIsOpen] = useState(false);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -103,24 +103,24 @@ export function NotificationCenter() {
     const getNotificationIcon = (type?: string) => {
         switch (type) {
             case 'expense_added':
-                return <Receipt className="w-3.5 h-3.5 text-emerald-600 shrink-0"/>;
+                return <Receipt className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
             case 'expense_updated':
-                return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0"/>;
+                return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
             case 'expense_deleted':
-                return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0"/>;
+                return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
             case 'expense_assigned':
             case 'managed_user_assigned':
-                return <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0"/>;
+                return <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
             case 'payment_received':
-                return <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0"/>;
+                return <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
             case 'payment_updated':
-                return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0"/>;
+                return <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
             case 'payment_deleted':
-                return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0"/>;
+                return <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
             case 'member_joined':
-                return <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0"/>;
+                return <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />;
             default:
-                return <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>;
+                return <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
         }
     };
 
@@ -132,12 +132,12 @@ export function NotificationCenter() {
                 title="Notificaciones e invitaciones"
                 aria-label="Notificaciones e invitaciones"
             >
-                <Bell className="w-5 h-5"/>
+                <Bell className="w-5 h-5" />
                 {totalBadges > 0 && (
                     <span
                         className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-white">
-            {totalBadges > 9 ? '9+' : totalBadges}
-          </span>
+                        {totalBadges > 9 ? '9+' : totalBadges}
+                    </span>
                 )}
             </button>
 
@@ -154,13 +154,13 @@ export function NotificationCenter() {
                         className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 max-w-sm sm:max-w-none mx-auto sm:mx-0 bg-white border border-zinc-200 rounded-3xl shadow-2xl z-50 overflow-hidden ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="p-3.5 sm:p-4 bg-zinc-900 text-white flex items-center justify-between gap-2">
                             <div className="flex items-center space-x-2 min-w-0">
-                                <Bell className="w-4 h-4 text-emerald-400 shrink-0"/>
+                                <Bell className="w-4 h-4 text-emerald-400 shrink-0" />
                                 <span className="font-semibold text-xs sm:text-sm truncate">Notificaciones</span>
                                 {totalBadges > 0 && (
                                     <span
                                         className="bg-emerald-500/20 text-emerald-300 text-[11px] px-2 py-0.5 rounded-full font-bold shrink-0">
-                    {totalBadges}
-                  </span>
+                                        {totalBadges}
+                                    </span>
                                 )}
                             </div>
 
@@ -170,7 +170,7 @@ export function NotificationCenter() {
                                         onClick={handleMarkAllRead}
                                         className="text-xs text-zinc-300 hover:text-white flex items-center space-x-1 transition-colors active:scale-95 px-2 py-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
                                     >
-                                        <CheckCheck className="w-3.5 h-3.5"/>
+                                        <CheckCheck className="w-3.5 h-3.5" />
                                         <span className="hidden xs:inline">Marcar leídas</span>
                                     </button>
                                 )}
@@ -179,7 +179,7 @@ export function NotificationCenter() {
                                     className="sm:hidden p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
                                     aria-label="Cerrar notificaciones"
                                 >
-                                    <X className="w-4 h-4"/>
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
@@ -205,7 +205,7 @@ export function NotificationCenter() {
                                                 <div className="flex items-start space-x-2.5 sm:space-x-3 min-w-0">
                                                     <div
                                                         className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0 font-bold text-xs shadow-2xs">
-                                                        <Users className="w-4 h-4"/>
+                                                        <Users className="w-4 h-4" />
                                                     </div>
                                                     <div className="text-xs space-y-0.5 min-w-0 flex-1">
                                                         <p className="font-bold text-zinc-900 leading-snug break-words">
@@ -213,7 +213,7 @@ export function NotificationCenter() {
                                                         </p>
                                                         <p className="text-zinc-600 text-[11px] sm:text-xs break-words">
                                                             Enviado por <span
-                                                            className="font-semibold text-zinc-800">{inviterName}</span>
+                                                                className="font-semibold text-zinc-800">{inviterName}</span>
                                                         </p>
                                                     </div>
                                                 </div>
@@ -251,22 +251,21 @@ export function NotificationCenter() {
                                         <div
                                             key={n.id}
                                             onClick={() => handleNotificationClick(n)}
-                                            className={`p-3 rounded-2xl text-xs space-y-1.5 transition-all cursor-pointer ${
-                                                n.is_read
+                                            className={`p-3 rounded-2xl text-xs space-y-1.5 transition-all cursor-pointer ${n.is_read
                                                     ? 'bg-zinc-50/60 text-zinc-500 hover:bg-zinc-100/60'
                                                     : 'bg-zinc-100/90 text-zinc-900 font-medium shadow-2xs hover:bg-zinc-200/80 hover:shadow-xs'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="flex items-center justify-between gap-2 min-w-0">
-                        <span className="font-bold text-zinc-900 flex items-center space-x-1.5 min-w-0">
-                          {getNotificationIcon(n.type)}
-                            <span className="truncate">{n.title}</span>
-                        </span>
+                                                <span className="font-bold text-zinc-900 flex items-center space-x-1.5 min-w-0">
+                                                    {getNotificationIcon(n.type)}
+                                                    <span className="truncate">{n.title}</span>
+                                                </span>
                                                 <div className="flex items-center space-x-1.5 shrink-0">
                                                     {n.created_at && (
                                                         <span className="text-[10px] text-zinc-400">
-                              {formatNotificationTime(n.created_at)}
-                            </span>
+                                                            {formatNotificationTime(n.created_at)}
+                                                        </span>
                                                     )}
                                                     {!n.is_read && (
                                                         <button
@@ -279,7 +278,7 @@ export function NotificationCenter() {
                                                             title="Marcar como leída"
                                                             aria-label="Marcar como leída"
                                                         >
-                                                            <Check className="w-3.5 h-3.5"/>
+                                                            <Check className="w-3.5 h-3.5" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -294,8 +293,8 @@ export function NotificationCenter() {
                                                             key={idx}
                                                             className="inline-flex items-center text-[10px] text-zinc-600 bg-zinc-200/70 px-1.5 py-0.5 rounded border border-zinc-300/50 leading-none font-normal"
                                                         >
-                              {tag}
-                            </span>
+                                                            {tag}
+                                                        </span>
                                                     ))}
                                                 </div>
                                             )}
@@ -304,7 +303,7 @@ export function NotificationCenter() {
                                                 <div
                                                     className="flex items-center space-x-1 text-[10px] font-semibold text-emerald-700 pt-0.5">
                                                     <span>Ver detalle</span>
-                                                    <ArrowRight className="w-2.5 h-2.5"/>
+                                                    <ArrowRight className="w-2.5 h-2.5" />
                                                 </div>
                                             )}
                                         </div>
@@ -317,7 +316,7 @@ export function NotificationCenter() {
                                 <div className="py-8 sm:py-10 text-center space-y-2">
                                     <div
                                         className="w-11 h-11 sm:w-12 sm:h-12 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
-                                        <Inbox className="w-5 h-5 sm:w-6 sm:h-6"/>
+                                        <Inbox className="w-5 h-5 sm:w-6 sm:h-6" />
                                     </div>
                                     <p className="text-xs font-medium text-zinc-500 px-4">
                                         No tienes notificaciones ni invitaciones pendientes

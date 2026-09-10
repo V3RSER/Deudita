@@ -1,18 +1,18 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import {useExpense} from '@/lib/expense-context';
-import {Group, GroupCategory} from '@/lib/types';
+import { useExpense } from '@/lib/expense-context';
+import { Group, GroupCategory } from '@/lib/types';
 import {
     getCleanGroupDescription,
     getGroupCategoryConfig,
     getGroupImage,
     GROUP_CATEGORY_OPTIONS
 } from '@/lib/group-utils';
-import {AlertCircle, Camera, FileText, ListChecks, Loader2, X} from 'lucide-react';
-import {CustomSelect} from '@/components/ui/CustomSelect';
+import { AlertCircle, Camera, FileText, ListChecks, Loader2, X } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface EditGroupModalProps {
     isOpen: boolean;
@@ -21,8 +21,8 @@ interface EditGroupModalProps {
     onDeleted?: () => void;
 }
 
-export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupModalProps) {
-    const {updateGroup, deleteGroup, isMutating} = useExpense();
+export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupModalProps) {
+    const { updateGroup, deleteGroup, isMutating } = useExpense();
 
     const [name, setName] = useState(group.name);
     const [category, setCategory] = useState<GroupCategory>(group.category ?? 'home');
@@ -128,8 +128,8 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                         Editar grupo
                     </h2>
                     <button onClick={onClose}
-                            className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
-                        <X className="w-5 h-5"/>
+                        className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -137,7 +137,7 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                 {errorMessage && (
                     <div
                         className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700 shrink-0">
-                        <AlertCircle className="w-4 h-4 mr-2 shrink-0"/> {errorMessage}
+                        <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMessage}
                     </div>
                 )}
 
@@ -148,7 +148,7 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                                <FileText className="w-4 h-4 mr-2 text-emerald-600"/>
+                                <FileText className="w-4 h-4 mr-2 text-emerald-600" />
                                 Información general
                             </h3>
                         </div>
@@ -158,9 +158,9 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                                 className={`w-12 h-12 rounded-full ${groupImageUrl ? '' : selectedCatConfig.bgColor} flex items-center justify-center shrink-0 border border-black/5 overflow-hidden relative`}>
                                 {groupImageUrl ? (
                                     <Image src={groupImageUrl} alt="Group" fill className="object-cover" unoptimized
-                                           referrerPolicy="no-referrer"/>
+                                        referrerPolicy="no-referrer" />
                                 ) : (
-                                    <CategoryIcon className={`w-6 h-6 ${selectedCatConfig.textColor}`}/>
+                                    <CategoryIcon className={`w-6 h-6 ${selectedCatConfig.textColor}`} />
                                 )}
                             </div>
                             <div className="flex-1 flex flex-col gap-2">
@@ -180,7 +180,7 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                                <ListChecks className="w-4 h-4 mr-2 text-emerald-600"/>
+                                <ListChecks className="w-4 h-4 mr-2 text-emerald-600" />
                                 Detalles
                             </h3>
                         </div>
@@ -213,7 +213,7 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                                                 icon: (
                                                     <div
                                                         className={`w-5 h-5 rounded-full ${cat.bgColor} ${cat.textColor} flex items-center justify-center shrink-0`}>
-                                                        <IconComponent className="w-3 h-3"/>
+                                                        <IconComponent className="w-3 h-3" />
                                                     </div>
                                                 ),
                                             };
@@ -230,13 +230,13 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                                         value={selectedCurrency}
                                         onChange={val => setSelectedCurrency(val)}
                                         options={[
-                                            {value: 'COP', label: 'COP ($)'},
-                                            {value: 'MXN', label: 'MXN ($)'},
-                                            {value: 'CLP', label: 'CLP ($)'},
-                                            {value: 'ARS', label: 'ARS ($)'},
-                                            {value: 'USD', label: 'USD ($)'},
-                                            {value: 'EUR', label: 'EUR (€)'},
-                                            {value: 'PEN', label: 'PEN (S/)'},
+                                            { value: 'COP', label: 'COP ($)' },
+                                            { value: 'MXN', label: 'MXN ($)' },
+                                            { value: 'CLP', label: 'CLP ($)' },
+                                            { value: 'ARS', label: 'ARS ($)' },
+                                            { value: 'USD', label: 'USD ($)' },
+                                            { value: 'EUR', label: 'EUR (€)' },
+                                            { value: 'PEN', label: 'PEN (S/)' },
                                         ]}
                                         size="sm"
                                     />
@@ -250,17 +250,17 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                                     className={`w-full flex items-center justify-center space-x-1.5 py-2 text-xs font-bold transition-all ${groupImageUrl
                                         ? 'border border-solid bg-emerald-50 border-emerald-200 text-emerald-700 rounded-xl shadow-sm'
                                         : 'border border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 bg-zinc-50/50 hover:bg-emerald-50/50'
-                                    }`}
+                                        }`}
                                 >
                                     {isUploading ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                     ) : (
-                                        <Camera className="w-3.5 h-3.5"/>
+                                        <Camera className="w-3.5 h-3.5" />
                                     )}
                                     <span>{groupImageUrl ? 'Cambiar foto de grupo' : 'Añadir foto de grupo'}</span>
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*"
-                                       className="hidden"/>
+                                    className="hidden" />
                             </div>
                         </div>
                     </div>
@@ -273,7 +273,7 @@ export function EditGroupModal({isOpen, group, onClose, onDeleted}: EditGroupMod
                         disabled={isSubmitting || isMutating || !name.trim()}
                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
                     >
-                        {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                        {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         <span>{(isSubmitting || isMutating) ? 'Guardando cambios...' : 'Guardar cambios'}</span>
                     </button>
                 </div>

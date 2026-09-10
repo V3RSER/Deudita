@@ -1,22 +1,22 @@
 'use client';
 
-import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  Expense,
-  ExpenseAuditLog,
-  ExpenseDraft,
-  ExpenseSplit,
-  Group,
-  GroupCategory,
-  GroupInvite,
-  GroupMember,
-  Notification,
-  Payment,
-  Profile,
+    Expense,
+    ExpenseAuditLog,
+    ExpenseDraft,
+    ExpenseSplit,
+    Group,
+    GroupCategory,
+    GroupInvite,
+    GroupMember,
+    Notification,
+    Payment,
+    Profile,
 } from './types';
-import {createClient} from '@/lib/supabase/client';
-import type {RealtimePostgresChangesPayload} from '@supabase/supabase-js';
-import {buildSponsorshipMap} from './balance-utils';
+import { createClient } from '@/lib/supabase/client';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { buildSponsorshipMap } from './balance-utils';
 
 interface ExpenseContextType {
     currentProfile: Profile | null;
@@ -89,7 +89,7 @@ interface ExpenseContextType {
 
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
-export function ExpenseProvider({children}: { children: React.ReactNode }) {
+export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isMutating, setIsMutating] = useState<boolean>(false);
@@ -107,7 +107,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
 
     const supabase = createClient();
 
-    const runOperation = async <T, >(operationLabel: string, action: () => Promise<T>): Promise<T> => {
+    const runOperation = async <T,>(operationLabel: string, action: () => Promise<T>): Promise<T> => {
         setIsMutating(true);
         setActiveOperation(operationLabel);
         try {
@@ -159,8 +159,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
                     try {
                         const claimRes = await fetch('/api/invites/claim', {
                             method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({token: pendingInvite}),
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: pendingInvite }),
                         });
                         if (claimRes.ok) {
                             const claimData = await claimRes.json();
@@ -199,7 +199,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         void reloadFromSupabase(true);
 
-        const {data: {subscription}} = supabase.auth.onAuthStateChange((event: string) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
             if (event !== 'INITIAL_SESSION') {
                 void reloadFromSupabase(true);
             }
@@ -217,12 +217,12 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
 
     const completeOnboarding = async (): Promise<void> => {
         if (!currentProfile) return;
-        setCurrentProfile((prev) => (prev ? {...prev, onboarding_completed: true} : null));
+        setCurrentProfile((prev) => (prev ? { ...prev, onboarding_completed: true } : null));
         try {
             await fetch('/api/profile', {
                 method: 'PATCH',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({onboarding_completed: true}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ onboarding_completed: true }),
             });
         } catch (err) {
             console.warn('[ExpenseContext] Could not persist onboarding status:', err);
@@ -234,7 +234,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         await runOperation('Guardando perfil...', async () => {
             const res = await fetch('/api/profile', {
                 method: 'PATCH',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates),
             });
 
@@ -308,7 +308,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
                         if (!groupIds.includes(newRecord.group_id)) return;
 
                         // Hydrate full row with items and splits relations
-                        const {data, error} = await supabase
+                        const { data, error } = await supabase
                             .from('expenses')
                             .select('*, items:expense_items(*), splits:expense_splits(*)')
                             .eq('id', newRecord.id)
@@ -331,7 +331,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
                         if (!groupIds.includes(updatedRecord.group_id)) return;
 
                         // Hydrate full row with items and splits relations
-                        const {data, error} = await supabase
+                        const { data, error } = await supabase
                             .from('expenses')
                             .select('*, items:expense_items(*), splits:expense_splits(*)')
                             .eq('id', updatedRecord.id)
@@ -436,7 +436,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
             prev.map((p) => {
                 if (p.id === currentProfile.id) return optimisticProfile;
                 if (p.id === targetUserId) {
-                    return {...p, managed_by: shouldManage ? currentProfile.id : undefined};
+                    return { ...p, managed_by: shouldManage ? currentProfile.id : undefined };
                 }
                 return p;
             })
@@ -445,14 +445,14 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         try {
             const res = await fetch('/api/managed-users', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({targetUserId, shouldManage}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetUserId, shouldManage }),
             });
             if (!res.ok) {
-                await updateProfile({managed_user_ids: updatedList});
+                await updateProfile({ managed_user_ids: updatedList });
             }
         } catch {
-            await updateProfile({managed_user_ids: updatedList});
+            await updateProfile({ managed_user_ids: updatedList });
         }
 
         await reloadFromSupabase();
@@ -462,8 +462,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Agregando amigo...', async () => {
             const res = await fetch('/api/friends', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({fullName, email}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fullName, email }),
             });
 
             if (!res.ok) {
@@ -502,8 +502,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Creando grupo...', async () => {
             const res = await fetch('/api/groups', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name, category, description, emails, imageUrl, memberIds, currency}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, category, description, emails, imageUrl, memberIds, currency }),
             });
 
             if (!res.ok) {
@@ -541,8 +541,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Actualizando grupo...', async () => {
             const res = await fetch(`/api/groups/${id}`, {
                 method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name, category, description, imageUrl, currency}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, category, description, imageUrl, currency }),
             });
 
             if (!res.ok) {
@@ -605,8 +605,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Añadiendo integrante...', async () => {
             const res = await fetch('/api/groups/invite', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({groupId, email, name, memberId}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, email, name, memberId }),
             });
 
             if (!res.ok) {
@@ -776,7 +776,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
     const markNotificationAsRead = async (notificationId?: string): Promise<void> => {
         const res = await fetch('/api/notifications', {
             method: 'PATCH',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 notificationId,
                 markAll: !notificationId,
@@ -804,7 +804,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         setNotifications((prev) =>
             prev.map((n) => {
                 if (!notificationId || n.id === notificationId) {
-                    return {...n, is_read: true};
+                    return { ...n, is_read: true };
                 }
                 return n;
             })
@@ -819,8 +819,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Guardando gasto...', async () => {
             const res = await fetch('/api/expenses', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({expense, items, splits}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expense, items, splits }),
             });
 
             if (!res.ok) {
@@ -861,8 +861,8 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Actualizando gasto y participantes...', async () => {
             const res = await fetch(`/api/expenses/${id}`, {
                 method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({expense, items, splits}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expense, items, splits }),
             });
 
             if (!res.ok) {
@@ -898,7 +898,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
 
     const deleteExpense = async (id: string): Promise<void> => {
         await runOperation('Eliminando gasto...', async () => {
-            const res = await fetch(`/api/expenses/${id}`, {method: 'DELETE'});
+            const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
 
             if (!res.ok) {
                 let message = 'No se pudo eliminar el gasto';
@@ -927,7 +927,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Registrando pago...', async () => {
             const res = await fetch('/api/payments', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payment),
             });
 
@@ -959,7 +959,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Actualizando pago...', async () => {
             const res = await fetch(`/api/payments/${id}`, {
                 method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payment),
             });
 
@@ -1027,7 +1027,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Confirmando borrador...', async () => {
             const res = await fetch(`/api/expenses/${draftId}`, {
                 method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     expense: {
                         group_id: groupId,
@@ -1066,7 +1066,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
             }
             setDrafts((prev) => prev.filter((d) => d.id !== draftId));
 
-            return {expense: confirmedExpense, draftId};
+            return { expense: confirmedExpense, draftId };
         });
     };
 
@@ -1105,7 +1105,7 @@ export function ExpenseProvider({children}: { children: React.ReactNode }) {
         return await runOperation('Agregando borrador...', async () => {
             const res = await fetch('/api/expenses', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     expense: {
                         description: draft.concept || draft.detected_merchant || 'Borrador',

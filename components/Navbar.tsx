@@ -1,9 +1,9 @@
 'use client';
 
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import {useExpense} from '@/lib/expense-context';
+import { useExpense } from '@/lib/expense-context';
 import {
     LayoutDashboard,
     LogOut,
@@ -19,9 +19,9 @@ import {
     X,
 } from 'lucide-react';
 
-import {DeuditaLogo} from '@/components/DeuditaLogo';
-import {NotificationCenter} from '@/components/NotificationCenter';
-import {ProfileSettingsModal} from '@/components/ProfileSettingsModal';
+import { DeuditaLogo } from '@/components/DeuditaLogo';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
 export type ActiveTab = 'dashboard' | 'groups' | 'friends' | 'balances' | 'expenses' | 'drafts';
 
@@ -33,11 +33,11 @@ interface NavbarProps {
 }
 
 export function Navbar({
-                           activeTab,
-                           setActiveTab,
-                           onOpenNewExpense,
-                       }: NavbarProps) {
-    const {currentProfile, drafts, logout} = useExpense();
+    activeTab,
+    setActiveTab,
+    onOpenNewExpense,
+}: NavbarProps) {
+    const { currentProfile, drafts, logout } = useExpense();
     const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -58,10 +58,10 @@ export function Navbar({
                             className="flex items-center space-x-2.5 cursor-pointer group"
                             onClick={() => setActiveTab('dashboard')}
                         >
-                            <DeuditaLogo size="md" withHoverEffect/>
+                            <DeuditaLogo size="md" withHoverEffect />
                             <span className="font-bold text-lg text-zinc-900 leading-tight tracking-tight">
-                Deudita
-              </span>
+                                Deudita
+                            </span>
                         </div>
 
                         {/* Navigation Tabs (Desktop) */}
@@ -69,79 +69,73 @@ export function Navbar({
                             className="hidden lg:flex items-center space-x-1 bg-zinc-100/70 p-1.5 rounded-2xl ring-1 ring-zinc-200/50">
                             <button
                                 onClick={() => setActiveTab('dashboard')}
-                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'dashboard'
+                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'dashboard'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <LayoutDashboard className="w-4 h-4"/>
+                                <LayoutDashboard className="w-4 h-4" />
                                 <span>Dashboard</span>
                             </button>
 
                             <button
                                 onClick={() => setActiveTab('groups')}
-                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'groups'
+                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'groups'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <Users className="w-4 h-4"/>
+                                <Users className="w-4 h-4" />
                                 <span>Grupos</span>
                             </button>
 
                             <button
                                 onClick={() => setActiveTab('friends')}
-                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'friends'
+                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'friends'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <UserPlus className="w-4 h-4"/>
+                                <UserPlus className="w-4 h-4" />
                                 <span>Amigos</span>
                             </button>
 
                             <button
                                 onClick={() => setActiveTab('balances')}
-                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'balances'
+                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'balances'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <Wallet className="w-4 h-4"/>
+                                <Wallet className="w-4 h-4" />
                                 <span>Balances</span>
                             </button>
 
                             <button
                                 onClick={() => setActiveTab('expenses')}
-                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'expenses'
+                                className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'expenses'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <Receipt className="w-4 h-4"/>
+                                <Receipt className="w-4 h-4" />
                                 <span>Gastos</span>
                             </button>
 
                             <button
                                 onClick={() => setActiveTab('drafts')}
-                                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${
-                                    activeTab === 'drafts'
+                                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === 'drafts'
                                         ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 font-semibold'
                                         : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50'
-                                }`}
+                                    }`}
                             >
-                                <MailCheck className="w-4 h-4"/>
+                                <MailCheck className="w-4 h-4" />
                                 <span>Tickets</span>
                                 {pendingDraftsCount > 0 && (
                                     <span
                                         className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full">
-                    {pendingDraftsCount}
-                  </span>
+                                        {pendingDraftsCount}
+                                    </span>
                                 )}
                             </button>
                         </nav>
@@ -154,13 +148,13 @@ export function Navbar({
                                     onClick={onOpenNewExpense}
                                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3.5 py-2 rounded-xl text-sm shadow-xs transition-all active:scale-95 flex items-center space-x-1.5 cursor-pointer"
                                 >
-                                    <Plus className="w-4 h-4"/>
+                                    <Plus className="w-4 h-4" />
                                     <span>Nuevo gasto</span>
                                 </button>
                             </div>
 
                             {/* Notifications Bell */}
-                            <NotificationCenter/>
+                            <NotificationCenter />
 
                             {/* Profile Avatar Button */}
                             <div className="relative">
@@ -193,7 +187,7 @@ export function Navbar({
                                         className="absolute right-0 mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-xl py-2 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                                         <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50">
                                             <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider flex items-center gap-1">
-                                                <UserCheck className="w-3 h-3 text-emerald-600"/>
+                                                <UserCheck className="w-3 h-3 text-emerald-600" />
                                                 <span>Sesión Activa</span>
                                             </p>
                                             <p className="text-sm font-semibold text-zinc-900 truncate mt-1">
@@ -208,7 +202,7 @@ export function Navbar({
                                                 onClick={() => setProfileDropdownOpen(false)}
                                                 className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
                                             >
-                                                <Receipt className="w-4 h-4 text-zinc-500"/>
+                                                <Receipt className="w-4 h-4 text-zinc-500" />
                                                 <span>Tickets y Borradores</span>
                                             </Link>
 
@@ -219,7 +213,7 @@ export function Navbar({
                                                 }}
                                                 className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-xl transition cursor-pointer"
                                             >
-                                                <Settings className="w-4 h-4 text-zinc-500"/>
+                                                <Settings className="w-4 h-4 text-zinc-500" />
                                                 <span>Mi Perfil y Ajustes</span>
                                             </button>
 
@@ -230,7 +224,7 @@ export function Navbar({
                                                 }}
                                                 className="w-full flex items-center space-x-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
                                             >
-                                                <LogOut className="w-4 h-4"/>
+                                                <LogOut className="w-4 h-4" />
                                                 <span>Cerrar Sesión</span>
                                             </button>
                                         </div>
@@ -248,28 +242,26 @@ export function Navbar({
                 {/* Tab 1: Inicio */}
                 <button
                     onClick={() => setActiveTab('dashboard')}
-                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
-                        isTabActive('dashboard')
+                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${isTabActive('dashboard')
                             ? 'text-emerald-600 font-bold'
                             : 'text-zinc-500 hover:text-zinc-800 font-medium'
-                    }`}
+                        }`}
                 >
                     <LayoutDashboard
-                        className={`w-5 h-5 ${isTabActive('dashboard') ? 'text-emerald-600' : 'text-zinc-600'}`}/>
+                        className={`w-5 h-5 ${isTabActive('dashboard') ? 'text-emerald-600' : 'text-zinc-600'}`} />
                     <span className="text-[10.5px] mt-1 leading-none">Inicio</span>
                 </button>
 
                 {/* Tab 2: Grupos */}
                 <button
                     onClick={() => setActiveTab('groups')}
-                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
-                        isTabActive('groups')
+                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${isTabActive('groups')
                             ? 'text-emerald-600 font-bold'
                             : 'text-zinc-500 hover:text-zinc-800 font-medium'
-                    }`}
+                        }`}
                 >
                     <Users
-                        className={`w-5 h-5 ${isTabActive('groups') ? 'text-emerald-600 stroke-[2.2]' : 'text-zinc-600'}`}/>
+                        className={`w-5 h-5 ${isTabActive('groups') ? 'text-emerald-600 stroke-[2.2]' : 'text-zinc-600'}`} />
                     <span className="text-[10.5px] mt-1 leading-none">Grupos</span>
                 </button>
 
@@ -281,33 +273,31 @@ export function Navbar({
                         title="Nuevo gasto"
                         aria-label="Nuevo gasto"
                     >
-                        <Plus className="w-6 h-6 stroke-[2.5]"/>
+                        <Plus className="w-6 h-6 stroke-[2.5]" />
                     </button>
                 </div>
 
                 {/* Tab 4: Balances */}
                 <button
                     onClick={() => setActiveTab('balances')}
-                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
-                        isTabActive('balances')
+                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${isTabActive('balances')
                             ? 'text-emerald-600 font-bold'
                             : 'text-zinc-500 hover:text-zinc-800 font-medium'
-                    }`}
+                        }`}
                 >
-                    <Wallet className={`w-5 h-5 ${isTabActive('balances') ? 'text-emerald-600' : 'text-zinc-600'}`}/>
+                    <Wallet className={`w-5 h-5 ${isTabActive('balances') ? 'text-emerald-600' : 'text-zinc-600'}`} />
                     <span className="text-[10.5px] mt-1 leading-none">Balances</span>
                 </button>
 
                 {/* Tab 5: Más */}
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${
-                        isMobileMenuOpen || isTabActive('friends') || isTabActive('expenses') || isTabActive('drafts')
+                    className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all min-h-[44px] flex-1 cursor-pointer ${isMobileMenuOpen || isTabActive('friends') || isTabActive('expenses') || isTabActive('drafts')
                             ? 'text-emerald-600 font-bold'
                             : 'text-zinc-500 hover:text-zinc-800 font-medium'
-                    }`}
+                        }`}
                 >
-                    <Menu className={`w-5 h-5 ${isMobileMenuOpen ? 'text-emerald-600' : 'text-zinc-600'}`}/>
+                    <Menu className={`w-5 h-5 ${isMobileMenuOpen ? 'text-emerald-600' : 'text-zinc-600'}`} />
                     <span className="text-[10.5px] mt-1 leading-none">Más</span>
                 </button>
             </nav>
@@ -324,7 +314,7 @@ export function Navbar({
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className="p-1 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition cursor-pointer"
                             >
-                                <X className="w-5 h-5"/>
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
 
@@ -339,7 +329,7 @@ export function Navbar({
                                 <div className="flex items-center space-x-3">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                                        <UserPlus className="w-5 h-5"/>
+                                        <UserPlus className="w-5 h-5" />
                                     </div>
                                     <span className="font-semibold text-sm text-zinc-900">Amigos</span>
                                 </div>
@@ -355,7 +345,7 @@ export function Navbar({
                                 <div className="flex items-center space-x-3">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                                        <Receipt className="w-5 h-5"/>
+                                        <Receipt className="w-5 h-5" />
                                     </div>
                                     <span className="font-semibold text-sm text-zinc-900">Todos los gastos</span>
                                 </div>
@@ -371,14 +361,14 @@ export function Navbar({
                                 <div className="flex items-center space-x-3">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                                        <MailCheck className="w-5 h-5"/>
+                                        <MailCheck className="w-5 h-5" />
                                     </div>
                                     <span className="font-semibold text-sm text-zinc-900">Tickets y Borradores</span>
                                 </div>
                                 {pendingDraftsCount > 0 && (
                                     <span className="px-2 py-0.5 text-xs font-bold bg-rose-500 text-white rounded-full">
-                    {pendingDraftsCount}
-                  </span>
+                                        {pendingDraftsCount}
+                                    </span>
                                 )}
                             </button>
                         </div>

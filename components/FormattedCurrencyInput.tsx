@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useState} from 'react';
-import {formatCurrency} from '@/lib/balance-utils';
-import {parseCurrencyAmount} from '@/lib/transaction-date-utils';
+import React, { useState } from 'react';
+import { formatCurrency } from '@/lib/balance-utils';
+import { parseCurrencyAmount } from '@/lib/transaction-date-utils';
 
 interface FormattedCurrencyInputProps {
     value: string | number;
@@ -18,17 +18,17 @@ interface FormattedCurrencyInputProps {
 }
 
 export function FormattedCurrencyInput({
-                                           value,
-                                           onChange,
-                                           currency = 'COP',
-                                           placeholder = '0',
-                                           className = '',
-                                           required = false,
-                                           disabled = false,
-                                           id,
-                                           autoFocus = false,
-                                           hideSymbol = false,
-                                       }: FormattedCurrencyInputProps) {
+    value,
+    onChange,
+    currency = 'COP',
+    placeholder = '0',
+    className = '',
+    required = false,
+    disabled = false,
+    id,
+    autoFocus = false,
+    hideSymbol = false,
+}: FormattedCurrencyInputProps) {
     const [isFocused, setIsFocused] = useState(false);
     const [editingValue, setEditingValue] = useState<string | null>(null);
 

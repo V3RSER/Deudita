@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
-import {Expense, Group, Payment, Profile} from '@/lib/types';
-import {formatCurrency} from '@/lib/balance-utils';
-import {getCategoryConfig} from '@/lib/expense-category-utils';
+import { Expense, Group, Payment, Profile } from '@/lib/types';
+import { formatCurrency } from '@/lib/balance-utils';
+import { getCategoryConfig } from '@/lib/expense-category-utils';
 import {
     DateFilterMode,
     extractTimeFromISO,
@@ -18,8 +18,8 @@ import {
     ParticipantItemBreakdown,
     ParticipantSummaryData
 } from '@/components/ExpenseParticipantSummary';
-import {getExpenseSplitConfig} from '@/lib/split-config-utils';
-import {ConfirmModal} from '@/components/ConfirmModal';
+import { getExpenseSplitConfig } from '@/lib/split-config-utils';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import {
     ArrowRight,
     Calendar,
@@ -40,21 +40,21 @@ import {
 
 type UnifiedTransaction =
     | {
-    type: 'expense';
-    date: string;
-    dateObj: Date;
-    isUpdated: boolean;
-    hasExplicitTime: boolean;
-    data: Expense;
-}
+        type: 'expense';
+        date: string;
+        dateObj: Date;
+        isUpdated: boolean;
+        hasExplicitTime: boolean;
+        data: Expense;
+    }
     | {
-    type: 'payment';
-    date: string;
-    dateObj: Date;
-    isUpdated: boolean;
-    hasExplicitTime: boolean;
-    data: Payment;
-};
+        type: 'payment';
+        date: string;
+        dateObj: Date;
+        isUpdated: boolean;
+        hasExplicitTime: boolean;
+        data: Payment;
+    };
 
 interface GenericExpenseListProps {
     expenses: Expense[];
@@ -99,7 +99,7 @@ function parseTxDate(dateInput: string | Date) {
         const monthAbbr = MONTH_ABBR_ES[monthIndex];
         const monthLabel = `${MONTH_NAMES_ES[monthIndex]} ${year}`;
         const key = `${year}-${monthIndex < 9 ? '0' : ''}${monthIndex}`;
-        return {year, monthIndex, dayStr, timeStr, monthAbbr, monthLabel, key};
+        return { year, monthIndex, dayStr, timeStr, monthAbbr, monthLabel, key };
     }
     return {
         year: 2026,
@@ -130,24 +130,24 @@ function formatFullDateTime(dateStr: string | null | undefined): string {
 }
 
 export function GenericExpenseList({
-                                       expenses,
-                                       payments,
-                                       profiles,
-                                       userGroups,
-                                       currentProfile,
-                                       pairwisePartnerProfile,
-                                       isSimplified = true,
-                                       groupCurrency,
-                                       dateFilterMode = 'expense_date',
-                                       onSelectExpense,
-                                       onEditExpense,
-                                       onDeleteExpense,
-                                       onEditPayment,
-                                       onDeletePayment,
-                                       showGroupBadge = true,
-                                       initialExpandedExpenseId,
-                                       pageSize = 20,
-                                   }: GenericExpenseListProps) {
+    expenses,
+    payments,
+    profiles,
+    userGroups,
+    currentProfile,
+    pairwisePartnerProfile,
+    isSimplified = true,
+    groupCurrency,
+    dateFilterMode = 'expense_date',
+    onSelectExpense,
+    onEditExpense,
+    onDeleteExpense,
+    onEditPayment,
+    onDeletePayment,
+    showGroupBadge = true,
+    initialExpandedExpenseId,
+    pageSize = 20,
+}: GenericExpenseListProps) {
     const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
     const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
     const [userToggledPaymentIds, setUserToggledPaymentIds] = useState<Map<string, boolean>>(new Map());
@@ -170,7 +170,7 @@ export function GenericExpenseList({
             const timer = setTimeout(() => {
                 const el = document.getElementById(`expense-card-${initialExpandedExpenseId}`);
                 if (el) {
-                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             }, 150);
 
@@ -236,7 +236,7 @@ export function GenericExpenseList({
     if (transactions.length === 0) {
         return (
             <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-12 text-center text-zinc-500">
-                <Receipt className="w-12 h-12 text-zinc-300 mx-auto mb-3"/>
+                <Receipt className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
                 <h3 className="font-semibold text-zinc-900 text-base">No hay movimientos registrados</h3>
                 <p className="text-xs text-zinc-500 mt-1">Los gastos y pagos de deuda aparecerán aquí.</p>
             </div>
@@ -255,7 +255,7 @@ export function GenericExpenseList({
         const parsed = parseTxDate(tx.dateObj);
         let existing = groupedByMonth.find((g) => g.key === parsed.key);
         if (!existing) {
-            existing = {key: parsed.key, label: parsed.monthLabel, items: []};
+            existing = { key: parsed.key, label: parsed.monthLabel, items: [] };
             groupedByMonth.push(existing);
         }
         existing.items.push(tx);
@@ -267,16 +267,16 @@ export function GenericExpenseList({
                 <div key={group.key} className="space-y-2">
                     {/* Monthly Section Header Cut */}
                     <div className="flex items-center space-x-2.5 px-1 py-0.5">
-            <span
-                className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
-              {dateFilterMode === 'entry_date' ? (
-                  <Clock className="w-3 h-3 text-indigo-600"/>
-              ) : (
-                  <Calendar className="w-3 h-3 text-zinc-500"/>
-              )}
-                <span>{group.label}</span>
-            </span>
-                        <div className="h-px bg-zinc-200/70 flex-1"/>
+                        <span
+                            className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
+                            {dateFilterMode === 'entry_date' ? (
+                                <Clock className="w-3 h-3 text-indigo-600" />
+                            ) : (
+                                <Calendar className="w-3 h-3 text-zinc-500" />
+                            )}
+                            <span>{group.label}</span>
+                        </span>
+                        <div className="h-px bg-zinc-200/70 flex-1" />
                     </div>
 
                     <div className="space-y-2">
@@ -398,7 +398,7 @@ export function GenericExpenseList({
                                             : isExpanded
                                                 ? 'ring-1 ring-emerald-500/20 shadow-xs'
                                                 : ''
-                                        }`}
+                                            }`}
                                     >
                                         <div
                                             className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
@@ -410,17 +410,17 @@ export function GenericExpenseList({
                                                     className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
                                                         ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
                                                         : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
-                                                    }`}
+                                                        }`}
                                                 >
-                          <span className="text-xs sm:text-sm font-bold leading-none">
-                            {parsed.dayStr}
-                          </span>
+                                                    <span className="text-xs sm:text-sm font-bold leading-none">
+                                                        {parsed.dayStr}
+                                                    </span>
                                                     <span
                                                         className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
-                                                        }`}
+                                                            }`}
                                                     >
-                            {parsed.monthAbbr}
-                          </span>
+                                                        {parsed.monthAbbr}
+                                                    </span>
                                                 </div>
 
                                                 {/* Category Icon Box */}
@@ -428,7 +428,7 @@ export function GenericExpenseList({
                                                     className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
                                                     title={catConfig.name}
                                                 >
-                                                    <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5"/>
+                                                    <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                                                 </div>
 
                                                 {/* Description, Category Badge & Subtitle */}
@@ -436,32 +436,32 @@ export function GenericExpenseList({
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <h3
                                                             className={`text-sm font-semibold text-zinc-900 truncate leading-snug ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
-                                                            }`}
+                                                                }`}
                                                         >
                                                             {exp.description}
                                                         </h3>
                                                         <span
                                                             className={`text-[10px] font-medium px-1.5 py-0.2 rounded-md ${catConfig.bgClass} ${catConfig.textClass} border ${catConfig.borderClass || 'border-zinc-200/50'} shrink-0`}
                                                         >
-                              {exp.category || 'General'}
-                            </span>
+                                                            {exp.category || 'General'}
+                                                        </span>
                                                         {exp.source === 'gmail' && (
                                                             <span
                                                                 className="bg-zinc-900 text-white text-[8px] uppercase font-semibold tracking-widest px-1 py-0.2 rounded shrink-0">
-                                AI
-                              </span>
+                                                                AI
+                                                            </span>
                                                         )}
                                                         {exp.is_draft && (
                                                             <span
                                                                 className="bg-amber-100 text-amber-900 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border border-amber-300 shrink-0">
-                                Borrador
-                              </span>
+                                                                Borrador
+                                                            </span>
                                                         )}
                                                         {dateFilterMode === 'entry_date' && tx.isUpdated && (
                                                             <span
                                                                 className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
-                                Editado
-                              </span>
+                                                                Editado
+                                                            </span>
                                                         )}
                                                     </div>
 
@@ -470,21 +470,21 @@ export function GenericExpenseList({
                                                         className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
                                                         {showGroupBadge && groupObj && (
                                                             <>
-                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
-                                  {groupObj.name}
-                                </span>
+                                                                <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
+                                                                    {groupObj.name}
+                                                                </span>
                                                                 <span>•</span>
                                                             </>
                                                         )}
                                                         <span className="truncate">
-                              Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
-                            </span>
+                                                            Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
+                                                        </span>
                                                         {exp.source_account && (
                                                             <>
                                                                 <span>•</span>
                                                                 <span className="font-mono text-zinc-600 font-medium">
-                                  💳 *{exp.source_account}
-                                </span>
+                                                                    💳 *{exp.source_account}
+                                                                </span>
                                                             </>
                                                         )}
                                                     </div>
@@ -494,13 +494,13 @@ export function GenericExpenseList({
                                             {/* Right Amount & Personal Share info beneath amount */}
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <div className="flex flex-col items-end justify-center text-right">
-                          <span className="text-xs sm:text-sm font-bold text-zinc-900 leading-tight">
-                            {formatCurrency(exp.total_amount, currency)}
-                          </span>
+                                                    <span className="text-xs sm:text-sm font-bold text-zinc-900 leading-tight">
+                                                        {formatCurrency(exp.total_amount, currency)}
+                                                    </span>
                                                     <span
                                                         className={`text-[10px] sm:text-xs leading-tight mt-0.5 font-semibold ${badgeColorClass}`}>
-                            {badgeText}
-                          </span>
+                                                        {badgeText}
+                                                    </span>
                                                 </div>
 
                                                 {/* Icon-only buttons when expanded */}
@@ -516,7 +516,7 @@ export function GenericExpenseList({
                                                                 aria-label="Editar gasto"
                                                                 className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
                                                             >
-                                                                <Pencil className="w-3.5 h-3.5"/>
+                                                                <Pencil className="w-3.5 h-3.5" />
                                                             </button>
                                                         )}
                                                         {onDeleteExpense && (
@@ -527,16 +527,16 @@ export function GenericExpenseList({
                                                                 aria-label="Eliminar gasto"
                                                                 className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
                                                             >
-                                                                <Trash2 className="w-3.5 h-3.5"/>
+                                                                <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
                                                         )}
                                                     </div>
                                                 )}
 
                                                 {isExpanded ? (
-                                                    <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                    <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
                                                 ) : (
-                                                    <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                    <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
                                                 )}
                                             </div>
                                         </div>
@@ -643,29 +643,29 @@ export function GenericExpenseList({
                                                                                 <div
                                                                                     className="flex items-center gap-1.5">
                                                                                     <ShoppingBag
-                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                                                     <span
                                                                                         className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                            Desglose de artículos ({exp.items?.length || 0})
-                                          </span>
+                                                                                        Desglose de artículos ({exp.items?.length || 0})
+                                                                                    </span>
                                                                                 </div>
                                                                             </div>
                                                                             <div
                                                                                 className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
                                                                                 {exp.items?.map((item, idx) => (
                                                                                     <div key={item.id || idx}
-                                                                                         className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors">
+                                                                                        className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors">
                                                                                         <div
                                                                                             className="flex items-center space-x-2 min-w-0 pr-2">
                                                                                             <span
-                                                                                                className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"/>
+                                                                                                className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                                                                                             <span
                                                                                                 className="font-medium text-zinc-800 truncate">{item.description}</span>
                                                                                         </div>
                                                                                         <span
                                                                                             className="text-zinc-900 font-bold shrink-0 text-xs">
-                                              {formatCurrency(item.amount, currency)}
-                                            </span>
+                                                                                            {formatCurrency(item.amount, currency)}
+                                                                                        </span>
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
@@ -680,11 +680,11 @@ export function GenericExpenseList({
                                                                                 <div
                                                                                     className="flex items-center gap-1.5">
                                                                                     <ImageIcon
-                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                                                     <span
                                                                                         className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                            Comprobante
-                                          </span>
+                                                                                        Comprobante
+                                                                                    </span>
                                                                                 </div>
                                                                             </div>
                                                                             <div className="p-3">
@@ -703,7 +703,7 @@ export function GenericExpenseList({
                                                                                     <div
                                                                                         className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
                                                                                         <ExternalLink
-                                                                                            className="w-3.5 h-3.5"/>
+                                                                                            className="w-3.5 h-3.5" />
                                                                                         <span>Ver</span>
                                                                                     </div>
                                                                                 </div>
@@ -719,11 +719,11 @@ export function GenericExpenseList({
                                                                                 <div
                                                                                     className="flex items-center gap-1.5">
                                                                                     <FileText
-                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                                                     <span
                                                                                         className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                            Notas
-                                          </span>
+                                                                                        Notas
+                                                                                    </span>
                                                                                 </div>
                                                                             </div>
                                                                             <div className="p-3">
@@ -754,37 +754,37 @@ export function GenericExpenseList({
                                                 <div
                                                     className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
                                                     <div className="flex items-center space-x-2 flex-wrap">
-                                                        <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                        <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                         <span>
-                              Fecha del gasto: <strong className="font-semibold text-zinc-700">
-                                {formatHumanDate(eventInfo.dateObj, {includeTime: Boolean(exp.expense_time)})}
-                              </strong>
-                            </span>
+                                                            Fecha del gasto: <strong className="font-semibold text-zinc-700">
+                                                                {formatHumanDate(eventInfo.dateObj, { includeTime: Boolean(exp.expense_time) })}
+                                                            </strong>
+                                                        </span>
                                                     </div>
 
                                                     {exp.source_account && (
                                                         <div className="flex items-center space-x-2 flex-wrap">
-                                                            <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                            <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                             <span>
-                                Pagado con: <strong className="font-mono font-semibold text-zinc-700">*{exp.source_account}</strong>
+                                                                Pagado con: <strong className="font-mono font-semibold text-zinc-700">*{exp.source_account}</strong>
                                                                 {exp.entity ? ` (${exp.entity})` : ''}
-                              </span>
+                                                            </span>
                                                         </div>
                                                     )}
 
                                                     <div className="flex items-center space-x-2 flex-wrap">
-                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                                         <span>
-                              Registrado por <strong className="font-medium text-zinc-700">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
-                            </span>
+                                                            Registrado por <strong className="font-medium text-zinc-700">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
+                                                        </span>
                                                     </div>
 
                                                     {exp.updated_at && exp.updated_at !== exp.created_at && (
                                                         <div className="flex items-center space-x-2 flex-wrap">
-                                                            <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                            <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                                             <span>
-                                Última modificación por <strong className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
-                              </span>
+                                                                Última modificación por <strong className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
+                                                            </span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -817,7 +817,7 @@ export function GenericExpenseList({
                                     key={`pay-${payment.id}`}
                                     id={`payment-card-${payment.id}`}
                                     className={`bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isExpanded ? 'ring-1 ring-emerald-500/20 shadow-xs' : ''
-                                    }`}
+                                        }`}
                                 >
                                     {/* Collapsed / Summary Header (Click toggles expansion) */}
                                     <div
@@ -830,23 +830,23 @@ export function GenericExpenseList({
                                                 className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
                                                     ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
                                                     : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
-                                                }`}
+                                                    }`}
                                             >
-                        <span className="text-xs sm:text-sm font-bold leading-none">
-                          {parsed.dayStr}
-                        </span>
+                                                <span className="text-xs sm:text-sm font-bold leading-none">
+                                                    {parsed.dayStr}
+                                                </span>
                                                 <span
                                                     className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
-                                                    }`}
+                                                        }`}
                                                 >
-                          {parsed.monthAbbr}
-                        </span>
+                                                    {parsed.monthAbbr}
+                                                </span>
                                             </div>
 
                                             {/* Payment Icon Box */}
                                             <div
                                                 className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                                                <HandCoins className="w-4 h-4 sm:w-5 sm:h-5"/>
+                                                <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
                                             </div>
 
                                             {/* Payment Description & Details */}
@@ -857,13 +857,13 @@ export function GenericExpenseList({
                                                     </h3>
                                                     <span
                                                         className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
-                            Saldado
-                          </span>
+                                                        Saldado
+                                                    </span>
                                                     {dateFilterMode === 'entry_date' && tx.isUpdated && (
                                                         <span
                                                             className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
-                              Editado
-                            </span>
+                                                            Editado
+                                                        </span>
                                                     )}
                                                 </div>
 
@@ -872,17 +872,17 @@ export function GenericExpenseList({
                                                     className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
                                                     {showGroupBadge && groupObj && (
                                                         <>
-                              <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
-                                {groupObj.name}
-                              </span>
+                                                            <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
+                                                                {groupObj.name}
+                                                            </span>
                                                             <span>•</span>
                                                         </>
                                                     )}
                                                     <span className="truncate">
-                            {isIpaid ? 'Transferiste a ' : 'Pagó a '}
+                                                        {isIpaid ? 'Transferiste a ' : 'Pagó a '}
                                                         <span
                                                             className="font-medium text-zinc-700">{receiver ? receiver.full_name : 'Usuario'}</span>
-                          </span>
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -890,19 +890,19 @@ export function GenericExpenseList({
                                         {/* Right Amount & Personal Share info beneath amount */}
                                         <div className="flex items-center gap-2 shrink-0">
                                             <div className="flex flex-col items-end justify-center text-right">
-                        <span className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
-                          {formatCurrency(payment.amount, currency)}
-                        </span>
+                                                <span className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
+                                                    {formatCurrency(payment.amount, currency)}
+                                                </span>
                                                 <span
                                                     className={`text-xs font-semibold leading-tight mt-0.5 ${isIpaid
                                                         ? 'text-emerald-600'
                                                         : isIreceived
                                                             ? 'text-emerald-600'
                                                             : 'text-zinc-400'
-                                                    }`}
+                                                        }`}
                                                 >
-                          {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'saldado'}
-                        </span>
+                                                    {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'saldado'}
+                                                </span>
                                             </div>
 
                                             {/* Icon-only buttons when expanded */}
@@ -918,7 +918,7 @@ export function GenericExpenseList({
                                                             aria-label="Editar pago"
                                                             className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
                                                         >
-                                                            <Pencil className="w-3.5 h-3.5"/>
+                                                            <Pencil className="w-3.5 h-3.5" />
                                                         </button>
                                                     )}
                                                     {onDeletePayment && (
@@ -929,16 +929,16 @@ export function GenericExpenseList({
                                                             aria-label="Eliminar pago"
                                                             className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
                                                         >
-                                                            <Trash2 className="w-3.5 h-3.5"/>
+                                                            <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
                                                     )}
                                                 </div>
                                             )}
 
                                             {isExpanded ? (
-                                                <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
                                             ) : (
-                                                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
                                             )}
                                         </div>
                                     </div>
@@ -978,8 +978,8 @@ export function GenericExpenseList({
                                                                 )}
                                                                 <span
                                                                     className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                                  PAGA
-                                </span>
+                                                                    PAGA
+                                                                </span>
                                                             </div>
 
                                                             <div className="min-w-0 flex-1 text-left">
@@ -999,7 +999,7 @@ export function GenericExpenseList({
                                                     <div className="shrink-0 flex items-center justify-center px-1">
                                                         <div
                                                             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shadow-2xs">
-                                                            <ArrowRight className="w-4 h-4 text-emerald-600"/>
+                                                            <ArrowRight className="w-4 h-4 text-emerald-600" />
                                                         </div>
                                                     </div>
 
@@ -1026,8 +1026,8 @@ export function GenericExpenseList({
                                                                 )}
                                                                 <span
                                                                     className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
-                                  RECIBE
-                                </span>
+                                                                    RECIBE
+                                                                </span>
                                                             </div>
 
                                                             <div className="min-w-0 flex-1 text-left">
@@ -1050,8 +1050,8 @@ export function GenericExpenseList({
                                                     <span className="text-[11px] font-semibold text-zinc-500">Monto transferido</span>
                                                     <span
                                                         className="text-sm sm:text-base font-black text-zinc-900 tracking-tight">
-                            {formatCurrency(payment.amount, currency)}
-                          </span>
+                                                        {formatCurrency(payment.amount, currency)}
+                                                    </span>
                                                 </div>
                                             </div>
 
@@ -1065,11 +1065,11 @@ export function GenericExpenseList({
                                                                 className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
                                                                 <div className="flex items-center gap-1.5">
                                                                     <ImageIcon
-                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                                     <span
                                                                         className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                    Comprobante
-                                  </span>
+                                                                        Comprobante
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                             <div className="p-3">
@@ -1087,7 +1087,7 @@ export function GenericExpenseList({
                                                                     />
                                                                     <div
                                                                         className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
-                                                                        <ExternalLink className="w-3.5 h-3.5"/>
+                                                                        <ExternalLink className="w-3.5 h-3.5" />
                                                                         <span>Ver</span>
                                                                     </div>
                                                                 </div>
@@ -1102,11 +1102,11 @@ export function GenericExpenseList({
                                                                 className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
                                                                 <div className="flex items-center gap-1.5">
                                                                     <FileText
-                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                                     <span
                                                                         className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                                    Notas
-                                  </span>
+                                                                        Notas
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                             <div className="p-3">
@@ -1123,28 +1123,28 @@ export function GenericExpenseList({
                                             <div
                                                 className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
                                                 <div className="flex items-center space-x-2 flex-wrap">
-                                                    <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                    <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                                     <span>
-                            Fecha del pago: <strong className="font-semibold text-zinc-700">
-                              {formatHumanDate(eventInfo.dateObj, {includeTime: Boolean(payment.payment_time)})}
-                            </strong>
-                          </span>
+                                                        Fecha del pago: <strong className="font-semibold text-zinc-700">
+                                                            {formatHumanDate(eventInfo.dateObj, { includeTime: Boolean(payment.payment_time) })}
+                                                        </strong>
+                                                    </span>
                                                 </div>
 
                                                 <div className="flex items-center space-x-2 flex-wrap">
-                                                    <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                    <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                                     <span>
-                            Registrado el {formatFullDateTime(payment.created_at)}
-                          </span>
+                                                        Registrado el {formatFullDateTime(payment.created_at)}
+                                                    </span>
                                                 </div>
 
                                                 {payment.updated_at && payment.updated_at !== payment.created_at && (
                                                     <div className="flex items-center space-x-2 flex-wrap">
-                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                                                         <span>
-                              Última modificación por <strong
-                                                            className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(payment.updated_at)}
-                            </span>
+                                                            Última modificación por <strong
+                                                                className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(payment.updated_at)}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
@@ -1166,21 +1166,21 @@ export function GenericExpenseList({
                             onClick={() => setExtraPages((prev) => prev + 1)}
                             className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-zinc-50 active:scale-[0.98] border border-zinc-200/90 hover:border-zinc-300 text-zinc-900 rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
                         >
-                            <ChevronDown className="w-4 h-4 text-emerald-600"/>
+                            <ChevronDown className="w-4 h-4 text-emerald-600" />
                             <span>
-                Cargar más ({Math.min(pageSize, remainingCount)} de {remainingCount} restantes)
-              </span>
+                                Cargar más ({Math.min(pageSize, remainingCount)} de {remainingCount} restantes)
+                            </span>
                         </button>
                     ) : (
                         <div className="text-center py-4">
-              <span className="text-xs font-medium text-zinc-400">
-                No hay más gastos
-              </span>
+                            <span className="text-xs font-medium text-zinc-400">
+                                No hay más gastos
+                            </span>
                         </div>
                     )}
                     <span className="text-[11px] font-medium text-zinc-400">
-            Mostrando {visibleTransactions.length} de {transactions.length} movimientos
-          </span>
+                        Mostrando {visibleTransactions.length} de {transactions.length} movimientos
+                    </span>
                 </div>
             )}
 
@@ -1242,7 +1242,7 @@ export function GenericExpenseList({
                                 onClick={() => setSelectedProofUrl(null)}
                                 className="p-1.5 text-zinc-400 hover:text-zinc-900 rounded-full"
                             >
-                                <X className="w-5 h-5"/>
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
                         <div

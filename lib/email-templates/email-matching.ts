@@ -321,17 +321,17 @@ function extractTemplateFields(
     parsedAmount: number | null;
 } {
     const fields: FieldConfig[] = [
-        {field: 'amount', label: 'Monto', pattern: template.amount_regex},
-        {field: 'merchant', label: 'Comercio / Destinatario', pattern: template.merchant_regex},
-        {field: 'date', label: 'Fecha', pattern: template.date_regex},
-        {field: 'time', label: 'Hora', pattern: template.time_regex},
-        {field: 'currency', label: 'Moneda', pattern: template.currency_regex},
-        {field: 'source_account', label: 'Cuenta de origen', pattern: template.source_account_regex},
+        { field: 'amount', label: 'Monto', pattern: template.amount_regex },
+        { field: 'merchant', label: 'Comercio / Destinatario', pattern: template.merchant_regex },
+        { field: 'date', label: 'Fecha', pattern: template.date_regex },
+        { field: 'time', label: 'Hora', pattern: template.time_regex },
+        { field: 'currency', label: 'Moneda', pattern: template.currency_regex },
+        { field: 'source_account', label: 'Cuenta de origen', pattern: template.source_account_regex },
     ];
 
     const extracted = {} as Record<ExtractedField['field'], RegexMatchResult>;
 
-    for (const {field, label, pattern} of fields) {
+    for (const { field, label, pattern } of fields) {
         extracted[field] = extractWithCaptureGroup(body, pattern, label);
     }
 
@@ -424,13 +424,13 @@ function getEvaluationWarnings(template: CatalogTemplate, fields: ReturnType<typ
         pattern: string | null;
         label: string;
     }> = [
-        {result: fields.merchantRes, pattern: template.merchant_regex, label: 'Comercio'},
-        {result: fields.dateRes, pattern: template.date_regex, label: 'Fecha'},
-        {result: fields.timeRes, pattern: template.time_regex, label: 'Hora'},
-        {result: fields.accountRes, pattern: template.source_account_regex, label: 'Cuenta origen'},
-    ];
+            { result: fields.merchantRes, pattern: template.merchant_regex, label: 'Comercio' },
+            { result: fields.dateRes, pattern: template.date_regex, label: 'Fecha' },
+            { result: fields.timeRes, pattern: template.time_regex, label: 'Hora' },
+            { result: fields.accountRes, pattern: template.source_account_regex, label: 'Cuenta origen' },
+        ];
 
-    for (const {result, pattern, label} of optionalFields) {
+    for (const { result, pattern, label } of optionalFields) {
         if (pattern && !result.success) {
             warnings.push(`${label}: ${result.reason || 'Sin captura'}`);
         } else if (result.success && !result.hasCaptureGroup) {
@@ -453,7 +453,7 @@ function buildEntityLookup(
     const entityMap = new Map<string, { entity: CatalogEntity | null; templates: CatalogTemplate[] }>();
 
     for (const entity of entities) {
-        entityMap.set(entity.id, {entity, templates: []});
+        entityMap.set(entity.id, { entity, templates: [] });
     }
 
     const orphanTemplates = new Set<string>();
@@ -467,7 +467,7 @@ function buildEntityLookup(
         entityMap.get(template.entity_id)!.templates.push(template);
     }
 
-    return {entityMap, orphanTemplates};
+    return { entityMap, orphanTemplates };
 }
 
 function groupTemplatesBySubject(
@@ -502,11 +502,11 @@ function evaluateMatchPattern(
         const regex = new RegExp(pattern, 'i');
 
         if (regex.test(body)) {
-            return {matched: true, matchedOn: 'body'};
+            return { matched: true, matchedOn: 'body' };
         }
 
         if (regex.test(subject)) {
-            return {matched: true, matchedOn: 'subject'};
+            return { matched: true, matchedOn: 'subject' };
         }
 
         return {
@@ -529,7 +529,7 @@ function evaluateTemplateAgainstEmailContext(
     context: ReturnType<typeof buildEmailContext>,
     entities: CatalogEntity[],
 ): SingleTemplateEvaluation {
-    const {cleanBody} = context;
+    const { cleanBody } = context;
     const sender = (email.sender || '').trim();
     const subject = (email.subject || '').trim();
 
@@ -565,7 +565,7 @@ function evaluateTemplateAgainstEmailContext(
         l1Reason = `La entidad "${entityName}" no tiene patrones de correo configurados (entity_email_patterns); no puede coincidir ningún correo.`;
         criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
     } else {
-        const {bodyHeadLines, forwardedSender} = context;
+        const { bodyHeadLines, forwardedSender } = context;
         const entityMatch = matchEmailEntityPatterns(entityPatterns, sender, bodyHeadLines, forwardedSender);
 
         level1Passed = entityMatch.matched;
@@ -595,7 +595,7 @@ function evaluateTemplateAgainstEmailContext(
             }
         } catch (err: unknown) {
             l2Reason = `Error en patrón de asunto /${sanitizedSubject}/: ${err instanceof Error ? err.message : String(err)
-            }`;
+                }`;
             criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
         }
     } else {
@@ -726,7 +726,7 @@ export function evaluateTemplateAgainstEmail(
     const context = buildEmailContext(email.body || email.plainBody || email.snippet || '');
     return evaluateTemplateAgainstEmailContext(
         template,
-        {sender: email.sender || '', subject: email.subject || ''},
+        { sender: email.sender || '', subject: email.subject || '' },
         context,
         entities,
     );
@@ -745,13 +745,13 @@ export function diagnoseEmailMatching(
         forwardedSender,
         forwardedSubject: contextForwardedSubject
     } = buildEmailContext(rawOrCleanBody);
-    const {entityMap, orphanTemplates} = buildEntityLookup(entities, templates);
+    const { entityMap, orphanTemplates } = buildEntityLookup(entities, templates);
 
     const passedEntities: Level1EntityReport[] = [];
     const discardedEntities: Level1EntityReport[] = [];
     let l1DiscardedTemplatesCount = 0;
 
-    for (const [entityId, {entity, templates: entityTemplates}] of entityMap.entries()) {
+    for (const [entityId, { entity, templates: entityTemplates }] of entityMap.entries()) {
         if (entityTemplates.length === 0) continue;
 
         const entityPatterns: Array<string | null | undefined> = [
@@ -993,7 +993,7 @@ export function diagnoseEmailMatching(
     const templateReports: DiagnosisTemplateReport[] = templates.map((template) => {
         const evaluation = evaluateTemplateAgainstEmailContext(
             template,
-            {sender, subject},
+            { sender, subject },
             {
                 cleanBody,
                 bodyHeadLines,
@@ -1144,7 +1144,7 @@ export function diagnoseEmailMatching(
         matched: Boolean(winner?.fields.amount.success),
         level1: {
             passedEntities,
-            matchingEntities: passedEntities.map(({entityId, entityName}) => ({
+            matchingEntities: passedEntities.map(({ entityId, entityName }) => ({
                 id: entityId,
                 name: entityName,
             })),
@@ -1177,38 +1177,38 @@ function matchSubjectOrBody(
     context: ReturnType<typeof buildEmailContext>,
 ): { matched: boolean; matchedOn?: 'subject' | 'body' } {
     const cleanPattern = sanitizeRegexPattern(pattern);
-    if (!cleanPattern) return {matched: true};
+    if (!cleanPattern) return { matched: true };
 
     try {
         const regex = new RegExp(cleanPattern, 'i');
 
         if (regex.test(subject)) {
-            return {matched: true, matchedOn: 'subject'};
+            return { matched: true, matchedOn: 'subject' };
         }
 
         const strippedSubject = stripSubjectPrefixes(subject);
         if (strippedSubject && strippedSubject !== subject && regex.test(strippedSubject)) {
-            return {matched: true, matchedOn: 'subject'};
+            return { matched: true, matchedOn: 'subject' };
         }
 
-        if (!context.cleanBody) return {matched: false};
+        if (!context.cleanBody) return { matched: false };
 
         if (context.forwardedSubject && regex.test(context.forwardedSubject)) {
-            return {matched: true, matchedOn: 'subject'};
+            return { matched: true, matchedOn: 'subject' };
         }
 
         if (regex.test(context.cleanBody)) {
-            return {matched: true, matchedOn: 'body'};
+            return { matched: true, matchedOn: 'body' };
         }
 
         const multilineRegex = new RegExp(cleanPattern, 'im');
         if (multilineRegex.test(context.cleanBody)) {
-            return {matched: true, matchedOn: 'body'};
+            return { matched: true, matchedOn: 'body' };
         }
 
-        return {matched: false};
+        return { matched: false };
     } catch {
-        return {matched: false};
+        return { matched: false };
     }
 }
 
@@ -1250,7 +1250,7 @@ export function createProductionEmailMatcher(
     templates: CatalogTemplate[],
     entities: CatalogEntity[] = [],
 ): ProductionEmailMatcher {
-    const {entityMap} = buildEntityLookup(entities, templates);
+    const { entityMap } = buildEntityLookup(entities, templates);
     const groups: ProductionEmailMatcher['groups'] = [];
 
     for (const [entityId, entityData] of entityMap.entries()) {
@@ -1278,7 +1278,7 @@ export function createProductionEmailMatcher(
         });
     }
 
-    return {groups};
+    return { groups };
 }
 
 export function matchEmailForProduction(
@@ -1290,7 +1290,7 @@ export function matchEmailForProduction(
     const context = buildEmailContext(rawBody || '');
     const normalizedSender = (sender || '').trim();
     const normalizedSubject = (subject || '').trim();
-    const {cleanBody, bodyHeadLines, forwardedSender, forwardedSubject} = context;
+    const { cleanBody, bodyHeadLines, forwardedSender, forwardedSubject } = context;
 
     for (const group of matcher.groups) {
         if (!group.entityPatterns.length) continue;

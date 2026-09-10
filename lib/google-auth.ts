@@ -30,7 +30,7 @@ export async function verifyGoogleToken(token: string): Promise<TokenVerificatio
         // 1. Consultar tokeninfo para comprobar validez de la sesión y scopes otorgados
         const infoRes = await fetch(
             `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`,
-            {cache: 'no-store'}
+            { cache: 'no-store' }
         );
 
         if (!infoRes.ok) {
@@ -57,7 +57,7 @@ export async function verifyGoogleToken(token: string): Promise<TokenVerificatio
 
         try {
             const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
-                headers: {Authorization: `Bearer ${token}`},
+                headers: { Authorization: `Bearer ${token}` },
                 cache: 'no-store',
             });
 

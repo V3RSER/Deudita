@@ -132,24 +132,24 @@ const EXTRACTION_REGEX_FIELDS: Array<{
     label: string;
     requiresCapture: boolean;
 }> = [
-    {key: 'amount_regex', label: 'Monto', requiresCapture: true},
-    {key: 'merchant_regex', label: 'Comercio', requiresCapture: true},
-    {key: 'date_regex', label: 'Fecha', requiresCapture: true},
-    {key: 'time_regex', label: 'Hora', requiresCapture: true},
-    {key: 'currency_regex', label: 'Moneda', requiresCapture: true},
-    {
-        key: 'source_account_regex',
-        label: 'Cuenta de origen',
-        requiresCapture: true,
-    },
-    {key: 'subject_pattern', label: 'Patrón de Asunto', requiresCapture: false},
-    {key: 'match_pattern', label: 'Patrón de Desempate', requiresCapture: false},
-    {
-        key: 'entity_email_pattern',
-        label: 'Patrón de Correo de Entidad',
-        requiresCapture: false,
-    },
-];
+        { key: 'amount_regex', label: 'Monto', requiresCapture: true },
+        { key: 'merchant_regex', label: 'Comercio', requiresCapture: true },
+        { key: 'date_regex', label: 'Fecha', requiresCapture: true },
+        { key: 'time_regex', label: 'Hora', requiresCapture: true },
+        { key: 'currency_regex', label: 'Moneda', requiresCapture: true },
+        {
+            key: 'source_account_regex',
+            label: 'Cuenta de origen',
+            requiresCapture: true,
+        },
+        { key: 'subject_pattern', label: 'Patrón de Asunto', requiresCapture: false },
+        { key: 'match_pattern', label: 'Patrón de Desempate', requiresCapture: false },
+        {
+            key: 'entity_email_pattern',
+            label: 'Patrón de Correo de Entidad',
+            requiresCapture: false,
+        },
+    ];
 
 function getNonEmptyString(value: string | null | undefined): string {
     return typeof value === 'string' ? value.trim() : '';
@@ -267,7 +267,7 @@ function parseJsonObject(rawText: string): {
                 error: 'La respuesta JSON de la IA no contiene un objeto en el nivel superior.',
             };
         }
-        return {success: true, value};
+        return { success: true, value };
     } catch (err: unknown) {
         try {
             const repaired = repairUnescapedJsonBackslashes(jsonSubstring);
@@ -278,7 +278,7 @@ function parseJsonObject(rawText: string): {
                     error: 'La respuesta JSON de la IA no contiene un objeto en el nivel superior.',
                 };
             }
-            return {success: true, value};
+            return { success: true, value };
         } catch {
             const message = err instanceof Error ? err.message : 'JSON inválido';
             return {
@@ -652,31 +652,31 @@ export function matchEmailEntityPatterns(
         try {
             const regex = new RegExp(pattern, 'i');
             if (normalizedSender && regex.test(normalizedSender)) {
-                return {matched: true, matchedPattern: pattern, matchedOn: 'sender'};
+                return { matched: true, matchedPattern: pattern, matchedOn: 'sender' };
             }
             if (forwardedSender && regex.test(forwardedSender)) {
-                return {matched: true, matchedPattern: pattern, matchedOn: 'body'};
+                return { matched: true, matchedPattern: pattern, matchedOn: 'body' };
             }
             if (bodyHeadLines && regex.test(bodyHeadLines)) {
-                return {matched: true, matchedPattern: pattern, matchedOn: 'body'};
+                return { matched: true, matchedPattern: pattern, matchedOn: 'body' };
             }
         } catch {
             // Invalid persisted patterns must not prevent other patterns from matching.
         }
     }
 
-    return {matched: false};
+    return { matched: false };
 }
 
 export function resolveEmailEntity({
-                                       entities,
-                                       entityId,
-                                       entityLabel,
-                                       requestedPattern,
-                                       sender,
-                                       body,
-                                       allowPatternFallback = true,
-                                   }: {
+    entities,
+    entityId,
+    entityLabel,
+    requestedPattern,
+    sender,
+    body,
+    allowPatternFallback = true,
+}: {
     entities: EmailEntityPatternSource[];
     entityId?: string | null;
     entityLabel?: string | null;
@@ -712,7 +712,7 @@ export function resolveEmailEntity({
                     context.forwardedSender,
                 ),
             }))
-            .find(({match}) => match.matched);
+            .find(({ match }) => match.matched);
 
         if (patternMatch) {
             entity = patternMatch.entity;
@@ -737,7 +737,7 @@ export function resolveEmailEntity({
             ? inferEntityEmailPattern(sender, body)
             : null;
 
-    return {entity, effectivePattern, senderAlreadyCovered, matchedBy, matchedPattern};
+    return { entity, effectivePattern, senderAlreadyCovered, matchedBy, matchedPattern };
 }
 
 
@@ -1001,7 +1001,7 @@ export function parseAITemplateResponse(
 
     const validationErrors: string[] = [];
 
-    for (const {key, label, requiresCapture} of EXTRACTION_REGEX_FIELDS) {
+    for (const { key, label, requiresCapture } of EXTRACTION_REGEX_FIELDS) {
         const rawPattern = parsed[key];
         const pattern = normalizeRegexOrNull(rawPattern);
 

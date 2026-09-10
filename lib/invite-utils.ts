@@ -1,4 +1,4 @@
-import {SupabaseClient, User} from '@supabase/supabase-js';
+import { SupabaseClient, User } from '@supabase/supabase-js';
 
 export interface ClaimResult {
     success: boolean;
@@ -29,7 +29,7 @@ export async function claimAllTempProfilesForUser(
     // 1. Find all temporary profiles matching the user's email
     if (userEmail) {
         try {
-            const {data: tempProfilesByEmail} = await db
+            const { data: tempProfilesByEmail } = await db
                 .from('profiles')
                 .select('id, is_temp, email')
                 .ilike('email', userEmail);
@@ -47,7 +47,7 @@ export async function claimAllTempProfilesForUser(
 
         // 2. Find any invites with matching email and an invitee_profile_id
         try {
-            const {data: invitesByEmail} = await db
+            const { data: invitesByEmail } = await db
                 .from('group_invites')
                 .select('invitee_profile_id')
                 .ilike('email', userEmail)
@@ -83,14 +83,14 @@ export async function claimAllTempProfilesForUser(
         // B) Comprehensive manual migration fallback
         try {
             // Group Members: reassign membership to user.id if not already member, then delete old
-            const {data: tempMemberships} = await db
+            const { data: tempMemberships } = await db
                 .from('group_members')
                 .select('group_id')
                 .eq('user_id', tempId);
 
             if (tempMemberships && tempMemberships.length > 0) {
                 for (const tm of tempMemberships) {
-                    const {data: realMembership} = await db
+                    const { data: realMembership } = await db
                         .from('group_members')
                         .select('id')
                         .eq('group_id', tm.group_id)
@@ -98,9 +98,9 @@ export async function claimAllTempProfilesForUser(
                         .maybeSingle();
 
                     if (!realMembership) {
-                        const {error: updMemErr} = await db
+                        const { error: updMemErr } = await db
                             .from('group_members')
-                            .update({user_id: user.id})
+                            .update({ user_id: user.id })
                             .eq('user_id', tempId)
                             .eq('group_id', tm.group_id);
 
@@ -117,27 +117,27 @@ export async function claimAllTempProfilesForUser(
 
             // Managed users: reassign or remove duplicate sponsorship links
             try {
-                await db.from('managed_users').update({sponsor_id: user.id}).eq('sponsor_id', tempId);
-                await db.from('managed_users').update({managed_user_id: user.id}).eq('managed_user_id', tempId);
+                await db.from('managed_users').update({ sponsor_id: user.id }).eq('sponsor_id', tempId);
+                await db.from('managed_users').update({ managed_user_id: user.id }).eq('managed_user_id', tempId);
             } catch (muErr) {
                 console.warn('[claimAllTempProfilesForUser] Managed users migration warning:', muErr);
             }
 
             // Reassign group ownership, invitations, expenses, splits, payments, notifications
-            await db.from('group_members').update({invited_by: user.id}).eq('invited_by', tempId);
-            await db.from('groups').update({owner_id: user.id}).eq('owner_id', tempId);
-            await db.from('expenses').update({paid_by: user.id}).eq('paid_by', tempId);
-            await db.from('expenses').update({created_by: user.id}).eq('created_by', tempId);
+            await db.from('group_members').update({ invited_by: user.id }).eq('invited_by', tempId);
+            await db.from('groups').update({ owner_id: user.id }).eq('owner_id', tempId);
+            await db.from('expenses').update({ paid_by: user.id }).eq('paid_by', tempId);
+            await db.from('expenses').update({ created_by: user.id }).eq('created_by', tempId);
 
             // Expense splits: migrate splits to real user or remove duplicates
-            const {data: tempSplits} = await db
+            const { data: tempSplits } = await db
                 .from('expense_splits')
                 .select('id, expense_id, amount_owed')
                 .eq('user_id', tempId);
 
             if (tempSplits && tempSplits.length > 0) {
                 for (const split of tempSplits) {
-                    const {data: realSplit} = await db
+                    const { data: realSplit } = await db
                         .from('expense_splits')
                         .select('id')
                         .eq('expense_id', split.expense_id)
@@ -145,9 +145,9 @@ export async function claimAllTempProfilesForUser(
                         .maybeSingle();
 
                     if (!realSplit) {
-                        const {error: updSplitErr} = await db
+                        const { error: updSplitErr } = await db
                             .from('expense_splits')
-                            .update({user_id: user.id})
+                            .update({ user_id: user.id })
                             .eq('id', split.id);
 
                         if (updSplitErr) {
@@ -161,11 +161,11 @@ export async function claimAllTempProfilesForUser(
             }
             await db.from('expense_splits').delete().eq('user_id', tempId);
 
-            await db.from('payments').update({paid_by: user.id}).eq('paid_by', tempId);
-            await db.from('payments').update({paid_to: user.id}).eq('paid_to', tempId);
-            await db.from('notifications').update({user_id: user.id}).eq('user_id', tempId);
-            await db.from('group_invites').update({invitee_profile_id: user.id}).eq('invitee_profile_id', tempId);
-            await db.from('group_invites').update({invited_by: user.id}).eq('invited_by', tempId);
+            await db.from('payments').update({ paid_by: user.id }).eq('paid_by', tempId);
+            await db.from('payments').update({ paid_to: user.id }).eq('paid_to', tempId);
+            await db.from('notifications').update({ user_id: user.id }).eq('user_id', tempId);
+            await db.from('group_invites').update({ invitee_profile_id: user.id }).eq('invitee_profile_id', tempId);
+            await db.from('group_invites').update({ invited_by: user.id }).eq('invited_by', tempId);
 
             // C) Delete temporary profile from profiles table
             await db.from('profiles').delete().eq('id', tempId);
@@ -216,7 +216,7 @@ export async function claimAndJoinGroupInvite(
                 avatar_url: avatarUrl,
                 is_temp: false,
             },
-            {onConflict: 'id'}
+            { onConflict: 'id' }
         );
     } catch (profErr) {
         console.warn('[claimAndJoinGroupInvite] Warning upserting profile:', profErr);
@@ -224,7 +224,7 @@ export async function claimAndJoinGroupInvite(
 
     // 2. Try atomic database RPC first (runs with SECURITY DEFINER to bypass RLS)
     try {
-        const {data: rpcData, error: rpcErr} = await db.rpc('claim_and_join_group', {
+        const { data: rpcData, error: rpcErr } = await db.rpc('claim_and_join_group', {
             p_token: cleanToken,
             p_user_id: user.id,
         });
@@ -252,7 +252,7 @@ export async function claimAndJoinGroupInvite(
     let invite: any = null;
 
     // By token
-    const {data: inviteByToken} = await db
+    const { data: inviteByToken } = await db
         .from('group_invites')
         .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
         .eq('token', cleanToken)
@@ -262,7 +262,7 @@ export async function claimAndJoinGroupInvite(
         invite = inviteByToken;
     } else {
         // By id
-        const {data: inviteById} = await db
+        const { data: inviteById } = await db
             .from('group_invites')
             .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
             .eq('id', cleanToken)
@@ -272,7 +272,7 @@ export async function claimAndJoinGroupInvite(
             invite = inviteById;
         } else if (userEmailLower) {
             // By email match
-            const {data: inviteByEmail} = await db
+            const { data: inviteByEmail } = await db
                 .from('group_invites')
                 .select('id, group_id, email, status, token, invited_by, invitee_profile_id, created_at')
                 .ilike('email', userEmailLower)
@@ -299,7 +299,7 @@ export async function claimAndJoinGroupInvite(
 
     // If still not found, check if the token itself is a valid group_id
     if (!targetGroupId) {
-        const {data: directGroup} = await db
+        const { data: directGroup } = await db
             .from('groups')
             .select('id, name')
             .eq('id', cleanToken)
@@ -316,7 +316,7 @@ export async function claimAndJoinGroupInvite(
 
     if (!targetGroupId) {
         // Check if user is already a member of any group matching
-        const {data: existingMembership} = await db
+        const { data: existingMembership } = await db
             .from('group_members')
             .select('group_id')
             .eq('user_id', user.id)
@@ -334,7 +334,7 @@ export async function claimAndJoinGroupInvite(
     }
 
     // 5. GUARANTEE that user is present in group_members for targetGroupId
-    const {data: alreadyMember} = await db
+    const { data: alreadyMember } = await db
         .from('group_members')
         .select('group_id')
         .eq('group_id', targetGroupId)
@@ -377,7 +377,7 @@ export async function claimAndJoinGroupInvite(
     }
 
     // 7. Get group details for response and notification
-    const {data: groupDetails} = await db
+    const { data: groupDetails } = await db
         .from('groups')
         .select('name')
         .eq('id', targetGroupId)
@@ -393,11 +393,11 @@ export async function claimAndJoinGroupInvite(
             title: '¡Te has unido al grupo!',
             message: `Te has unido exitosamente al grupo "${groupName}".`,
             link: `/groups/${targetGroupId}`,
-            data: {group_id: targetGroupId, invite_id: invite?.id},
+            data: { group_id: targetGroupId, invite_id: invite?.id },
             is_read: false,
         });
 
-        const {data: userProfile} = await db
+        const { data: userProfile } = await db
             .from('profiles')
             .select('full_name')
             .eq('id', user.id)
@@ -405,7 +405,7 @@ export async function claimAndJoinGroupInvite(
 
         const joinerName = userProfile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Un nuevo integrante';
 
-        const {data: otherMembers} = await db
+        const { data: otherMembers } = await db
             .from('group_members')
             .select('user_id')
             .eq('group_id', targetGroupId)
@@ -418,7 +418,7 @@ export async function claimAndJoinGroupInvite(
                 title: 'Nuevo integrante en el grupo',
                 message: `${joinerName} se ha unido al grupo "${groupName}".`,
                 link: `/groups/${targetGroupId}`,
-                data: {group_id: targetGroupId, joined_user_id: user.id},
+                data: { group_id: targetGroupId, joined_user_id: user.id },
                 is_read: false,
             }));
             await db.from('notifications').insert(memberNotifs);

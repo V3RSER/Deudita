@@ -1,22 +1,22 @@
 'use client';
 
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import {useRouter} from 'next/navigation';
-import {useExpense} from '@/lib/expense-context';
-import {GroupCategory} from '@/lib/types';
-import {DEFAULT_GROUP_IMAGE, getGroupCategoryConfig, GROUP_CATEGORY_OPTIONS} from '@/lib/group-utils';
-import {AlertCircle, Camera, FileText, ListChecks, Loader2, Users, X} from 'lucide-react';
-import {CustomSelect} from '@/components/ui/CustomSelect';
+import { useRouter } from 'next/navigation';
+import { useExpense } from '@/lib/expense-context';
+import { GroupCategory } from '@/lib/types';
+import { DEFAULT_GROUP_IMAGE, getGroupCategoryConfig, GROUP_CATEGORY_OPTIONS } from '@/lib/group-utils';
+import { AlertCircle, Camera, FileText, ListChecks, Loader2, Users, X } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
+export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
     const router = useRouter();
-    const {createGroup, profiles, currentProfile, addFriend, isMutating} = useExpense();
+    const { createGroup, profiles, currentProfile, addFriend, isMutating } = useExpense();
 
     const [name, setName] = useState('');
     const [category, setCategory] = useState<GroupCategory>('friends');
@@ -162,8 +162,8 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                         Nuevo grupo
                     </h2>
                     <button onClick={onClose}
-                            className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
-                        <X className="w-5 h-5"/>
+                        className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -171,7 +171,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                 {errorMessage && (
                     <div
                         className="bg-rose-50 px-6 py-3 border-b border-rose-100 flex items-center text-sm font-medium text-rose-700 shrink-0">
-                        <AlertCircle className="w-4 h-4 mr-2 shrink-0"/> {errorMessage}
+                        <AlertCircle className="w-4 h-4 mr-2 shrink-0" /> {errorMessage}
                     </div>
                 )}
 
@@ -182,7 +182,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                                <FileText className="w-4 h-4 mr-2 text-emerald-600"/>
+                                <FileText className="w-4 h-4 mr-2 text-emerald-600" />
                                 Información general
                             </h3>
                         </div>
@@ -192,9 +192,9 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                 className={`w-12 h-12 rounded-full ${groupImageUrl ? '' : selectedCatConfig.bgColor} flex items-center justify-center shrink-0 border border-black/5 overflow-hidden relative`}>
                                 {groupImageUrl ? (
                                     <Image src={groupImageUrl} alt="Group" fill className="object-cover" unoptimized
-                                           referrerPolicy="no-referrer"/>
+                                        referrerPolicy="no-referrer" />
                                 ) : (
-                                    <CategoryIcon className={`w-6 h-6 ${selectedCatConfig.textColor}`}/>
+                                    <CategoryIcon className={`w-6 h-6 ${selectedCatConfig.textColor}`} />
                                 )}
                             </div>
                             <div className="flex-1 flex flex-col gap-2">
@@ -214,7 +214,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                                <ListChecks className="w-4 h-4 mr-2 text-emerald-600"/>
+                                <ListChecks className="w-4 h-4 mr-2 text-emerald-600" />
                                 Detalles
                             </h3>
                         </div>
@@ -235,7 +235,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                                 icon: (
                                                     <div
                                                         className={`w-5 h-5 rounded-full ${cat.bgColor} ${cat.textColor} flex items-center justify-center shrink-0`}>
-                                                        <IconComponent className="w-3 h-3"/>
+                                                        <IconComponent className="w-3 h-3" />
                                                     </div>
                                                 ),
                                             };
@@ -252,13 +252,13 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                         value={selectedCurrency}
                                         onChange={val => setSelectedCurrency(val)}
                                         options={[
-                                            {value: 'COP', label: 'COP ($)'},
-                                            {value: 'MXN', label: 'MXN ($)'},
-                                            {value: 'CLP', label: 'CLP ($)'},
-                                            {value: 'ARS', label: 'ARS ($)'},
-                                            {value: 'USD', label: 'USD ($)'},
-                                            {value: 'EUR', label: 'EUR (€)'},
-                                            {value: 'PEN', label: 'PEN (S/)'},
+                                            { value: 'COP', label: 'COP ($)' },
+                                            { value: 'MXN', label: 'MXN ($)' },
+                                            { value: 'CLP', label: 'CLP ($)' },
+                                            { value: 'ARS', label: 'ARS ($)' },
+                                            { value: 'USD', label: 'USD ($)' },
+                                            { value: 'EUR', label: 'EUR (€)' },
+                                            { value: 'PEN', label: 'PEN (S/)' },
                                         ]}
                                         size="sm"
                                     />
@@ -272,19 +272,19 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                     className={`w-full flex items-center justify-center space-x-1.5 py-2 text-xs font-bold transition-all ${groupImageUrl
                                         ? 'border border-solid bg-emerald-50 border-emerald-200 text-emerald-700 rounded-xl shadow-sm'
                                         : 'border border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-300 hover:text-emerald-600 bg-zinc-50/50 hover:bg-emerald-50/50'
-                                    }`}
+                                        }`}
                                 >
                                     {isUploading ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                     ) : groupImageUrl ? (
-                                        <Camera className="w-3.5 h-3.5"/>
+                                        <Camera className="w-3.5 h-3.5" />
                                     ) : (
-                                        <Camera className="w-3.5 h-3.5"/>
+                                        <Camera className="w-3.5 h-3.5" />
                                     )}
                                     <span>{groupImageUrl ? 'Cambiar foto de grupo' : 'Añadir foto de grupo (opcional)'}</span>
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*"
-                                       className="hidden"/>
+                                    className="hidden" />
                             </div>
                         </div>
                     </div>
@@ -293,13 +293,13 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center">
-                                <Users className="w-4 h-4 mr-2 text-emerald-600"/>
+                                <Users className="w-4 h-4 mr-2 text-emerald-600" />
                                 Integrantes
                             </h3>
                             <span
                                 className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                {selectedMemberIds.length} amigo(s)
-              </span>
+                                {selectedMemberIds.length} amigo(s)
+                            </span>
                         </div>
                         <div
                             className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden p-3 space-y-3">
@@ -316,7 +316,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                     disabled={isAddingNewFriend || !newFriendName.trim()}
                                     className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 rounded-lg text-xs font-bold disabled:opacity-50 transition-colors shrink-0 flex items-center justify-center min-w-[70px]"
                                 >
-                                    {isAddingNewFriend ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : 'Añadir'}
+                                    {isAddingNewFriend ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Añadir'}
                                 </button>
                             </form>
 
@@ -333,8 +333,8 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                             >
                                                 {p.avatar_url ? (
                                                     <Image src={p.avatar_url} alt="avatar" width={24} height={24}
-                                                           className={`rounded-full shrink-0 w-6 h-6 object-cover border transition-all ${isSelected ? 'border-zinc-300' : 'border-transparent'}`}
-                                                           unoptimized/>
+                                                        className={`rounded-full shrink-0 w-6 h-6 object-cover border transition-all ${isSelected ? 'border-zinc-300' : 'border-transparent'}`}
+                                                        unoptimized />
                                                 ) : (
                                                     <div
                                                         className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center border transition-all ${isSelected ? 'bg-zinc-100 border-zinc-300 text-zinc-900' : 'bg-zinc-200 border-transparent text-zinc-500'}`}>
@@ -344,8 +344,8 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                                                 )}
                                                 <span
                                                     className={`text-[11px] font-bold truncate ${isSelected ? 'text-zinc-900' : 'text-zinc-500'}`}>
-                          {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
-                        </span>
+                                                    {p.full_name?.split(' ')[0] || (p.email || 'U').split('@')[0]}
+                                                </span>
                                             </button>
                                         );
                                     })}
@@ -362,7 +362,7 @@ export function CreateGroupModal({isOpen, onClose}: CreateGroupModalProps) {
                         disabled={isSubmitting || isMutating || !name.trim()}
                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
                     >
-                        {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+                        {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         <span>{(isSubmitting || isMutating) ? 'Creando grupo...' : 'Crear grupo'}</span>
                     </button>
                 </div>

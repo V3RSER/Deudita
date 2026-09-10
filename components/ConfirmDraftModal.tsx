@@ -1,13 +1,13 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import React, {useEffect, useMemo, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {ExpenseDraft, ExpenseSplit} from '@/lib/types';
-import {distributeAmountEqually, formatCurrency} from '@/lib/balance-utils';
-import {CheckCircle2, Loader2, MailCheck, Trash2, X,} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { ExpenseDraft, ExpenseSplit } from '@/lib/types';
+import { distributeAmountEqually, formatCurrency } from '@/lib/balance-utils';
+import { CheckCircle2, Loader2, MailCheck, Trash2, X, } from 'lucide-react';
 import Image from 'next/image';
-import {CustomSelect} from '@/components/ui/CustomSelect';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface ConfirmDraftModalProps {
     readonly isOpen: boolean;
@@ -16,10 +16,10 @@ interface ConfirmDraftModalProps {
 }
 
 export function ConfirmDraftModal({
-                                      isOpen,
-                                      onClose,
-                                      draft,
-                                  }: ConfirmDraftModalProps) {
+    isOpen,
+    onClose,
+    draft,
+}: ConfirmDraftModalProps) {
     const {
         currentProfile,
         userGroups,
@@ -211,7 +211,7 @@ export function ConfirmDraftModal({
                     <div className="flex items-center space-x-3.5">
                         <div
                             className="w-10 h-10 rounded-2xl bg-zinc-800 ring-1 ring-zinc-700 flex items-center justify-center text-zinc-100 font-bold">
-                            <MailCheck className="w-5 h-5 text-indigo-400"/>
+                            <MailCheck className="w-5 h-5 text-indigo-400" />
                         </div>
                         <div>
                             <h2 className="text-lg font-bold tracking-tight text-zinc-50">
@@ -229,7 +229,7 @@ export function ConfirmDraftModal({
                         aria-label="Cerrar modal"
                         className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
                     >
-                        <X className="w-5 h-5"/>
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -249,17 +249,17 @@ export function ConfirmDraftModal({
                                 {draft.source_account && (
                                     <span
                                         className="text-[10px] font-mono bg-white text-zinc-600 px-2 py-0.5 rounded-md border border-indigo-200">
-                    *{draft.source_account}
-                  </span>
+                                        *{draft.source_account}
+                                    </span>
                                 )}
                             </div>
                             <span className="text-xs font-extrabold text-indigo-700">
-                {draft.currency || 'COP'}{' '}
+                                {draft.currency || 'COP'}{' '}
                                 {formatCurrency(
                                     draft.detected_amount,
                                     draft.currency || 'COP',
                                 )}
-              </span>
+                            </span>
                         </div>
 
                         {draft.raw_snippet && (
@@ -326,9 +326,9 @@ export function ConfirmDraftModal({
                     </div>
 
                     <div className="space-y-1">
-            <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-              Asignar al Grupo <span className="text-rose-500">*</span>
-            </span>
+                        <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                            Asignar al Grupo <span className="text-rose-500">*</span>
+                        </span>
                         <CustomSelect
                             value={selectedGroupId}
                             onChange={setSelectedGroupId}
@@ -342,9 +342,9 @@ export function ConfirmDraftModal({
                     </div>
 
                     <div className="space-y-1">
-            <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-              ¿Quién pagó?
-            </span>
+                        <span className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                            ¿Quién pagó?
+                        </span>
                         <CustomSelect
                             value={paidBy}
                             onChange={setPaidBy}
@@ -374,22 +374,22 @@ export function ConfirmDraftModal({
 
                     <div
                         className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-xs text-zinc-600 flex items-center justify-between">
-            <span>
-              División entre{' '}
-                <strong className="text-zinc-900">
-                {selectedGroupMemberProfiles.length} integrantes
-              </strong>
-              :
-            </span>
+                        <span>
+                            División entre{' '}
+                            <strong className="text-zinc-900">
+                                {selectedGroupMemberProfiles.length} integrantes
+                            </strong>
+                            :
+                        </span>
                         <span className="font-bold text-zinc-900">
-              {formatCurrency(
-                  selectedGroupMemberProfiles.length > 0
-                      ? amount / selectedGroupMemberProfiles.length
-                      : 0,
-                  draft.currency || 'COP',
-              )}{' '}
+                            {formatCurrency(
+                                selectedGroupMemberProfiles.length > 0
+                                    ? amount / selectedGroupMemberProfiles.length
+                                    : 0,
+                                draft.currency || 'COP',
+                            )}{' '}
                             c/u
-            </span>
+                        </span>
                     </div>
 
                     <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
@@ -400,9 +400,9 @@ export function ConfirmDraftModal({
                             className="px-3.5 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
                         >
                             {isDiscarding ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                                <Trash2 className="w-3.5 h-3.5"/>
+                                <Trash2 className="w-3.5 h-3.5" />
                             )}
                             <span>Descartar</span>
                         </button>
@@ -421,13 +421,13 @@ export function ConfirmDraftModal({
                                 className="px-5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold shadow-xs transition flex items-center space-x-2 cursor-pointer disabled:opacity-50"
                             >
                                 {isSubmitting ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400"/>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                                 ) : (
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400"/>
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                                 )}
                                 <span>
-                  {isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}
-                </span>
+                                    {isSubmitting ? 'Confirmando...' : 'Confirmar Gasto'}
+                                </span>
                             </button>
                         </div>
                     </div>

@@ -1,13 +1,13 @@
 'use client';
 
-import React, {useState} from 'react';
-import {Building2, Check, Copy, ExternalLink, QrCode} from 'lucide-react';
+import React, { useState } from 'react';
+import { Building2, Check, Copy, ExternalLink, QrCode } from 'lucide-react';
 
 interface PaymentInstructionsViewProps {
     instructions: string;
 }
 
-export function PaymentInstructionsView({instructions}: PaymentInstructionsViewProps) {
+export function PaymentInstructionsView({ instructions }: PaymentInstructionsViewProps) {
     const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
     if (!instructions || instructions.trim().length === 0) return null;
@@ -49,7 +49,7 @@ export function PaymentInstructionsView({instructions}: PaymentInstructionsViewP
                     className="inline-flex items-center space-x-1.5 text-emerald-700 hover:text-emerald-800 underline font-bold bg-emerald-100/70 hover:bg-emerald-100 px-2.5 py-0.5 rounded-lg mx-1 transition-colors shadow-2xs"
                 >
                     <span>{matchText}</span>
-                    <ExternalLink className="w-3.5 h-3.5 shrink-0"/>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
             );
         } else {
@@ -63,21 +63,20 @@ export function PaymentInstructionsView({instructions}: PaymentInstructionsViewP
                         e.stopPropagation();
                         handleCopy(matchText);
                     }}
-                    className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs mx-1 transition-all active:scale-95 cursor-pointer shadow-2xs ${
-                        isCopied
+                    className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold text-xs mx-1 transition-all active:scale-95 cursor-pointer shadow-2xs ${isCopied
                             ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-500/20'
                             : 'bg-white border-zinc-200/90 text-zinc-900 hover:bg-zinc-50 hover:border-zinc-300'
-                    }`}
+                        }`}
                     title="Toca para copiar"
                 >
                     <span>{matchText}</span>
                     {isCopied ? (
                         <span className="flex items-center space-x-1 text-[10px] font-sans font-extrabold uppercase">
-              <Check className="w-3.5 h-3.5"/>
-              <span>Copiado</span>
-            </span>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Copiado</span>
+                        </span>
                     ) : (
-                        <Copy className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600"/>
+                        <Copy className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600" />
                     )}
                 </button>
             );
@@ -100,20 +99,20 @@ export function PaymentInstructionsView({instructions}: PaymentInstructionsViewP
                 <div className="flex items-center space-x-2">
                     <div
                         className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                        <Building2 className="w-4 h-4"/>
+                        <Building2 className="w-4 h-4" />
                     </div>
                     <div>
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900 block">
-              Datos para transferir
-            </span>
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900 block">
+                            Datos para transferir
+                        </span>
                         <span className="text-[10px] text-emerald-700/80 font-medium">
-              Toca los números para copiarlos al portapapeles
-            </span>
+                            Toca los números para copiarlos al portapapeles
+                        </span>
                     </div>
                 </div>
                 <div
                     className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                    <QrCode className="w-3 h-3"/>
+                    <QrCode className="w-3 h-3" />
                     <span>Cobro directo</span>
                 </div>
             </div>

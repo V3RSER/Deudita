@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useEffect, useRef, useState} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import {useExpense} from '@/lib/expense-context';
-import {Profile} from '@/lib/types';
-import {ConfirmModal} from '@/components/ConfirmModal';
+import { useExpense } from '@/lib/expense-context';
+import { Profile } from '@/lib/types';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import {
     AlertCircle,
     Check,
@@ -19,8 +19,8 @@ import {
     X,
 } from 'lucide-react';
 import Image from 'next/image';
-import {calculatePairwiseBalance} from '@/lib/group-utils';
-import {formatDisplayEmail, isTempEmail, isTempProfile} from '@/lib/utils';
+import { calculatePairwiseBalance } from '@/lib/group-utils';
+import { formatDisplayEmail, isTempEmail, isTempProfile } from '@/lib/utils';
 
 interface MemberDetailModalProps {
     isOpen: boolean;
@@ -31,12 +31,12 @@ interface MemberDetailModalProps {
 }
 
 export function MemberDetailModal({
-                                      isOpen,
-                                      onClose,
-                                      groupId,
-                                      context = 'group',
-                                      memberProfile,
-                                  }: MemberDetailModalProps) {
+    isOpen,
+    onClose,
+    groupId,
+    context = 'group',
+    memberProfile,
+}: MemberDetailModalProps) {
     const {
         currentProfile,
         userGroups,
@@ -156,7 +156,7 @@ export function MemberDetailModal({
 
             const res = await fetch(`/api/members/${memberProfile.id}`, {
                 method: 'PATCH',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: name.trim(),
                     email: email.trim() ? email.trim().toLowerCase() : undefined,
@@ -305,13 +305,13 @@ export function MemberDetailModal({
                             </h2>
                             {isTemp ? (
                                 <span className="inline-flex items-center text-[11px] font-medium text-amber-600">
-                  <Clock className="w-3 h-3 mr-1 shrink-0"/>
-                  Pendiente
-                </span>
+                                    <Clock className="w-3 h-3 mr-1 shrink-0" />
+                                    Pendiente
+                                </span>
                             ) : (
                                 <span className="text-[11px] text-zinc-500 truncate block">
-                  {formatDisplayEmail(memberProfile.email) || 'Miembro'}
-                </span>
+                                    {formatDisplayEmail(memberProfile.email) || 'Miembro'}
+                                </span>
                             )}
                         </div>
                     </div>
@@ -320,7 +320,7 @@ export function MemberDetailModal({
                         onClick={onClose}
                         className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-full transition-colors"
                     >
-                        <X className="w-4 h-4"/>
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -328,7 +328,7 @@ export function MemberDetailModal({
                 <div className="p-5 space-y-4">
                     {errorMsg && (
                         <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
-                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600"/>
+                            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                             <span>{errorMsg}</span>
                         </div>
                     )}
@@ -336,59 +336,56 @@ export function MemberDetailModal({
                     {successMsg && (
                         <div
                             className="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs flex items-center space-x-2">
-                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600"/>
+                            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                             <span>{successMsg}</span>
                         </div>
                     )}
 
                     {/* Balance pill */}
                     {!isSelf && (
-                        <div className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold ${
-                            balance > 0
+                        <div className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold ${balance > 0
                                 ? 'bg-emerald-50 text-emerald-900'
                                 : balance < 0
                                     ? 'bg-rose-50 text-rose-900'
                                     : 'bg-zinc-50 text-zinc-600'
-                        }`}>
-              <span className="text-zinc-500 font-medium">
-                {isCurrentlyManagedByMe ? 'Saldo (persona vinculada)' : 'Saldo directo'}
-              </span>
+                            }`}>
+                            <span className="text-zinc-500 font-medium">
+                                {isCurrentlyManagedByMe ? 'Saldo (persona vinculada)' : 'Saldo directo'}
+                            </span>
                             <span className="font-bold">
-                {balance > 0
-                    ? `Te debe $${balance.toLocaleString('es-CO', {minimumFractionDigits: 0})}`
-                    : balance < 0
-                        ? `Le debes $${Math.abs(balance).toLocaleString('es-CO', {minimumFractionDigits: 0})}`
-                        : 'Al día'}
-              </span>
+                                {balance > 0
+                                    ? `Te debe $${balance.toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
+                                    : balance < 0
+                                        ? `Le debes $${Math.abs(balance).toLocaleString('es-CO', { minimumFractionDigits: 0 })}`
+                                        : 'Al día'}
+                            </span>
                         </div>
                     )}
 
                     {/* Vincular integrante a mi perfil */}
                     {!isSelf && (
                         <div
-                            className={`p-3.5 rounded-2xl border transition-all ${
-                                isCurrentlyManagedByMe
+                            className={`p-3.5 rounded-2xl border transition-all ${isCurrentlyManagedByMe
                                     ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
                                     : isManagedByOther
                                         ? 'bg-zinc-50 border-zinc-200 text-zinc-700'
                                         : 'bg-zinc-50/80 hover:bg-zinc-100/60 border-zinc-200 text-zinc-900'
-                            }`}
+                                }`}
                         >
                             <div className="flex items-start justify-between gap-2.5">
                                 <div className="space-y-1 min-w-0 flex-1">
                                     <div className="flex items-center space-x-1.5">
                                         <ShieldCheck
-                                            className={`w-4 h-4 shrink-0 ${
-                                                isCurrentlyManagedByMe ? 'text-emerald-600' : isManagedByOther ? 'text-zinc-500' : 'text-zinc-700'
-                                            }`}
+                                            className={`w-4 h-4 shrink-0 ${isCurrentlyManagedByMe ? 'text-emerald-600' : isManagedByOther ? 'text-zinc-500' : 'text-zinc-700'
+                                                }`}
                                         />
                                         <span className="text-xs font-bold truncate">
-                      {isCurrentlyManagedByMe
-                          ? 'Persona vinculada a tu perfil'
-                          : isManagedByOther
-                              ? `Vinculada a ${sponsorName}`
-                              : 'Vincular a mi perfil'}
-                    </span>
+                                            {isCurrentlyManagedByMe
+                                                ? 'Persona vinculada a tu perfil'
+                                                : isManagedByOther
+                                                    ? `Vinculada a ${sponsorName}`
+                                                    : 'Vincular a mi perfil'}
+                                        </span>
                                     </div>
                                     <p className="text-[11px] text-zinc-500 leading-tight">
                                         {isCurrentlyManagedByMe
@@ -404,14 +401,13 @@ export function MemberDetailModal({
                                         type="button"
                                         onClick={handleToggleManagement}
                                         disabled={isTogglingManagement || isSubmitting}
-                                        className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
-                                            isCurrentlyManagedByMe
+                                        className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${isCurrentlyManagedByMe
                                                 ? 'bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-2xs'
                                                 : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-2xs'
-                                        }`}
+                                            }`}
                                     >
                                         {isTogglingManagement ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                         ) : isCurrentlyManagedByMe ? (
                                             'Desvincular'
                                         ) : (
@@ -450,11 +446,10 @@ export function MemberDetailModal({
                                     onChange={(e) => setEmail(e.target.value)}
                                     readOnly={!canEdit || isRegistered}
                                     disabled={!canEdit || isRegistered}
-                                    className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${
-                                        isRegistered
+                                    className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${isRegistered
                                             ? 'bg-zinc-100 border-zinc-200 text-zinc-500 cursor-not-allowed'
                                             : 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white'
-                                    }`}
+                                        }`}
                                 />
                             </div>
 
@@ -464,7 +459,7 @@ export function MemberDetailModal({
                                 className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5 shadow-sm"
                             >
                                 {isSubmitting ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 ) : (
                                     <span>Guardar</span>
                                 )}
@@ -483,12 +478,12 @@ export function MemberDetailModal({
                             >
                                 {copied ? (
                                     <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-600"/>
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
                                         <span className="text-emerald-700 font-semibold">Enlace copiado</span>
                                     </>
                                 ) : (
                                     <>
-                                        <LinkIcon className="w-3.5 h-3.5 text-zinc-600"/>
+                                        <LinkIcon className="w-3.5 h-3.5 text-zinc-600" />
                                         <span>Copiar enlace de invitación</span>
                                     </>
                                 )}
@@ -502,7 +497,7 @@ export function MemberDetailModal({
                                     onClick={onClose}
                                     className="flex-1 flex items-center justify-center space-x-1.5 py-2 px-3 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 rounded-xl text-xs font-medium transition-colors"
                                 >
-                                    <Eye className="w-3.5 h-3.5 text-zinc-500"/>
+                                    <Eye className="w-3.5 h-3.5 text-zinc-500" />
                                     <span>Ver historial</span>
                                 </Link>
 
@@ -514,7 +509,7 @@ export function MemberDetailModal({
                                         className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                                         title="Eliminar del grupo"
                                     >
-                                        <Trash2 className="w-4 h-4"/>
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 )}
 
@@ -526,7 +521,7 @@ export function MemberDetailModal({
                                         className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                                         title="Eliminar amigo"
                                     >
-                                        <UserMinus className="w-4 h-4"/>
+                                        <UserMinus className="w-4 h-4" />
                                     </button>
                                 )}
                             </div>

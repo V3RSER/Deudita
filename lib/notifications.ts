@@ -1,6 +1,6 @@
-import {SupabaseClient} from '@supabase/supabase-js';
-import {formatCurrency} from '@/lib/balance-utils';
-import {extractNotesAndConfig} from '@/lib/split-config-utils';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { formatCurrency } from '@/lib/balance-utils';
+import { extractNotesAndConfig } from '@/lib/split-config-utils';
 
 export interface NotificationPayload {
     user_id: string;
@@ -32,13 +32,13 @@ export async function sendNotifications(
             is_read: false,
         }));
 
-        const {error} = await supabase.from('notifications').insert(rows);
+        const { error } = await supabase.from('notifications').insert(rows);
         if (error) {
             // If error might be missing link column in older cache, fallback without link column
             if (error.message?.includes('link') || error.code === 'PGRST204') {
-                const fallbackRows = rows.map(({link, ...rest}) => ({
+                const fallbackRows = rows.map(({ link, ...rest }) => ({
                     ...rest,
-                    data: {...rest.data, link},
+                    data: { ...rest.data, link },
                 }));
                 await supabase.from('notifications').insert(fallbackRows);
             } else {
@@ -64,7 +64,7 @@ export async function getSponsorshipMapForUsers(
 
     // 1. Try querying `managed_users` table
     try {
-        const {data: dbManaged} = await supabase
+        const { data: dbManaged } = await supabase
             .from('managed_users')
             .select('sponsor_id, managed_user_id')
             .in('managed_user_id', userIds);
@@ -82,7 +82,7 @@ export async function getSponsorshipMapForUsers(
 
     // 2. Fallback / supplementary check on `profiles.managed_user_ids`
     try {
-        const {data: sponsorProfiles} = await supabase
+        const { data: sponsorProfiles } = await supabase
             .from('profiles')
             .select('id, managed_user_ids')
             .not('managed_user_ids', 'is', null);
@@ -132,7 +132,7 @@ export async function notifyExpenseCreated(
         if (!splits || splits.length === 0) return;
 
         // Fetch creator profile
-        const {data: creator} = await supabase
+        const { data: creator } = await supabase
             .from('profiles')
             .select('id, full_name')
             .eq('id', creatorId)
@@ -143,7 +143,7 @@ export async function notifyExpenseCreated(
         // Fetch group if any
         let groupName = 'el grupo';
         if (groupId) {
-            const {data: group} = await supabase
+            const { data: group } = await supabase
                 .from('groups')
                 .select('name, currency')
                 .eq('id', groupId)
@@ -156,7 +156,7 @@ export async function notifyExpenseCreated(
         const sponsorshipMap = await getSponsorshipMapForUsers(supabase, participantIds);
 
         // Fetch names of participants
-        const {data: participantProfiles} = await supabase
+        const { data: participantProfiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', participantIds);
@@ -262,11 +262,11 @@ export interface ExpenseChangeSummary {
  * Returns unified change tags, a human-friendly summary, and structured change data.
  */
 export function calculateExpenseChangeDetails({
-                                                  previousExpense,
-                                                  newExpense,
-                                                  currency = 'COP',
-                                                  nameMap = new Map(),
-                                              }: {
+    previousExpense,
+    newExpense,
+    currency = 'COP',
+    nameMap = new Map(),
+}: {
     previousExpense: {
         description?: string;
         total_amount?: number;
@@ -503,7 +503,7 @@ export async function notifyExpenseUpdated(
 ) {
     try {
         // Fetch updater profile
-        const {data: updater} = await supabase
+        const { data: updater } = await supabase
             .from('profiles')
             .select('id, full_name')
             .eq('id', updaterId)
@@ -514,7 +514,7 @@ export async function notifyExpenseUpdated(
         // Fetch group if any
         let groupName = 'el grupo';
         if (groupId) {
-            const {data: group} = await supabase
+            const { data: group } = await supabase
                 .from('groups')
                 .select('name, currency')
                 .eq('id', groupId)
@@ -537,7 +537,7 @@ export async function notifyExpenseUpdated(
         const allUserIds = Array.from(participantIds);
         const sponsorshipMap = await getSponsorshipMapForUsers(supabase, allUserIds);
 
-        const {data: participantProfiles} = await supabase
+        const { data: participantProfiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', allUserIds);
@@ -847,7 +847,7 @@ export async function notifyExpenseDeleted(
     }
 ) {
     try {
-        const {data: deleter} = await supabase
+        const { data: deleter } = await supabase
             .from('profiles')
             .select('id, full_name')
             .eq('id', deleterId)
@@ -857,7 +857,7 @@ export async function notifyExpenseDeleted(
 
         let groupName = 'el grupo';
         if (groupId) {
-            const {data: group} = await supabase
+            const { data: group } = await supabase
                 .from('groups')
                 .select('name')
                 .eq('id', groupId)
@@ -868,7 +868,7 @@ export async function notifyExpenseDeleted(
         const participantIds = splits.map((s) => s.user_id);
         const sponsorshipMap = await getSponsorshipMapForUsers(supabase, participantIds);
 
-        const {data: participantProfiles} = await supabase
+        const { data: participantProfiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', participantIds);
@@ -954,7 +954,7 @@ export async function notifyPaymentCreated(
         if (!paymentId || !payerId || !receiverId) return;
 
         // Fetch payer and receiver profiles
-        const {data: profiles} = await supabase
+        const { data: profiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', [payerId, receiverId]);
@@ -964,7 +964,7 @@ export async function notifyPaymentCreated(
 
         let groupName = 'el grupo';
         if (groupId) {
-            const {data: group} = await supabase
+            const { data: group } = await supabase
                 .from('groups')
                 .select('name, currency')
                 .eq('id', groupId)
@@ -1069,7 +1069,7 @@ export async function notifyPaymentDeleted(
     }
 ) {
     try {
-        const {data: profiles} = await supabase
+        const { data: profiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', [deleterId, payerId, receiverId]);
@@ -1078,7 +1078,7 @@ export async function notifyPaymentDeleted(
 
         let groupName = 'el grupo';
         if (groupId) {
-            const {data: group} = await supabase
+            const { data: group } = await supabase
                 .from('groups')
                 .select('name, currency')
                 .eq('id', groupId)
