@@ -778,3 +778,86 @@ function matchSubjectOrBody(pattern, subject, context) {
         return { matched: false };
     }
 }
+function createProductionEmailMatcher(templates, entities = []) {
+    var _a;
+    const { entityMap } = buildEntityLookup(entities, templates);
+    const groups = [];
+    for (const [entityId, entityData] of entityMap.entries()) {
+        if (!entityData.templates.length)
+            continue;
+        const entityPatterns = uniqueSanitizedPatterns([
+            ...(((_a = entityData.entity) === null || _a === void 0 ? void 0 : _a.patterns) || []),
+            ...entityData.templates.flatMap((template) => template.entity_email_patterns || []),
+        ]);
+        const subjectGroups = Array.from(groupTemplatesBySubject(entityData.templates, false).entries()).map(([key, group]) => ({
+            subjectPattern: sanitizeRegexPattern(key === '__NO_SUBJECT_PATTERN__' ? null : key),
+            templates: group,
+        }));
+        groups.push({
+            entityId,
+            entity: entityData.entity,
+            templates: entityData.templates,
+            entityPatterns,
+            subjectGroups,
+        });
+    }
+    return { groups };
+}
+function matchEmailForProduction(matcher, sender, subject, rawBody) {
+    const context = buildEmailContext(rawBody || '');
+    const normalizedSender = (sender || '').trim();
+    const normalizedSubject = (subject || '').trim();
+    const { cleanBody, bodyHeadLines, forwardedSender, forwardedSubject } = context;
+    for (const group of matcher.groups) {
+        if (!group.entityPatterns.length)
+            continue;
+        const entityMatch = matchEmailEntityPatterns(group.entityPatterns, normalizedSender, bodyHeadLines, forwardedSender);
+        if (!entityMatch.matched)
+            continue;
+        for (const subjectGroup of group.subjectGroups) {
+            if (subjectGroup.subjectPattern) {
+                const subjectMatch = matchSubjectOrBody(subjectGroup.subjectPattern, normalizedSubject, context);
+                if (!subjectMatch.matched)
+                    continue;
+            }
+            const ambiguous = subjectGroup.templates.length > 1;
+            for (const template of subjectGroup.templates) {
+                const matchPattern = sanitizeRegexPattern(template.match_pattern);
+                // Same ambiguity rule as the frontend: a shared subject group requires
+                // match_pattern to identify a specific template.
+                if (ambiguous && !matchPattern)
+                    continue;
+                if (matchPattern) {
+                    const matchResult = evaluateMatchPattern(matchPattern, cleanBody, normalizedSubject);
+                    if (!matchResult.matched)
+                        continue;
+                }
+                // Reuse the exact extraction function used by the frontend.
+                const fields = extractTemplateFields(template, cleanBody);
+                if (!fields.amountRes.success || fields.parsedAmount === null)
+                    continue;
+                const merchant = fields.merchantRes.rawExtracted;
+                const currency = fields.currencyRes.rawExtracted;
+                const sourceAccount = fields.accountRes.rawExtracted;
+                const date = fields.dateRes.rawExtracted;
+                const time = fields.timeRes.rawExtracted;
+                const cleanMerchant = merchant ? merchant.trim() : null;
+                const concept = template.expense_type_label && cleanMerchant
+                    ? `${template.expense_type_label} · ${cleanMerchant}`
+                    : cleanMerchant || template.expense_type_label || null;
+                return {
+                    templateId: template.id,
+                    amount: fields.parsedAmount,
+                    currency,
+                    merchant: cleanMerchant,
+                    entityId: template.entity_id || group.entityId || null,
+                    sourceAccount,
+                    date,
+                    time,
+                    concept,
+                };
+            }
+        }
+    }
+    return null;
+}
