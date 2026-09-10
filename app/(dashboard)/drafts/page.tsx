@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UnifiedDraftsAndTemplatesView } from '@/components/UnifiedDraftsAndTemplatesView';
-import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
+import { UnifiedDraftsAndTemplatesView } from '@/components/draft/UnifiedDraftsAndTemplatesView';
+import { ConfirmDraftModal } from '@/components/draft/ConfirmDraftModal';
 import { ExpenseDraft } from '@/lib/types';
 
 export default function DraftsPage() {
