@@ -1,28 +1,3 @@
-/**
- * ============================================================
- * DETECCIÓN DE GASTOS POR CORREO — Apps Script
- * ============================================================
- *
- * IMPORTANTE:
- *
- * Este archivo NO contiene una implementación propia del matching.
- *
- * En el proyecto de Google Apps Script deben existir también:
- *   - email-cleaning.js  ← generado desde email-cleaning.ts
- *   - email-matching.js  ← generado desde email-matching.ts
- *
- * Los tres archivos comparten el mismo scope global de Apps Script.
- * Por tanto, el cron llama directamente a las funciones del código compartido.
- *
- * FUENTE ÚNICA DE VERDAD:
- *   email-cleaning.ts
- *   email-matching.ts
- *
- * Para regenerar los .js compartidos:
- *   node build-google-script-engine.js
- * ============================================================
- */
-
 const BACKEND_BASE_URL = 'https://deudita-nine.vercel.app';
 const PROCESSED_LABEL = 'gastos-procesados';
 const TEMPLATES_CACHE_SECONDS = 21600; // 6 horas.
@@ -34,11 +9,11 @@ const DEBUG_MATCHING = false;
 // ------------------------------------------------------------
 
 function doGet(e) {
-  if (e && e.parameter && e.parameter.mode === 'test') {
+  if (e?.parameter?.mode === 'test') {
     return renderEmailTestApp();
   }
 
-  const token = e && e.parameter ? e.parameter.token : null;
+  const token = e?.parameter ? e.parameter.token : null;
 
   if (!token) {
     return HtmlService.createHtmlOutput(
@@ -56,7 +31,7 @@ function doGet(e) {
   try {
     syncExpenseEmails();
   } catch (err) {
-    console.warn(`Primera sincronización falló: ${err && err.message ? err.message : err}`);
+    console.warn(`Primera sincronización falló: ${err?.message ? err.message : err}`);
   }
 
   return HtmlService.createHtmlOutput(
@@ -222,7 +197,7 @@ function buildCatalogEntitiesFromTemplates(templates) {
     if (!byId[entityId]) {
       byId[entityId] = {
         id: String(entityId),
-        name: template.entity && template.entity.name
+        name: template.entity?.name
           ? String(template.entity.name)
           : String(entityId),
         patterns: [],
