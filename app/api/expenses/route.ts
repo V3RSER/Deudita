@@ -1,8 +1,8 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {createClient as createSupabaseClient} from '@supabase/supabase-js';
-import {createClient} from '@/lib/supabase/server';
-import {notifyExpenseCreated} from '@/lib/notifications';
-import {normalizeSplitsToTotal} from '@/lib/balance-utils';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
+import { notifyExpenseCreated } from '@/lib/notifications';
+import { normalizeSplitsToTotal } from '@/lib/balance-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         if (bearerToken) {
             // 1. Autenticación por webhook_token (Google Apps Script)
             const directClient = getDirectClient();
-            const {data: connection, error: connErr} = await directClient
+            const { data: connection, error: connErr } = await directClient
                 .from('email_ingest_connections')
                 .select('user_id, status')
                 .eq('webhook_token', bearerToken)
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
 
             if (connErr || !connection) {
                 return NextResponse.json(
-                    {error: 'Token de webhook inválido o inactivo'},
-                    {status: 401}
+                    { error: 'Token de webhook inválido o inactivo' },
+                    { status: 401 }
                 );
             }
 
@@ -56,16 +56,16 @@ export async function POST(req: NextRequest) {
             // Actualizar timestamp de última sincronización
             await directClient
                 .from('email_ingest_connections')
-                .update({last_sync_at: new Date().toISOString()})
+                .update({ last_sync_at: new Date().toISOString() })
                 .eq('user_id', connection.user_id);
         } else {
             // 2. Autenticación por sesión activa de usuario
             const serverClient = await createClient();
-            const {data: {user}, error: authErr} = await serverClient.auth.getUser();
+            const { data: { user }, error: authErr } = await serverClient.auth.getUser();
 
             if (authErr || !user) {
                 console.error('[API /api/expenses] Auth error:', authErr);
-                return NextResponse.json({error: 'No autorizado'}, {status: 401});
+                return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
             }
 
             targetUserId = user.id;
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!targetUserId) {
-            return NextResponse.json({error: 'Usuario no identificado'}, {status: 401});
+            return NextResponse.json({ error: 'Usuario no identificado' }, { status: 401 });
         }
 
         const body = await req.json().catch(() => ({}));
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
         // Prevención de duplicados si viene con gmail_message_id
         if (gmailMessageId) {
-            const {data: existingExpense} = await clientSupabase
+            const { data: existingExpense } = await clientSupabase
                 .from('expenses')
                 .select('*, items:expense_items(*), splits:expense_splits(*)')
                 .eq('gmail_message_id', gmailMessageId)
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
 
         // Si es una llamada desde el webhook y queremos usar la función Postgres optimizada
         if (isWebhookAuth && bearerToken) {
-            const {data: rpcData, error: rpcErr} = await clientSupabase.rpc('insert_expense_for_webhook', {
+            const { data: rpcData, error: rpcErr } = await clientSupabase.rpc('insert_expense_for_webhook', {
                 p_token: bearerToken,
                 p_gmail_message_id: gmailMessageId,
                 p_template_id: templateId,
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
 
             if (!rpcErr && rpcData) {
                 const expenseId = rpcData.expense_id || rpcData.id;
-                const {data: fullExpense} = await clientSupabase
+                const { data: fullExpense } = await clientSupabase
                     .from('expenses')
                     .select('*, items:expense_items(*), splits:expense_splits(*)')
                     .eq('id', expenseId)
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
 
         // Fallback: si no es borrador pero no tiene grupo, asociar a Gastos Personales
         if (!rawGroupId && !isDraft) {
-            let {data: personalGroup} = await clientSupabase
+            let { data: personalGroup } = await clientSupabase
                 .from('groups')
                 .select('id')
                 .eq('owner_id', targetUserId)
@@ -230,9 +230,9 @@ export async function POST(req: NextRequest) {
                 .maybeSingle();
 
             if (!personalGroup) {
-                const {data: createdGroup} = await clientSupabase
+                const { data: createdGroup } = await clientSupabase
                     .from('groups')
-                    .insert({name: 'Gastos Personales', owner_id: targetUserId, currency: currency || 'COP'})
+                    .insert({ name: 'Gastos Personales', owner_id: targetUserId, currency: currency || 'COP' })
                     .select('id')
                     .single();
 
@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
         if (category) expenseInsertPayload.category = category;
         if (notes) expenseInsertPayload.notes = notes;
 
-        let {data: newExpense, error: expErr} = await clientSupabase
+        let { data: newExpense, error: expErr } = await clientSupabase
             .from('expenses')
             .insert(expenseInsertPayload)
             .select()
@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
 
         if (expErr || !newExpense) {
             console.error('[API /api/expenses] Supabase insert expense error:', expErr);
-            return NextResponse.json({error: expErr?.message ?? 'Error al crear el gasto'}, {status: 500});
+            return NextResponse.json({ error: expErr?.message ?? 'Error al crear el gasto' }, { status: 500 });
         }
 
         // Insertar ítems desglosados si existen
@@ -311,7 +311,7 @@ export async function POST(req: NextRequest) {
                 description: i.description,
                 amount: i.amount,
             }));
-            const {error: itemsErr} = await clientSupabase.from('expense_items').insert(itemsToInsert);
+            const { error: itemsErr } = await clientSupabase.from('expense_items').insert(itemsToInsert);
             if (itemsErr) {
                 console.error('[API /api/expenses] Supabase insert items error:', itemsErr);
             }
@@ -335,13 +335,13 @@ export async function POST(req: NextRequest) {
                 amount_owed: s.amount_owed,
             }));
 
-            const {error: splitsErr} = await clientSupabase.from('expense_splits').insert(splitsToInsert);
+            const { error: splitsErr } = await clientSupabase.from('expense_splits').insert(splitsToInsert);
             if (splitsErr) {
                 console.error('[API /api/expenses] Error al insertar splits:', splitsErr);
                 if (!isDraft && rawGroupId) {
                     await clientSupabase.from('expense_items').delete().eq('expense_id', newExpense.id);
                     await clientSupabase.from('expenses').delete().eq('id', newExpense.id);
-                    return NextResponse.json({error: 'Error al registrar la distribución del gasto'}, {status: 500});
+                    return NextResponse.json({ error: 'Error al registrar la distribución del gasto' }, { status: 500 });
                 }
             } else {
                 insertedSplits = splitsToInsert;
@@ -368,7 +368,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const {data: fullExpense} = await clientSupabase
+        const { data: fullExpense } = await clientSupabase
             .from('expenses')
             .select('*, items:expense_items(*), splits:expense_splits(*)')
             .eq('id', newExpense.id)
@@ -388,6 +388,6 @@ export async function POST(req: NextRequest) {
     } catch (err: unknown) {
         console.error('[API /api/expenses] Unhandled error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al guardar gasto';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

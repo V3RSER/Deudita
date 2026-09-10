@@ -50,7 +50,7 @@ export function TransactionFilterBar({
     showGroupFilter = false,
     showCategoryFilter = false,
     showSearch = true,
-}: TransactionFilterBarProps) {
+}: Readonly<TransactionFilterBarProps>) {
     const [isOpen, setIsOpen] = useState(false);
 
     const activeFiltersCount =
@@ -171,8 +171,8 @@ export function TransactionFilterBar({
                     onClick={() => setIsOpen(!isOpen)}
                     aria-expanded={isOpen}
                     className={`inline-flex items-center justify-center gap-2 h-10 px-3.5 sm:px-4 rounded-xl border text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${isOpen || activeFiltersCount > 0
-                            ? 'border-zinc-900 bg-zinc-900 text-white shadow-xs'
-                            : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50'
+                        ? 'border-zinc-900 bg-zinc-900 text-white shadow-xs'
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50'
                         }`}
                 >
                     <SlidersHorizontal className="h-4 w-4" />
@@ -180,8 +180,8 @@ export function TransactionFilterBar({
                     {activeFiltersCount > 0 && (
                         <span
                             className={`flex h-4.5 min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${isOpen || activeFiltersCount > 0
-                                    ? 'bg-emerald-500 text-zinc-950'
-                                    : 'bg-emerald-600 text-white'
+                                ? 'bg-emerald-500 text-zinc-950'
+                                : 'bg-emerald-600 text-white'
                                 }`}
                         >
                             {activeFiltersCount}

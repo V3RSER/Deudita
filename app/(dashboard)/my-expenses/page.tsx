@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useState} from 'react';
-import {AllExpensesView} from '@/components/AllExpensesView';
-import {NewExpenseModal} from '@/components/NewExpenseModal';
-import {SettleDebtModal} from '@/components/SettleDebtModal';
-import {Expense, Payment} from '@/lib/types';
+import React, { useState } from 'react';
+import { AllExpensesView } from '@/components/my-expenses/AllExpensesView';
+import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { SettleDebtModal } from '@/components/SettleDebtModal';
+import { Expense, Payment } from '@/lib/types';
 
 export default function MyExpensesPage() {
     const [isNewExpenseOpen, setIsNewExpenseOpen] = useState(false);

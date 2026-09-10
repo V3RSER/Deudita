@@ -7,10 +7,8 @@ import { formatCurrency } from '@/lib/balance-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import {
     DateFilterMode,
-    extractTimeFromISO,
     formatHumanDate,
     getEffectiveTransactionDate,
-    getRecordEntryDateInfo,
     getRecordEventDateInfo,
 } from '@/lib/transaction-date-utils';
 import {
@@ -139,7 +137,6 @@ export function GenericExpenseList({
     isSimplified = true,
     groupCurrency,
     dateFilterMode = 'expense_date',
-    onSelectExpense,
     onEditExpense,
     onDeleteExpense,
     onEditPayment,
@@ -147,7 +144,7 @@ export function GenericExpenseList({
     showGroupBadge = true,
     initialExpandedExpenseId,
     pageSize = 20,
-}: GenericExpenseListProps) {
+}: Readonly<GenericExpenseListProps>) {
     const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
     const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
     const [userToggledPaymentIds, setUserToggledPaymentIds] = useState<Map<string, boolean>>(new Map());

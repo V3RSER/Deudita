@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useState} from 'react';
-import {createClient} from '@/lib/supabase/client';
-import {AlertCircle, ArrowRight, Check, CheckCircle2, Copy, Info, KeyRound, Loader2, Terminal} from 'lucide-react';
+import React, { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { AlertCircle, ArrowRight, Check, CheckCircle2, Copy, Info, KeyRound, Loader2, Terminal } from 'lucide-react';
 
 export default function AuthBypassPage() {
     const [sessionInput, setSessionInput] = useState('');
@@ -105,11 +105,11 @@ export default function AuthBypassPage() {
             const anyObj = obj as Record<string, unknown>;
 
             if (typeof anyObj.access_token === 'string' && typeof anyObj.refresh_token === 'string') {
-                return {accessToken: anyObj.access_token, refreshToken: anyObj.refresh_token};
+                return { accessToken: anyObj.access_token, refreshToken: anyObj.refresh_token };
             }
             if (Array.isArray(anyObj) && anyObj.length >= 2 && typeof anyObj[0] === 'string' && typeof anyObj[1] === 'string') {
                 if (anyObj[0].length > 20) {
-                    return {accessToken: anyObj[0], refreshToken: anyObj[1]};
+                    return { accessToken: anyObj[0], refreshToken: anyObj[1] };
                 }
             }
             if (anyObj.currentSession && typeof anyObj.currentSession === 'object') {
@@ -137,7 +137,7 @@ export default function AuthBypassPage() {
                 if (name.includes('auth-token') && !name.includes('flow') && !name.includes('verifier') && !name.includes('code')) {
                     const match = name.match(/\.(\d+)$/);
                     const index = match ? parseInt(match[1], 10) : 0;
-                    chunks.push({name, index, val});
+                    chunks.push({ name, index, val });
                 }
             }
             chunks.sort((a, b) => a.index - b.index);
@@ -189,7 +189,7 @@ export default function AuthBypassPage() {
         const tokenMatch = trimmed.match(/access_token["']?\s*[:=]\s*["']([^"'\s]+)["']/i);
         const refreshMatch = trimmed.match(/refresh_token["']?\s*[:=]\s*["']([^"'\s]+)["']/i);
         if (tokenMatch?.[1] && refreshMatch?.[1]) {
-            return {accessToken: tokenMatch[1], refreshToken: refreshMatch[1]};
+            return { accessToken: tokenMatch[1], refreshToken: refreshMatch[1] };
         }
 
         return null;
@@ -257,7 +257,7 @@ export default function AuthBypassPage() {
             // 2. Establecer la sesión en el cliente de Supabase
             addLog('Paso 2: Fijando sesión en supabase.auth.setSession() en el navegador...');
             const supabase = createClient();
-            const {data, error} = await supabase.auth.setSession({
+            const { data, error } = await supabase.auth.setSession({
                 access_token: finalAccessToken,
                 refresh_token: finalRefreshToken,
             });
@@ -293,8 +293,8 @@ export default function AuthBypassPage() {
                         try {
                             const claimRes = await fetch('/api/invites/claim', {
                                 method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({token: pendingToken}),
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: pendingToken }),
                             });
                             const claimData = await claimRes.json();
                             if (claimData?.groupId) {
@@ -348,11 +348,11 @@ export default function AuthBypassPage() {
     return (
         <div id="bypass-root" className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-4">
             <div id="bypass-card"
-                 className="w-full max-w-xl bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
+                className="w-full max-w-xl bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
                 <div id="bypass-header" className="p-6 border-b border-zinc-100 bg-zinc-900 text-white">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                            <KeyRound className="w-5 h-5 text-white"/>
+                            <KeyRound className="w-5 h-5 text-white" />
                         </div>
                         <div>
                             <h1 className="text-xl font-bold">Acceso Directo de Sesión</h1>
@@ -366,7 +366,7 @@ export default function AuthBypassPage() {
                     <div id="bypass-guide" className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
-                                <Terminal className="w-4 h-4 text-zinc-500"/>
+                                <Terminal className="w-4 h-4 text-zinc-500" />
                                 <span>Comando para tu consola local</span>
                             </div>
                             <button
@@ -377,12 +377,12 @@ export default function AuthBypassPage() {
                             >
                                 {copiedSnippet ? (
                                     <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-600"/>
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
                                         <span className="text-emerald-600 font-semibold">¡Comando copiado!</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Copy className="w-3.5 h-3.5 text-zinc-500"/>
+                                        <Copy className="w-3.5 h-3.5 text-zinc-500" />
                                         <span>Copiar comando</span>
                                     </>
                                 )}
@@ -390,16 +390,16 @@ export default function AuthBypassPage() {
                         </div>
                         <p className="text-xs text-zinc-500 leading-relaxed">
                             1. En tu pestaña local logueada, abre la consola (F12 o Clic
-                            derecho &gt; Inspeccionar &gt; Consola).<br/>
-                            2. Pega el comando y pulsa <strong>Enter</strong>.<br/>
+                            derecho &gt; Inspeccionar &gt; Consola).<br />
+                            2. Pega el comando y pulsa <strong>Enter</strong>.<br />
                             3. Vuelve a esta página y pega (<kbd
-                            className="px-1 py-0.5 bg-zinc-200 rounded text-[10px] font-mono">Ctrl+V</kbd> / <kbd
-                            className="px-1 py-0.5 bg-zinc-200 rounded text-[10px] font-mono">Cmd+V</kbd>) en el cuadro
+                                className="px-1 py-0.5 bg-zinc-200 rounded text-[10px] font-mono">Ctrl+V</kbd> / <kbd
+                                    className="px-1 py-0.5 bg-zinc-200 rounded text-[10px] font-mono">Cmd+V</kbd>) en el cuadro
                             de abajo.
                         </p>
                         <div
                             className="flex items-center gap-2 text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200/60">
-                            <Info className="w-3.5 h-3.5 flex-shrink-0"/>
+                            <Info className="w-3.5 h-3.5 flex-shrink-0" />
                             <span>Nota: La consola del navegador siempre muestra &quot;undefined&quot; tras ejecutar copy(), pero los datos ya quedan en el portapapeles listos para pegar.</span>
                         </div>
                     </div>
@@ -409,11 +409,10 @@ export default function AuthBypassPage() {
                             type="button"
                             id="tab-json"
                             onClick={() => setActiveTab('json')}
-                            className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${
-                                activeTab === 'json'
+                            className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'json'
                                     ? 'border-zinc-900 text-zinc-900'
                                     : 'border-transparent text-zinc-400 hover:text-zinc-600'
-                            }`}
+                                }`}
                         >
                             Pegar datos copiados
                         </button>
@@ -421,11 +420,10 @@ export default function AuthBypassPage() {
                             type="button"
                             id="tab-manual"
                             onClick={() => setActiveTab('manual')}
-                            className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${
-                                activeTab === 'manual'
+                            className={`pb-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === 'manual'
                                     ? 'border-zinc-900 text-zinc-900'
                                     : 'border-transparent text-zinc-400 hover:text-zinc-600'
-                            }`}
+                                }`}
                         >
                             Tokens individuales
                         </button>
@@ -433,17 +431,17 @@ export default function AuthBypassPage() {
 
                     {errorMessage && (
                         <div id="bypass-error"
-                             className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-3 text-sm">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5"/>
+                            className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-3 text-sm">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                             <span>{errorMessage}</span>
                         </div>
                     )}
 
                     {successMessage && (
                         <div id="bypass-success"
-                             className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl space-y-3">
+                            className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl space-y-3">
                             <div className="flex items-start gap-3 text-sm">
-                                <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600"/>
+                                <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600" />
                                 <span>{successMessage}</span>
                             </div>
                             <button
@@ -455,7 +453,7 @@ export default function AuthBypassPage() {
                                 className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer shadow-sm"
                             >
                                 <span>Acceder a Mis Grupos</span>
-                                <ArrowRight className="w-4 h-4"/>
+                                <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
                     )}
@@ -464,7 +462,7 @@ export default function AuthBypassPage() {
                         {activeTab === 'json' ? (
                             <div className="space-y-1.5">
                                 <label htmlFor="session-json-input"
-                                       className="block text-xs font-semibold text-zinc-700">
+                                    className="block text-xs font-semibold text-zinc-700">
                                     Contenido copiado (JSON, Cookies o Tokens)
                                 </label>
                                 <textarea
@@ -480,7 +478,7 @@ export default function AuthBypassPage() {
                             <div className="space-y-4">
                                 <div className="space-y-1.5">
                                     <label htmlFor="access-token-input"
-                                           className="block text-xs font-semibold text-zinc-700">
+                                        className="block text-xs font-semibold text-zinc-700">
                                         Access Token
                                     </label>
                                     <textarea
@@ -494,7 +492,7 @@ export default function AuthBypassPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <label htmlFor="refresh-token-input"
-                                           className="block text-xs font-semibold text-zinc-700">
+                                        className="block text-xs font-semibold text-zinc-700">
                                         Refresh Token
                                     </label>
                                     <input
@@ -517,13 +515,13 @@ export default function AuthBypassPage() {
                         >
                             {loading ? (
                                 <>
-                                    <Loader2 className="w-4 h-4 animate-spin"/>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
                                     <span>Verificando e ingresando...</span>
                                 </>
                             ) : (
                                 <>
                                     <span>Ingresar a la aplicación</span>
-                                    <ArrowRight className="w-4 h-4"/>
+                                    <ArrowRight className="w-4 h-4" />
                                 </>
                             )}
                         </button>
@@ -531,7 +529,7 @@ export default function AuthBypassPage() {
 
                     {debugLogs.length > 0 && (
                         <div id="bypass-debug-log"
-                             className="p-4 bg-zinc-900 text-zinc-200 rounded-xl space-y-2 border border-zinc-800">
+                            className="p-4 bg-zinc-900 text-zinc-200 rounded-xl space-y-2 border border-zinc-800">
                             <div
                                 className="flex items-center justify-between text-xs text-zinc-400 font-semibold border-b border-zinc-800 pb-2">
                                 <span>Registro de Diagnóstico en Tiempo Real:</span>
@@ -541,7 +539,7 @@ export default function AuthBypassPage() {
                                 className="max-h-48 overflow-y-auto font-mono text-[11px] space-y-1.5 pt-1 text-zinc-300">
                                 {debugLogs.map((log, idx) => (
                                     <div key={idx}
-                                         className={`leading-relaxed break-all ${log.includes('ERROR') ? 'text-red-400 font-bold' : log.includes('ADVERTENCIA') ? 'text-amber-400' : 'text-zinc-300'}`}>
+                                        className={`leading-relaxed break-all ${log.includes('ERROR') ? 'text-red-400 font-bold' : log.includes('ADVERTENCIA') ? 'text-amber-400' : 'text-zinc-300'}`}>
                                         {log}
                                     </div>
                                 ))}

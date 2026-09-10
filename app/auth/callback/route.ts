@@ -1,11 +1,11 @@
-import {NextResponse} from 'next/server';
-import {cookies} from 'next/headers';
-import {createClient} from '@/lib/supabase/server';
-import {claimAllTempProfilesForUser, claimAndJoinGroupInvite} from '@/lib/invite-utils';
-import {verifyGoogleToken} from '@/lib/google-auth';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
+import { verifyGoogleToken } from '@/lib/google-auth';
 
 export async function GET(request: Request) {
-    const {searchParams, origin} = new URL(request.url);
+    const { searchParams, origin } = new URL(request.url);
     const code = searchParams.get('code');
     const cookieStore = await cookies();
     const cookieReturnTo = cookieStore.get('auth_return_to')?.value;
@@ -18,10 +18,10 @@ export async function GET(request: Request) {
 
     if (code) {
         const supabase = await createClient();
-        const {data: sessionData, error} = await supabase.auth.exchangeCodeForSession(code);
+        const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (!error) {
-            const {data: {user}} = await supabase.auth.getUser();
+            const { data: { user } } = await supabase.auth.getUser();
 
             let joinedGroupId: string | null = null;
 
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
                     if (profileEmail) {
                         metaUpdates.tester_email = profileEmail;
                     }
-                    await supabase.auth.updateUser({data: metaUpdates});
+                    await supabase.auth.updateUser({ data: metaUpdates });
                 } catch (metaErr) {
                     console.warn('[auth/callback] Error updating user metadata for tester:', metaErr);
                 }

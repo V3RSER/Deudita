@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 
@@ -38,15 +38,15 @@ import { formatDisplayEmail } from '@/lib/utils';
 import { UserAvatar } from '@/components/UserAvatar';
 
 import { MemberDetailModal } from '@/components/MemberDetailModal';
-import { GroupExpenseFilterSheet } from '@/components/GroupExpenseFilterSheet';
-import { TransactionFilterState } from '@/components/TransactionFilterBar';
+import { GroupExpenseFilterSheet } from '@/components/groups/GroupExpenseFilterSheet';
+import { TransactionFilterState } from '@/components/my-expenses/TransactionFilterBar';
 import {
     getAvailableTransactionMonths,
     getEffectiveTransactionDate,
     isDateMatchingFilter,
 } from '@/lib/transaction-date-utils';
-import { EditGroupModal } from '@/components/EditGroupModal';
-import { GroupSettingsModal } from '@/components/GroupSettingsModal';
+import { EditGroupModal } from '@/components/groups/EditGroupModal';
+import { GroupSettingsModal } from '@/components/groups/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';

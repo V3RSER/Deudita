@@ -1,9 +1,9 @@
 'use client';
 
-import React, {useState} from 'react';
-import {ConsolidatedBalances} from '@/components/ConsolidatedBalances';
-import {SettleDebtModal} from '@/components/SettleDebtModal';
-import {Payment} from '@/lib/types';
+import React, { useState } from 'react';
+import { ConsolidatedBalances } from '@/components/ConsolidatedBalances';
+import { SettleDebtModal } from '@/components/SettleDebtModal';
+import { Payment } from '@/lib/types';
 
 export default function BalancesPage() {
     const [isSettleOpen, setIsSettleOpen] = useState(false);
@@ -22,7 +22,7 @@ export default function BalancesPage() {
         amount?: number
     ) => {
         setPaymentToEdit(null);
-        setSettleParams({groupId, debtorId, creditorId, amount});
+        setSettleParams({ groupId, debtorId, creditorId, amount });
         setIsSettleOpen(true);
     };
 

@@ -1,5 +1,5 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -25,13 +25,13 @@ function getBaseAppsScriptUrl(): string {
 export async function GET() {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {data: connection} = await supabase
+        const { data: connection } = await supabase
             .from('email_ingest_connections')
             .select('*')
             .eq('user_id', user.id)
@@ -61,7 +61,7 @@ export async function GET() {
     } catch (err: unknown) {
         console.error('[API GET /api/gmail-connections] Error:', err);
         const message = err instanceof Error ? err.message : 'Error interno';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
@@ -73,17 +73,17 @@ export async function GET() {
 export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const body = await req.json().catch(() => ({}));
         const shouldRotate = Boolean(body.regenerateToken);
 
         // 1. Verificar si ya existe conexión
-        const {data: existingConn} = await supabase
+        const { data: existingConn } = await supabase
             .from('email_ingest_connections')
             .select('*')
             .eq('user_id', user.id)
@@ -102,15 +102,15 @@ export async function POST(req: NextRequest) {
             last_sync_at: existingConn?.last_sync_at || null,
         };
 
-        const {data: connection, error: upsertErr} = await supabase
+        const { data: connection, error: upsertErr } = await supabase
             .from('email_ingest_connections')
-            .upsert(upsertData, {onConflict: 'user_id'})
+            .upsert(upsertData, { onConflict: 'user_id' })
             .select()
             .single();
 
         if (upsertErr) {
             console.error('[API POST /api/gmail-connections] Upsert error:', upsertErr);
-            return NextResponse.json({error: upsertErr.message}, {status: 500});
+            return NextResponse.json({ error: upsertErr.message }, { status: 500 });
         }
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://deudita.app';
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     } catch (err: unknown) {
         console.error('[API POST /api/gmail-connections] Error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al conectar Gmail';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
@@ -140,20 +140,20 @@ export async function POST(req: NextRequest) {
 export async function DELETE() {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {error: updateErr} = await supabase
+        const { error: updateErr } = await supabase
             .from('email_ingest_connections')
-            .update({status: 'inactive'})
+            .update({ status: 'inactive' })
             .eq('user_id', user.id);
 
         if (updateErr) {
             console.error('[API DELETE /api/gmail-connections] Update error:', updateErr);
-            return NextResponse.json({error: updateErr.message}, {status: 500});
+            return NextResponse.json({ error: updateErr.message }, { status: 500 });
         }
 
         return NextResponse.json({
@@ -164,7 +164,7 @@ export async function DELETE() {
     } catch (err: unknown) {
         console.error('[API DELETE /api/gmail-connections] Error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al desactivar Gmail';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

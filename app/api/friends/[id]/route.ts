@@ -1,23 +1,23 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function DELETE(
     req: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const resolvedParams = await params;
         const friendId = resolvedParams.id;
 
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         if (!friendId) {
-            return NextResponse.json({error: 'Falta el ID del amigo'}, {status: 400});
+            return NextResponse.json({ error: 'Falta el ID del amigo' }, { status: 400 });
         }
 
         const db = supabase;
@@ -26,7 +26,7 @@ export async function DELETE(
         // It MUST NEVER remove the user from group memberships (group_members) or delete group expenses/balances!
 
         // Check if the friend is part of any group memberships
-        const {data: friendMemberships} = await db
+        const { data: friendMemberships } = await db
             .from('group_members')
             .select('group_id')
             .eq('user_id', friendId);
@@ -34,19 +34,19 @@ export async function DELETE(
         const hasGroupMemberships = Boolean(friendMemberships && friendMemberships.length > 0);
 
         // Check if friend has any associated expense splits, expenses or payments
-        const {data: friendSplits} = await db
+        const { data: friendSplits } = await db
             .from('expense_splits')
             .select('id')
             .eq('user_id', friendId)
             .limit(1);
 
-        const {data: friendExpenses} = await db
+        const { data: friendExpenses } = await db
             .from('expenses')
             .select('id')
             .eq('paid_by', friendId)
             .limit(1);
 
-        const {data: friendPayments} = await db
+        const { data: friendPayments } = await db
             .from('payments')
             .select('id')
             .or(`paid_by.eq.${friendId},paid_to.eq.${friendId}`)
@@ -59,7 +59,7 @@ export async function DELETE(
         );
 
         // Check if the friend profile is a temporary standalone profile created by current user
-        const {data: friendProfile} = await db
+        const { data: friendProfile } = await db
             .from('profiles')
             .select('id, email, is_temp, created_by')
             .eq('id', friendId)
@@ -109,6 +109,6 @@ export async function DELETE(
     } catch (err: unknown) {
         console.error('[API DELETE /api/friends/[id]] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al eliminar amigo';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

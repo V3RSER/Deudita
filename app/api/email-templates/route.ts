@@ -1,8 +1,8 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {createClient as createSupabaseClient, SupabaseClient} from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 
-import type {CatalogTemplate} from '@/lib/email-templates/email-matching';
+import type { CatalogTemplate } from '@/lib/email-templates/email-matching';
 
 export const dynamic = 'force-dynamic';
 
@@ -130,26 +130,26 @@ async function enrichTemplates(
     )];
 
     const [
-        {data: entities, error: entitiesError},
-        {data: patterns, error: patternsError},
-        {data: expenseTypes, error: expenseTypesError},
+        { data: entities, error: entitiesError },
+        { data: patterns, error: patternsError },
+        { data: expenseTypes, error: expenseTypesError },
     ] = await Promise.all([
         entityIds.length
             ? db.from('entities').select('id,name').in('id', entityIds)
-            : Promise.resolve({data: [] as EntityRow[], error: null}),
+            : Promise.resolve({ data: [] as EntityRow[], error: null }),
         entityIds.length
             ? db
                 .from('entity_email_patterns')
                 .select('entity_id,pattern,created_at')
                 .in('entity_id', entityIds)
-                .order('created_at', {ascending: true})
-            : Promise.resolve({data: [] as PatternRow[], error: null}),
+                .order('created_at', { ascending: true })
+            : Promise.resolve({ data: [] as PatternRow[], error: null }),
         expenseTypeIds.length
             ? db
                 .from('expense_types')
                 .select('id,name,label')
                 .in('id', expenseTypeIds)
-            : Promise.resolve({data: [] as ExpenseTypeRow[], error: null}),
+            : Promise.resolve({ data: [] as ExpenseTypeRow[], error: null }),
     ]);
 
     if (entitiesError) throw entitiesError;
@@ -159,7 +159,7 @@ async function enrichTemplates(
     const entityMap = new Map(
         ((entities || []) as EntityRow[]).map((entity) => [
             entity.id,
-            {id: entity.id, name: entity.name},
+            { id: entity.id, name: entity.name },
         ]),
     );
 
@@ -196,7 +196,7 @@ async function getTemplates(
     db: DbClient,
     userId: string,
 ): Promise<CatalogTemplate[]> {
-    const {data: disabled, error: disabledError} = await db
+    const { data: disabled, error: disabledError } = await db
         .from('user_template_preferences')
         .select('template_id')
         .eq('user_id', userId)
@@ -208,10 +208,10 @@ async function getTemplates(
         (disabled || []).map((preference: { template_id: string }) => preference.template_id),
     );
 
-    const {data, error} = await db
+    const { data, error } = await db
         .from('email_templates')
         .select('*')
-        .order('created_at', {ascending: true});
+        .order('created_at', { ascending: true });
 
     if (error) throw error;
 
@@ -228,7 +228,7 @@ async function resolveEntity(
     newEntityName: string | null,
 ): Promise<string> {
     if (entityId) {
-        const {data, error} = await db
+        const { data, error } = await db
             .from('entities')
             .select('id')
             .eq('id', entityId)
@@ -246,7 +246,7 @@ async function resolveEntity(
         );
     }
 
-    const {data: existing, error: lookupError} = await db
+    const { data: existing, error: lookupError } = await db
         .from('entities')
         .select('id')
         .ilike('name', newEntityName)
@@ -255,9 +255,9 @@ async function resolveEntity(
     if (lookupError) throw lookupError;
     if (existing?.length) return existing[0].id;
 
-    const {data, error} = await db
+    const { data, error } = await db
         .from('entities')
-        .insert({name: newEntityName})
+        .insert({ name: newEntityName })
         .select('id')
         .single();
 
@@ -288,7 +288,7 @@ async function ensureEntityHasPattern(
             throw new Error('entity_email_pattern no es un regex válido');
         }
 
-        const {data: existing, error: lookupError} = await db
+        const { data: existing, error: lookupError } = await db
             .from('entity_email_patterns')
             .select('id')
             .eq('entity_id', entityId)
@@ -298,15 +298,15 @@ async function ensureEntityHasPattern(
         if (lookupError) throw lookupError;
 
         if (!existing?.length) {
-            const {error} = await db
+            const { error } = await db
                 .from('entity_email_patterns')
-                .insert({entity_id: entityId, pattern});
+                .insert({ entity_id: entityId, pattern });
 
             if (error) throw error;
         }
     }
 
-    const {data, error} = await db
+    const { data, error } = await db
         .from('entity_email_patterns')
         .select('id')
         .eq('entity_id', entityId)
@@ -332,7 +332,7 @@ async function resolveExpenseTypeId(
     const label = trimNullable(expenseType);
     if (!label) return null;
 
-    const {data, error} = await db
+    const { data, error } = await db
         .from('expense_types')
         .select('id,name,label');
 
@@ -356,13 +356,13 @@ export async function GET(req: NextRequest) {
 
         if (bearerToken) {
             const db = getDirectClient();
-            const {data, error} = await db.rpc(
+            const { data, error } = await db.rpc(
                 'get_email_templates_for_webhook',
-                {p_token: bearerToken},
+                { p_token: bearerToken },
             );
 
             if (error) {
-                return NextResponse.json({error: error.message}, {status: 500});
+                return NextResponse.json({ error: error.message }, { status: 500 });
             }
 
             return NextResponse.json(data || []);
@@ -370,14 +370,14 @@ export async function GET(req: NextRequest) {
 
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
             return NextResponse.json(
-                {error: 'No autorizado. Se requiere Bearer token o sesión activa.'},
-                {status: 401},
+                { error: 'No autorizado. Se requiere Bearer token o sesión activa.' },
+                { status: 401 },
             );
         }
 
@@ -390,7 +390,7 @@ export async function GET(req: NextRequest) {
                         ? err.message
                         : 'Error interno al consultar plantillas',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }
@@ -399,19 +399,19 @@ export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const rawBody: unknown = await req.json();
         if (!isTemplateWriteBody(rawBody)) {
             return NextResponse.json(
-                {error: 'El cuerpo de la solicitud no es válido.'},
-                {status: 400},
+                { error: 'El cuerpo de la solicitud no es válido.' },
+                { status: 400 },
             );
         }
 
@@ -425,15 +425,15 @@ export async function POST(req: NextRequest) {
 
         if (!name) {
             return NextResponse.json(
-                {error: 'El nombre de la plantilla es obligatorio'},
-                {status: 400},
+                { error: 'El nombre de la plantilla es obligatorio' },
+                { status: 400 },
             );
         }
 
         if (!amountRegex) {
             return NextResponse.json(
-                {error: 'El patrón amount_regex es obligatorio'},
-                {status: 400},
+                { error: 'El patrón amount_regex es obligatorio' },
+                { status: 400 },
             );
         }
 
@@ -443,7 +443,7 @@ export async function POST(req: NextRequest) {
                     error:
                         'Se requiere entity_id o el nombre de la entidad (new_entity_name).',
                 },
-                {status: 400},
+                { status: 400 },
             );
         }
 
@@ -476,17 +476,17 @@ export async function POST(req: NextRequest) {
             amount_regex: amountRegex,
         };
 
-        const {data, error} = await supabase
+        const { data, error } = await supabase
             .from('email_templates')
             .insert(payload)
             .select()
             .single();
 
         if (error) {
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json(data, {status: 201});
+        return NextResponse.json(data, { status: 201 });
     } catch (err: unknown) {
         return NextResponse.json(
             {
@@ -495,7 +495,7 @@ export async function POST(req: NextRequest) {
                         ? err.message
                         : 'Error interno al crear plantilla',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }
@@ -504,19 +504,19 @@ export async function PUT(req: NextRequest) {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const rawBody: unknown = await req.json();
         if (!isTemplateWriteBody(rawBody)) {
             return NextResponse.json(
-                {error: 'El cuerpo de la solicitud no es válido.'},
-                {status: 400},
+                { error: 'El cuerpo de la solicitud no es válido.' },
+                { status: 400 },
             );
         }
 
@@ -525,8 +525,8 @@ export async function PUT(req: NextRequest) {
 
         if (!id) {
             return NextResponse.json(
-                {error: 'El ID de la plantilla es obligatorio'},
-                {status: 400},
+                { error: 'El ID de la plantilla es obligatorio' },
+                { status: 400 },
             );
         }
 
@@ -553,8 +553,8 @@ export async function PUT(req: NextRequest) {
 
         if (payload.amount_regex === null) {
             return NextResponse.json(
-                {error: 'amount_regex es obligatorio'},
-                {status: 400},
+                { error: 'amount_regex es obligatorio' },
+                { status: 400 },
             );
         }
 
@@ -570,7 +570,7 @@ export async function PUT(req: NextRequest) {
             );
         }
 
-        const {data: current, error: currentError} = await supabase
+        const { data: current, error: currentError } = await supabase
             .from('email_templates')
             .select('entity_id')
             .eq('id', id)
@@ -578,8 +578,8 @@ export async function PUT(req: NextRequest) {
 
         if (currentError) {
             return NextResponse.json(
-                {error: currentError.message},
-                {status: 404},
+                { error: currentError.message },
+                { status: 404 },
             );
         }
 
@@ -589,13 +589,13 @@ export async function PUT(req: NextRequest) {
 
         if (!targetEntityId) {
             return NextResponse.json(
-                {error: 'La plantilla debe pertenecer a una entidad.'},
-                {status: 400},
+                { error: 'La plantilla debe pertenecer a una entidad.' },
+                { status: 400 },
             );
         }
 
         if (payload.entity_id && payload.entity_id !== current.entity_id) {
-            const {data: entity, error: entityError} = await supabase
+            const { data: entity, error: entityError } = await supabase
                 .from('entities')
                 .select('id')
                 .eq('id', payload.entity_id)
@@ -605,8 +605,8 @@ export async function PUT(req: NextRequest) {
 
             if (!entity) {
                 return NextResponse.json(
-                    {error: 'La entidad indicada no existe'},
-                    {status: 400},
+                    { error: 'La entidad indicada no existe' },
+                    { status: 400 },
                 );
             }
         }
@@ -617,7 +617,7 @@ export async function PUT(req: NextRequest) {
             body.entity_email_pattern,
         );
 
-        const {data, error} = await supabase
+        const { data, error } = await supabase
             .from('email_templates')
             .update(payload)
             .eq('id', id)
@@ -625,7 +625,7 @@ export async function PUT(req: NextRequest) {
             .single();
 
         if (error) {
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         return NextResponse.json(data);
@@ -637,7 +637,7 @@ export async function PUT(req: NextRequest) {
                         ? err.message
                         : 'Error interno al actualizar plantilla',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }
@@ -646,33 +646,33 @@ export async function DELETE(req: NextRequest) {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const id = new URL(req.url).searchParams.get('id')?.trim();
 
         if (!id) {
             return NextResponse.json(
-                {error: 'ID de plantilla requerido'},
-                {status: 400},
+                { error: 'ID de plantilla requerido' },
+                { status: 400 },
             );
         }
 
-        const {error} = await supabase
+        const { error } = await supabase
             .from('email_templates')
             .delete()
             .eq('id', id);
 
         if (error) {
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json({success: true});
+        return NextResponse.json({ success: true });
     } catch (err: unknown) {
         return NextResponse.json(
             {
@@ -681,7 +681,7 @@ export async function DELETE(req: NextRequest) {
                         ? err.message
                         : 'Error interno al eliminar plantilla',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }

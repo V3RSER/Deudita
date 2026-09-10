@@ -1,56 +1,56 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {sendNotifications} from '@/lib/notifications';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { sendNotifications } from '@/lib/notifications';
 
 export async function GET() {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {data: managedUsers, error} = await supabase
+        const { data: managedUsers, error } = await supabase
             .from('managed_users')
             .select('*');
 
         if (error) {
             console.warn('[API /api/managed-users] Query warning:', error.message);
-            return NextResponse.json({managedUsers: []});
+            return NextResponse.json({ managedUsers: [] });
         }
 
-        return NextResponse.json({managedUsers: managedUsers || []});
+        return NextResponse.json({ managedUsers: managedUsers || [] });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Error al obtener personas vinculadas';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const body = await req.json();
-        const {targetUserId, shouldManage} = body;
+        const { targetUserId, shouldManage } = body;
 
         if (!targetUserId || targetUserId === user.id) {
-            return NextResponse.json({error: 'ID de usuario no válido'}, {status: 400});
+            return NextResponse.json({ error: 'ID de usuario no válido' }, { status: 400 });
         }
 
         if (shouldManage) {
             // 1. Insert into managed_users table
             try {
-                const {error: insErr} = await supabase
+                const { error: insErr } = await supabase
                     .from('managed_users')
                     .upsert(
-                        {sponsor_id: user.id, managed_user_id: targetUserId},
-                        {onConflict: 'managed_user_id'}
+                        { sponsor_id: user.id, managed_user_id: targetUserId },
+                        { onConflict: 'managed_user_id' }
                     );
 
                 if (insErr) {
@@ -61,13 +61,13 @@ export async function POST(req: Request) {
             }
 
             // 2. Fetch current sponsor profile & target profile
-            const {data: sponsorProfile} = await supabase
+            const { data: sponsorProfile } = await supabase
                 .from('profiles')
                 .select('id, full_name, managed_user_ids')
                 .eq('id', user.id)
                 .maybeSingle();
 
-            const {data: targetProfile} = await supabase
+            const { data: targetProfile } = await supabase
                 .from('profiles')
                 .select('id, full_name, is_temp')
                 .eq('id', targetUserId)
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
             try {
                 await supabase
                     .from('profiles')
-                    .update({managed_user_ids: updatedList})
+                    .update({ managed_user_ids: updatedList })
                     .eq('id', user.id);
             } catch (syncErr) {
                 console.warn('[API /api/managed-users] Error updating profile managed_user_ids:', syncErr);
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
             }
 
             // Keep profiles.managed_user_ids in sync
-            const {data: sponsorProfile} = await supabase
+            const { data: sponsorProfile } = await supabase
                 .from('profiles')
                 .select('id, managed_user_ids')
                 .eq('id', user.id)
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
             try {
                 await supabase
                     .from('profiles')
-                    .update({managed_user_ids: updatedList})
+                    .update({ managed_user_ids: updatedList })
                     .eq('id', user.id);
             } catch (syncErr) {
                 console.warn('[API /api/managed-users] Error updating profile managed_user_ids on delete:', syncErr);
@@ -151,6 +151,6 @@ export async function POST(req: Request) {
     } catch (err: unknown) {
         console.error('[API /api/managed-users] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al actualizar persona vinculada';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

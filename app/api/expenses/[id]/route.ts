@@ -1,69 +1,69 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {calculateExpenseChangeDetails, notifyExpenseDeleted, notifyExpenseUpdated,} from '@/lib/notifications';
-import {normalizeSplitsToTotal} from '@/lib/balance-utils';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { calculateExpenseChangeDetails, notifyExpenseDeleted, notifyExpenseUpdated, } from '@/lib/notifications';
+import { normalizeSplitsToTotal } from '@/lib/balance-utils';
 
 export async function GET(
     request: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const {id} = await params;
+        const { id } = await params;
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {data: expense, error} = await supabase
+        const { data: expense, error } = await supabase
             .from('expenses')
             .select('*, items:expense_items(*), splits:expense_splits(*)')
             .eq('id', id)
             .single();
 
         if (error || !expense) {
-            return NextResponse.json({error: 'Gasto no encontrado'}, {status: 404});
+            return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
         }
 
-        const {data: auditLogs} = await supabase
+        const { data: auditLogs } = await supabase
             .from('expense_audit_logs')
             .select('*')
             .eq('expense_id', id)
-            .order('created_at', {ascending: false});
+            .order('created_at', { ascending: false });
 
-        return NextResponse.json({...expense, audit_logs: auditLogs ?? []});
+        return NextResponse.json({ ...expense, audit_logs: auditLogs ?? [] });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Error al obtener detalle del gasto';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 export async function PUT(
     request: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const {id} = await params;
+        const { id } = await params;
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
             console.error('[API /api/expenses/[id]] Auth error:', authErr);
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {expense, items, splits} = await request.json();
+        const { expense, items, splits } = await request.json();
 
         // Fetch previous expense and splits to calculate audit differences
-        const {data: previousExpense, error: prevErr} = await supabase
+        const { data: previousExpense, error: prevErr } = await supabase
             .from('expenses')
             .select('*, items:expense_items(*), splits:expense_splits(*)')
             .eq('id', id)
             .maybeSingle();
 
         if (prevErr || !previousExpense) {
-            return NextResponse.json({error: 'Gasto no encontrado'}, {status: 404});
+            return NextResponse.json({ error: 'Gasto no encontrado' }, { status: 404 });
         }
 
         const rawGroupId = expense.group_id && expense.group_id !== 'none' ? expense.group_id : (previousExpense.group_id ?? null);
@@ -97,7 +97,7 @@ export async function PUT(
         if (expense.notes !== undefined) updatePayload.notes = expense.notes;
 
         // 1. Update main expense record
-        let {data: updatedExpense, error: expErr} = await supabase
+        let { data: updatedExpense, error: expErr } = await supabase
             .from('expenses')
             .update(updatePayload)
             .eq('id', id)
@@ -124,7 +124,7 @@ export async function PUT(
 
         if (expErr || !updatedExpense) {
             console.error('[API /api/expenses/[id]] Update error:', expErr);
-            return NextResponse.json({error: expErr?.message ?? 'Error al actualizar el gasto'}, {status: 500});
+            return NextResponse.json({ error: expErr?.message ?? 'Error al actualizar el gasto' }, { status: 500 });
         }
 
         // 2. Prepare target splits & items with precision normalization
@@ -154,7 +154,7 @@ export async function PUT(
         })) : [];
 
         // 3. Update splits directly (update existing, insert new, delete removed)
-        const {data: currentSplits} = await supabase
+        const { data: currentSplits } = await supabase
             .from('expense_splits')
             .select('*')
             .eq('expense_id', id);
@@ -168,7 +168,7 @@ export async function PUT(
             if (currentUserIdSet.has(s.user_id)) {
                 await supabase
                     .from('expense_splits')
-                    .update({amount_owed: s.amount_owed})
+                    .update({ amount_owed: s.amount_owed })
                     .eq('expense_id', id)
                     .eq('user_id', s.user_id);
             }
@@ -200,7 +200,7 @@ export async function PUT(
         }
 
         // 5. Verify if splits were updated correctly or if RLS blocked modification
-        const {data: verifiedSplits} = await supabase
+        const { data: verifiedSplits } = await supabase
             .from('expense_splits')
             .select('*')
             .eq('expense_id', id);
@@ -215,7 +215,7 @@ export async function PUT(
             console.log('[API /api/expenses/[id]] Splits mismatch detected, using cascade recreation for expense', id);
             try {
                 // Cascade delete parent expense
-                const {error: delExpErr} = await supabase
+                const { error: delExpErr } = await supabase
                     .from('expenses')
                     .delete()
                     .eq('id', id);
@@ -229,7 +229,7 @@ export async function PUT(
                         created_at: previousExpense.created_at,
                     };
 
-                    const {data: reInsertedExp, error: reInsErr} = await supabase
+                    const { data: reInsertedExp, error: reInsErr } = await supabase
                         .from('expenses')
                         .insert(reInsertPayload)
                         .select()
@@ -273,7 +273,7 @@ export async function PUT(
 
             const nameMap = new Map<string, string>();
             if (allAffectedIds.length > 0) {
-                const {data: profileRecords} = await supabase
+                const { data: profileRecords } = await supabase
                     .from('profiles')
                     .select('id, full_name')
                     .in('id', allAffectedIds);
@@ -314,12 +314,12 @@ export async function PUT(
             // If the Postgres trigger already recorded an update log within the last 15 seconds,
             // enrich it with our full change details to prevent duplicate entries in group activity.
             if (rawGroupId) {
-                const {data: recentTriggerLogs} = await supabase
+                const { data: recentTriggerLogs } = await supabase
                     .from('expense_audit_logs')
                     .select('id, changes, created_at')
                     .eq('expense_id', id)
                     .eq('action', 'update')
-                    .order('created_at', {ascending: false})
+                    .order('created_at', { ascending: false })
                     .limit(1);
 
                 const recentLog = recentTriggerLogs?.[0];
@@ -395,50 +395,50 @@ export async function PUT(
         }
 
         // Fetch complete updated expense with items and splits to return
-        const {data: fullUpdatedExpense} = await supabase
+        const { data: fullUpdatedExpense } = await supabase
             .from('expenses')
             .select('*, items:expense_items(*), splits:expense_splits(*)')
             .eq('id', id)
             .single();
 
         const finalExpense = fullUpdatedExpense ?? updatedExpense;
-        return NextResponse.json({...finalExpense, split_config: expense.split_config});
+        return NextResponse.json({ ...finalExpense, split_config: expense.split_config });
     } catch (err: unknown) {
         console.error('[API /api/expenses/[id]] Unhandled PUT error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al actualizar gasto';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 export async function DELETE(
     request: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const {id} = await params;
+        const { id } = await params;
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
             console.error('[API /api/expenses/[id]] Auth error:', authErr);
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         // Fetch expense and its splits before deletion to notify participants
-        const {data: expToDelete} = await supabase
+        const { data: expToDelete } = await supabase
             .from('expenses')
             .select('*, splits:expense_splits(*)')
             .eq('id', id)
             .maybeSingle();
 
-        const {error} = await supabase
+        const { error } = await supabase
             .from('expenses')
             .delete()
             .eq('id', id);
 
         if (error) {
             console.error('[API /api/expenses/[id]] Delete error:', error);
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         if (expToDelete) {
@@ -457,11 +457,11 @@ export async function DELETE(
             }
         }
 
-        return NextResponse.json({success: true});
+        return NextResponse.json({ success: true });
     } catch (err: unknown) {
         console.error('[API /api/expenses/[id]] Unhandled error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al eliminar gasto';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

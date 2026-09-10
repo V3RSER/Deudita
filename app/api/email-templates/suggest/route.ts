@@ -1,8 +1,8 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {GoogleGenAI, Type} from '@google/genai';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { GoogleGenAI, Type } from '@google/genai';
 
-import {buildTemplatePrompt, cleanEmailBody, parseAITemplateResponse,} from '@/lib/email-templates/email-cleaning';
+import { buildTemplatePrompt, cleanEmailBody, parseAITemplateResponse, } from '@/lib/email-templates/email-cleaning';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,17 +27,17 @@ async function loadPromptEntities(
     supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<PromptEntity[]> {
     const [
-        {data: entities, error: entitiesError},
-        {data: patterns, error: patternsError},
+        { data: entities, error: entitiesError },
+        { data: patterns, error: patternsError },
     ] = await Promise.all([
         supabase
             .from('entities')
             .select('id,name')
-            .order('name', {ascending: true}),
+            .order('name', { ascending: true }),
         supabase
             .from('entity_email_patterns')
             .select('entity_id,pattern')
-            .order('created_at', {ascending: true}),
+            .order('created_at', { ascending: true }),
     ]);
 
     if (entitiesError) throw entitiesError;
@@ -127,7 +127,7 @@ function buildSuggestionSchema(expenseTypes: Array<{ name: string; label?: strin
             expense_type: {
                 type: Type.STRING,
                 description: expenseTypeDescription,
-                ...(expenseTypes.length > 0 ? {enum: expenseTypes.map((t) => t.name)} : {}),
+                ...(expenseTypes.length > 0 ? { enum: expenseTypes.map((t) => t.name) } : {}),
             },
         },
         required: [
@@ -192,12 +192,12 @@ export async function POST(req: NextRequest) {
         const supabase = await createClient();
 
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const rawBody: unknown = await req.json().catch(() => null);
@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
                     error:
                         'Debes proporcionar el remitente, asunto y cuerpo de un correo de ejemplo.',
                 },
-                {status: 400},
+                { status: 400 },
             );
         }
 
@@ -217,8 +217,8 @@ export async function POST(req: NextRequest) {
 
         if (!apiKey) {
             return NextResponse.json(
-                {error: 'GEMINI_API_KEY no está configurada en el servidor.'},
-                {status: 503},
+                { error: 'GEMINI_API_KEY no está configurada en el servidor.' },
+                { status: 503 },
             );
         }
 
@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
             supabase
                 .from('expense_types')
                 .select('name, label')
-                .order('label', {ascending: true}),
+                .order('label', { ascending: true }),
         ]);
 
         const availableExpenseTypes: Array<{
@@ -271,8 +271,8 @@ export async function POST(req: NextRequest) {
 
         if (!textOutput) {
             return NextResponse.json(
-                {error: 'La IA no devolvió una plantilla.'},
-                {status: 502},
+                { error: 'La IA no devolvió una plantilla.' },
+                { status: 502 },
             );
         }
 
@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
                         'La IA devolvió una plantilla que no cumple la estructura esperada.',
                     warnings: parsed.warnings,
                 },
-                {status: 422},
+                { status: 422 },
             );
         }
 
@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
                         ? err.message
                         : 'No se pudo generar la plantilla con IA.',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }

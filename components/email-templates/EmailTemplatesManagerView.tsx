@@ -1,51 +1,51 @@
 'use client';
 
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {useSearchParams} from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
-  AlertTriangle,
-  Calendar,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  CreditCard,
-  DollarSign,
-  Edit3,
-  ExternalLink,
-  Inbox,
-  Layers,
-  Loader2,
-  Mail,
-  Plus,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Store,
-  Trash2,
-  X,
+    AlertCircle,
+    AlertTriangle,
+    Calendar,
+    Check,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    Copy,
+    CreditCard,
+    DollarSign,
+    Edit3,
+    ExternalLink,
+    Inbox,
+    Layers,
+    Loader2,
+    Mail,
+    Plus,
+    RefreshCw,
+    Search,
+    Sparkles,
+    Store,
+    Trash2,
+    X,
 } from 'lucide-react';
-import {createClient} from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import {
-  buildCorrectionPrompt,
-  buildTemplatePrompt,
-  cleanEmailBody,
-  parseAITemplateResponse,
-  resolveEmailEntity,
-  sanitizeRegexPattern,
+    buildCorrectionPrompt,
+    buildTemplatePrompt,
+    cleanEmailBody,
+    parseAITemplateResponse,
+    resolveEmailEntity,
+    sanitizeRegexPattern,
 } from '@/lib/email-templates/email-cleaning';
 import {
-  CatalogEntity,
-  CatalogTemplate,
-  diagnoseEmailMatching,
-  DiagnosisResult,
-  DiagnosisTemplateReport,
-  evaluateTemplateAgainstEmail,
-  SingleTemplateEvaluation,
+    CatalogEntity,
+    CatalogTemplate,
+    diagnoseEmailMatching,
+    DiagnosisResult,
+    DiagnosisTemplateReport,
+    evaluateTemplateAgainstEmail,
+    SingleTemplateEvaluation,
 } from '@/lib/email-templates/email-matching';
-import {formatCurrency} from '@/lib/balance-utils';
+import { formatCurrency } from '@/lib/balance-utils';
 
 type TemplateFormState = {
     name: string;
@@ -91,14 +91,14 @@ function useTemplateFormState(initialState: TemplateFormState) {
     const [state, setState] = useState<TemplateFormState>(initialState);
 
     const update = useCallback((patch: Partial<TemplateFormState>) => {
-        setState((current) => ({...current, ...patch}));
+        setState((current) => ({ ...current, ...patch }));
     }, []);
 
     const reset = useCallback(() => {
-        setState({...initialState});
+        setState({ ...initialState });
     }, [initialState]);
 
-    return {state, update, reset};
+    return { state, update, reset };
 }
 
 interface TemplateDiagnosticStepsViewProps {
@@ -118,14 +118,14 @@ interface DiagnosticLevelRowProps {
     matchedOn?: string | null;
 }
 
-function DiagnosticLevelRow({label, passed, pattern, matchedOn}: Readonly<DiagnosticLevelRowProps>) {
+function DiagnosticLevelRow({ label, passed, pattern, matchedOn }: Readonly<DiagnosticLevelRowProps>) {
     const tone = passed ? 'text-zinc-700' : 'text-rose-700';
     const location = matchedOn === 'sender' ? 'en remitente' : 'en cuerpo';
 
     return (
         <div className={`flex items-center gap-1.5 text-[11px] ${tone}`}>
-            {passed ? <Check className="w-3 h-3 text-emerald-600 shrink-0"/> :
-                <X className="w-3 h-3 text-rose-500 shrink-0"/>}
+            {passed ? <Check className="w-3 h-3 text-emerald-600 shrink-0" /> :
+                <X className="w-3 h-3 text-rose-500 shrink-0" />}
             <span className="font-semibold shrink-0">{label}</span>
             <code
                 className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[200px] sm:max-w-xs">{pattern}</code>
@@ -141,7 +141,7 @@ interface DiagnosticExtractionRowProps {
     amount?: number | null;
 }
 
-function DiagnosticExtractionValue({field, amount}: Readonly<{
+function DiagnosticExtractionValue({ field, amount }: Readonly<{
     field: DiagnosticExtractionRowProps['field'];
     amount?: number | null;
 }>) {
@@ -153,24 +153,24 @@ function DiagnosticExtractionValue({field, amount}: Readonly<{
         return (
             <span
                 className="font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
-        ${formatCurrency(amount ?? 0)}
-      </span>
+                ${formatCurrency(amount ?? 0)}
+            </span>
         );
     }
 
     return (
         <span
             className="font-bold text-zinc-900 bg-white border border-zinc-200 px-2 py-0.5 rounded truncate max-w-[200px]">
-      {field.rawExtracted}
-    </span>
+            {field.rawExtracted}
+        </span>
     );
 }
 
-function DiagnosticExtractionRow({label, pattern, field, amount}: Readonly<DiagnosticExtractionRowProps>) {
+function DiagnosticExtractionRow({ label, pattern, field, amount }: Readonly<DiagnosticExtractionRowProps>) {
     const valueClass = field.success ? 'text-zinc-700' : 'text-zinc-500';
     const icon = field.success
-        ? <Check className="w-3 h-3 text-emerald-600 shrink-0"/>
-        : <X className="w-3 h-3 text-zinc-400 shrink-0"/>;
+        ? <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+        : <X className="w-3 h-3 text-zinc-400 shrink-0" />;
 
     return (
         <div className={`flex items-center gap-1.5 text-[11px] ${valueClass}`}>
@@ -179,7 +179,7 @@ function DiagnosticExtractionRow({label, pattern, field, amount}: Readonly<Diagn
             <code
                 className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px] sm:max-w-xs">/{pattern}/i</code>
             <span className="text-zinc-400 shrink-0">→</span>
-            <DiagnosticExtractionValue field={field} amount={amount}/>
+            <DiagnosticExtractionValue field={field} amount={amount} />
             {!field.hasCaptureGroup && field.success && (
                 <span className="text-[10px] text-amber-700 font-medium shrink-0">(sin grupo (...))</span>
             )}
@@ -187,38 +187,38 @@ function DiagnosticExtractionRow({label, pattern, field, amount}: Readonly<Diagn
     );
 }
 
-function DiagnosticStatusBadge({passed, isWinner}: Readonly<{ passed: boolean; isWinner?: boolean }>) {
+function DiagnosticStatusBadge({ passed, isWinner }: Readonly<{ passed: boolean; isWinner?: boolean }>) {
     let label = 'No coincide';
     let tone = 'text-rose-700 bg-rose-100/90 border-rose-300';
-    let icon = <X className="w-3 h-3 text-rose-600"/>;
+    let icon = <X className="w-3 h-3 text-rose-600" />;
 
     if (passed) {
         label = isWinner ? 'Ganadora / Coincide' : 'Coincide';
         tone = 'text-emerald-700 bg-emerald-100/90 border-emerald-300';
-        icon = <Check className="w-3 h-3 text-emerald-600"/>;
+        icon = <Check className="w-3 h-3 text-emerald-600" />;
     }
 
     return (
         <span
             className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${tone}`}>
-      {icon}
+            {icon}
             <span>{label}</span>
-    </span>
+        </span>
     );
 }
 
 function DiagnosisSummaryBadge({
-                                   matchedCount,
-                                   winner,
-                               }: Readonly<{ matchedCount: number; winner?: DiagnosisResult['winner'] }>) {
+    matchedCount,
+    winner,
+}: Readonly<{ matchedCount: number; winner?: DiagnosisResult['winner'] }>) {
     if (matchedCount === 1 && winner) {
         return (
             <span
                 className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-[11px]">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600"/>
-        <span className="hidden sm:inline">{winner.template.name}</span>
-        <span className="sm:hidden">Coincide</span>
-      </span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">{winner.template.name}</span>
+                <span className="sm:hidden">Coincide</span>
+            </span>
         );
     }
 
@@ -226,21 +226,21 @@ function DiagnosisSummaryBadge({
         return (
             <span
                 className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg text-[11px]">
-        <AlertTriangle className="w-3.5 h-3.5 text-amber-600"/>
-        <span>{matchedCount} conflictos</span>
-      </span>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                <span>{matchedCount} conflictos</span>
+            </span>
         );
     }
 
     return (
         <span
             className="inline-flex items-center gap-1 font-medium text-zinc-600 bg-zinc-100 px-2.5 py-1 rounded-lg text-[11px]">
-      <span>Ninguna plantilla funcionó</span>
-    </span>
+            <span>Ninguna plantilla funcionó</span>
+        </span>
     );
 }
 
-function DiagnosticIssueList({title, items, kind}: Readonly<{
+function DiagnosticIssueList({ title, items, kind }: Readonly<{
     title: string;
     items: string[];
     kind: 'error' | 'warning'
@@ -248,8 +248,8 @@ function DiagnosticIssueList({title, items, kind}: Readonly<{
     const isError = kind === 'error';
     const wrapper = isError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50/80 border-amber-200 text-amber-900';
     const titleTone = isError ? 'text-rose-900' : 'text-amber-800';
-    const icon = isError ? <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0"/> :
-        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0"/>;
+    const icon = isError ? <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" /> :
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
 
     return (
         <div className="p-3 pb-2 pt-1">
@@ -264,23 +264,23 @@ function DiagnosticIssueList({title, items, kind}: Readonly<{
 }
 
 function TemplateDiagnosticStepsView({
-                                         evaluation,
-                                         isWinner,
-                                         onAction,
-                                         actionLabel,
-                                         onCopyCorrectionPrompt,
-                                         copiedPrompt,
-                                         customTitle,
-                                     }: Readonly<TemplateDiagnosticStepsViewProps>) {
-    const {template: tmpl, level1, level2, level3, level4} = evaluation;
+    evaluation,
+    isWinner,
+    onAction,
+    actionLabel,
+    onCopyCorrectionPrompt,
+    copiedPrompt,
+    customTitle,
+}: Readonly<TemplateDiagnosticStepsViewProps>) {
+    const { template: tmpl, level1, level2, level3, level4 } = evaluation;
     const isPassing = evaluation.overallPassed;
     const entityName = tmpl.entity?.name || evaluation.level1.entityName;
     const rows = [
-        {label: 'Monto', pattern: tmpl.amount_regex, field: level4.fields.amount, amount: level4.extractedAmount},
-        {label: 'Comercio', pattern: tmpl.merchant_regex, field: level4.fields.merchant},
-        {label: 'Cuenta', pattern: tmpl.source_account_regex, field: level4.fields.source_account},
-        {label: 'Fecha', pattern: tmpl.date_regex, field: level4.fields.date},
-        {label: 'Hora', pattern: tmpl.time_regex, field: level4.fields.time},
+        { label: 'Monto', pattern: tmpl.amount_regex, field: level4.fields.amount, amount: level4.extractedAmount },
+        { label: 'Comercio', pattern: tmpl.merchant_regex, field: level4.fields.merchant },
+        { label: 'Cuenta', pattern: tmpl.source_account_regex, field: level4.fields.source_account },
+        { label: 'Fecha', pattern: tmpl.date_regex, field: level4.fields.date },
+        { label: 'Hora', pattern: tmpl.time_regex, field: level4.fields.time },
     ].filter((row) => Boolean(row.pattern));
 
     return (
@@ -289,14 +289,14 @@ function TemplateDiagnosticStepsView({
             className={`group rounded-xl border overflow-hidden transition ${isPassing
                 ? 'bg-emerald-50/40 border-emerald-200'
                 : 'bg-white border-zinc-200'
-            }`}
+                }`}
         >
             <summary
                 className="list-none cursor-pointer px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-white/60 transition [&::-webkit-details-marker]:hidden">
                 <div className="flex items-center gap-2 min-w-0">
                     <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isPassing ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                        {isPassing ? <Check className="w-3.5 h-3.5"/> : <X className="w-3.5 h-3.5"/>}
+                        {isPassing ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
                     </div>
                     <div className="min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -311,15 +311,15 @@ function TemplateDiagnosticStepsView({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                    <DiagnosticStatusBadge passed={isPassing} isWinner={isWinner}/>
+                    <DiagnosticStatusBadge passed={isPassing} isWinner={isWinner} />
                     {onCopyCorrectionPrompt && (
                         <button type="button" onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
                             event.preventDefault();
                             onCopyCorrectionPrompt();
                         }}
-                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${copiedPrompt ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-indigo-700 border-zinc-200 hover:bg-indigo-50'}`}>
-                            {copiedPrompt ? <Check className="w-3 h-3"/> :
-                                <Sparkles className="w-3 h-3 text-amber-500"/>}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${copiedPrompt ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-indigo-700 border-zinc-200 hover:bg-indigo-50'}`}>
+                            {copiedPrompt ? <Check className="w-3 h-3" /> :
+                                <Sparkles className="w-3 h-3 text-amber-500" />}
                             {copiedPrompt ? 'Copiado' : 'IA'}
                         </button>
                     )}
@@ -328,34 +328,34 @@ function TemplateDiagnosticStepsView({
                             event.preventDefault();
                             onAction();
                         }}
-                                className="px-2 py-1 rounded-lg bg-white border border-zinc-200 text-[10px] font-bold text-zinc-700 hover:bg-zinc-50 transition cursor-pointer">{actionLabel}</button>
+                            className="px-2 py-1 rounded-lg bg-white border border-zinc-200 text-[10px] font-bold text-zinc-700 hover:bg-zinc-50 transition cursor-pointer">{actionLabel}</button>
                     )}
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 transition-transform group-open:rotate-180"/>
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 transition-transform group-open:rotate-180" />
                 </div>
             </summary>
 
             <div className="border-t border-zinc-200/80 p-3 space-y-2.5">
                 {evaluation.criticalFailures.length > 0 &&
                     <DiagnosticIssueList title="Motivo(s) por los que no coincide:" items={evaluation.criticalFailures}
-                                         kind="error"/>}
+                        kind="error" />}
                 {evaluation.warnings.length > 0 &&
-                    <DiagnosticIssueList title="Avisos de extracción:" items={evaluation.warnings} kind="warning"/>}
+                    <DiagnosticIssueList title="Avisos de extracción:" items={evaluation.warnings} kind="warning" />}
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-4 gap-y-1.5">
                     <DiagnosticLevelRow label="1. Entidad" passed={level1.passed}
-                                        pattern={level1.matchedPattern ? `/${level1.matchedPattern}/i` : level1.entityName || entityName || 'sin patrón'}
-                                        matchedOn={level1.matchedOn}/>
+                        pattern={level1.matchedPattern ? `/${level1.matchedPattern}/i` : level1.entityName || entityName || 'sin patrón'}
+                        matchedOn={level1.matchedOn} />
                     <DiagnosticLevelRow label="2. Asunto" passed={level2.passed}
-                                        pattern={tmpl.subject_pattern ? `/${tmpl.subject_pattern}/i` : 'sin filtro de asunto'}
-                                        matchedOn={level2.matchedOn}/>
+                        pattern={tmpl.subject_pattern ? `/${tmpl.subject_pattern}/i` : 'sin filtro de asunto'}
+                        matchedOn={level2.matchedOn} />
                     <DiagnosticLevelRow label="3. Desempate" passed={level3.passed}
-                                        pattern={tmpl.match_pattern ? `/${tmpl.match_pattern}/i` : 'no requerido'}/>
+                        pattern={tmpl.match_pattern ? `/${tmpl.match_pattern}/i` : 'no requerido'} />
                     {rows.map((row) => (
                         <DiagnosticExtractionRow key={row.label} label={row.label} pattern={row.pattern || ''}
-                                                 field={row.field} amount={row.amount}/>
+                            field={row.field} amount={row.amount} />
                     ))}
                     <div className="flex items-center gap-1.5 text-[11px] text-zinc-700 min-w-0">
-                        <Check className="w-3 h-3 text-emerald-600 shrink-0"/>
+                        <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                         <span className="font-semibold shrink-0">Moneda</span>
                         <code
                             className="bg-white/80 border border-zinc-200 rounded px-1.5 py-0.5 font-mono truncate max-w-[180px]">{tmpl.currency_regex ? `/${tmpl.currency_regex}/i` : 'por defecto'}</code>
@@ -401,26 +401,26 @@ interface TemplateCatalogPanelProps {
 }
 
 function TemplateCatalogPanel({
-                                  templates,
-                                  entities,
-                                  isLoadingTemplates,
-                                  templateSearchQuery,
-                                  selectedEntityFilter,
-                                  deletingId,
-                                  availableEntityNames,
-                                  filteredTemplates,
-                                  onSearchChange,
-                                  onEntityFilterChange,
-                                  onOpenNew,
-                                  onEdit,
-                                  onDelete,
-                              }: Readonly<TemplateCatalogPanelProps>) {
+    templates,
+    entities,
+    isLoadingTemplates,
+    templateSearchQuery,
+    selectedEntityFilter,
+    deletingId,
+    availableEntityNames,
+    filteredTemplates,
+    onSearchChange,
+    onEntityFilterChange,
+    onOpenNew,
+    onEdit,
+    onDelete,
+}: Readonly<TemplateCatalogPanelProps>) {
     return (
         <div className="space-y-4">
             <div
                 className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 border border-zinc-200 rounded-2xl shadow-xs">
                 <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2"/>
+                    <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                         type="text"
                         value={templateSearchQuery}
@@ -437,7 +437,7 @@ function TemplateCatalogPanel({
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter === 'all'
                             ? 'bg-zinc-900 text-white'
                             : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                        }`}
+                            }`}
                     >
                         Todos ({templates.length})
                     </button>
@@ -449,7 +449,7 @@ function TemplateCatalogPanel({
                             className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${selectedEntityFilter.toLowerCase() === name.toLowerCase()
                                 ? 'bg-zinc-900 text-white'
                                 : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                            }`}
+                                }`}
                         >
                             {name}
                         </button>
@@ -461,21 +461,21 @@ function TemplateCatalogPanel({
                     onClick={() => onOpenNew()}
                     className="inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
                 >
-                    <Plus className="w-3.5 h-3.5"/>
+                    <Plus className="w-3.5 h-3.5" />
                     <span>Nueva Plantilla</span>
                 </button>
             </div>
 
             {isLoadingTemplates ? (
                 <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-2">
-                    <Loader2 className="w-6 h-6 animate-spin text-zinc-500 mx-auto"/>
+                    <Loader2 className="w-6 h-6 animate-spin text-zinc-500 mx-auto" />
                     <p className="text-xs text-zinc-500">Cargando plantillas guardadas...</p>
                 </div>
             ) : filteredTemplates.length === 0 ? (
                 <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center space-y-3">
                     <div
                         className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto text-zinc-400">
-                        <Layers className="w-6 h-6"/>
+                        <Layers className="w-6 h-6" />
                     </div>
                     <div className="space-y-1">
                         <h3 className="text-sm font-bold text-zinc-900">No hay plantillas que coincidan</h3>
@@ -494,10 +494,10 @@ function TemplateCatalogPanel({
                             <div className="space-y-2">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="space-y-0.5">
-                    <span
-                        className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
-                      {entities.find((e) => e.id === t.entity_id)?.name || 'General'}
-                    </span>
+                                        <span
+                                            className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
+                                            {entities.find((e) => e.id === t.entity_id)?.name || 'General'}
+                                        </span>
                                         <h3 className="text-sm font-bold text-zinc-900">{t.name}</h3>
                                     </div>
 
@@ -508,7 +508,7 @@ function TemplateCatalogPanel({
                                             className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
                                             title="Editar plantilla"
                                         >
-                                            <Edit3 className="w-4 h-4"/>
+                                            <Edit3 className="w-4 h-4" />
                                         </button>
                                         <button
                                             type="button"
@@ -518,9 +518,9 @@ function TemplateCatalogPanel({
                                             title="Eliminar plantilla"
                                         >
                                             {deletingId === t.id ? (
-                                                <Loader2 className="w-4 h-4 animate-spin text-rose-600"/>
+                                                <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
                                             ) : (
-                                                <Trash2 className="w-4 h-4"/>
+                                                <Trash2 className="w-4 h-4" />
                                             )}
                                         </button>
                                     </div>
@@ -538,31 +538,31 @@ function TemplateCatalogPanel({
                             </div>
 
                             <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-1.5">
-                <span
-                    className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <DollarSign className="w-3 h-3"/>
-                  Monto
-                </span>
+                                <span
+                                    className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <DollarSign className="w-3 h-3" />
+                                    Monto
+                                </span>
                                 {t.merchant_regex && (
                                     <span
                                         className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Store className="w-3 h-3 text-zinc-400"/>
-                    Comercio
-                  </span>
+                                        <Store className="w-3 h-3 text-zinc-400" />
+                                        Comercio
+                                    </span>
                                 )}
                                 {t.source_account_regex && (
                                     <span
                                         className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-zinc-400"/>
-                    Cuenta
-                  </span>
+                                        <CreditCard className="w-3 h-3 text-zinc-400" />
+                                        Cuenta
+                                    </span>
                                 )}
                                 {t.date_regex && (
                                     <span
                                         className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-zinc-400"/>
-                    Fecha
-                  </span>
+                                        <Calendar className="w-3 h-3 text-zinc-400" />
+                                        Fecha
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -582,7 +582,7 @@ interface EmailBodyModalProps {
     onClose: () => void;
 }
 
-function EmailBodyModal({subject, sender, date, body, onClose}: Readonly<EmailBodyModalProps>) {
+function EmailBodyModal({ subject, sender, date, body, onClose }: Readonly<EmailBodyModalProps>) {
     return (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
             <div
@@ -597,9 +597,9 @@ function EmailBodyModal({subject, sender, date, body, onClose}: Readonly<EmailBo
                         </div>
                     </div>
                     <button type="button" onClick={onClose}
-                            className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer shrink-0"
-                            aria-label="Cerrar">
-                        <X className="w-4 h-4"/>
+                        className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer shrink-0"
+                        aria-label="Cerrar">
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
                 <div className="overflow-y-auto p-5 sm:p-7 select-text cursor-text">
@@ -623,15 +623,15 @@ interface CustomEmailModalProps {
 }
 
 function CustomEmailModal({
-                              sender,
-                              subject,
-                              body,
-                              onSenderChange,
-                              onSubjectChange,
-                              onBodyChange,
-                              onSubmit,
-                              onClose
-                          }: Readonly<CustomEmailModalProps>) {
+    sender,
+    subject,
+    body,
+    onSenderChange,
+    onSubjectChange,
+    onBodyChange,
+    onSubmit,
+    onClose
+}: Readonly<CustomEmailModalProps>) {
     return (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
             <div
@@ -648,7 +648,7 @@ function CustomEmailModal({
                         onClick={() => onClose()}
                         className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
                     >
-                        <X className="w-4 h-4"/>
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -658,11 +658,11 @@ function CustomEmailModal({
                             Remitente <span className="text-zinc-400 font-normal">(opcional)</span>
                         </label>
                         <input id="email-template-field-13"
-                               type="text"
-                               value={sender}
-                               onChange={(e) => onSenderChange(e.target.value)}
-                               placeholder="ej: notificaciones@banco.com"
-                               className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+                            type="text"
+                            value={sender}
+                            onChange={(e) => onSenderChange(e.target.value)}
+                            placeholder="ej: notificaciones@banco.com"
+                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
                         />
                     </div>
 
@@ -671,11 +671,11 @@ function CustomEmailModal({
                             Asunto <span className="text-zinc-400 font-normal">(opcional)</span>
                         </label>
                         <input id="email-template-field-14"
-                               type="text"
-                               value={subject}
-                               onChange={(e) => onSubjectChange(e.target.value)}
-                               placeholder="ej: Notificación de compra con tarjeta"
-                               className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
+                            type="text"
+                            value={subject}
+                            onChange={(e) => onSubjectChange(e.target.value)}
+                            placeholder="ej: Notificación de compra con tarjeta"
+                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400"
                         />
                     </div>
 
@@ -684,12 +684,12 @@ function CustomEmailModal({
                             Cuerpo del Correo <span className="text-rose-500">*</span>
                         </label>
                         <textarea id="email-template-field-15"
-                                  required
-                                  rows={6}
-                                  value={body}
-                                  onChange={(e) => onBodyChange(e.target.value)}
-                                  placeholder="Pega aquí el texto completo de la notificación bancaria..."
-                                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px] leading-relaxed"
+                            required
+                            rows={6}
+                            value={body}
+                            onChange={(e) => onBodyChange(e.target.value)}
+                            placeholder="Pega aquí el texto completo de la notificación bancaria..."
+                            className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-zinc-400 font-mono text-[11px] leading-relaxed"
                         />
                     </div>
 
@@ -720,7 +720,7 @@ const getStoredGoogleToken = (): string | null => (
 );
 
 const buildAuthHeaders = (token?: string | null): Record<string, string> => (
-    token ? {'x-google-token': token} : {}
+    token ? { 'x-google-token': token } : {}
 );
 
 const buildTemplateCorrectionDetails = (template: CatalogTemplate) => ({
@@ -747,7 +747,7 @@ const buildTemplateSavePayload = (
     entityEmailPattern: string | null,
     expenseTypeId?: string | null,
 ) => ({
-    ...(editingTemplateId ? {id: editingTemplateId} : {}),
+    ...(editingTemplateId ? { id: editingTemplateId } : {}),
     name: form.name.trim(),
     new_entity_name: form.entityLabel.trim() || null,
     new_entity_label: form.entityLabel.trim() || null,
@@ -768,8 +768,8 @@ const buildTemplateSavePayload = (
 });
 
 export function EmailTemplatesManagerView({
-                                              initialMode = 'explorer',
-                                          }: Readonly<EmailTemplatesManagerViewProps>) {
+    initialMode = 'explorer',
+}: Readonly<EmailTemplatesManagerViewProps>) {
     const searchParams = useSearchParams();
 
     // Top level tabs: 'explorer' (2-panel email-driven flow) vs 'catalog' (saved templates list)
@@ -817,9 +817,9 @@ export function EmailTemplatesManagerView({
     const [testResultViewFilter, setTestResultViewFilter] = useState<'all' | 'matched' | 'failed'>('all');
     const explorerForm = useTemplateFormState(EMPTY_TEMPLATE_FORM);
     const form = explorerForm.state;
-    const {update: updateForm, reset: resetForm} = explorerForm;
+    const { update: updateForm, reset: resetForm } = explorerForm;
     const setFormField = useCallback(<K extends keyof TemplateFormState>(field: K, value: TemplateFormState[K]) => {
-        updateForm({[field]: value} as Partial<TemplateFormState>);
+        updateForm({ [field]: value } as Partial<TemplateFormState>);
     }, [updateForm]);
 
     const [copiedCorrectionPrompt, setCopiedCorrectionPrompt] = useState<boolean>(false);
@@ -861,7 +861,7 @@ export function EmailTemplatesManagerView({
             const storedToken = getStoredGoogleToken() || urlToken;
             const headers = buildAuthHeaders(storedToken);
 
-            const res = await fetch('/api/gmail/status', {headers});
+            const res = await fetch('/api/gmail/status', { headers });
             const data = await res.json();
 
             if (data.serviceDisabled) {
@@ -936,10 +936,10 @@ export function EmailTemplatesManagerView({
         try {
             const storedToken = getStoredGoogleToken();
             const headers = buildAuthHeaders(storedToken);
-            const params = new URLSearchParams({limit: '25'});
+            const params = new URLSearchParams({ limit: '25' });
             if (pageToken) params.set('pageToken', pageToken);
 
-            const res = await fetch(`/api/gmail/emails?${params.toString()}`, {headers});
+            const res = await fetch(`/api/gmail/emails?${params.toString()}`, { headers });
             const data = await res.json();
 
             if (!res.ok) {
@@ -1051,7 +1051,7 @@ export function EmailTemplatesManagerView({
                 localStorage.setItem('auth_return_to', '/email-templates');
             }
 
-            const {error} = await supabase.auth.signInWithOAuth({
+            const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
                     redirectTo: `${window.location.origin}/auth/callback?returnTo=/email-templates`,
@@ -1171,7 +1171,7 @@ export function EmailTemplatesManagerView({
                 matched += 1;
             }
         }
-        return {matched, failed: reports.length - matched};
+        return { matched, failed: reports.length - matched };
     }, [diagnosisForSelectedEmail]);
 
     // Plantilla activa en el formulario (creación o edición en curso)
@@ -1195,7 +1195,7 @@ export function EmailTemplatesManagerView({
             date_regex: form.dateRegex || '',
             date_format: form.dateFormat || 'DD/MM/YYYY',
             entity_id: form.entityId || matchedEnt?.id || null,
-            entity: {name: form.entityLabel || matchedEnt?.name || ''},
+            entity: { name: form.entityLabel || matchedEnt?.name || '' },
             match_pattern: form.matchPattern || '',
             expense_type_id: matchedExpenseType?.id || form.expenseTypeId || null,
             expense_type_label: form.expenseType || matchedExpenseType?.label || 'compra',
@@ -1372,7 +1372,7 @@ export function EmailTemplatesManagerView({
     // ---------------------------------------------------------------------------
     const handleCopyPrompt = async () => {
         setAiError(null);
-        const existingEntityCatalog = entities.map((e) => ({id: e.id, name: e.name, patterns: e.patterns || []}));
+        const existingEntityCatalog = entities.map((e) => ({ id: e.id, name: e.name, patterns: e.patterns || [] }));
         const promptText = buildTemplatePrompt(
             selectedEmail?.sender || '',
             selectedEmail?.subject || '',
@@ -1455,7 +1455,7 @@ export function EmailTemplatesManagerView({
             date_regex: data.date_regex,
             date_format: data.date_format,
             entity_id: resolved.entity?.id || null,
-            entity: {name: resolved.entity?.name || data.entity_label || ''},
+            entity: { name: resolved.entity?.name || data.entity_label || '' },
             match_pattern: data.match_pattern,
             expense_type_id: matchedExpenseType?.id || null,
             expense_type_label: data.expense_type || matchedExpenseType?.label || null,
@@ -1508,8 +1508,8 @@ export function EmailTemplatesManagerView({
 
             const res = await fetch('/api/email-templates/suggest', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({emailText}),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emailText }),
             });
 
             const data = await res.json();
@@ -1724,14 +1724,14 @@ export function EmailTemplatesManagerView({
             else if (c === 1) matched++;
             else conflict++;
         }
-        return {all: emails.length, unmatched, matched, conflict};
+        return { all: emails.length, unmatched, matched, conflict };
     }, [emails, emailDiagnoses]);
 
     // Loading Screen
     if (authChecking) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 space-y-4">
-                <Loader2 className="w-8 h-8 animate-spin text-zinc-900"/>
+                <Loader2 className="w-8 h-8 animate-spin text-zinc-900" />
                 <p className="text-sm font-medium text-zinc-600">Verificando acceso a plantillas...</p>
             </div>
         );
@@ -1744,7 +1744,7 @@ export function EmailTemplatesManagerView({
                 <div className="bg-white border border-zinc-200 rounded-2xl p-6 sm:p-8 shadow-xs space-y-6 text-center">
                     <div
                         className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
-                        <Sparkles className="w-7 h-7"/>
+                        <Sparkles className="w-7 h-7" />
                     </div>
 
                     <div className="space-y-2">
@@ -1760,7 +1760,7 @@ export function EmailTemplatesManagerView({
                     {serviceDisabled ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left space-y-3">
                             <div className="flex items-start space-x-2.5">
-                                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5"/>
+                                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                                 <div className="space-y-1">
                                     <p className="text-xs font-bold text-amber-900">
                                         Activación requerida en Google Cloud Console
@@ -1780,7 +1780,7 @@ export function EmailTemplatesManagerView({
                                         className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition"
                                     >
                                         <span>Activar API en Google Cloud</span>
-                                        <ExternalLink className="w-3.5 h-3.5"/>
+                                        <ExternalLink className="w-3.5 h-3.5" />
                                     </a>
                                 )}
                                 <button
@@ -1788,7 +1788,7 @@ export function EmailTemplatesManagerView({
                                     onClick={checkAuthStatus}
                                     className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-semibold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/50 rounded-lg transition cursor-pointer"
                                 >
-                                    <RefreshCw className="w-3.5 h-3.5"/>
+                                    <RefreshCw className="w-3.5 h-3.5" />
                                     <span>Reintentar Verificación</span>
                                 </button>
                             </div>
@@ -1803,9 +1803,9 @@ export function EmailTemplatesManagerView({
                                 className="w-full sm:w-auto inline-flex items-center justify-center space-x-2.5 px-6 py-3 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
                             >
                                 {isConnecting ? (
-                                    <Loader2 className="w-4 h-4 animate-spin"/>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
-                                    <Mail className="w-4 h-4 text-emerald-400"/>
+                                    <Mail className="w-4 h-4 text-emerald-400" />
                                 )}
                                 <span>Conectar con Google</span>
                             </button>
@@ -1829,7 +1829,7 @@ export function EmailTemplatesManagerView({
                         <div className="flex items-center gap-2.5">
                             <div
                                 className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                                <Sparkles className="w-4 h-4"/>
+                                <Sparkles className="w-4 h-4" />
                             </div>
                             <h1 className="text-lg sm:text-xl font-bold text-zinc-900 truncate">Plantillas de
                                 Notificaciones Bancarias</h1>
@@ -1841,11 +1841,11 @@ export function EmailTemplatesManagerView({
                     <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
                         <div
                             className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 px-3 py-1.5 rounded-xl">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"/>
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
                             <span
                                 className="text-xs font-medium text-zinc-700 max-w-[180px] truncate">{userEmail || 'Cuenta conectada'}</span>
                             <button type="button" onClick={handleDisconnect}
-                                    className="text-[11px] text-zinc-400 hover:text-rose-600 transition underline cursor-pointer">Desconectar
+                                className="text-[11px] text-zinc-400 hover:text-rose-600 transition underline cursor-pointer">Desconectar
                             </button>
                         </div>
                         <button
@@ -1855,7 +1855,7 @@ export function EmailTemplatesManagerView({
                             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-semibold border border-zinc-200 rounded-xl transition cursor-pointer disabled:opacity-50"
                             title="Actualizar correos de Gmail"
                         >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingEmails ? 'animate-spin' : ''}`}/>
+                            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingEmails ? 'animate-spin' : ''}`} />
                             Actualizar
                         </button>
                     </div>
@@ -1868,7 +1868,7 @@ export function EmailTemplatesManagerView({
                             onClick={() => setActiveTab('explorer')}
                             className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${activeTab === 'explorer' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-600 hover:text-zinc-900'}`}
                         >
-                            <Inbox className="w-3.5 h-3.5"/>
+                            <Inbox className="w-3.5 h-3.5" />
                             <span>Correos</span>
                             <span
                                 className="px-1.5 py-0.5 rounded-full bg-zinc-200 text-zinc-800 text-[10px] font-bold">{emails.length}</span>
@@ -1878,7 +1878,7 @@ export function EmailTemplatesManagerView({
                             onClick={() => setActiveTab('catalog')}
                             className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${activeTab === 'catalog' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-600 hover:text-zinc-900'}`}
                         >
-                            <Layers className="w-3.5 h-3.5"/>
+                            <Layers className="w-3.5 h-3.5" />
                             <span>Plantillas</span>
                             <span
                                 className="px-1.5 py-0.5 rounded-full bg-zinc-200 text-zinc-800 text-[10px] font-bold">{templates.length}</span>
@@ -1903,12 +1903,12 @@ export function EmailTemplatesManagerView({
                                     onClick={() => setIsCustomEmailModalOpen(true)}
                                     className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[10px] font-bold transition cursor-pointer"
                                 >
-                                    <Plus className="w-3 h-3"/>
+                                    <Plus className="w-3 h-3" />
                                     Ejemplo
                                 </button>
                             </div>
                             <div className="relative">
-                                <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2"/>
+                                <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 <input
                                     type="text"
                                     value={emailSearchQuery}
@@ -1933,7 +1933,7 @@ export function EmailTemplatesManagerView({
                                             className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition cursor-pointer ${emailStatusFilter === filter
                                                 ? filter === 'conflict' ? 'bg-amber-600 text-white' : 'bg-zinc-900 text-white'
                                                 : filter === 'conflict' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                            }`}
+                                                }`}
                                         >
                                             {label}
                                         </button>
@@ -1946,13 +1946,13 @@ export function EmailTemplatesManagerView({
                             {isLoadingEmails ? (
                                 <div
                                     className="h-full min-h-[240px] flex flex-col items-center justify-center text-center gap-2 p-6">
-                                    <Loader2 className="w-6 h-6 animate-spin text-zinc-400"/>
+                                    <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
                                     <p className="text-xs text-zinc-500">Cargando correos...</p>
                                 </div>
                             ) : filteredEmails.length === 0 ? (
                                 <div
                                     className="h-full min-h-[240px] flex flex-col items-center justify-center text-center gap-2 p-6">
-                                    <Inbox className="w-7 h-7 text-zinc-300"/>
+                                    <Inbox className="w-7 h-7 text-zinc-300" />
                                     <p className="text-xs font-semibold text-zinc-800">No se encontraron correos</p>
                                     <p className="text-[10px] text-zinc-500 leading-relaxed">{emailsError || (emails.length === 0 ? 'Carga un ejemplo o actualiza la bandeja.' : 'Prueba otro filtro o término.')}</p>
                                 </div>
@@ -1977,7 +1977,7 @@ export function EmailTemplatesManagerView({
                                         >
                                             <div className="flex items-start gap-2">
                                                 <span
-                                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`}/>
+                                                    className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`} />
                                                 <p className={`text-[11px] font-semibold leading-snug line-clamp-2 min-w-0 ${isSelected ? 'text-indigo-950' : 'text-zinc-800'}`}>
                                                     {email.subject || '(Sin asunto)'}
                                                 </p>
@@ -1987,9 +1987,9 @@ export function EmailTemplatesManagerView({
                                                     className={`text-[10px] font-semibold ${statusTone}`}>{statusText}</span>
                                                 {email.date && <span
                                                     className="text-[9px] text-zinc-400 shrink-0">{new Date(email.date).toLocaleDateString(undefined, {
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                })}</span>}
+                                                        month: 'short',
+                                                        day: 'numeric'
+                                                    })}</span>}
                                             </div>
                                         </button>
                                     );
@@ -2005,13 +2005,13 @@ export function EmailTemplatesManagerView({
                                 className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition cursor-pointer disabled:opacity-50"
                                 title="Recuperar más correos de Gmail"
                             >
-                                {isLoadingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> :
-                                    <Plus className="w-3.5 h-3.5"/>}
+                                {isLoadingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
+                                    <Plus className="w-3.5 h-3.5" />}
                                 {isLoadingEmails ? 'Cargando...' : emailNextPageToken ? 'Cargar más correos' : 'No hay más correos'}
                             </button>
                             <button type="button" onClick={handleRefreshEmails} disabled={isLoadingEmails}
-                                    className="w-full inline-flex items-center justify-center gap-2 py-1.5 text-[10px] font-semibold text-zinc-500 hover:text-zinc-800 transition cursor-pointer disabled:opacity-50">
-                                <RefreshCw className={`w-3 h-3 ${isLoadingEmails ? 'animate-spin' : ''}`}/>
+                                className="w-full inline-flex items-center justify-center gap-2 py-1.5 text-[10px] font-semibold text-zinc-500 hover:text-zinc-800 transition cursor-pointer disabled:opacity-50">
+                                <RefreshCw className={`w-3 h-3 ${isLoadingEmails ? 'animate-spin' : ''}`} />
                                 Actualizar bandeja
                             </button>
                         </div>
@@ -2023,7 +2023,7 @@ export function EmailTemplatesManagerView({
                                 <div className="max-w-md space-y-3">
                                     <div
                                         className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600">
-                                        <Inbox className="w-6 h-6"/></div>
+                                        <Inbox className="w-6 h-6" /></div>
                                     <h3 className="text-sm font-bold text-zinc-900">Selecciona un correo</h3>
                                     <p className="text-xs text-zinc-500 leading-relaxed">El resultado de matching y las
                                         acciones para crear o corregir la plantilla aparecerán aquí.</p>
@@ -2035,8 +2035,8 @@ export function EmailTemplatesManagerView({
                                     className="px-4 sm:px-5 py-3 border-b border-zinc-100 flex items-center justify-between gap-3 bg-white">
                                     <div className="min-w-0 flex items-center gap-2.5">
                                         <button type="button" onClick={() => setIsFormVisible(false)}
-                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-[10px] font-bold transition cursor-pointer shrink-0">
-                                            <ChevronRight className="w-3 h-3 rotate-180"/>
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-[10px] font-bold transition cursor-pointer shrink-0">
+                                            <ChevronRight className="w-3 h-3 rotate-180" />
                                             Correo
                                         </button>
                                         <div className="min-w-0">
@@ -2054,21 +2054,21 @@ export function EmailTemplatesManagerView({
                                         <div className="space-y-2">
                                             {aiSuccess && <div
                                                 className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs text-emerald-800 flex items-start gap-2">
-                                                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-600 shrink-0"/><span>{aiSuccess}</span>
+                                                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-600 shrink-0" /><span>{aiSuccess}</span>
                                             </div>}
                                             {aiError && <div
                                                 className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-start gap-2">
                                                 <AlertCircle
-                                                    className="w-3.5 h-3.5 mt-0.5 text-rose-600 shrink-0"/><span
-                                                className="whitespace-pre-line">{aiError}</span></div>}
+                                                    className="w-3.5 h-3.5 mt-0.5 text-rose-600 shrink-0" /><span
+                                                        className="whitespace-pre-line">{aiError}</span></div>}
                                             {saveSuccessMessage && <div
                                                 className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs text-emerald-800 flex items-start gap-2">
-                                                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-600 shrink-0"/><span>{saveSuccessMessage}</span>
+                                                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-emerald-600 shrink-0" /><span>{saveSuccessMessage}</span>
                                             </div>}
                                             {saveErrorMessage && <div
                                                 className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-start gap-2">
                                                 <AlertCircle
-                                                    className="w-3.5 h-3.5 mt-0.5 text-rose-600 shrink-0"/><span>{saveErrorMessage}</span>
+                                                    className="w-3.5 h-3.5 mt-0.5 text-rose-600 shrink-0" /><span>{saveErrorMessage}</span>
                                             </div>}
                                         </div>
                                     )}
@@ -2084,24 +2084,24 @@ export function EmailTemplatesManagerView({
                                             </div>
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <button type="button" onClick={handleCopyPrompt}
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition cursor-pointer">{copiedPrompt ?
-                                                    <Check className="w-3 h-3"/> : <Copy
-                                                        className="w-3 h-3"/>}{copiedPrompt ? 'Copiado' : 'Copiar prompt'}</button>
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition cursor-pointer">{copiedPrompt ?
+                                                        <Check className="w-3 h-3" /> : <Copy
+                                                            className="w-3 h-3" />}{copiedPrompt ? 'Copiado' : 'Copiar prompt'}</button>
                                                 <button type="button" onClick={handleDirectAISuggest}
-                                                        disabled={isAISuggestingDirect}
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-bold transition cursor-pointer disabled:opacity-50">{isAISuggestingDirect ?
-                                                    <Loader2 className="w-3 h-3 animate-spin"/> :
-                                                    <Sparkles className="w-3 h-3 text-amber-500"/>}Generar directo
+                                                    disabled={isAISuggestingDirect}
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-bold transition cursor-pointer disabled:opacity-50">{isAISuggestingDirect ?
+                                                        <Loader2 className="w-3 h-3 animate-spin" /> :
+                                                        <Sparkles className="w-3 h-3 text-amber-500" />}Generar directo
                                                 </button>
                                             </div>
                                         </div>
                                         <div className="mt-3 flex flex-col sm:flex-row gap-2">
                                             <input type="text" value={pastedAIResponse}
-                                                   onChange={(e) => setPastedAIResponse(e.target.value)}
-                                                   placeholder="Pega aquí el JSON devuelto por la IA"
-                                                   className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-[11px] font-mono focus:outline-hidden focus:ring-1 focus:ring-indigo-500/40"/>
+                                                onChange={(e) => setPastedAIResponse(e.target.value)}
+                                                placeholder="Pega aquí el JSON devuelto por la IA"
+                                                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-[11px] font-mono focus:outline-hidden focus:ring-1 focus:ring-indigo-500/40" />
                                             <button type="button" onClick={handleApplyPastedAIResponse}
-                                                    className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold cursor-pointer">Cargar
+                                                className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold cursor-pointer">Cargar
                                                 JSON
                                             </button>
                                         </div>
@@ -2111,47 +2111,47 @@ export function EmailTemplatesManagerView({
                                         className="rounded-2xl border border-zinc-200 bg-white p-3.5 sm:p-4 space-y-3">
                                         <div className="flex items-center gap-2"><span
                                             className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Identificación y clasificación</span>
-                                            <div className="h-px flex-1 bg-zinc-100"/>
+                                            <div className="h-px flex-1 bg-zinc-100" />
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                                             <div className="xl:col-span-2 space-y-1"><label
                                                 htmlFor="email-template-field-16"
                                                 className="text-xs font-bold text-zinc-700">Nombre *</label><input
-                                                id="email-template-field-16" required value={form.name}
-                                                onChange={(e) => setFormField('name', e.target.value)}
-                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"/>
+                                                    id="email-template-field-16" required value={form.name}
+                                                    onChange={(e) => setFormField('name', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl" />
                                             </div>
                                             <div className="xl:col-span-2 space-y-1"><label
                                                 htmlFor="email-template-field-17"
                                                 className="text-xs font-bold text-zinc-700">Banco /
                                                 Entidad</label><input id="email-template-field-17"
-                                                                      list="entity-suggestions" value={form.entityLabel}
-                                                                      onChange={(e) => {
-                                                                          const val = e.target.value;
-                                                                          setFormField('entityLabel', val);
-                                                                          const match = entities.find((ent) => ent.name.toLowerCase() === val.toLowerCase());
-                                                                          setFormField('entityId', match?.id || null);
-                                                                          setFormField('isNewEntity', !match);
-                                                                      }}
-                                                                      className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"/>
+                                                    list="entity-suggestions" value={form.entityLabel}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setFormField('entityLabel', val);
+                                                        const match = entities.find((ent) => ent.name.toLowerCase() === val.toLowerCase());
+                                                        setFormField('entityId', match?.id || null);
+                                                        setFormField('isNewEntity', !match);
+                                                    }}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl" />
                                                 <datalist id="entity-suggestions">{entities.map((ent) => <option
-                                                    key={ent.id} value={ent.name}/>)}</datalist>
+                                                    key={ent.id} value={ent.name} />)}</datalist>
                                             </div>
                                             <div className="xl:col-span-2 space-y-1"><label
                                                 htmlFor="email-template-field-18"
                                                 className="text-xs font-bold text-zinc-700">Patrón de
                                                 asunto</label><input id="email-template-field-18"
-                                                                     value={form.subjectPattern}
-                                                                     onChange={(e) => setFormField('subjectPattern', e.target.value)}
-                                                                     className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    value={form.subjectPattern}
+                                                    onChange={(e) => setFormField('subjectPattern', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="xl:col-span-2 space-y-1"><label
                                                 htmlFor="email-template-field-19"
                                                 className="text-xs font-bold text-zinc-700">Desempate en
                                                 cuerpo</label><input id="email-template-field-19"
-                                                                     value={form.matchPattern}
-                                                                     onChange={(e) => setFormField('matchPattern', e.target.value)}
-                                                                     className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    value={form.matchPattern}
+                                                    onChange={(e) => setFormField('matchPattern', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                         </div>
                                     </section>
@@ -2162,60 +2162,60 @@ export function EmailTemplatesManagerView({
                                             <div><p
                                                 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Reglas
                                                 de extracción</p><p
-                                                className="text-[10px] text-zinc-400 mt-0.5">Patrones aplicados sobre el
-                                                cuerpo limpio.</p></div>
+                                                    className="text-[10px] text-zinc-400 mt-0.5">Patrones aplicados sobre el
+                                                    cuerpo limpio.</p></div>
                                             <span
                                                 className="text-[10px] font-semibold text-zinc-400">Monto obligatorio</span>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                                             <div className="space-y-1"><label htmlFor="email-template-field-20"
-                                                                              className="text-xs font-bold text-zinc-700">Monto
+                                                className="text-xs font-bold text-zinc-700">Monto
                                                 *</label><input id="email-template-field-20" required
-                                                                value={form.amountRegex}
-                                                                onChange={(e) => setFormField('amountRegex', e.target.value)}
-                                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    value={form.amountRegex}
+                                                    onChange={(e) => setFormField('amountRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-21"
-                                                                              className="text-xs font-bold text-zinc-700">Comercio</label><input
-                                                id="email-template-field-21" value={form.merchantRegex}
-                                                onChange={(e) => setFormField('merchantRegex', e.target.value)}
-                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                className="text-xs font-bold text-zinc-700">Comercio</label><input
+                                                    id="email-template-field-21" value={form.merchantRegex}
+                                                    onChange={(e) => setFormField('merchantRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-22"
-                                                                              className="text-xs font-bold text-zinc-700">Cuenta
+                                                className="text-xs font-bold text-zinc-700">Cuenta
                                                 / Tarjeta</label><input id="email-template-field-22"
-                                                                        value={form.sourceAccountRegex}
-                                                                        onChange={(e) => setFormField('sourceAccountRegex', e.target.value)}
-                                                                        className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    value={form.sourceAccountRegex}
+                                                    onChange={(e) => setFormField('sourceAccountRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-23"
-                                                                              className="text-xs font-bold text-zinc-700">Moneda</label><input
-                                                id="email-template-field-23" value={form.currencyRegex}
-                                                onChange={(e) => setFormField('currencyRegex', e.target.value)}
-                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                className="text-xs font-bold text-zinc-700">Moneda</label><input
+                                                    id="email-template-field-23" value={form.currencyRegex}
+                                                    onChange={(e) => setFormField('currencyRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-24"
-                                                                              className="text-xs font-bold text-zinc-700">Fecha</label><input
-                                                id="email-template-field-24" value={form.dateRegex}
-                                                onChange={(e) => setFormField('dateRegex', e.target.value)}
-                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                className="text-xs font-bold text-zinc-700">Fecha</label><input
+                                                    id="email-template-field-24" value={form.dateRegex}
+                                                    onChange={(e) => setFormField('dateRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-25"
-                                                                              className="text-xs font-bold text-zinc-700">Hora</label><input
-                                                id="email-template-field-25" value={form.timeRegex}
-                                                onChange={(e) => setFormField('timeRegex', e.target.value)}
-                                                className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                className="text-xs font-bold text-zinc-700">Hora</label><input
+                                                    id="email-template-field-25" value={form.timeRegex}
+                                                    onChange={(e) => setFormField('timeRegex', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-26"
-                                                                              className="text-xs font-bold text-zinc-700">Patrón
+                                                className="text-xs font-bold text-zinc-700">Patrón
                                                 de correo de entidad</label><input id="email-template-field-26"
-                                                                                   value={form.entityEmailPattern}
-                                                                                   onChange={(e) => setFormField('entityEmailPattern', e.target.value)}
-                                                                                   className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    value={form.entityEmailPattern}
+                                                    onChange={(e) => setFormField('entityEmailPattern', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                             </div>
                                             <div className="space-y-1">
                                                 <label htmlFor="email-template-field-27"
-                                                       className="text-xs font-bold text-zinc-700">Tipo de gasto</label>
+                                                    className="text-xs font-bold text-zinc-700">Tipo de gasto</label>
                                                 <select
                                                     id="email-template-field-27"
                                                     value={
@@ -2246,43 +2246,43 @@ export function EmailTemplatesManagerView({
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                             <div className="space-y-1"><label htmlFor="email-template-field-28"
-                                                                              className="text-xs font-bold text-zinc-700">Formato
+                                                className="text-xs font-bold text-zinc-700">Formato
                                                 de fecha</label><input id="email-template-field-28"
-                                                                       list="date-format-suggestions"
-                                                                       value={form.dateFormat}
-                                                                       onChange={(e) => setFormField('dateFormat', e.target.value)}
-                                                                       className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    list="date-format-suggestions"
+                                                    value={form.dateFormat}
+                                                    onChange={(e) => setFormField('dateFormat', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                                 <datalist id="date-format-suggestions">
-                                                    <option value="DD/MM/YYYY"/>
-                                                    <option value="YYYY-MM-DD"/>
-                                                    <option value="YYYY/MM/DD"/>
-                                                    <option value="MM/DD/YYYY"/>
+                                                    <option value="DD/MM/YYYY" />
+                                                    <option value="YYYY-MM-DD" />
+                                                    <option value="YYYY/MM/DD" />
+                                                    <option value="MM/DD/YYYY" />
                                                 </datalist>
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-29"
-                                                                              className="text-xs font-bold text-zinc-700">Formato
+                                                className="text-xs font-bold text-zinc-700">Formato
                                                 de hora</label><input id="email-template-field-29"
-                                                                      list="time-format-suggestions"
-                                                                      value={form.timeFormat}
-                                                                      onChange={(e) => setFormField('timeFormat', e.target.value)}
-                                                                      className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono"/>
+                                                    list="time-format-suggestions"
+                                                    value={form.timeFormat}
+                                                    onChange={(e) => setFormField('timeFormat', e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" />
                                                 <datalist id="time-format-suggestions">
-                                                    <option value="HH:mm:ss"/>
-                                                    <option value="HH:mm"/>
-                                                    <option value="HH:mm a"/>
+                                                    <option value="HH:mm:ss" />
+                                                    <option value="HH:mm" />
+                                                    <option value="HH:mm a" />
                                                 </datalist>
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-30"
-                                                                              className="text-xs font-bold text-zinc-700">ID
+                                                className="text-xs font-bold text-zinc-700">ID
                                                 de entidad</label><input id="email-template-field-30" readOnly
-                                                                         value={form.entityId || ''}
-                                                                         className="w-full px-3 py-2.5 text-xs bg-zinc-100 border border-zinc-200 rounded-xl font-mono text-zinc-500"/>
+                                                    value={form.entityId || ''}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-100 border border-zinc-200 rounded-xl font-mono text-zinc-500" />
                                             </div>
                                             <div className="space-y-1"><label htmlFor="email-template-field-31"
-                                                                              className="text-xs font-bold text-zinc-700">Entidad
+                                                className="text-xs font-bold text-zinc-700">Entidad
                                                 nueva</label><input id="email-template-field-31" readOnly
-                                                                    value={form.isNewEntity ? 'Sí' : 'No'}
-                                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500"/>
+                                                    value={form.isNewEntity ? 'Sí' : 'No'}
+                                                    className="w-full px-3 py-2.5 text-xs bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500" />
                                             </div>
                                         </div>
                                     </section>
@@ -2298,25 +2298,25 @@ export function EmailTemplatesManagerView({
                                                     <p className="text-xs font-semibold text-zinc-800">{activeFormEvaluation.overallPassed ? 'La plantilla coincide con el correo' : 'Revisa los puntos que impiden la coincidencia'}</p>
                                                 </div>
                                                 <button type="button" onClick={handleCopyCorrectionPrompt}
-                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-indigo-700 text-[10px] font-bold cursor-pointer self-start sm:self-auto">{copiedCorrectionPrompt ?
-                                                    <Check className="w-3 h-3"/> : <Sparkles
-                                                        className="w-3 h-3 text-amber-500"/>}{copiedCorrectionPrompt ? 'Copiado' : 'Mini-prompt IA'}</button>
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-zinc-200 text-indigo-700 text-[10px] font-bold cursor-pointer self-start sm:self-auto">{copiedCorrectionPrompt ?
+                                                        <Check className="w-3 h-3" /> : <Sparkles
+                                                            className="w-3 h-3 text-amber-500" />}{copiedCorrectionPrompt ? 'Copiado' : 'Mini-prompt IA'}</button>
                                             </div>
                                             <div className="p-3 sm:p-4"><TemplateDiagnosticStepsView
                                                 evaluation={activeFormEvaluation}
                                                 isWinner={activeFormEvaluation.overallPassed}
-                                                customTitle={form.name || 'Plantilla en edición'}/></div>
+                                                customTitle={form.name || 'Plantilla en edición'} /></div>
                                         </section>
                                     )}
 
                                     <div className="flex items-center justify-between gap-3 pt-1">
                                         <button type="button" onClick={() => setIsFormVisible(false)}
-                                                className="px-3.5 py-2 rounded-xl border border-zinc-200 bg-white text-xs font-bold text-zinc-700 hover:bg-zinc-50 cursor-pointer">Cancelar
+                                            className="px-3.5 py-2 rounded-xl border border-zinc-200 bg-white text-xs font-bold text-zinc-700 hover:bg-zinc-50 cursor-pointer">Cancelar
                                         </button>
                                         <button type="submit" disabled={isSaving}
-                                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50">{isSaving ?
-                                            <Loader2 className="w-4 h-4 animate-spin"/> : <Check
-                                                className="w-4 h-4 text-emerald-400"/>}{editingTemplateId ? 'Actualizar plantilla' : 'Guardar plantilla'}</button>
+                                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50">{isSaving ?
+                                                <Loader2 className="w-4 h-4 animate-spin" /> : <Check
+                                                    className="w-4 h-4 text-emerald-400" />}{editingTemplateId ? 'Actualizar plantilla' : 'Guardar plantilla'}</button>
                                     </div>
                                 </form>
                             </div>
@@ -2327,12 +2327,12 @@ export function EmailTemplatesManagerView({
                                         <div className="flex items-center gap-2.5 min-w-0">
                                             <div
                                                 className="w-8 h-8 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-500 shrink-0">
-                                                <Mail className="w-4 h-4"/></div>
+                                                <Mail className="w-4 h-4" /></div>
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <h2 className="text-sm font-bold text-zinc-900 truncate">{selectedEmail.subject || '(Sin asunto)'}</h2>
                                                     <DiagnosisSummaryBadge matchedCount={testReportCounts.matched}
-                                                                           winner={diagnosisForSelectedEmail?.winner}/>
+                                                        winner={diagnosisForSelectedEmail?.winner} />
                                                 </div>
                                                 <div
                                                     className="mt-1 flex items-center gap-2 text-[10px] text-zinc-400 min-w-0">
@@ -2344,8 +2344,8 @@ export function EmailTemplatesManagerView({
                                             </div>
                                         </div>
                                         <button type="button" onClick={() => setIsEmailBodyModalOpen(true)}
-                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-[10px] font-bold cursor-pointer shrink-0">
-                                            <ExternalLink className="w-3 h-3"/>
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-[10px] font-bold cursor-pointer shrink-0">
+                                            <ExternalLink className="w-3 h-3" />
                                             Ver contenido
                                         </button>
                                     </div>
@@ -2358,7 +2358,7 @@ export function EmailTemplatesManagerView({
                                             <div className="flex items-center gap-2">
                                                 <div
                                                     className={`w-8 h-8 rounded-xl flex items-center justify-center ${testReportCounts.matched === 1 ? 'bg-emerald-50 text-emerald-600' : testReportCounts.matched > 1 ? 'bg-amber-50 text-amber-600' : 'bg-zinc-100 text-zinc-500'}`}>
-                                                    <Layers className="w-4 h-4"/>
+                                                    <Layers className="w-4 h-4" />
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-bold text-zinc-900">Prueba de
@@ -2371,8 +2371,8 @@ export function EmailTemplatesManagerView({
                                         </div>
                                         {testReportCounts.matched === 0 && (
                                             <button type="button" onClick={handleOpenEmptyForm}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition cursor-pointer shrink-0">
-                                                <Plus className="w-3 h-3"/>
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition cursor-pointer shrink-0">
+                                                <Plus className="w-3 h-3" />
                                                 Crear plantilla
                                             </button>
                                         )}
@@ -2415,25 +2415,25 @@ export function EmailTemplatesManagerView({
                                                     </div>
                                                     <div className="flex items-center gap-2 flex-wrap shrink-0">
                                                         <button type="button" onClick={handleDirectAISuggest}
-                                                                disabled={isAISuggestingDirect}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold cursor-pointer disabled:opacity-50">{isAISuggestingDirect ?
-                                                            <Loader2 className="w-3 h-3 animate-spin"/> :
-                                                            <Sparkles className="w-3 h-3"/>}Generar directo
+                                                            disabled={isAISuggestingDirect}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold cursor-pointer disabled:opacity-50">{isAISuggestingDirect ?
+                                                                <Loader2 className="w-3 h-3 animate-spin" /> :
+                                                                <Sparkles className="w-3 h-3" />}Generar directo
                                                         </button>
                                                         <button type="button" onClick={handleCopyPrompt}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-[10px] font-bold cursor-pointer">{copiedPrompt ?
-                                                            <Check className="w-3 h-3 text-emerald-600"/> : <Copy
-                                                                className="w-3 h-3"/>}{copiedPrompt ? 'Prompt copiado' : 'Copiar prompt'}</button>
+                                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 text-[10px] font-bold cursor-pointer">{copiedPrompt ?
+                                                                <Check className="w-3 h-3 text-emerald-600" /> : <Copy
+                                                                    className="w-3 h-3" />}{copiedPrompt ? 'Prompt copiado' : 'Copiar prompt'}</button>
                                                     </div>
                                                 </div>
                                                 <div
                                                     className="mt-3 pt-3 border-t border-zinc-100 flex flex-col sm:flex-row gap-2">
                                                     <input type="text" value={pastedAIResponse}
-                                                           onChange={(e) => setPastedAIResponse(e.target.value)}
-                                                           placeholder="¿Ya tienes el JSON de la IA? Pégalo aquí"
-                                                           className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-[11px] font-mono focus:outline-hidden focus:ring-1 focus:ring-indigo-500/40"/>
+                                                        onChange={(e) => setPastedAIResponse(e.target.value)}
+                                                        placeholder="¿Ya tienes el JSON de la IA? Pégalo aquí"
+                                                        className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 text-[11px] font-mono focus:outline-hidden focus:ring-1 focus:ring-indigo-500/40" />
                                                     <button type="button" onClick={handleApplyPastedAIResponse}
-                                                            className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold cursor-pointer">Cargar
+                                                        className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-bold cursor-pointer">Cargar
                                                         JSON
                                                     </button>
                                                 </div>
@@ -2452,7 +2452,7 @@ export function EmailTemplatesManagerView({
                                                         asunto, desempate y extracción.</p>
                                                 </div>
                                                 <ChevronDown
-                                                    className="w-4 h-4 text-zinc-400 transition-transform group-open:rotate-180"/>
+                                                    className="w-4 h-4 text-zinc-400 transition-transform group-open:rotate-180" />
                                             </summary>
                                             <div
                                                 className="border-t border-zinc-100 p-3 sm:p-4 space-y-3 bg-zinc-50/40">
@@ -2460,20 +2460,20 @@ export function EmailTemplatesManagerView({
                                                     <div className="flex items-center gap-1.5">
                                                         {(['all', 'matched', 'failed'] as const).map((filter) => (
                                                             <button key={filter} type="button"
-                                                                    onClick={() => setTestResultViewFilter(filter)}
-                                                                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition cursor-pointer ${testResultViewFilter === filter ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100'}`}>
+                                                                onClick={() => setTestResultViewFilter(filter)}
+                                                                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition cursor-pointer ${testResultViewFilter === filter ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100'}`}>
                                                                 {filter === 'all' ? `Todas (${diagnosisForSelectedEmail?.reports?.length || 0})` : filter === 'matched' ? `Coinciden (${testReportCounts.matched})` : `Fallan (${testReportCounts.failed})`}
                                                             </button>
                                                         ))}
                                                     </div>
                                                     <select value={templateTestFilter}
-                                                            onChange={(e) => setTemplateTestFilter(e.target.value)}
-                                                            className="text-[10px] bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 font-semibold text-zinc-700 focus:outline-hidden">
+                                                        onChange={(e) => setTemplateTestFilter(e.target.value)}
+                                                        className="text-[10px] bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 font-semibold text-zinc-700 focus:outline-hidden">
                                                         <option value="all">Todas las plantillas ({templates.length})
                                                         </option>
                                                         {Array.from(new Set(templates.map((t) => entities.find((e) => e.id === t.entity_id)?.name).filter(Boolean))).map((ent) =>
                                                             <option key={ent}
-                                                                    value={ent as string}>{String(ent)}</option>)}
+                                                                value={ent as string}>{String(ent)}</option>)}
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">

@@ -1,13 +1,13 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function PATCH(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const body = await req.json();
@@ -36,7 +36,7 @@ export async function PATCH(req: Request) {
 
         // 1. Try to update in profiles table
         let updateError: any = null;
-        const {error: err1} = await supabase
+        const { error: err1 } = await supabase
             .from('profiles')
             .update(updates)
             .eq('id', user.id);
@@ -59,7 +59,7 @@ export async function PATCH(req: Request) {
                     ...safeUpdates
                 } = updates;
                 if (Object.keys(safeUpdates).length > 0) {
-                    const {error: err2} = await supabase
+                    const { error: err2 } = await supabase
                         .from('profiles')
                         .update(safeUpdates)
                         .eq('id', user.id);
@@ -74,7 +74,7 @@ export async function PATCH(req: Request) {
 
         if (updateError) {
             console.error('[API /api/profile] Error updating profile:', updateError);
-            return NextResponse.json({error: updateError.message}, {status: 500});
+            return NextResponse.json({ error: updateError.message }, { status: 500 });
         }
 
         // 2. Also update user_metadata in auth so custom data and onboarding status are safely preserved
@@ -89,12 +89,12 @@ export async function PATCH(req: Request) {
             try {
                 await supabase.auth.updateUser({
                     data: {
-                        ...(country !== undefined ? {country} : {}),
-                        ...(full_name !== undefined ? {full_name} : {}),
-                        ...(avatar_url !== undefined ? {avatar_url} : {}),
-                        ...(payment_instructions !== undefined ? {payment_instructions} : {}),
-                        ...(onboarding_completed !== undefined ? {onboarding_completed: Boolean(onboarding_completed)} : {}),
-                        ...(managed_user_ids !== undefined ? {managed_user_ids} : {}),
+                        ...(country !== undefined ? { country } : {}),
+                        ...(full_name !== undefined ? { full_name } : {}),
+                        ...(avatar_url !== undefined ? { avatar_url } : {}),
+                        ...(payment_instructions !== undefined ? { payment_instructions } : {}),
+                        ...(onboarding_completed !== undefined ? { onboarding_completed: Boolean(onboarding_completed) } : {}),
+                        ...(managed_user_ids !== undefined ? { managed_user_ids } : {}),
                     },
                 });
             } catch (authMetaErr) {
@@ -103,7 +103,7 @@ export async function PATCH(req: Request) {
         }
 
         // Fetch updated profile
-        const {data: updatedProfile} = await supabase
+        const { data: updatedProfile } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
@@ -134,6 +134,6 @@ export async function PATCH(req: Request) {
     } catch (err: unknown) {
         console.error('[API /api/profile] Unexpected error:', err);
         const message = err instanceof Error ? err.message : 'Error al actualizar perfil';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

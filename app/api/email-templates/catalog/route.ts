@@ -1,6 +1,6 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import type {CatalogEntity, CatalogTemplate} from '@/lib/email-templates/email-matching';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import type { CatalogEntity, CatalogTemplate } from '@/lib/email-templates/email-matching';
 
 type TemplateRow = CatalogTemplate & {
     expense_type_id: string | null;
@@ -79,7 +79,7 @@ export async function GET() {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
@@ -89,38 +89,38 @@ export async function GET() {
                     error:
                         'No autorizado. Debes iniciar sesión para consultar plantillas.',
                 },
-                {status: 401},
+                { status: 401 },
             );
         }
 
         const [
-            {data: templateRows, error: templatesError},
-            {data: entityRows, error: entitiesError},
-            {data: patternRows, error: patternsError},
-            {data: expenseTypeRows, error: expenseTypesError},
+            { data: templateRows, error: templatesError },
+            { data: entityRows, error: entitiesError },
+            { data: patternRows, error: patternsError },
+            { data: expenseTypeRows, error: expenseTypesError },
         ] = await Promise.all([
             supabase
                 .from('email_templates')
                 .select('*')
-                .order('created_at', {ascending: false}),
+                .order('created_at', { ascending: false }),
             supabase
                 .from('entities')
                 .select('id,name')
-                .order('name', {ascending: true}),
+                .order('name', { ascending: true }),
             supabase
                 .from('entity_email_patterns')
                 .select('entity_id,pattern')
-                .order('created_at', {ascending: true}),
+                .order('created_at', { ascending: true }),
             supabase
                 .from('expense_types')
                 .select('id,name,label')
-                .order('label', {ascending: true}),
+                .order('label', { ascending: true }),
         ]);
 
         if (templatesError) {
             return NextResponse.json(
-                {error: `Error al consultar plantillas: ${templatesError.message}`},
-                {status: 500},
+                { error: `Error al consultar plantillas: ${templatesError.message}` },
+                { status: 500 },
             );
         }
 
@@ -131,7 +131,7 @@ export async function GET() {
                 expenseTypesError?.message ||
                 'No se pudo completar la carga del catálogo.';
 
-            return NextResponse.json({error}, {status: 500});
+            return NextResponse.json({ error }, { status: 500 });
         }
 
         const entities = buildEntityCatalog(
@@ -148,7 +148,7 @@ export async function GET() {
 
         let ambiguousTemplates: AmbiguousTemplate[] = [];
 
-        const {data: ambiguityData, error: ambiguityError} = await supabase.rpc(
+        const { data: ambiguityData, error: ambiguityError } = await supabase.rpc(
             'detect_ambiguous_templates',
         );
 
@@ -178,7 +178,7 @@ export async function GET() {
                         ? err.message
                         : 'Error interno al consultar el catálogo de plantillas.',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }

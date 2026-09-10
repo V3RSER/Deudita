@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
-import { TransactionFilterBar, TransactionFilterState } from '@/components/TransactionFilterBar';
+import { TransactionFilterBar, TransactionFilterState } from '@/components/my-expenses/TransactionFilterBar';
 import {
     getAvailableTransactionMonths,
     getEffectiveTransactionDate,

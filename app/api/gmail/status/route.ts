@@ -1,7 +1,7 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {cookies} from 'next/headers';
-import {createClient} from '@/lib/supabase/server';
-import {verifyGoogleToken} from '@/lib/google-auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { verifyGoogleToken } from '@/lib/google-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,14 +39,14 @@ export async function GET(req: NextRequest) {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
             return NextResponse.json(
-                {authorized: false, error: 'No autenticado'},
-                {status: 401},
+                { authorized: false, error: 'No autenticado' },
+                { status: 401 },
             );
         }
 
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
         if (user.user_metadata?.google_provider_token !== token) {
             try {
                 await supabase.auth.updateUser({
-                    data: {google_provider_token: token},
+                    data: { google_provider_token: token },
                 });
             } catch (updateError: unknown) {
                 console.warn(
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
                 authorized: false,
                 error: err instanceof Error ? err.message : 'Error interno',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }
@@ -120,14 +120,14 @@ export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient();
         const {
-            data: {user},
+            data: { user },
             error: authError,
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
             return NextResponse.json(
-                {authorized: false, error: 'No autenticado'},
-                {status: 401},
+                { authorized: false, error: 'No autenticado' },
+                { status: 401 },
             );
         }
 
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
         ) {
             try {
                 await supabase.auth.updateUser({
-                    data: {google_provider_token: null},
+                    data: { google_provider_token: null },
                 });
             } catch (updateError: unknown) {
                 console.warn(
@@ -150,23 +150,23 @@ export async function POST(req: NextRequest) {
                 );
             }
 
-            const response = NextResponse.json({authorized: false});
+            const response = NextResponse.json({ authorized: false });
             clearGoogleTokenCookies(response);
             return response;
         }
 
         const token =
             typeof body === 'object' &&
-            body !== null &&
-            'token' in body &&
-            typeof body.token === 'string'
+                body !== null &&
+                'token' in body &&
+                typeof body.token === 'string'
                 ? body.token.trim()
                 : req.headers.get('x-google-token')?.trim() || null;
 
         if (!token) {
             return NextResponse.json(
-                {error: 'Se requiere un token de Google'},
-                {status: 400},
+                { error: 'Se requiere un token de Google' },
+                { status: 400 },
             );
         }
 
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
                     authorized: false,
                     error: verification.error || 'Token no válido',
                 },
-                {status: 400},
+                { status: 400 },
             );
         }
 
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
 
         try {
             await supabase.auth.updateUser({
-                data: {google_provider_token: token},
+                data: { google_provider_token: token },
             });
         } catch (updateError: unknown) {
             console.warn(
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
             {
                 error: err instanceof Error ? err.message : 'Error interno',
             },
-            {status: 500},
+            { status: 500 },
         );
     }
 }

@@ -1,7 +1,7 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {generateUUID} from '@/lib/types';
-import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { generateUUID } from '@/lib/types';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -13,7 +13,7 @@ function generateNumericId(): string {
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}} = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
 
         const formData = await req.formData();
         const file = formData.get('file') as File | null;
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         const customEntityId = formData.get('entityId') as string | null;
 
         if (!file) {
-            return NextResponse.json({error: 'No se ha adjuntado ningún archivo'}, {status: 400});
+            return NextResponse.json({ error: 'No se ha adjuntado ningún archivo' }, { status: 400 });
         }
 
         const bytes = await file.arrayBuffer();
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
         // 2. Try Supabase Storage JS API if publicUrl is not set yet
         if (!publicUrl) {
             try {
-                const {data, error: uploadErr} = await supabase.storage
+                const { data, error: uploadErr } = await supabase.storage
                     .from('uploads')
                     .upload(storagePath, buffer, {
                         contentType: file.type || 'image/jpeg',
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
                     });
 
                 if (!uploadErr && data) {
-                    const {data: publicUrlData} = supabase.storage
+                    const { data: publicUrlData } = supabase.storage
                         .from('uploads')
                         .getPublicUrl(storagePath);
 
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
             const localAbsolutePath = path.join(process.cwd(), 'public', storagePath);
             const dir = path.dirname(localAbsolutePath);
 
-            await fs.mkdir(dir, {recursive: true});
+            await fs.mkdir(dir, { recursive: true });
             await fs.writeFile(localAbsolutePath, buffer);
 
             publicUrl = localRelativePath;
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
     } catch (err: unknown) {
         console.error('[API POST /api/upload] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al subir la imagen';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

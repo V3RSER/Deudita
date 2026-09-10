@@ -1,35 +1,35 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {parseCurrencyAmount} from '@/lib/transaction-date-utils';
-import {notifyPaymentCreated} from '@/lib/notifications';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { parseCurrencyAmount } from '@/lib/transaction-date-utils';
+import { notifyPaymentCreated } from '@/lib/notifications';
 
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
             console.error('[API /api/payments] Auth error:', authErr);
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url} = await req.json();
+        const { group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url } = await req.json();
 
         if (!group_id) {
-            return NextResponse.json({error: 'Falta el identificador del grupo'}, {status: 400});
+            return NextResponse.json({ error: 'Falta el identificador del grupo' }, { status: 400 });
         }
 
         if (!paid_by || !paid_to) {
-            return NextResponse.json({error: 'El pagador y el receptor son requeridos'}, {status: 400});
+            return NextResponse.json({ error: 'El pagador y el receptor son requeridos' }, { status: 400 });
         }
 
         if (paid_by === paid_to) {
-            return NextResponse.json({error: 'El pagador y el receptor no pueden ser la misma persona'}, {status: 400});
+            return NextResponse.json({ error: 'El pagador y el receptor no pueden ser la misma persona' }, { status: 400 });
         }
 
         const numericAmount = parseCurrencyAmount(amount);
         if (isNaN(numericAmount) || numericAmount <= 0) {
-            return NextResponse.json({error: 'El monto debe ser un valor numérico mayor a 0'}, {status: 400});
+            return NextResponse.json({ error: 'El monto debe ser un valor numérico mayor a 0' }, { status: 400 });
         }
 
         const insertData: Record<string, any> = {
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
             insertData.proof_url = proof_url;
         }
 
-        let {data: payment, error} = await supabase
+        let { data: payment, error } = await supabase
             .from('payments')
             .insert(insertData)
             .select()
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
         if (error) {
             console.error('[API /api/payments] Supabase insert payment error:', error);
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         // Trigger notification asynchronously
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     } catch (err: unknown) {
         console.error('[API /api/payments] Unhandled error:', err);
         const message = err instanceof Error ? err.message : 'Error interno al registrar pago';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

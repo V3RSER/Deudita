@@ -1,15 +1,15 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {ActiveTab, Navbar} from '@/components/Navbar';
-import {usePathname, useRouter} from 'next/navigation';
-import {CreateGroupModal} from '@/components/groups/CreateGroupModal';
-import {NewExpenseModal} from '@/components/NewExpenseModal';
-import {ProfileSettingsModal} from '@/components/ProfileSettingsModal';
+import React, { useEffect, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { ActiveTab, Navbar } from '@/components/Navbar';
+import { usePathname, useRouter } from 'next/navigation';
+import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
+import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
-function DashboardLayoutContent({children}: { children: React.ReactNode }) {
-    const {currentProfile, loading, completeOnboarding} = useExpense();
+function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
+    const { currentProfile, loading, completeOnboarding } = useExpense();
     const pathname = usePathname();
     const router = useRouter();
 
@@ -75,7 +75,7 @@ function DashboardLayoutContent({children}: { children: React.ReactNode }) {
             <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
                 <div className="text-center space-y-3">
                     <div
-                        className="w-10 h-10 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto"/>
+                        className="w-10 h-10 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-sm text-zinc-500 font-medium">Cargando datos de la sesión...</p>
                 </div>
             </div>
@@ -149,7 +149,7 @@ function DashboardLayoutContent({children}: { children: React.ReactNode }) {
     );
 }
 
-export default function DashboardLayout({children}: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     return (
         <DashboardLayoutContent>{children}</DashboardLayoutContent>
     );

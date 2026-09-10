@@ -1,7 +1,7 @@
-import type {Metadata} from 'next';
-import {DM_Sans, Outfit} from 'next/font/google';
+import type { Metadata } from 'next';
+import { DM_Sans, Outfit } from 'next/font/google';
 import './globals.css'; // Global styles
-import {ExpenseProvider} from '@/lib/expense-context';
+import { ExpenseProvider } from '@/lib/expense-context';
 
 const dmSans = DM_Sans({
     subsets: ['latin'],
@@ -25,14 +25,14 @@ export const metadata: Metadata = {
     },
 };
 
-export default function RootLayout({children}: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="es" className={`${dmSans.variable} ${outfit.variable}`}>
-        <body className="font-sans antialiased text-zinc-900 bg-white" suppressHydrationWarning>
-        <ExpenseProvider>
-            {children}
-        </ExpenseProvider>
-        </body>
+            <body className="font-sans antialiased text-zinc-900 bg-white" suppressHydrationWarning>
+                <ExpenseProvider>
+                    {children}
+                </ExpenseProvider>
+            </body>
         </html>
     );
 }

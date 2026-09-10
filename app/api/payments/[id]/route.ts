@@ -1,25 +1,25 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {parseCurrencyAmount} from '@/lib/transaction-date-utils';
-import {notifyPaymentDeleted} from '@/lib/notifications';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { parseCurrencyAmount } from '@/lib/transaction-date-utils';
+import { notifyPaymentDeleted } from '@/lib/notifications';
 
 export async function PUT(
     req: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const {id} = await params;
+        const { id } = await params;
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const {group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url} = await req.json();
+        const { group_id, paid_by, paid_to, amount, payment_date, payment_time, note, proof_url } = await req.json();
 
         if (paid_by && paid_to && paid_by === paid_to) {
-            return NextResponse.json({error: 'El pagador y el receptor no pueden ser la misma persona'}, {status: 400});
+            return NextResponse.json({ error: 'El pagador y el receptor no pueden ser la misma persona' }, { status: 400 });
         }
 
         const updateData: Record<string, any> = {
@@ -37,7 +37,7 @@ export async function PUT(
         if (amount !== undefined) {
             const numericAmount = parseCurrencyAmount(amount);
             if (isNaN(numericAmount) || numericAmount <= 0) {
-                return NextResponse.json({error: 'El monto debe ser un valor numérico mayor a 0'}, {status: 400});
+                return NextResponse.json({ error: 'El monto debe ser un valor numérico mayor a 0' }, { status: 400 });
             }
             updateData.amount = numericAmount;
         }
@@ -46,7 +46,7 @@ export async function PUT(
             updateData.payment_time = payment_time;
         }
 
-        let {data: payment, error} = await supabase
+        let { data: payment, error } = await supabase
             .from('payments')
             .update(updateData)
             .eq('id', id)
@@ -70,45 +70,45 @@ export async function PUT(
 
         if (error) {
             console.error('[API /api/payments/[id]] Update payment error:', error);
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         return NextResponse.json(payment);
     } catch (err: unknown) {
         console.error('[API /api/payments/[id]] Unhandled error:', err);
         const message = err instanceof Error ? err.message : 'Error al actualizar el pago';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 export async function DELETE(
     req: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const {id} = await params;
+        const { id } = await params;
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         // Fetch existing payment to obtain details for notifications
-        const {data: existingPayment} = await supabase
+        const { data: existingPayment } = await supabase
             .from('payments')
             .select('id, group_id, paid_by, paid_to, amount')
             .eq('id', id)
             .maybeSingle();
 
-        const {error} = await supabase
+        const { error } = await supabase
             .from('payments')
             .delete()
             .eq('id', id);
 
         if (error) {
             console.error('[API /api/payments/[id]] Delete payment error:', error);
-            return NextResponse.json({error: error.message}, {status: 500});
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         // Trigger notification
@@ -124,11 +124,11 @@ export async function DELETE(
             });
         }
 
-        return NextResponse.json({success: true});
+        return NextResponse.json({ success: true });
     } catch (err: unknown) {
         console.error('[API /api/payments/[id]] Unhandled error:', err);
         const message = err instanceof Error ? err.message : 'Error al eliminar el pago';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

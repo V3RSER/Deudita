@@ -12,7 +12,7 @@ import {
     Tag,
     UserCheck,
 } from 'lucide-react';
-import { TransactionFilterState } from '@/components/TransactionFilterBar';
+import { TransactionFilterState } from '@/components/my-expenses/TransactionFilterBar';
 import { DatePreset } from '@/lib/transaction-date-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 

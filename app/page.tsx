@@ -1,8 +1,8 @@
-import {redirect} from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 export default async function Page({
-                                       searchParams,
-                                   }: {
+    searchParams,
+}: {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
     const params = await searchParams;

@@ -1,10 +1,10 @@
 'use client';
 
-import React, {useState} from 'react';
-import {DashboardSummary} from '@/components/DashboardSummary';
-import {CreateGroupModal} from '@/components/groups/CreateGroupModal';
-import {NewExpenseModal} from '@/components/NewExpenseModal';
-import {SettleDebtModal} from '@/components/SettleDebtModal';
+import React, { useState } from 'react';
+import { DashboardSummary } from '@/components/DashboardSummary';
+import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
+import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { SettleDebtModal } from '@/components/SettleDebtModal';
 
 export default function DashboardPage() {
     const [isNewGroupOpen, setIsNewGroupOpen] = useState(false);

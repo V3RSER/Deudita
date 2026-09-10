@@ -15,7 +15,7 @@ interface GroupListProps {
     onOpenNewGroup?: () => void;
 }
 
-export function GroupList({ onSelectGroup, onOpenNewGroup }: GroupListProps) {
+export function GroupList({ onSelectGroup, onOpenNewGroup }: Readonly<GroupListProps>) {
     const {
         currentProfile,
         userGroups,

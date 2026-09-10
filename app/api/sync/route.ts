@@ -1,19 +1,19 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {cookies} from 'next/headers';
-import {createClient} from '@/lib/supabase/server';
-import {claimAllTempProfilesForUser, claimAndJoinGroupInvite} from '@/lib/invite-utils';
-import {extractNotesAndConfig} from '@/lib/split-config-utils';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { claimAllTempProfilesForUser, claimAndJoinGroupInvite } from '@/lib/invite-utils';
+import { extractNotesAndConfig } from '@/lib/split-config-utils';
 
 export async function GET(req: NextRequest) {
     try {
-        const {searchParams} = new URL(req.url);
+        const { searchParams } = new URL(req.url);
         const isFullSync = searchParams.get('full') === 'true';
 
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         // Use the authenticated Supabase client (with request cookies and JWT) to respect RLS
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
             if (user.email) {
                 try {
                     const userEmailLower = user.email.toLowerCase().trim();
-                    const {data: pendingInvites} = await db
+                    const { data: pendingInvites } = await db
                         .from('group_invites')
                         .select('token, id, group_id')
                         .ilike('email', userEmailLower)
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         }
 
         // 1. Current user profile
-        const {data: userProfile, error: profileErr} = await db
+        const { data: userProfile, error: profileErr } = await db
             .from('profiles')
             .select('*')
             .eq('id', user.id)
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         }
 
         // 2. User's group memberships
-        const {data: userMemberships, error: memSelectErr} = await db
+        const { data: userMemberships, error: memSelectErr } = await db
             .from('group_members')
             .select('group_id')
             .eq('user_id', user.id);
@@ -90,11 +90,11 @@ export async function GET(req: NextRequest) {
         // 3. Groups
         let groups: any[] = [];
         if (userGroupIds.length > 0) {
-            const {data: groupData, error: groupSelectErr} = await db
+            const { data: groupData, error: groupSelectErr } = await db
                 .from('groups')
                 .select('*')
                 .in('id', userGroupIds)
-                .order('created_at', {ascending: false});
+                .order('created_at', { ascending: false });
 
             console.log(`[API /api/sync] groups select result: ${JSON.stringify({
                 data: groupData,
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
         // 4. All members for these groups
         let members: any[] = [];
         if (userGroupIds.length > 0) {
-            const {data: memberData} = await db
+            const { data: memberData } = await db
                 .from('group_members')
                 .select('*')
                 .in('group_id', userGroupIds);
@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
         const profileIdsToFetch = new Set<string>([user.id, ...members.map((m) => m.user_id)]);
 
         // Fetch standalone profiles created by current user
-        const {data: userCreatedProfiles, error: userCreatedProfilesErr} = await db
+        const { data: userCreatedProfiles, error: userCreatedProfilesErr } = await db
             .from('profiles')
             .select('id')
             .eq('created_by', user.id);
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch profiles invited by current user in group_invites
-        const {data: userInvites} = await db
+        const { data: userInvites } = await db
             .from('group_invites')
             .select('invitee_profile_id')
             .eq('invited_by', user.id);
@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
         // 5. Profiles of members and user's contacts
         let profiles: any[] = [];
         if (finalProfileIds.length > 0) {
-            const {data: profileData} = await db
+            const { data: profileData } = await db
                 .from('profiles')
                 .select('*')
                 .in('id', finalProfileIds);
@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
 
             let dbManagedIdsForUser: string[] = [];
             try {
-                const {data: dbUserManaged} = await db
+                const { data: dbUserManaged } = await db
                     .from('managed_users')
                     .select('managed_user_id')
                     .eq('sponsor_id', user.id);
@@ -241,7 +241,7 @@ export async function GET(req: NextRequest) {
         if (finalProfileIds.length > 0) {
             try {
                 const idList = finalProfileIds.join(',');
-                const {data: allManaged} = await db
+                const { data: allManaged } = await db
                     .from('managed_users')
                     .select('*')
                     .or(`sponsor_id.in.(${idList}),managed_user_id.in.(${idList})`);
@@ -297,43 +297,43 @@ export async function GET(req: NextRequest) {
         const expenseIdsSeen = new Set<string>();
 
         const [
-            {data: paymentData},
-            {data: notificationsData},
-            {data: auditLogsData},
-            {data: personalExpenses},
+            { data: paymentData },
+            { data: notificationsData },
+            { data: auditLogsData },
+            { data: personalExpenses },
         ] = await Promise.all([
             userGroupIds.length > 0
                 ? db
                     .from('payments')
                     .select('*')
                     .in('group_id', userGroupIds)
-                    .order('created_at', {ascending: false})
-                : Promise.resolve({data: []}),
+                    .order('created_at', { ascending: false })
+                : Promise.resolve({ data: [] }),
             db
                 .from('notifications')
                 .select('*')
                 .eq('user_id', user.id)
-                .order('created_at', {ascending: false}),
+                .order('created_at', { ascending: false }),
             userGroupIds.length > 0
                 ? db
                     .from('expense_audit_logs')
                     .select('*')
                     .in('group_id', userGroupIds)
-                    .order('created_at', {ascending: false})
-                : Promise.resolve({data: []}),
+                    .order('created_at', { ascending: false })
+                : Promise.resolve({ data: [] }),
             db
                 .from('expenses')
                 .select('*, items:expense_items(*), splits:expense_splits(*)')
                 .or(`created_by.eq.${user.id},paid_by.eq.${user.id}`)
-                .order('created_at', {ascending: false}),
+                .order('created_at', { ascending: false }),
         ]);
 
         if (userGroupIds.length > 0) {
-            const {data: expenseData} = await db
+            const { data: expenseData } = await db
                 .from('expenses')
                 .select('*, items:expense_items(*), splits:expense_splits(*)')
                 .in('group_id', userGroupIds)
-                .order('created_at', {ascending: false});
+                .order('created_at', { ascending: false });
 
             (expenseData || []).forEach((e) => {
                 expenseIdsSeen.add(e.id);
@@ -355,9 +355,9 @@ export async function GET(req: NextRequest) {
         // Hydrate split_config from persisted metadata in notes
         expenses = expenses.map((e) => {
             if (!e.split_config && e.notes) {
-                const {splitConfig} = extractNotesAndConfig(e.notes);
+                const { splitConfig } = extractNotesAndConfig(e.notes);
                 if (splitConfig) {
-                    return {...e, split_config: splitConfig};
+                    return { ...e, split_config: splitConfig };
                 }
             }
             return e;
@@ -404,7 +404,7 @@ export async function GET(req: NextRequest) {
             ? `invitee_profile_id.eq.${user.id},email.eq.${userEmailLower}`
             : `invitee_profile_id.eq.${user.id}`;
 
-        const {data: inviteData} = await db
+        const { data: inviteData } = await db
             .from('group_invites')
             .select('*, groups(name)')
             .or(inviteFilter)
@@ -436,6 +436,6 @@ export async function GET(req: NextRequest) {
         });
     } catch (error: any) {
         console.error('[API /api/sync] Error:', error);
-        return NextResponse.json({error: 'Error al sincronizar los datos'}, {status: 500});
+        return NextResponse.json({ error: 'Error al sincronizar los datos' }, { status: 500 });
     }
 }

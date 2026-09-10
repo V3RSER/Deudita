@@ -21,7 +21,7 @@ export function GroupSettingsModal({
     onInviteLink,
     onDeleteGroup,
     canEdit = true,
-}: GroupSettingsModalProps) {
+}: Readonly<GroupSettingsModalProps>) {
     if (!isOpen) return null;
 
     return (

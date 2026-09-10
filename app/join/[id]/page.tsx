@@ -1,9 +1,9 @@
 'use client';
 
-import React, {use, useEffect, useState} from 'react';
-import {useRouter} from 'next/navigation';
-import {createClient} from '@/lib/supabase/client';
-import {AlertCircle, ArrowRight, CheckCircle2, Loader2, Sparkles, Users} from 'lucide-react';
+import React, { use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Sparkles, Users } from 'lucide-react';
 import Link from 'next/link';
 
 interface InviteData {
@@ -37,7 +37,7 @@ interface InviteData {
     isAlreadyMember?: boolean;
 }
 
-export default function JoinInvitePage({params}: { params: Promise<{ id: string }> }) {
+export default function JoinInvitePage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = use(params);
     const inviteId = resolvedParams.id;
     const router = useRouter();
@@ -66,7 +66,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
 
                 const userPromise = supabase.auth.getUser();
                 const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
-                    setTimeout(() => resolve({data: {user: null}}), 1500)
+                    setTimeout(() => resolve({ data: { user: null } }), 1500)
                 );
                 const authResult = await Promise.race([userPromise, timeoutPromise]);
                 setCurrentUser(authResult.data?.user ?? null);
@@ -147,7 +147,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
     if (loading) {
         return (
             <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
-                <Loader2 className="w-7 h-7 text-zinc-900 animate-spin"/>
+                <Loader2 className="w-7 h-7 text-zinc-900 animate-spin" />
             </div>
         );
     }
@@ -159,7 +159,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                     className="bg-white rounded-3xl p-8 ring-1 ring-zinc-200 shadow-sm max-w-sm w-full text-center space-y-4">
                     <div
                         className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
-                        <AlertCircle className="w-6 h-6"/>
+                        <AlertCircle className="w-6 h-6" />
                     </div>
                     <h2 className="text-lg font-bold text-zinc-900">Enlace expirado</h2>
                     <p className="text-sm text-zinc-500">
@@ -185,7 +185,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                     className="bg-white rounded-3xl p-8 ring-1 ring-zinc-200 shadow-sm max-w-sm w-full text-center space-y-4">
                     <div
                         className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
-                        <AlertCircle className="w-6 h-6"/>
+                        <AlertCircle className="w-6 h-6" />
                     </div>
                     <h2 className="text-lg font-bold text-zinc-900">Invitación no disponible</h2>
                     <p className="text-sm text-zinc-500">
@@ -204,7 +204,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
         );
     }
 
-    const {group, inviter, invite} = inviteData;
+    const { group, inviter, invite } = inviteData;
     const isAccepted = invite.status === 'accepted' || Boolean(inviteData.isAlreadyMember);
 
     return (
@@ -217,9 +217,9 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                         className="w-16 h-16 bg-zinc-900 text-white rounded-2xl flex items-center justify-center text-xl font-bold mx-auto shadow-sm overflow-hidden">
                         {group.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={group.image_url} alt={group.name} className="w-full h-full object-cover"/>
+                            <img src={group.image_url} alt={group.name} className="w-full h-full object-cover" />
                         ) : (
-                            <Users className="w-7 h-7"/>
+                            <Users className="w-7 h-7" />
                         )}
                     </div>
 
@@ -235,7 +235,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                     {inviteData?.invitee && (
                         <div
                             className="inline-flex items-center gap-1.5 bg-zinc-100 text-zinc-800 text-xs font-medium px-3 py-1.5 rounded-full">
-                            <Sparkles className="w-3.5 h-3.5 text-zinc-600"/>
+                            <Sparkles className="w-3.5 h-3.5 text-zinc-600" />
                             <span>{inviteData.invitee.full_name}</span>
                         </div>
                     )}
@@ -246,7 +246,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                     {successMessage ? (
                         <div
                             className="bg-emerald-50 text-emerald-900 p-3.5 rounded-2xl flex items-center justify-center space-x-2 text-sm font-medium">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0"/>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                             <span>{successMessage}</span>
                         </div>
                     ) : isAccepted ? (
@@ -255,7 +255,7 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                             className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-medium py-3.5 px-6 rounded-2xl text-sm transition-colors flex items-center justify-center space-x-2 shadow-sm"
                         >
                             <span>Entrar</span>
-                            <ArrowRight className="w-4 h-4"/>
+                            <ArrowRight className="w-4 h-4" />
                         </button>
                     ) : currentUser ? (
                         <button
@@ -264,11 +264,11 @@ export default function JoinInvitePage({params}: { params: Promise<{ id: string 
                             className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-medium py-3.5 px-6 rounded-2xl text-sm transition-colors flex items-center justify-center space-x-2 shadow-sm disabled:opacity-60"
                         >
                             {isProcessing ? (
-                                <Loader2 className="w-4 h-4 animate-spin"/>
+                                <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <>
                                     <span>Unirme</span>
-                                    <ArrowRight className="w-4 h-4"/>
+                                    <ArrowRight className="w-4 h-4" />
                                 </>
                             )}
                         </button>

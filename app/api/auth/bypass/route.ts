@@ -1,6 +1,6 @@
-import {NextResponse} from 'next/server';
-import {createServerClient} from '@supabase/ssr';
-import {cookies} from 'next/headers';
+import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function GET() {
     try {
@@ -19,29 +19,29 @@ export async function GET() {
             }
         );
 
-        const {data: {user}, error} = await supabase.auth.getUser();
+        const { data: { user }, error } = await supabase.auth.getUser();
 
         return NextResponse.json({
             authenticated: !!user,
-            user: user ? {id: user.id, email: user.email} : null,
+            user: user ? { id: user.id, email: user.email } : null,
             error: error?.message ?? null,
             cookiesPresent: cookieStore.getAll().map((c) => c.name),
         });
     } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : 'Error al verificar sesión';
-        return NextResponse.json({error: errorMsg}, {status: 500});
+        return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 }
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const {access_token, refresh_token} = body;
+        const { access_token, refresh_token } = body;
 
         if (!access_token || !refresh_token) {
             return NextResponse.json(
-                {error: 'Credenciales incompletas: se requieren access_token y refresh_token'},
-                {status: 400}
+                { error: 'Credenciales incompletas: se requieren access_token y refresh_token' },
+                { status: 400 }
             );
         }
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
                         return cookieStore.getAll();
                     },
                     setAll(cookiesToSet) {
-                        cookiesToSet.forEach(({name, value, options}) => {
+                        cookiesToSet.forEach(({ name, value, options }) => {
                             try {
                                 cookieStore.set(name, value, {
                                     ...options,
@@ -84,13 +84,13 @@ export async function POST(req: Request) {
             }
         );
 
-        const {data, error} = await supabase.auth.setSession({
+        const { data, error } = await supabase.auth.setSession({
             access_token,
             refresh_token,
         });
 
         if (error) {
-            return NextResponse.json({error: error.message}, {status: 400});
+            return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
         const response = NextResponse.json({
@@ -100,14 +100,14 @@ export async function POST(req: Request) {
             cookiesList: cookiesToSetInResponse.map((c) => c.name),
         });
 
-        cookiesToSetInResponse.forEach(({name, value, options}) => {
+        cookiesToSetInResponse.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
         });
 
         return response;
     } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : 'Error al procesar la sesión en el servidor';
-        return NextResponse.json({error: errorMsg}, {status: 500});
+        return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 }
 

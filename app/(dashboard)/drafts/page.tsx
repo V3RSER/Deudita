@@ -1,9 +1,9 @@
 'use client';
 
-import React, {useState} from 'react';
-import {UnifiedDraftsAndTemplatesView} from '@/components/UnifiedDraftsAndTemplatesView';
-import {ConfirmDraftModal} from '@/components/ConfirmDraftModal';
-import {ExpenseDraft} from '@/lib/types';
+import React, { useState } from 'react';
+import { UnifiedDraftsAndTemplatesView } from '@/components/UnifiedDraftsAndTemplatesView';
+import { ConfirmDraftModal } from '@/components/ConfirmDraftModal';
+import { ExpenseDraft } from '@/lib/types';
 
 export default function DraftsPage() {
     const [isConfirmDraftOpen, setIsConfirmDraftOpen] = useState(false);

@@ -36,7 +36,7 @@ export function MemberDetailModal({
     groupId,
     context = 'group',
     memberProfile,
-}: MemberDetailModalProps) {
+}: Readonly<MemberDetailModalProps>) {
     const {
         currentProfile,
         userGroups,
@@ -344,10 +344,10 @@ export function MemberDetailModal({
                     {/* Balance pill */}
                     {!isSelf && (
                         <div className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold ${balance > 0
-                                ? 'bg-emerald-50 text-emerald-900'
-                                : balance < 0
-                                    ? 'bg-rose-50 text-rose-900'
-                                    : 'bg-zinc-50 text-zinc-600'
+                            ? 'bg-emerald-50 text-emerald-900'
+                            : balance < 0
+                                ? 'bg-rose-50 text-rose-900'
+                                : 'bg-zinc-50 text-zinc-600'
                             }`}>
                             <span className="text-zinc-500 font-medium">
                                 {isCurrentlyManagedByMe ? 'Saldo (persona vinculada)' : 'Saldo directo'}
@@ -366,10 +366,10 @@ export function MemberDetailModal({
                     {!isSelf && (
                         <div
                             className={`p-3.5 rounded-2xl border transition-all ${isCurrentlyManagedByMe
-                                    ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-                                    : isManagedByOther
-                                        ? 'bg-zinc-50 border-zinc-200 text-zinc-700'
-                                        : 'bg-zinc-50/80 hover:bg-zinc-100/60 border-zinc-200 text-zinc-900'
+                                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                                : isManagedByOther
+                                    ? 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                                    : 'bg-zinc-50/80 hover:bg-zinc-100/60 border-zinc-200 text-zinc-900'
                                 }`}
                         >
                             <div className="flex items-start justify-between gap-2.5">
@@ -402,8 +402,8 @@ export function MemberDetailModal({
                                         onClick={handleToggleManagement}
                                         disabled={isTogglingManagement || isSubmitting}
                                         className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${isCurrentlyManagedByMe
-                                                ? 'bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-2xs'
-                                                : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-2xs'
+                                            ? 'bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-2xs'
+                                            : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-2xs'
                                             }`}
                                     >
                                         {isTogglingManagement ? (
@@ -447,8 +447,8 @@ export function MemberDetailModal({
                                     readOnly={!canEdit || isRegistered}
                                     disabled={!canEdit || isRegistered}
                                     className={`w-full px-3 py-2 rounded-xl text-xs font-medium border ${isRegistered
-                                            ? 'bg-zinc-100 border-zinc-200 text-zinc-500 cursor-not-allowed'
-                                            : 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white'
+                                        ? 'bg-zinc-100 border-zinc-200 text-zinc-500 cursor-not-allowed'
+                                        : 'bg-zinc-50 border-zinc-200 text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 focus:bg-white'
                                         }`}
                                 />
                             </div>

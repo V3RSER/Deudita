@@ -1,20 +1,20 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const db = supabase;
         const body = await req.json().catch(() => null);
 
         if (!body || !body.fullName || typeof body.fullName !== 'string' || !body.fullName.trim()) {
-            return NextResponse.json({error: 'El nombre del amigo es obligatorio'}, {status: 400});
+            return NextResponse.json({ error: 'El nombre del amigo es obligatorio' }, { status: 400 });
         }
 
         const fullName = body.fullName.trim();
@@ -24,16 +24,16 @@ export async function POST(req: Request) {
         let targetProfile: any = null;
 
         if (email) {
-            const {data: existingProfiles} = await db
+            const { data: existingProfiles } = await db
                 .from('profiles')
                 .select('*')
                 .ilike('email', email)
-                .order('is_temp', {ascending: true});
+                .order('is_temp', { ascending: true });
 
             if (existingProfiles && existingProfiles.length > 0) {
                 targetProfile = existingProfiles[0];
                 if (targetProfile.is_temp && fullName && (!targetProfile.full_name || targetProfile.full_name === email.split('@')[0])) {
-                    await db.from('profiles').update({full_name: fullName}).eq('id', targetProfile.id);
+                    await db.from('profiles').update({ full_name: fullName }).eq('id', targetProfile.id);
                     targetProfile.full_name = fullName;
                 }
             }
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
                 created_by: user.id,
             };
 
-            let {data: newProfile, error} = await db
+            let { data: newProfile, error } = await db
                 .from('profiles')
                 .insert(profilePayload)
                 .select('*')
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
             if (error || !newProfile) {
                 console.error('[API POST /api/friends] Error creating profile:', error);
-                return NextResponse.json({error: error?.message ?? 'Error al agregar el amigo'}, {status: 500});
+                return NextResponse.json({ error: error?.message ?? 'Error al agregar el amigo' }, { status: 500 });
             }
 
             targetProfile = newProfile;
@@ -92,10 +92,10 @@ export async function POST(req: Request) {
             }
         }
 
-        return NextResponse.json({profile: targetProfile});
+        return NextResponse.json({ profile: targetProfile });
     } catch (err: unknown) {
         console.error('[API POST /api/friends] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al procesar la solicitud';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

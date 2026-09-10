@@ -1,10 +1,10 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {sendGroupInviteEmail} from '@/lib/email';
-import {getBaseUrl} from '@/lib/utils';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { sendGroupInviteEmail } from '@/lib/email';
+import { getBaseUrl } from '@/lib/utils';
 
 async function ensureGroupMember(db: any, groupId: string, userId: string, invitedBy: string) {
-    const {data: existing} = await db
+    const { data: existing } = await db
         .from('group_members')
         .select('group_id')
         .eq('group_id', groupId)
@@ -12,7 +12,7 @@ async function ensureGroupMember(db: any, groupId: string, userId: string, invit
         .maybeSingle();
 
     if (!existing) {
-        const {error} = await db
+        const { error } = await db
             .from('group_members')
             .insert({
                 group_id: groupId,
@@ -30,41 +30,41 @@ async function ensureGroupMember(db: any, groupId: string, userId: string, invit
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
             console.error('[API /api/groups/invite] Error de autenticación:', authErr);
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const db = supabase;
 
         const body = await req.json().catch(() => null);
-        if (!body || !body.groupId) {
-            return NextResponse.json({error: 'Falta la información del grupo'}, {status: 400});
+        if (!body?.groupId) {
+            return NextResponse.json({ error: 'Falta la información del grupo' }, { status: 400 });
         }
 
-        const {groupId, email: rawEmail, name: rawName, memberId: rawMemberId} = body;
+        const { groupId, email: rawEmail, name: rawName, memberId: rawMemberId } = body;
         const targetEmail = rawEmail ? String(rawEmail).trim().toLowerCase() : null;
         const memberName = rawName ? String(rawName).trim() : '';
 
         if (!targetEmail && !memberName && !rawMemberId) {
-            return NextResponse.json({error: 'Ingresa al menos un nombre o correo para invitar'}, {status: 400});
+            return NextResponse.json({ error: 'Ingresa al menos un nombre o correo para invitar' }, { status: 400 });
         }
 
         // Fetch group details
-        const {data: group, error: groupErr} = await db
+        const { data: group, error: groupErr } = await db
             .from('groups')
             .select('*')
             .eq('id', groupId)
             .single();
 
         if (groupErr || !group) {
-            return NextResponse.json({error: 'Grupo no encontrado'}, {status: 404});
+            return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 404 });
         }
 
         // Fetch inviter profile
-        const {data: inviterProfile} = await db
+        const { data: inviterProfile } = await db
             .from('profiles')
             .select('*')
             .eq('id', user.id)
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
         // 1. If memberId is passed (existing member/profile)
         if (rawMemberId) {
-            const {data: existingProf} = await db
+            const { data: existingProf } = await db
                 .from('profiles')
                 .select('*')
                 .eq('id', rawMemberId)
@@ -85,10 +85,10 @@ export async function POST(req: Request) {
             if (existingProf) {
                 targetUserId = existingProf.id;
                 if (targetEmail) {
-                    await db.from('profiles').update({email: targetEmail}).eq('id', targetUserId);
+                    await db.from('profiles').update({ email: targetEmail }).eq('id', targetUserId);
                 }
                 if (memberName && existingProf.is_temp) {
-                    await db.from('profiles').update({full_name: memberName}).eq('id', targetUserId);
+                    await db.from('profiles').update({ full_name: memberName }).eq('id', targetUserId);
                 }
                 await ensureGroupMember(db, groupId, targetUserId!, user.id);
             }
@@ -96,17 +96,17 @@ export async function POST(req: Request) {
 
         // 2. If targetUserId not set, but email is provided, check if a profile already exists
         if (!targetUserId && targetEmail) {
-            const {data: existingProfiles} = await db
+            const { data: existingProfiles } = await db
                 .from('profiles')
                 .select('*')
                 .ilike('email', targetEmail)
-                .order('is_temp', {ascending: true});
+                .order('is_temp', { ascending: true });
 
             if (existingProfiles && existingProfiles.length > 0) {
                 const existingProfile = existingProfiles[0];
                 targetUserId = existingProfile.id;
                 if (memberName && existingProfile.is_temp && (!existingProfile.full_name || existingProfile.full_name === targetEmail.split('@')[0])) {
-                    await db.from('profiles').update({full_name: memberName}).eq('id', targetUserId);
+                    await db.from('profiles').update({ full_name: memberName }).eq('id', targetUserId);
                 }
                 await ensureGroupMember(db, groupId, targetUserId!, user.id);
             }
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
             targetUserId = crypto.randomUUID();
             const displayName = memberName || (targetEmail ? targetEmail.split('@')[0] : 'Integrante');
 
-            const {error: profErr} = await db.from('profiles').insert({
+            const { error: profErr } = await db.from('profiles').insert({
                 id: targetUserId,
                 full_name: displayName,
                 email: targetEmail || null,
@@ -126,13 +126,13 @@ export async function POST(req: Request) {
 
             if (profErr) {
                 console.error('[API /api/groups/invite] Error creating temp profile:', profErr);
-                return NextResponse.json({error: profErr.message || 'Error al crear perfil del integrante'}, {status: 500});
+                return NextResponse.json({ error: profErr.message || 'Error al crear perfil del integrante' }, { status: 500 });
             }
 
             const memberInsertErr = await ensureGroupMember(db, groupId, targetUserId, user.id);
             if (memberInsertErr) {
                 console.error('[API /api/groups/invite] Error adding member to group:', memberInsertErr);
-                return NextResponse.json({error: memberInsertErr.message || 'Error al añadir integrante al grupo'}, {status: 500});
+                return NextResponse.json({ error: memberInsertErr.message || 'Error al añadir integrante al grupo' }, { status: 500 });
             }
         }
 
@@ -148,16 +148,16 @@ export async function POST(req: Request) {
             inviteQuery = inviteQuery.eq('email', targetEmail);
         }
 
-        const {data: existingInvite} = await inviteQuery.maybeSingle();
+        const { data: existingInvite } = await inviteQuery.maybeSingle();
 
         if (existingInvite) {
             inviteId = existingInvite.id;
             inviteToken = existingInvite.token;
             if (targetEmail) {
-                await db.from('group_invites').update({email: targetEmail}).eq('id', inviteId);
+                await db.from('group_invites').update({ email: targetEmail }).eq('id', inviteId);
             }
         } else {
-            const {data: newInvite, error: inviteInsErr} = await db
+            const { data: newInvite, error: inviteInsErr } = await db
                 .from('group_invites')
                 .insert({
                     group_id: groupId,
@@ -210,6 +210,6 @@ export async function POST(req: Request) {
     } catch (err: unknown) {
         console.error('[API POST /api/groups/invite] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al procesar la invitación';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

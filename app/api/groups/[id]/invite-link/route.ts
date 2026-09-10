@@ -1,30 +1,30 @@
-import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {getBaseUrl} from '@/lib/utils';
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/utils';
 
 export async function GET(
     req: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const resolvedParams = await params;
         const groupId = resolvedParams.id;
 
         if (!groupId) {
-            return NextResponse.json({error: 'ID de grupo requerido'}, {status: 400});
+            return NextResponse.json({ error: 'ID de grupo requerido' }, { status: 400 });
         }
 
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const db = supabase;
 
         // Check if user is a member or owner of the group
-        const {data: membership} = await db
+        const { data: membership } = await db
             .from('group_members')
             .select('role')
             .eq('group_id', groupId)
@@ -32,23 +32,23 @@ export async function GET(
             .maybeSingle();
 
         if (!membership) {
-            const {data: groupCheck} = await db
+            const { data: groupCheck } = await db
                 .from('groups')
                 .select('owner_id')
                 .eq('id', groupId)
                 .maybeSingle();
 
             if (groupCheck?.owner_id !== user.id) {
-                return NextResponse.json({error: 'No tienes permiso para generar enlaces de este grupo'}, {status: 403});
+                return NextResponse.json({ error: 'No tienes permiso para generar enlaces de este grupo' }, { status: 403 });
             }
         }
 
         // Look for an existing, non-expired open invite link for this group
-        const {data: existingInvites} = await db
+        const { data: existingInvites } = await db
             .from('group_invites')
             .select('id, token, created_at, status, email, invitee_profile_id')
             .eq('group_id', groupId)
-            .order('created_at', {ascending: false})
+            .order('created_at', { ascending: false })
             .limit(10);
 
         let activeInvite: any = null;
@@ -100,7 +100,7 @@ export async function GET(
             token,
         };
 
-        const {data: newInvite, error: insertErr} = await db
+        const { data: newInvite, error: insertErr } = await db
             .from('group_invites')
             .insert(insertPayload)
             .select('id, token, created_at')
@@ -132,33 +132,33 @@ export async function GET(
     } catch (err: unknown) {
         console.error('[API GET /api/groups/[id]/invite-link] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al obtener el enlace de invitación';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 export async function POST(
     req: Request,
-    {params}: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const resolvedParams = await params;
         const groupId = resolvedParams.id;
 
         if (!groupId) {
-            return NextResponse.json({error: 'ID de grupo requerido'}, {status: 400});
+            return NextResponse.json({ error: 'ID de grupo requerido' }, { status: 400 });
         }
 
         const supabase = await createClient();
-        const {data: {user}, error: authErr} = await supabase.auth.getUser();
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
 
         if (authErr || !user) {
-            return NextResponse.json({error: 'No autorizado'}, {status: 401});
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
         const db = supabase;
 
         // Check membership or ownership
-        const {data: membership} = await db
+        const { data: membership } = await db
             .from('group_members')
             .select('role')
             .eq('group_id', groupId)
@@ -166,14 +166,14 @@ export async function POST(
             .maybeSingle();
 
         if (!membership) {
-            const {data: groupCheck} = await db
+            const { data: groupCheck } = await db
                 .from('groups')
                 .select('owner_id')
                 .eq('id', groupId)
                 .maybeSingle();
 
             if (groupCheck?.owner_id !== user.id) {
-                return NextResponse.json({error: 'No tienes permiso para generar enlaces de este grupo'}, {status: 403});
+                return NextResponse.json({ error: 'No tienes permiso para generar enlaces de este grupo' }, { status: 403 });
             }
         }
 
@@ -191,7 +191,7 @@ export async function POST(
             token,
         };
 
-        const {data: newInvite, error: insertErr} = await db
+        const { data: newInvite, error: insertErr } = await db
             .from('group_invites')
             .insert(insertPayload)
             .select('id, token, created_at')
@@ -228,6 +228,6 @@ export async function POST(
     } catch (err: unknown) {
         console.error('[API POST /api/groups/[id]/invite-link] Error:', err);
         const message = err instanceof Error ? err.message : 'Error al generar el enlace de invitación';
-        return NextResponse.json({error: message}, {status: 500});
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

@@ -1,7 +1,7 @@
-import {NextRequest, NextResponse} from 'next/server';
-import {cookies} from 'next/headers';
-import {createClient} from '@/lib/supabase/server';
-import {cleanEmailBody} from '@/lib/email-templates/email-cleaning';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
+import { cleanEmailBody } from '@/lib/email-templates/email-cleaning';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,16 +105,16 @@ function buildGmailListUrl(
 export async function GET(req: NextRequest) {
     try {
         const supabase = await createClient();
-        const {data: {user}, error: authError} = await supabase.auth.getUser();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
 
         if (authError || !user) {
             return NextResponse.json(
-                {error: 'Sesión no válida. Inicia sesión en la aplicación.'},
-                {status: 401},
+                { error: 'Sesión no válida. Inicia sesión en la aplicación.' },
+                { status: 401 },
             );
         }
 
-        const {searchParams} = new URL(req.url);
+        const { searchParams } = new URL(req.url);
         const parsedLimit = Number.parseInt(searchParams.get('limit') || '25', 10);
         const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 25 : parsedLimit, 1), 50);
         const pageToken = searchParams.get('pageToken')?.trim() || null;
@@ -198,7 +198,7 @@ export async function GET(req: NextRequest) {
                         error: 'AUTH_REQUIRED',
                         notice: `El permiso de acceso a Gmail para ${user.email} ha caducado. Renueva el acceso para continuar.`,
                     },
-                    {status: 401},
+                    { status: 401 },
                 );
                 response.cookies.delete('google_provider_token');
                 return response;
@@ -216,7 +216,7 @@ export async function GET(req: NextRequest) {
                     error: `Error de Gmail (${listRes.status})`,
                     notice: `No se pudo consultar Gmail: ${errText.substring(0, 150)}`,
                 },
-                {status: listRes.status},
+                { status: listRes.status },
             );
         }
 
@@ -237,12 +237,12 @@ export async function GET(req: NextRequest) {
         }
 
         const results = await Promise.all(
-            messages.map(async ({id}) => {
+            messages.map(async ({ id }) => {
                 try {
                     const detailRes = await fetch(
                         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
                         {
-                            headers: {Authorization: `Bearer ${googleToken}`},
+                            headers: { Authorization: `Bearer ${googleToken}` },
                             cache: 'no-store',
                         },
                     );
@@ -293,8 +293,8 @@ export async function GET(req: NextRequest) {
     } catch (err: unknown) {
         console.error('[API GET /api/gmail/emails] Error fatal:', err);
         return NextResponse.json(
-            {error: err instanceof Error ? err.message : 'Error interno al consultar Gmail'},
-            {status: 500},
+            { error: err instanceof Error ? err.message : 'Error interno al consultar Gmail' },
+            { status: 500 },
         );
     }
 }
