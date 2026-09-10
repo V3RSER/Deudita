@@ -88,7 +88,7 @@ const EMPTY_TEMPLATE_FORM: TemplateFormState = {
   timeRegex: '',
   timeFormat: '',
   currencyRegex: '',
-  expenseType: 'compra',
+  expenseType: '',
   expenseTypeId: null,
 };
 
@@ -1395,7 +1395,7 @@ export function EmailTemplatesManagerView({
     setIsFormVisible(true);
     setPastedAIResponse('');
 
-    const candidateTemplate: CatalogTemplate = {
+    const parsedTemplate: CatalogTemplate = {
       id: '__ai_pasted_template__',
       name: data.name || 'Nueva Plantilla',
       subject_pattern: data.subject_pattern,
@@ -1423,7 +1423,7 @@ export function EmailTemplatesManagerView({
       return;
     }
 
-    const evaluation = evaluateTemplateAgainstEmail(candidateTemplate, selectedEmail, entities);
+    const evaluation = evaluateTemplateAgainstEmail(parsedTemplate, selectedEmail, entities);
     if (!evaluation.overallPassed) {
       setAiError(
         evaluation.failureReasons[0] ||
@@ -2010,32 +2010,32 @@ export function EmailTemplatesManagerView({
                       <div className="space-y-1"><label htmlFor="email-template-field-26" className="text-xs font-bold text-zinc-700">Patrón de correo de entidad</label><input id="email-template-field-26" value={form.entityEmailPattern} onChange={(e) => setFormField('entityEmailPattern', e.target.value)} className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl font-mono" /></div>
                       <div className="space-y-1">
                         <label htmlFor="email-template-field-27" className="text-xs font-bold text-zinc-700">Tipo de gasto</label>
-                        <input
+                        <select
                           id="email-template-field-27"
-                          list="expense-type-suggestions"
-                          value={form.expenseType}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            const matched = expenseTypes.find(
+                          value={
+                            form.expenseTypeId ||
+                            expenseTypes.find(
                               (et) =>
-                                et.name?.toLowerCase() === val.trim().toLowerCase() ||
-                                et.label?.toLowerCase() === val.trim().toLowerCase()
-                            );
-                            setFormField('expenseType', val);
-                            setFormField('expenseTypeId', matched?.id || null);
+                                et.name?.toLowerCase() === form.expenseType.trim().toLowerCase() ||
+                                et.label?.toLowerCase() === form.expenseType.trim().toLowerCase()
+                            )?.id ||
+                            ''
+                          }
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const matched = expenseTypes.find((et) => et.id === selectedId);
+                            setFormField('expenseTypeId', selectedId || null);
+                            setFormField('expenseType', matched?.name || matched?.label || '');
                           }}
-                          className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl"
-                        />
-                        <datalist id="expense-type-suggestions">
+                          className="w-full px-3 py-2.5 text-xs bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                        >
+                          <option value="">Selecciona tipo de gasto...</option>
                           {expenseTypes.map((et) => (
-                            <option key={et.id} value={et.label || et.name || ''} />
+                            <option key={et.id} value={et.id}>
+                              {et.label || et.name}
+                            </option>
                           ))}
-                          <option value="Compra" />
-                          <option value="Transferencia" />
-                          <option value="Pago" />
-                          <option value="Retiro" />
-                          <option value="Transporte" />
-                        </datalist>
+                        </select>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

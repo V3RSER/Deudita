@@ -55,7 +55,7 @@ export async function GET() {
         ...connection,
         apps_script_url: appsScriptUrl,
         templates_url: `${appUrl}/api/email-templates`,
-        webhook_url: `${appUrl}/api/expense-candidate`,
+        webhook_url: `${appUrl}/api/expenses`,
       },
     });
   } catch (err: unknown) {
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       connected: true,
       webhook_token: webhookToken,
       apps_script_url: appsScriptUrl,
-      webhook_url: `${appUrl}/api/expense-candidate`,
+      webhook_url: `${appUrl}/api/expenses`,
       templates_url: `${appUrl}/api/email-templates`,
       connection,
     });

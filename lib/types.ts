@@ -149,15 +149,23 @@ export interface ExpenseSplitConfig {
 
 export interface Expense {
   id: string;
-  group_id: string;
+  group_id: string | null;
   paid_by: string;
   total_amount: number;
   description: string;
-  category: string;
+  category?: string;
   expense_date: string;
-  expense_time?: string;
+  expense_time?: string | null;
   source: 'manual' | 'gmail';
-  source_draft_id?: string;
+  source_account?: string | null;
+  entity?: string | null;
+  currency?: string | null;
+  expense_type?: string | null;
+  is_draft?: boolean;
+  status?: string;
+  gmail_message_id?: string | null;
+  template_id?: string | null;
+  raw_snippet?: string | null;
   receipt_url?: string;
   notes?: string;
   split_config?: ExpenseSplitConfig;

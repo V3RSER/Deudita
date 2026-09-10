@@ -64,7 +64,11 @@ async function loadPromptEntities(
   }));
 }
 
-function buildSuggestionSchema() {
+function buildSuggestionSchema(expenseTypes: Array<{ name: string; label?: string }> = []) {
+  const expenseTypeDescription = expenseTypes.length > 0
+    ? `Naturaleza de la operación según el vocabulario del sistema registrado en la base de datos: ${expenseTypes.map((t) => `"${t.name}"${t.label && t.label.toLowerCase() !== t.name.toLowerCase() ? ` (${t.label})` : ''}`).join(', ')}.`
+    : 'Naturaleza de la operación según el vocabulario del sistema registrado en la base de datos.';
+
   return {
     type: Type.OBJECT,
     properties: {
@@ -126,7 +130,8 @@ function buildSuggestionSchema() {
       },
       expense_type: {
         type: Type.STRING,
-        description: 'Naturaleza de la operación, por ejemplo compra, transferencia, retiro o pago.',
+        description: expenseTypeDescription,
+        ...(expenseTypes.length > 0 ? { enum: expenseTypes.map((t) => t.name) } : {}),
       },
     },
     required: [
@@ -222,13 +227,25 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanBody = cleanEmailBody(requestData.body);
-    const existingEntities = await loadPromptEntities(supabase);
+    const [existingEntities, expenseTypesRes] = await Promise.all([
+      loadPromptEntities(supabase),
+      supabase
+        .from('expense_types')
+        .select('name, label')
+        .order('label', { ascending: true }),
+    ]);
+
+    const availableExpenseTypes: Array<{ name: string; label?: string }> = (expenseTypesRes.data || []).map((t) => ({
+      name: t.name,
+      label: t.label || t.name,
+    }));
 
     const prompt = buildTemplatePrompt(
       requestData.sender,
       requestData.subject,
       cleanBody,
       existingEntities,
+      availableExpenseTypes,
     );
 
     const ai = new GoogleGenAI({
@@ -247,7 +264,7 @@ export async function POST(req: NextRequest) {
         systemInstruction:
           'Genera únicamente la plantilla JSON solicitada por las instrucciones del prompt. La fuente de verdad para limpieza, estructura, entidad, match_pattern y regex es el prompt proporcionado; no introduzcas campos adicionales ni inventes datos.',
         responseMimeType: 'application/json',
-        responseSchema: buildSuggestionSchema(),
+        responseSchema: buildSuggestionSchema(availableExpenseTypes),
       },
     });
 

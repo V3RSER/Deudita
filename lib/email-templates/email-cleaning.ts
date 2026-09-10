@@ -644,11 +644,11 @@ export function matchEmailEntityPatterns(
   forwardedSender: string | null,
 ): { matched: boolean; matchedPattern?: string; matchedOn?: 'sender' | 'body' } {
   const normalizedSender = getNonEmptyString(sender);
-  const candidates = patterns
+  const sanitizedPatterns = patterns
     .map((pattern) => sanitizeRegexPattern(pattern))
     .filter((pattern): pattern is string => Boolean(pattern));
 
-  for (const pattern of candidates) {
+  for (const pattern of sanitizedPatterns) {
     try {
       const regex = new RegExp(pattern, 'i');
       if (normalizedSender && regex.test(normalizedSender)) {
@@ -691,22 +691,22 @@ export function resolveEmailEntity({
   let matchedPattern: string | undefined;
 
   if (entityId) {
-    entity = entities.find((candidate) => candidate.id === entityId) || null;
+    entity = entities.find((ent) => ent.id === entityId) || null;
     if (entity) matchedBy = 'id';
   } else if (entityLabel?.trim()) {
     const normalizedLabel = entityLabel.trim().toLowerCase();
     entity = entities.find(
-      (candidate) => candidate.name.trim().toLowerCase() === normalizedLabel,
+      (ent) => ent.name.trim().toLowerCase() === normalizedLabel,
     ) || null;
     if (entity) matchedBy = 'name';
   }
 
   if (!entity && allowPatternFallback) {
     const patternMatch = entities
-      .map((candidate) => ({
-        candidate,
+      .map((ent) => ({
+        entity: ent,
         match: matchEmailEntityPatterns(
-          candidate.patterns,
+          ent.patterns,
           sender,
           context.bodyHeadLines,
           context.forwardedSender,
@@ -715,7 +715,7 @@ export function resolveEmailEntity({
       .find(({ match }) => match.matched);
 
     if (patternMatch) {
-      entity = patternMatch.candidate;
+      entity = patternMatch.entity;
       matchedBy = 'pattern';
       matchedPattern = patternMatch.match.matchedPattern;
     }
@@ -746,6 +746,7 @@ export function buildTemplatePrompt(
   subject: string,
   cleanBody: string,
   existingEntities: EmailEntityPatternSource[] = [],
+  availableExpenseTypes: Array<{ name: string; label?: string }> = [],
 ): string {
   const strippedSubject = stripSubjectPrefixes(subject);
   const forwardedSubject = extractForwardedSubjectFromBody(
@@ -912,7 +913,9 @@ export function buildTemplatePrompt(
       : 'Si ninguna entidad registrada coincide, puedes definir una nueva entidad y construir entity_email_pattern según las reglas.',
     '',
     '8. VALORES SEMÁNTICOS:',
-    'expense_type debe representar la naturaleza de la operación usando el vocabulario del sistema, por ejemplo "compra", "transferencia", "retiro" o "pago".',
+    availableExpenseTypes && availableExpenseTypes.length > 0
+      ? `expense_type debe representar la naturaleza de la operación usando estrictamente el vocabulario del sistema registrado en la base de datos: ${availableExpenseTypes.map((t) => `"${t.name}"${t.label && t.label.toLowerCase() !== t.name.toLowerCase() ? ` (${t.label})` : ''}`).join(', ')}. Debes seleccionar uno de estos valores exactos según la notificación. No inventes ni uses otros tipos.`
+      : 'expense_type debe representar la naturaleza de la operación usando el vocabulario del sistema registrado en la base de datos.',
     'entity_label debe usar exactamente el nombre registrado cuando exista una equivalencia válida.',
     '',
     'ANÁLISIS INTERNO:',

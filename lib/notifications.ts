@@ -523,18 +523,18 @@ export async function notifyExpenseUpdated(
       if (group?.currency) currency = group.currency;
     }
 
-    // Collect all candidate user IDs for names & sponsorships
-    const candidateIds = new Set<string>([
+    // Collect all participant user IDs for names & sponsorships
+    const participantIds = new Set<string>([
       updaterId,
       ...newSplits.map((s) => s.user_id),
       ...previousSplits.map((s) => s.user_id),
       ...removedUserIds,
     ]);
-    if (paidBy) candidateIds.add(paidBy);
-    if (previousPaidBy) candidateIds.add(previousPaidBy);
-    if (createdBy) candidateIds.add(createdBy);
+    if (paidBy) participantIds.add(paidBy);
+    if (previousPaidBy) participantIds.add(previousPaidBy);
+    if (createdBy) participantIds.add(createdBy);
 
-    const allUserIds = Array.from(candidateIds);
+    const allUserIds = Array.from(participantIds);
     const sponsorshipMap = await getSponsorshipMapForUsers(supabase, allUserIds);
 
     const { data: participantProfiles } = await supabase

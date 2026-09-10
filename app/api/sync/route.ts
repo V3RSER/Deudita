@@ -287,7 +287,6 @@ export async function GET(req: NextRequest) {
 
     const [
       { data: paymentData },
-      { data: draftsData },
       { data: notificationsData },
       { data: auditLogsData },
       { data: personalExpenses },
@@ -299,11 +298,6 @@ export async function GET(req: NextRequest) {
             .in('group_id', userGroupIds)
             .order('created_at', { ascending: false })
         : Promise.resolve({ data: [] }),
-      db
-        .from('expense_drafts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
       db
         .from('notifications')
         .select('*')
@@ -361,7 +355,35 @@ export async function GET(req: NextRequest) {
     // 7. Payments
     const payments = paymentData || [];
 
-    // 8. Expense Drafts (draftsData)
+    // 8. Unified Expense Drafts (Gastos de expenses en modo borrador is_draft = true)
+    const unifiedDrafts: any[] = [];
+
+    for (const exp of expenses) {
+      if (exp.is_draft) {
+        unifiedDrafts.push({
+          id: exp.id,
+          user_id: exp.created_by,
+          gmail_message_id: exp.gmail_message_id || '',
+          raw_snippet: exp.raw_snippet || exp.description || '',
+          detected_amount: exp.total_amount,
+          detected_merchant: exp.description,
+          detected_date: exp.expense_date,
+          detected_time: exp.expense_time,
+          confidence: 0.95,
+          status: 'pending',
+          currency: exp.currency || 'COP',
+          entity: exp.entity,
+          source_account: exp.source_account,
+          concept: exp.description,
+          created_at: exp.created_at,
+          is_draft: true,
+          extracted_items: exp.items?.map((it: any) => ({
+            description: it.description,
+            amount: it.amount,
+          })) || [],
+        });
+      }
+    }
 
     // 9. Notifications (notificationsData)
 
@@ -394,7 +416,7 @@ export async function GET(req: NextRequest) {
       members,
       expenses,
       payments,
-      drafts: draftsData || [],
+      drafts: unifiedDrafts,
       notifications: notificationsData || [],
       pendingInvites,
       auditLogs,

@@ -37,6 +37,7 @@ import {
   ShoppingBag,
   Layers,
   Loader2,
+  CreditCard,
 } from 'lucide-react';
 
 type UnifiedTransaction =
@@ -442,6 +443,11 @@ export function GenericExpenseList({
                                 AI
                               </span>
                             )}
+                            {exp.is_draft && (
+                              <span className="bg-amber-100 text-amber-900 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border border-amber-300 shrink-0">
+                                Borrador
+                              </span>
+                            )}
                             {dateFilterMode === 'entry_date' && tx.isUpdated && (
                               <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
                                 Editado
@@ -462,6 +468,14 @@ export function GenericExpenseList({
                             <span className="truncate">
                               Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
                             </span>
+                            {exp.source_account && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono text-zinc-600 font-medium">
+                                  💳 *{exp.source_account}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -705,6 +719,16 @@ export function GenericExpenseList({
                               </strong>
                             </span>
                           </div>
+
+                          {exp.source_account && (
+                            <div className="flex items-center space-x-2 flex-wrap">
+                              <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                              <span>
+                                Pagado con: <strong className="font-mono font-semibold text-zinc-700">*{exp.source_account}</strong>
+                                {exp.entity ? ` (${exp.entity})` : ''}
+                              </span>
+                            </div>
+                          )}
 
                           <div className="flex items-center space-x-2 flex-wrap">
                             <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />

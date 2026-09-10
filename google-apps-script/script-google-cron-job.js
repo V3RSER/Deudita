@@ -96,8 +96,8 @@ function syncExpenseEmails(selectedMessageId) {
   let latestMessageEpoch = sinceEpoch;
   let messagesProcessed = 0;
   let matchesFound = 0;
-  let candidatesSent = 0;
-  let candidatesFailed = 0;
+  let expensesSent = 0;
+  let expensesFailed = 0;
   const matchesByTemplate = {};
   const processedThreads = [];
 
@@ -151,11 +151,11 @@ function syncExpenseEmails(selectedMessageId) {
         );
       }
 
-      const sent = sendCandidate(token, message, match);
+      const sent = sendExpense(token, message, match);
       if (sent) {
-        candidatesSent++;
+        expensesSent++;
       } else {
-        candidatesFailed++;
+        expensesFailed++;
       }
     }
 
@@ -174,8 +174,8 @@ function syncExpenseEmails(selectedMessageId) {
 
   console.log(
     `Sync: hilos=${threads.length}, correos=${messagesProcessed}, ` +
-    `matches=${matchesFound}, enviados=${candidatesSent}, ` +
-    `errores=${candidatesFailed}, duración_ms=${durationMs}`
+    `matches=${matchesFound}, enviados=${expensesSent}, ` +
+    `errores=${expensesFailed}, duración_ms=${durationMs}`
   );
 
   if (matchesFound > 0) {
@@ -223,10 +223,10 @@ function buildCatalogEntitiesFromTemplates(templates) {
 }
 
 // ------------------------------------------------------------
-// 3) ENVÍO DEL CANDIDATO
+// 3) ENVÍO DIRECTO DEL GASTO A /api/expenses
 // ------------------------------------------------------------
 
-function sendCandidate(token, message, match) {
+function sendExpense(token, message, match) {
   const payload = {
     gmail_message_id: message.getId(),
     template_id: match.templateId,
@@ -234,21 +234,25 @@ function sendCandidate(token, message, match) {
     currency: match.currency,
     merchant: match.merchant,
     entity: match.entityId,
+    source_account: match.sourceAccount,
     sourceAccount: match.sourceAccount,
     date: match.date,
     time: match.time,
     concept: match.concept,
+    items: match.items || [],
+    expense_type: match.expenseType || match.expense_type || null,
     received_at: message.getDate().toISOString(),
+    is_draft: true,
   };
 
   const payloadJson = JSON.stringify(payload);
 
   console.log(
-    `EXPENSE CANDIDATE REQUEST | messageId=${message.getId()} | json=${payloadJson}`
+    `EXPENSE CREATE REQUEST | messageId=${message.getId()} | json=${payloadJson}`
   );
 
   const response = UrlFetchApp.fetch(
-    `${BACKEND_BASE_URL}/api/expense-candidate`,
+    `${BACKEND_BASE_URL}/api/expenses`,
     {
       method: 'post',
       contentType: 'application/json',
@@ -264,13 +268,13 @@ function sendCandidate(token, message, match) {
   const responseText = response.getContentText();
 
   console.log(
-    `EXPENSE CANDIDATE RESPONSE | messageId=${message.getId()} | ` +
+    `EXPENSE CREATE RESPONSE | messageId=${message.getId()} | ` +
     `status=${code} | body=${responseText}`
   );
 
   if (code < 200 || code >= 300) {
     console.warn(
-      `expense-candidate respondió ${code} para el mensaje ${message.getId()}: ${responseText}`
+      `/api/expenses respondió ${code} para el mensaje ${message.getId()}: ${responseText}`
     );
     return false;
   }

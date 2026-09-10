@@ -87,6 +87,15 @@ export async function PUT(
       updated_by: user.id,
     };
 
+    if (expense.is_draft !== undefined) {
+      updatePayload.is_draft = expense.is_draft;
+    } else if (rawGroupId && previousExpense.is_draft) {
+      updatePayload.is_draft = false;
+    }
+    if (expense.source_account !== undefined) updatePayload.source_account = expense.source_account;
+    if (expense.entity !== undefined) updatePayload.entity = expense.entity;
+    if (expense.expense_type !== undefined) updatePayload.expense_type = expense.expense_type;
+    if (expense.split_config !== undefined) updatePayload.split_config = expense.split_config;
     if (expense.expense_time !== undefined) updatePayload.expense_time = expense.expense_time;
     if (expense.category !== undefined) updatePayload.category = expense.category;
     if (expense.notes !== undefined) updatePayload.notes = expense.notes;
@@ -209,12 +218,6 @@ export async function PUT(
     if (isSplitsMismatch && targetSplits.length > 0) {
       console.log('[API /api/expenses/[id]] Splits mismatch detected, using cascade recreation for expense', id);
       try {
-        // Unlink draft if needed to avoid RESTRICT constraint
-        await supabase
-          .from('expense_drafts')
-          .update({ confirmed_expense_id: null })
-          .eq('confirmed_expense_id', id);
-
         // Cascade delete parent expense
         const { error: delExpErr } = await supabase
           .from('expenses')
@@ -246,14 +249,6 @@ export async function PUT(
 
             // Re-insert splits
             await supabase.from('expense_splits').insert(targetSplits);
-
-            // Relink draft if was linked
-            if (previousExpense.source_draft_id) {
-              await supabase
-                .from('expense_drafts')
-                .update({ confirmed_expense_id: id })
-                .eq('id', previousExpense.source_draft_id);
-            }
           }
         }
       } catch (cascadeErr) {
@@ -472,5 +467,12 @@ export async function DELETE(
     const message = err instanceof Error ? err.message : 'Error interno al eliminar gasto';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PUT(req, context);
 }
 

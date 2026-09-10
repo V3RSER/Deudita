@@ -158,7 +158,7 @@ export function inferSplitConfig(expense: Partial<Expense>): ExpenseSplitConfig 
   // 2. Shares / Cuotas heuristic test:
   // If amounts are proportional to small positive integers (e.g. 2:1, 3:1, 3:2, 4:1)
   if (minAmt > 0) {
-    // Try candidate bases from minAmt down to minAmt / 5
+    // Try bases from minAmt down to minAmt / 5
     let bestShares: Record<string, number> | null = null;
 
     for (let testDivisor = 1; testDivisor <= 4; testDivisor++) {
@@ -166,7 +166,7 @@ export function inferSplitConfig(expense: Partial<Expense>): ExpenseSplitConfig 
       if (unit <= 0.01) break;
 
       let allMatch = true;
-      const candidateShares: Record<string, number> = {};
+      const computedShares: Record<string, number> = {};
 
       for (let i = 0; i < splits.length; i++) {
         const amt = amounts[i];
@@ -181,11 +181,11 @@ export function inferSplitConfig(expense: Partial<Expense>): ExpenseSplitConfig 
           allMatch = false;
           break;
         }
-        candidateShares[splits[i].user_id] = rounded;
+        computedShares[splits[i].user_id] = rounded;
       }
 
       if (allMatch) {
-        bestShares = candidateShares;
+        bestShares = computedShares;
         break;
       }
     }

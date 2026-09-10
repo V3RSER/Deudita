@@ -57,7 +57,7 @@ export interface Level2SubjectGroupReport {
   templates: CatalogTemplate[];
 }
 
-export interface Level3CandidateReport {
+export interface Level3TemplateReport {
   template: CatalogTemplate;
   entityName: string;
   subjectPattern: string | null;
@@ -176,9 +176,9 @@ export interface DiagnosisResult {
     totalTemplatesDiscarded: number;
   };
   level3: {
-    candidates: Level3CandidateReport[];
+    evaluatedTemplates: Level3TemplateReport[];
     survivingTemplates: CatalogTemplate[];
-    discardedCandidates: Level3CandidateReport[];
+    discardedTemplates: Level3TemplateReport[];
     ambiguityIssuesCount: number;
   };
   extractions: TemplateExtractionReport[];
@@ -876,9 +876,9 @@ export function diagnoseEmailMatching(
     }
   }
 
-  const candidates: Level3CandidateReport[] = [];
+  const evaluatedTemplates: Level3TemplateReport[] = [];
   const survivingTemplates: CatalogTemplate[] = [];
-  const discardedCandidates: Level3CandidateReport[] = [];
+  const discardedTemplates: Level3TemplateReport[] = [];
   let ambiguityIssuesCount = 0;
 
   for (const group of passedGroups) {
@@ -889,7 +889,7 @@ export function diagnoseEmailMatching(
 
       if (isAmbiguousGroup && !matchPattern) {
         ambiguityIssuesCount++;
-        const candidateReport: Level3CandidateReport = {
+        const reportItem: Level3TemplateReport = {
           template,
           entityName: group.entityName,
           subjectPattern: group.subjectPattern,
@@ -900,13 +900,13 @@ export function diagnoseEmailMatching(
           matched: false,
           discardReason: 'No tiene match_pattern definido en un grupo ambiguo con múltiples plantillas.',
         };
-        candidates.push(candidateReport);
-        discardedCandidates.push(candidateReport);
+        evaluatedTemplates.push(reportItem);
+        discardedTemplates.push(reportItem);
         continue;
       }
 
       if (!isAmbiguousGroup && !matchPattern) {
-        const candidateReport: Level3CandidateReport = {
+        const reportItem: Level3TemplateReport = {
           template,
           entityName: group.entityName,
           subjectPattern: group.subjectPattern,
@@ -915,7 +915,7 @@ export function diagnoseEmailMatching(
           hasDataIssue: false,
           matched: true,
         };
-        candidates.push(candidateReport);
+        evaluatedTemplates.push(reportItem);
         survivingTemplates.push(template);
         continue;
       }
@@ -923,7 +923,7 @@ export function diagnoseEmailMatching(
       const matchResult = evaluateMatchPattern(matchPattern!, cleanBody, subject);
 
       if (matchResult.matched) {
-        const candidateReport: Level3CandidateReport = {
+        const reportItem: Level3TemplateReport = {
           template,
           entityName: group.entityName,
           subjectPattern: group.subjectPattern,
@@ -933,14 +933,14 @@ export function diagnoseEmailMatching(
           matched: true,
           matchedOn: matchResult.matchedOn,
         };
-        candidates.push(candidateReport);
+        evaluatedTemplates.push(reportItem);
         survivingTemplates.push(template);
       } else {
         const isSyntaxError = matchResult.reason?.startsWith(
           'Error en expresión regular de match_pattern:'
         );
 
-        const candidateReport: Level3CandidateReport = {
+        const reportItem: Level3TemplateReport = {
           template,
           entityName: group.entityName,
           subjectPattern: group.subjectPattern,
@@ -955,8 +955,8 @@ export function diagnoseEmailMatching(
           matched: false,
           discardReason: matchResult.reason || `El patrón de desempate /${matchPattern}/i no coincidió.`,
         };
-        candidates.push(candidateReport);
-        discardedCandidates.push(candidateReport);
+        evaluatedTemplates.push(reportItem);
+        discardedTemplates.push(reportItem);
       }
     }
   }
@@ -1014,7 +1014,7 @@ export function diagnoseEmailMatching(
       };
     }
 
-    const passedL1 = l1SurvivingTemplates.some((candidate) => candidate.id === template.id);
+    const passedL1 = l1SurvivingTemplates.some((t) => t.id === template.id);
     if (!passedL1) {
       const entityName = template.entity?.name || 'Entidad';
       const reason = `Descartada en Paso 1: El remitente/cuerpo no coincide con la entidad "${entityName}".`;
@@ -1032,7 +1032,7 @@ export function diagnoseEmailMatching(
       };
     }
 
-    const passedL2 = l2SurvivingTemplates.some((candidate) => candidate.id === template.id);
+    const passedL2 = l2SurvivingTemplates.some((t) => t.id === template.id);
     if (!passedL2) {
       const reason = `Descartada en Paso 2: El asunto no coincide con el patrón /${template.subject_pattern || ''}/i.`;
       return {
@@ -1049,9 +1049,9 @@ export function diagnoseEmailMatching(
       };
     }
 
-    const surviving = survivingTemplates.some((candidate) => candidate.id === template.id);
+    const surviving = survivingTemplates.some((t) => t.id === template.id);
     if (!surviving) {
-      const discarded = discardedCandidates.find((candidate) => candidate.template.id === template.id);
+      const discarded = discardedTemplates.find((d) => d.template.id === template.id);
       const reason =
         discarded?.discardReason ||
         `Descartada en Paso 3: Patrón de desempate /${template.match_pattern || ''}/i no encontrado.`;
@@ -1070,7 +1070,7 @@ export function diagnoseEmailMatching(
       };
     }
 
-    const extraction = extractions.find((candidate) => candidate.template.id === template.id);
+    const extraction = extractions.find((e) => e.template.id === template.id);
     const amountOk = Boolean(extraction?.fields.amount.success);
     const isWinner = Boolean(amountOk && winner?.template.id === template.id);
     const failureReason = amountOk
@@ -1154,9 +1154,9 @@ export function diagnoseEmailMatching(
       totalTemplatesDiscarded: l2DiscardedTemplatesCount,
     },
     level3: {
-      candidates,
+      evaluatedTemplates,
       survivingTemplates,
-      discardedCandidates,
+      discardedTemplates,
       ambiguityIssuesCount,
     },
     extractions,

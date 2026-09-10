@@ -886,6 +886,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       }
 
       setExpenses((prev) => prev.filter((e) => e.id !== id));
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
     });
   };
 
@@ -991,17 +992,19 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     customData?: { description?: string; totalAmount?: number; expenseDate?: string }
   ): Promise<{ expense: Expense; draftId: string }> => {
     return await runOperation('Confirmando borrador...', async () => {
-      const res = await fetch('/api/drafts/confirm', {
-        method: 'POST',
+      const res = await fetch(`/api/expenses/${draftId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          draftId,
-          groupId,
-          paidBy,
+          expense: {
+            group_id: groupId,
+            paid_by: paidBy,
+            total_amount: customData?.totalAmount,
+            description: customData?.description,
+            expense_date: customData?.expenseDate,
+            is_draft: false,
+          },
           splits,
-          description: customData?.description,
-          totalAmount: customData?.totalAmount,
-          expenseDate: customData?.expenseDate,
         }),
       });
 
@@ -1017,31 +1020,27 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         throw new Error(message);
       }
 
-      let data: { expense: Expense; draftId: string };
+      let data: any;
       try {
         data = await res.json();
       } catch {
         throw new Error('Respuesta inválida del servidor al confirmar el borrador');
       }
 
-      const { expense, draftId: confirmedDraftId } = data;
-      const targetDraftId = confirmedDraftId || draftId;
-
-      if (expense) {
-        setExpenses((prev) => [expense, ...prev.filter((e) => e.id !== expense.id)]);
+      const confirmedExpense: Expense = data.expense || data;
+      if (confirmedExpense?.id) {
+        setExpenses((prev) => [confirmedExpense, ...prev.filter((e) => e.id !== confirmedExpense.id)]);
       }
-      setDrafts((prev) => prev.filter((d) => d.id !== targetDraftId));
+      setDrafts((prev) => prev.filter((d) => d.id !== draftId));
 
-      return data;
+      return { expense: confirmedExpense, draftId };
     });
   };
 
   const discardDraft = async (draftId: string): Promise<void> => {
     await runOperation('Descartando borrador...', async () => {
-      const res = await fetch(`/api/drafts/${draftId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'discarded' }),
+      const res = await fetch(`/api/expenses/${draftId}`, {
+        method: 'DELETE',
       });
 
       if (!res.ok) {
@@ -1059,10 +1058,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       try {
         await res.json();
       } catch {
-        throw new Error('Respuesta inválida del servidor al descartar el borrador');
+        // ok
       }
 
       setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+      setExpenses((prev) => prev.filter((e) => e.id !== draftId));
     });
   };
 
@@ -1070,27 +1070,58 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>
   ): Promise<ExpenseDraft> => {
     return await runOperation('Agregando borrador...', async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Usuario no autenticado');
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expense: {
+            description: draft.concept || draft.detected_merchant || 'Borrador',
+            total_amount: draft.detected_amount,
+            currency: draft.currency || 'COP',
+            group_id: null,
+            is_draft: true,
+            source: 'manual',
+            source_account: draft.source_account,
+            entity: draft.entity,
+            gmail_message_id: draft.gmail_message_id,
+            raw_snippet: draft.raw_snippet,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        let message = 'No se pudo guardar el borrador';
+        try {
+          const errData = await res.json();
+          if (errData?.error) message = String(errData.error);
+        } catch {
+          // fallback
+        }
+        throw new Error(message);
       }
 
-      const { data, error } = await supabase
-        .from('expense_drafts')
-        .insert({
-          ...draft,
-          user_id: user.id,
-          status: 'pending'
-        })
-        .select()
-        .single();
+      const resData = await res.json();
+      const createdExp: Expense = resData.expense || resData;
 
-      if (error) {
-        console.error('[ExpenseContext] Error in addDraft:', error.message);
-        throw new Error(error.message);
-      }
+      const newDraft: ExpenseDraft = {
+        id: createdExp.id,
+        user_id: createdExp.created_by || '',
+        gmail_message_id: createdExp.gmail_message_id || '',
+        raw_snippet: createdExp.raw_snippet || createdExp.description,
+        detected_amount: createdExp.total_amount,
+        detected_merchant: createdExp.description,
+        detected_date: createdExp.expense_date,
+        detected_time: createdExp.expense_time,
+        confidence: 0.95,
+        status: 'pending',
+        currency: createdExp.currency || 'COP',
+        entity: createdExp.entity,
+        source_account: createdExp.source_account,
+        concept: createdExp.description,
+        created_at: createdExp.created_at,
+      };
 
-      const newDraft = data as ExpenseDraft;
+      setExpenses((prev) => [createdExp, ...prev.filter((e) => e.id !== createdExp.id)]);
       setDrafts((prev) => [newDraft, ...prev.filter((d) => d.id !== newDraft.id)]);
       return newDraft;
     });
