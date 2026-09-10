@@ -186,29 +186,6 @@ export function MemberDetailModal({
         }
     };
 
-    const handleResendInvite = async () => {
-        if (!groupId) return;
-        if (!email.trim() || !email.includes('@')) {
-            setErrorMsg('Ingresa un correo electrónico válido para enviar la invitación.');
-            return;
-        }
-
-        try {
-            setIsSubmitting(true);
-            setErrorMsg(null);
-            setSuccessMsg(null);
-
-            await addGroupInvite(groupId, email.trim().toLowerCase(), name.trim(), memberProfile.id);
-            setSuccessMsg(`Invitación enviada por correo a ${email.trim()}`);
-            if (refreshData) await refreshData();
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Error al enviar la invitación';
-            setErrorMsg(message);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     const handleCopyLink = async () => {
         if (!groupId) return;
         try {

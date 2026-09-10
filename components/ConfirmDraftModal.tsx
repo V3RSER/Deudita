@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';

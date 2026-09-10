@@ -203,31 +203,6 @@ export interface ExpenseDraft {
     extracted_items?: Array<{ description: string; amount: number }>;
 }
 
-export interface EmailTemplate {
-    id: string;
-    name: string;
-    sender_pattern?: string | null;
-    subject_pattern?: string | null;
-    amount_regex: string;
-    merchant_regex?: string | null;
-    date_regex?: string | null;
-    date_format?: string | null;
-    entity_name?: string | null;
-    default_currency?: string;
-    currency_regex?: string | null;
-    source_account_regex?: string | null;
-    time_regex?: string | null;
-    created_by?: string | null;
-    active: boolean;
-    created_at: string;
-}
-
-export interface UserTemplatePreference {
-    user_id: string;
-    template_id: string;
-    enabled: boolean;
-}
-
 export interface Payment {
     id: string;
     group_id: string;
