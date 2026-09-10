@@ -42,7 +42,6 @@ type UnifiedTransaction =
         date: string;
         dateObj: Date;
         isUpdated: boolean;
-        hasExplicitTime: boolean;
         data: Expense;
     }
     | {
@@ -50,7 +49,6 @@ type UnifiedTransaction =
         date: string;
         dateObj: Date;
         isUpdated: boolean;
-        hasExplicitTime: boolean;
         data: Payment;
     };
 
@@ -64,7 +62,6 @@ interface GenericExpenseListProps {
     isSimplified?: boolean;
     groupCurrency?: string;
     dateFilterMode?: DateFilterMode;
-    onSelectExpense?: (expense: Expense) => void;
     onEditExpense?: (expense: Expense) => void;
     onDeleteExpense?: (expenseId: string) => void;
     onEditPayment?: (payment: Payment) => void;
@@ -101,13 +98,13 @@ function parseTxDate(dateInput: string | Date) {
         return { year, monthIndex, dayStr, timeStr, monthAbbr, monthLabel, key };
     }
     return {
-        year: 2026,
+        year: 0,
         monthIndex: 0,
-        dayStr: '01',
-        timeStr: '00:00',
-        monthAbbr: 'ENE',
-        monthLabel: 'Enero 2026',
-        key: '2026-00'
+        dayStr: '--',
+        timeStr: '',
+        monthAbbr: '---',
+        monthLabel: 'Fecha no disponible',
+        key: 'invalid'
     };
 }
 
@@ -147,6 +144,7 @@ export function GenericExpenseList({
     targetExpenseId,
     pageSize = 20,
 }: Readonly<GenericExpenseListProps>) {
+    const effectivePageSize = Number.isFinite(pageSize) ? Math.max(1, Math.floor(pageSize)) : 20;
     const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
     const proofModalRef = useRef<HTMLDivElement>(null);
     const previousProofFocusRef = useRef<HTMLElement | null>(null);
@@ -156,14 +154,21 @@ export function GenericExpenseList({
     const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
     const [isDeletingExpense, setIsDeletingExpense] = useState(false);
     const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
     const [extraPages, setExtraPages] = useState<number>(0);
-    const currentFilterKey = `${expenses.length}_${payments.length}_${dateFilterMode}`;
+    const currentFilterKey = useMemo(
+        () => `${dateFilterMode}|${expenses.map((expense) => expense.id).join(',')}|${payments.map((payment) => payment.id).join(',')}`,
+        [expenses, payments, dateFilterMode],
+    );
+    const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
+    const groupsById = useMemo(() => new Map(userGroups.map((group) => [group.id, group])), [userGroups]);
     const previousFilterKeyRef = useRef(currentFilterKey);
 
     useEffect(() => {
         if (previousFilterKeyRef.current === currentFilterKey) return;
         previousFilterKeyRef.current = currentFilterKey;
         setExtraPages(0);
+        setDeleteError(null);
         setUserToggledExpenseIds(new Map());
         setUserToggledPaymentIds(new Map());
     }, [currentFilterKey]);
@@ -176,7 +181,6 @@ export function GenericExpenseList({
                 date: eff.timestamp,
                 dateObj: eff.dateObj,
                 isUpdated: eff.isUpdated,
-                hasExplicitTime: eff.hasExplicitTime,
                 data: e,
             };
         }),
@@ -187,7 +191,6 @@ export function GenericExpenseList({
                 date: eff.timestamp,
                 dateObj: eff.dateObj,
                 isUpdated: eff.isUpdated,
-                hasExplicitTime: eff.hasExplicitTime,
                 data: p,
             };
         }),
@@ -220,11 +223,11 @@ export function GenericExpenseList({
 
     useEffect(() => {
         if (targetExpenseIndex < 0) return;
-        const requiredExtraPages = Math.max(0, Math.ceil((targetExpenseIndex + 1) / pageSize) - 1);
+        const requiredExtraPages = Math.max(0, Math.ceil((targetExpenseIndex + 1) / effectivePageSize) - 1);
         setExtraPages((prev) => Math.max(prev, requiredExtraPages));
     }, [targetExpenseIndex, pageSize]);
 
-    const visibleCount = pageSize + extraPages * pageSize;
+    const visibleCount = effectivePageSize + extraPages * effectivePageSize;
 
     useEffect(() => {
         if (!requestedExpenseId || targetExpenseIndex < 0 || targetExpenseIndex >= visibleCount) return;
@@ -316,10 +319,10 @@ export function GenericExpenseList({
 
                             if (tx.type === 'expense') {
                                 const exp = tx.data;
-                                const groupObj = userGroups.find((g) => g.id === exp.group_id);
-                                const paidBy = profiles.find((p) => p.id === exp.paid_by);
-                                const createdBy = profiles.find((p) => p.id === exp.created_by);
-                                const updatedBy = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
+                                const groupObj = groupsById.get(exp.group_id);
+                                const paidBy = profilesById.get(exp.paid_by);
+                                const createdBy = profilesById.get(exp.created_by);
+                                const updatedBy = exp.updated_by ? profilesById.get(exp.updated_by) : null;
                                 const catConfig = getCategoryConfig(exp.category);
                                 const CategoryIcon = catConfig.icon;
                                 const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
@@ -411,7 +414,7 @@ export function GenericExpenseList({
                                 }
 
                                 const isExpanded = isExpenseExpanded(exp.id);
-                                const isTargeted = initialExpandedExpenseId === exp.id;
+                                const isTargeted = initialExpandedExpenseId === exp.id || targetExpenseId === exp.id;
 
                                 // Event and Entry date infos
                                 const eventInfo = getRecordEventDateInfo(exp);
@@ -593,7 +596,7 @@ export function GenericExpenseList({
                                                     const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
 
                                                     const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
-                                                        const profile = profiles.find((p) => p.id === split.user_id);
+                                                        const profile = profilesById.get(split.user_id);
                                                         const userAmt = split.amount_owed;
                                                         const breakdown: ParticipantItemBreakdown[] = [];
 
@@ -689,8 +692,14 @@ export function GenericExpenseList({
                                                                             </div>
                                                                             <div
                                                                                 className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
-                                                                                {exp.items?.map((item, idx) => (
-                                                                                    <div key={item.id || idx}
+                                                                                {(() => {
+                                                                                    const occurrences = new Map<string, number>();
+                                                                                    return exp.items?.map((item) => {
+                                                                                        const baseKey = item.id || `${item.description}|${item.amount}`;
+                                                                                        const occurrence = occurrences.get(baseKey) ?? 0;
+                                                                                        occurrences.set(baseKey, occurrence + 1);
+                                                                                        return (
+                                                                                    <div key={`${baseKey}-${occurrence}`}
                                                                                         className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors">
                                                                                         <div
                                                                                             className="flex items-center space-x-2 min-w-0 pr-2">
@@ -704,7 +713,9 @@ export function GenericExpenseList({
                                                                                             {formatCurrency(item.amount, currency)}
                                                                                         </span>
                                                                                     </div>
-                                                                                ))}
+                                                                                        );
+                                                                                    });
+                                                                                })()}
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -835,9 +846,9 @@ export function GenericExpenseList({
 
                             // Render PAYMENT transaction with visual harmony & full parity!
                             const payment = tx.data;
-                            const payer = profiles.find((p) => p.id === payment.paid_by);
-                            const receiver = profiles.find((p) => p.id === payment.paid_to);
-                            const groupObj = userGroups.find((g) => g.id === payment.group_id);
+                            const payer = profilesById.get(payment.paid_by);
+                            const receiver = profilesById.get(payment.paid_to);
+                            const groupObj = groupsById.get(payment.group_id);
                             const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
 
                             const isIpaid = payment.paid_by === currentProfile?.id;
@@ -846,7 +857,7 @@ export function GenericExpenseList({
 
                             const eventInfo = getRecordEventDateInfo(payment);
 
-                            const updatedBy = payment.updated_by ? profiles.find((p) => p.id === payment.updated_by) : null;
+                            const updatedBy = payment.updated_by ? profilesById.get(payment.updated_by) : null;
                             const hasProof = Boolean(payment.proof_url);
                             const hasNote = Boolean(payment.note && payment.note.trim().length > 0);
 
@@ -859,8 +870,19 @@ export function GenericExpenseList({
                                 >
                                     {/* Collapsed / Summary Header (Click toggles expansion) */}
                                     <div
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-expanded={isExpanded}
+                                        aria-label={`${isExpanded ? 'Colapsar' : 'Expandir'} detalles del pago a ${receiver ? receiver.full_name : 'Usuario'}`}
+                                        aria-controls={`payment-content-${payment.id}`}
                                         onClick={() => togglePaymentExpanded(payment.id)}
-                                        className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                togglePaymentExpanded(payment.id);
+                                            }
+                                        }}
+                                        className="w-full text-left p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
                                     >
                                         <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                                             {/* Date Block: Day on top, Month below */}
@@ -1198,7 +1220,7 @@ export function GenericExpenseList({
             ))}
 
             {/* Pagination / Load More Controls */}
-            {transactions.length > pageSize && (
+            {transactions.length > effectivePageSize && (
                 <div className="pt-2 pb-4 flex flex-col items-center justify-center gap-2">
                     {hasMoreTransactions ? (
                         <button
@@ -1208,7 +1230,7 @@ export function GenericExpenseList({
                         >
                             <ChevronDown className="w-4 h-4 text-emerald-600" />
                             <span>
-                                Cargar más ({Math.min(pageSize, remainingCount)} de {remainingCount} restantes)
+                                Cargar más ({Math.min(effectivePageSize, remainingCount)} de {remainingCount} restantes)
                             </span>
                         </button>
                     ) : (
@@ -1227,20 +1249,23 @@ export function GenericExpenseList({
             {/* Delete Expense Modal (Generic & Reusable) */}
             <ConfirmModal
                 isOpen={Boolean(expenseToDelete)}
-                onClose={() => setExpenseToDelete(null)}
+                onClose={() => { setExpenseToDelete(null); setDeleteError(null); }}
                 onConfirm={async () => {
                     if (onDeleteExpense && expenseToDelete) {
                         try {
+                            setDeleteError(null);
                             setIsDeletingExpense(true);
                             await onDeleteExpense(expenseToDelete);
                             setExpenseToDelete(null);
+                        } catch (error) {
+                            setDeleteError(error instanceof Error ? error.message : 'No se pudo eliminar el gasto.');
                         } finally {
                             setIsDeletingExpense(false);
                         }
                     }
                 }}
                 title="¿Eliminar gasto?"
-                description="¿Estás seguro de que deseas eliminar este gasto? Esta acción actualizará los balances del grupo y no se puede deshacer."
+                description={deleteError ?? "¿Estás seguro de que deseas eliminar este gasto? Esta acción actualizará los balances del grupo y no se puede deshacer."}
                 confirmText="Eliminar gasto"
                 cancelText="Cancelar"
                 variant="danger"
@@ -1250,20 +1275,23 @@ export function GenericExpenseList({
             {/* Delete Payment Modal (Generic & Reusable) */}
             <ConfirmModal
                 isOpen={Boolean(paymentToDelete)}
-                onClose={() => setPaymentToDelete(null)}
+                onClose={() => { setPaymentToDelete(null); setDeleteError(null); }}
                 onConfirm={async () => {
                     if (onDeletePayment && paymentToDelete) {
                         try {
+                            setDeleteError(null);
                             setIsDeletingPayment(true);
                             await onDeletePayment(paymentToDelete);
                             setPaymentToDelete(null);
+                        } catch (error) {
+                            setDeleteError(error instanceof Error ? error.message : 'No se pudo eliminar el pago.');
                         } finally {
                             setIsDeletingPayment(false);
                         }
                     }
                 }}
                 title="¿Eliminar pago?"
-                description="¿Estás seguro de que deseas eliminar este pago? Esta acción restaurará la deuda correspondiente en los balances y no se puede deshacer."
+                description={deleteError ?? "¿Estás seguro de que deseas eliminar este pago? Esta acción restaurará la deuda correspondiente en los balances y no se puede deshacer."}
                 confirmText="Eliminar pago"
                 cancelText="Cancelar"
                 variant="danger"
@@ -1284,7 +1312,7 @@ export function GenericExpenseList({
                         aria-labelledby="proof-modal-title"
                         className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
                         <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-                            <h3 id="proof-modal-title" className="font-bold text-zinc-900 text-base">Comprobante de Pago</h3>
+                            <h3 id="proof-modal-title" className="font-bold text-zinc-900 text-base">Comprobante</h3>
                             <button
                                 type="button"
                                 onClick={() => setSelectedProofUrl(null)}

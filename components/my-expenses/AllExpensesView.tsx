@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { formatCurrency } from '@/lib/balance-utils';
 import { GenericExpenseList } from '@/components/my-expenses/GenericExpenseList';
@@ -51,16 +51,26 @@ export function AllExpensesView(props: AllExpensesViewProps) {
     };
 
     const userGroupIds = useMemo(() => new Set(userGroups.map((group) => group.id)), [userGroups]);
+    const accessiblePersonalUserIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (currentProfile?.id) ids.add(currentProfile.id);
+        (currentProfile?.managed_user_ids || []).forEach((id) => ids.add(id));
+        return ids;
+    }, [currentProfile]);
 
-    const myExpenses = useMemo(
-        () => expenses.filter((expense) => userGroupIds.has(expense.group_id)),
-        [expenses, userGroupIds],
-    );
+    const myExpenses = useMemo(() => expenses.filter((expense) => {
+        if (expense.group_id != null) return userGroupIds.has(expense.group_id);
+        return Boolean(
+            expense.created_by && accessiblePersonalUserIds.has(expense.created_by)
+            || expense.paid_by && accessiblePersonalUserIds.has(expense.paid_by)
+            || expense.splits?.some((split) => accessiblePersonalUserIds.has(split.user_id))
+        );
+    }), [expenses, userGroupIds, accessiblePersonalUserIds]);
 
-    const myPayments = useMemo(
-        () => payments.filter((payment) => userGroupIds.has(payment.group_id)),
-        [payments, userGroupIds],
-    );
+    const myPayments = useMemo(() => payments.filter((payment) => {
+        if (payment.group_id != null) return userGroupIds.has(payment.group_id);
+        return accessiblePersonalUserIds.has(payment.paid_by) || accessiblePersonalUserIds.has(payment.paid_to);
+    }), [payments, userGroupIds, accessiblePersonalUserIds]);
 
     const profilesById = useMemo(
         () => new Map(profiles.map((profile) => [profile.id, profile])),
@@ -82,28 +92,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
         [myExpenses, myPayments, filters.dateMode],
     );
 
-    const totalTransactionsCount = myExpenses.length + myPayments.length;
 
-    const myInteractionsCount = useMemo(() => {
-        const currentProfileId = currentProfile?.id;
-
-        const myExpCount = myExpenses.filter((expense) => {
-            const isPayer = expense.paid_by === currentProfileId;
-            const isParticipant = Boolean(
-                expense.splits?.some(
-                    (split) => split.user_id === currentProfileId && split.amount_owed > 0,
-                ),
-            );
-
-            return isPayer || isParticipant;
-        }).length;
-
-        const myPayCount = myPayments.filter(
-            (payment) => payment.paid_by === currentProfileId || payment.paid_to === currentProfileId,
-        ).length;
-
-        return myExpCount + myPayCount;
-    }, [myExpenses, myPayments, currentProfile?.id]);
 
     const searchTerm = filters.searchTerm.trim().toLowerCase();
 
@@ -130,8 +119,12 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                 if (
                     !matchesSearch([
                         expense.description,
+                        expense.notes,
+                        expense.entity,
+                        expense.source_account,
                         group?.name,
                         paidBy?.full_name,
+                        ...(expense.items?.map((item) => item.description) || []),
                     ])
                 ) {
                     return false;
@@ -210,25 +203,36 @@ export function AllExpensesView(props: AllExpensesViewProps) {
         ],
     );
 
-    const categoryStats = useMemo(() => {
-        const totals: Record<string, number> = {};
+    const currencyForExpense = useCallback((expense: Expense): string => {
+        return groupsById.get(expense.group_id ?? '')?.currency ?? currentProfile?.currency ?? 'COP';
+    }, [groupsById, currentProfile?.currency]);
 
+    const filteredCurrencyTotals = useMemo(() => {
+        const totals = new Map<string, number>();
         filteredExpenses.forEach((expense) => {
+            const currency = currencyForExpense(expense);
+            totals.set(currency, (totals.get(currency) ?? 0) + expense.total_amount);
+        });
+        return Array.from(totals.entries()).sort(([a], [b]) => a.localeCompare(b));
+    }, [filteredExpenses, groupsById, currentProfile?.currency]);
+
+    const summaryCurrency = filteredCurrencyTotals.length === 1 ? filteredCurrencyTotals[0][0] : null;
+    const totalFilteredSpent = summaryCurrency ? filteredCurrencyTotals[0][1] : null;
+
+    const categoryStats = useMemo(() => {
+        if (!summaryCurrency) return [];
+        const totals: Record<string, number> = {};
+        filteredExpenses.forEach((expense) => {
+            if (currencyForExpense(expense) !== summaryCurrency) return;
             const category = expense.category || 'Varios';
             totals[category] = (totals[category] || 0) + expense.total_amount;
         });
-
         return Object.entries(totals).map(([name, value]) => ({
             name,
             value,
             color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Varios,
         }));
-    }, [filteredExpenses]);
-
-    const totalFilteredSpent = useMemo(
-        () => filteredExpenses.reduce((acc, expense) => acc + expense.total_amount, 0),
-        [filteredExpenses],
-    );
+    }, [filteredExpenses, summaryCurrency, groupsById, currentProfile?.currency]);
 
     return (
         <div className="space-y-6">
@@ -250,12 +254,30 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                                 <BarChart3 className="w-4 h-4 text-emerald-400" />
                                 <span>Resumen de Gastos</span>
                             </div>
-                            <p className="text-3xl font-black text-white tracking-tight">
-                                {formatCurrency(totalFilteredSpent, currentProfile?.currency || 'COP')}
-                            </p>
-                            <p className="text-xs text-zinc-400 mt-1">
-                                Suma total de {filteredExpenses.length} gastos filtrados
-                            </p>
+                            {summaryCurrency && totalFilteredSpent !== null ? (
+                                <>
+                                    <p className="text-3xl font-black text-white tracking-tight">
+                                        {formatCurrency(totalFilteredSpent, summaryCurrency)}
+                                    </p>
+                                    <p className="text-xs text-zinc-400 mt-1">
+                                        Suma total de {filteredExpenses.length} gastos filtrados
+                                    </p>
+                                </>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-zinc-400">
+                                        Los gastos filtrados usan varias monedas.
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        {filteredCurrencyTotals.map(([currency, total]) => (
+                                            <div key={currency} className="flex items-center justify-between gap-3">
+                                                <span className="text-sm font-semibold text-white">{currency}</span>
+                                                <span className="text-lg font-black text-white">{formatCurrency(total, currency)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-4 border-t border-zinc-800 space-y-2">
@@ -282,8 +304,9 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                             </span>
                         </div>
 
-                        <div className="h-44 w-full pt-2">
-                            <ResponsiveContainer width="100%" height="100%">
+                        {summaryCurrency ? (
+                            <div className="h-44 w-full pt-2">
+                                <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
                                     data={categoryStats}
                                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
@@ -292,7 +315,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                                     <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
                                     <Tooltip
                                         formatter={(val) =>
-                                            formatCurrency(Number(val) || 0, currentProfile?.currency || 'COP')
+                                            formatCurrency(Number(val) || 0, summaryCurrency || currentProfile?.currency || 'COP')
                                         }
                                         contentStyle={{
                                             backgroundColor: '#18181b',
@@ -317,8 +340,15 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                                         )}
                                     />
                                 </BarChart>
-                            </ResponsiveContainer>
-                        </div>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="h-44 flex items-center justify-center text-center px-6">
+                                <p className="text-xs text-zinc-500 max-w-sm">
+                                    No se muestra una gráfica única porque los gastos filtrados están en monedas distintas.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -332,8 +362,6 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                 showGroupFilter={true}
                 showCategoryFilter={true}
                 showSearch={true}
-                totalCount={totalTransactionsCount}
-                myCount={myInteractionsCount}
             />
 
             <GenericExpenseList

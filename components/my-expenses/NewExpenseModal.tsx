@@ -40,6 +40,25 @@ import {
     getTodayDateString,
 } from '@/lib/transaction-date-utils';
 
+type ExpenseSplitDraft = { user_id: string; amount_owed: number };
+type ItemDraft = {
+    id: number;
+    desc: string;
+    quantity: string;
+    amount: string;
+    amountType: 'total' | 'each';
+    assignedTo: string[];
+    shares?: Record<string, string>;
+};
+type SplitType = 'equal' | 'exact' | 'percentage' | 'shares' | 'itemized';
+
+function parseNonNegativeNumber(raw: string): number | null {
+    const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
+    if (!normalized || !/^\d+(?:\.\d*)?$/.test(normalized)) return null;
+    const value = Number(normalized);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 interface NewExpenseModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -74,34 +93,42 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     const [receiptUrl, setReceiptUrl] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+    const uploadControllerRef = useRef<AbortController | null>(null);
+    const uploadRequestIdRef = useRef(0);
+
+    useEffect(() => () => {
+        uploadControllerRef.current?.abort();
+        uploadControllerRef.current = null;
+        uploadRequestIdRef.current += 1;
+    }, []);
 
     // Itemized State
-    const [items, setItems] = useState<Array<{
-        id: number;
-        desc: string;
-        quantity: string;
-        amount: string;
-        amountType: 'total' | 'each';
-        assignedTo: string[];
-        shares?: Record<string, string>
-    }>>([
+    const [items, setItems] = useState<ItemDraft[]>([
         { id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }
     ]);
 
     // Split State
-    const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage' | 'shares' | 'itemized'>('equal');
+    const [splitType, setSplitType] = useState<SplitType>('equal');
     const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     const [splits, setSplits] = useState<Record<string, { exact: string; pct: string; shares: string }>>({});
     const [showExactMismatchModal, setShowExactMismatchModal] = useState(false);
     const [mismatchData, setMismatchData] = useState<{
         exactSum: number;
         currentTotal: number;
-        finalSplits: any[]
+        finalSplits: ExpenseSplitDraft[]
     } | null>(null);
 
     const [step, setStep] = useState(1);
     const [isItemizedVerticalView, setIsItemizedVerticalView] = useState(true);
     const [expandedItems, setExpandedItems] = useState<number[]>([1]);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const mismatchModalRef = useRef<HTMLDivElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
+    const isSubmittingRef = useRef(false);
+    const isUploadingRef = useRef(false);
+
+    isSubmittingRef.current = isSubmitting;
+    isUploadingRef.current = isUploading;
 
     // Computed
     const activeGroup = userGroups.find(g => g.id === groupId);
@@ -143,11 +170,18 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
     const prevIsOpenRef = useRef(false);
     const prevExpenseIdRef = useRef<string | null>(null);
+    const wasOpenRef = useRef(false);
+    const pendingInitialGroupRef = useRef(false);
+    const manuallyChangedGroupRef = useRef(false);
 
     useEffect(() => {
         if (!isOpen) {
             prevIsOpenRef.current = false;
             prevExpenseIdRef.current = null;
+            pendingInitialGroupRef.current = false;
+            manuallyChangedGroupRef.current = false;
+            uploadControllerRef.current?.abort();
+            uploadControllerRef.current = null;
             return;
         }
 
@@ -229,7 +263,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 }
 
                 // Restore split type, participants, and values (e.g. cuotas, exact amounts, percentages)
-                setSplitType(splitConfig.splitType);
+                setSplitType(splitConfig.splitType === 'percentage' ? 'exact' : splitConfig.splitType);
                 if (splitConfig.mode) {
                     setMode(splitConfig.mode);
                 }
@@ -263,7 +297,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     expenseToEdit.splits.forEach(s => {
                         const val = typeof s.amount_owed === 'number'
                             ? s.amount_owed
-                            : parseFloat(String(s.amount_owed).replace(/[^0-9.]/g, ''));
+                            : parseNonNegativeNumber(String(s.amount_owed)) ?? 0;
                         if (!newSplits[s.user_id]) {
                             newSplits[s.user_id] = {
                                 exact: !isNaN(val) && val > 0 ? String(val) : '',
@@ -292,6 +326,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 const initialGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
                     ? defaultGroupId
                     : (userGroups[0]?.id ?? 'none');
+                pendingInitialGroupRef.current = userGroups.length === 0;
+                manuallyChangedGroupRef.current = false;
                 setGroupId(initialGroupId);
 
                 const groupMemberIds = (initialGroupId && initialGroupId !== 'none')
@@ -308,10 +344,34 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 setSplits({});
             }
         }
-    }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, members]);
+
+        if (!expenseToEdit && pendingInitialGroupRef.current && !manuallyChangedGroupRef.current && userGroups.length > 0) {
+            const resolvedGroupId = defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
+                ? defaultGroupId
+                : userGroups[0].id;
+            pendingInitialGroupRef.current = false;
+            setGroupId(resolvedGroupId);
+            const groupMemberIds = members.filter(m => m.group_id === resolvedGroupId).map(m => m.user_id);
+            const groupProfiles = profiles.filter(p => groupMemberIds.includes(p.id));
+            const nextMembers = groupProfiles.length > 0
+                ? groupProfiles.map(p => p.id)
+                : (currentProfile ? [currentProfile.id] : []);
+            setSelectedMembers(nextMembers);
+            const nextPayer = currentProfile && nextMembers.includes(currentProfile.id)
+                ? currentProfile.id
+                : (nextMembers[0] ?? '');
+            setPaidById(nextPayer);
+        }
+    }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, members, profiles]);
+
+    useEffect(() => () => {
+        uploadControllerRef.current?.abort();
+    }, []);
 
     // Handle group change when user manually switches group dropdown
     const handleGroupChange = (newGroupId: string) => {
+        manuallyChangedGroupRef.current = true;
+        pendingInitialGroupRef.current = false;
         setGroupId(newGroupId);
 
         let newMemberIds: string[] = [];
@@ -347,48 +407,33 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         }
     };
 
-    const toFraction = (decimal: number) => {
-        if (Number.isInteger(decimal)) return decimal.toString();
-        const fractions = [
-            { num: 1, den: 2, char: '½' },
-            { num: 1, den: 3, char: '⅓' },
-            { num: 2, den: 3, char: '⅔' },
-            { num: 1, den: 4, char: '¼' },
-            { num: 3, den: 4, char: '¾' },
-            { num: 1, den: 5, char: '⅕' },
-            { num: 2, den: 5, char: '⅖' },
-            { num: 3, den: 5, char: '⅗' },
-            { num: 4, den: 5, char: '⅘' },
-            { num: 1, den: 6, char: '⅙' },
-            { num: 5, den: 6, char: '⅚' },
-            { num: 1, den: 8, char: '⅛' },
-            { num: 3, den: 8, char: '⅜' },
-            { num: 5, den: 8, char: '⅝' },
-            { num: 7, den: 8, char: '⅞' },
-        ];
-        const whole = Math.floor(decimal);
-        const frac = decimal - whole;
-        for (const f of fractions) {
-            if (Math.abs(frac - (f.num / f.den)) < 0.05) {
-                return (
-                    <span className="inline-flex items-baseline">
-                        {whole > 0 && <span className="mr-0.5">{whole}</span>}
-                        <span className="text-[15px] leading-none">{f.char}</span>
-                    </span>
-                );
-            }
-        }
-        return Number(decimal.toFixed(2)).toString();
+    const updateItem = (itemId: number, updates: Partial<ItemDraft>) => {
+        setItems((previous) => previous.map((item) => (item.id === itemId ? { ...item, ...updates } : item)));
     };
 
-    const getItemTotal = (item: any) => {
-        const qty = parseFloat(item.quantity) || 1;
-        const amt = parseFloat(item.amount) || 0;
+    const updateItemShares = (itemId: number, memberId: string, value: string) => {
+        setItems((previous) => previous.map((item) => item.id === itemId
+            ? { ...item, shares: { ...(item.shares ?? {}), [memberId]: value } }
+            : item
+        ));
+    };
+
+    const updateItemSharesForMembers = (itemId: number, values: Record<string, string>) => {
+        setItems((previous) => previous.map((item) => item.id === itemId
+            ? { ...item, shares: { ...(item.shares ?? {}), ...values } }
+            : item
+        ));
+    };
+
+    const getItemTotal = (item: ItemDraft) => {
+        const qty = parseNonNegativeNumber(item.quantity);
+        const amt = parseNonNegativeNumber(item.amount);
+        if (qty === null || qty <= 0 || amt === null || amt <= 0) return 0;
         return item.amountType === 'each' ? qty * amt : amt;
     };
 
     const itemsTotal = items.reduce((acc, i) => acc + getItemTotal(i), 0);
-    const totalAmount = mode === 'quick' ? (parseFloat(amount) || 0) : itemsTotal;
+    const totalAmount = mode === 'quick' ? (parseNonNegativeNumber(amount) ?? 0) : itemsTotal;
 
     const calculateItemizedShares = React.useCallback(() => {
         const res: Record<string, number> = {};
@@ -400,7 +445,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             const parsedShares: Record<string, number> = {};
 
             selectedMembers.forEach(id => {
-                const val = item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                const val = item.shares?.[id] !== undefined ? (parseNonNegativeNumber(item.shares[id] as string) ?? 0) : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
                 parsedShares[id] = val;
                 sumShares += val;
             });
@@ -423,14 +468,14 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
             items.forEach((item, idx) => {
                 const itemAmt = getItemTotal(item);
-                const val = item.shares?.[mId] !== undefined ? parseFloat(item.shares[mId] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
+                const val = item.shares?.[mId] !== undefined ? (parseNonNegativeNumber(item.shares[mId] as string) ?? 0) : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? 1 : 0);
                 if (val > 0) {
                     let sumShares = 0;
                     selectedMembers.forEach(id => {
-                        sumShares += item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                        sumShares += item.shares?.[id] !== undefined ? (parseNonNegativeNumber(item.shares[id] as string) ?? 0) : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
                     });
                     if (sumShares > 0) {
-                        const itemTotalQty = parseFloat(item.quantity) || 1;
+                        const itemTotalQty = parseNonNegativeNumber(item.quantity) ?? 1;
                         const userItemQty = itemTotalQty * (val / sumShares);
                         breakdown.push({
                             desc: item.desc || `Artículo ${idx + 1}`,
@@ -450,7 +495,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
         });
     }, [selectedMembers, activeProfiles, items, calculateItemizedShares]);
 
-    const executeSave = async (amountToSave: number, splitsToSave: any[]) => {
+    const executeSave = async (amountToSave: number, splitsToSave: ExpenseSplitDraft[]) => {
+        if (isUploading || isMutating) return;
         setIsSubmitting(true);
         try {
             // Filtrar participantes con monto mayor a 0 (si tiene monto 0, se quita del gasto)
@@ -463,7 +509,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             const normalizedSplits = normalizeSplitsToTotal(amountToSave, activeSplits, paidById);
             const effectiveSelectedMembers = normalizedSplits.map(s => s.user_id);
 
-            const expenseTimeISO = combineDateAndTimeToISO(date, time);
+            const expenseTimeISO = isManualTime ? combineDateAndTimeToISO(date, time) : undefined;
 
             const splitConfig: ExpenseSplitConfig = {
                 version: 1,
@@ -479,7 +525,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             const combinedNotes = serializeNotesWithConfig(notes.trim(), splitConfig);
 
             const payload = {
-                group_id: (groupId === 'none' ? null : groupId) as any,
+                group_id: groupId === 'none' ? null : groupId,
                 paid_by: paidById,
                 total_amount: amountToSave,
                 description: description.trim(),
@@ -496,117 +542,111 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
                 id: "tmp_" + idx,
                 expense_id: expenseToEdit?.id ?? '',
-                description: i.quantity && parseFloat(i.quantity) > 1 ? `${i.quantity} · ${i.desc.trim()}` : i.desc.trim(),
+                description: i.quantity && Number(i.quantity.replace(',', '.')) > 1 ? `${i.quantity} · ${i.desc.trim()}` : i.desc.trim(),
                 amount: getItemTotal(i),
                 created_at: new Date().toISOString()
             })) : [];
 
             if (expenseToEdit) {
-                saveLocalSplitConfig(expenseToEdit.id, splitConfig);
                 await updateExpense(expenseToEdit.id, payload, finalItems, normalizedSplits);
+                saveLocalSplitConfig(expenseToEdit.id, splitConfig);
             } else {
                 const created = await addExpense(payload, finalItems, normalizedSplits);
-                if (created && (created as any).id) {
-                    saveLocalSplitConfig((created as any).id, splitConfig);
+                if (created?.id) {
+                    saveLocalSplitConfig(created.id, splitConfig);
                 }
             }
             onClose();
-        } catch (err: any) {
-            setError(err.message ?? 'Error al guardar el gasto.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Error al guardar el gasto.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const handleSubmit = async () => {
+        if (isUploading || isSubmitting || isMutating) return;
         setError(null);
 
         if (!description.trim()) return setError('Ingresa una descripción.');
         if (!paidById) return setError('Selecciona quién pagó.');
         if (selectedMembers.length === 0) return setError('Selecciona al menos un participante.');
 
+        if (mode === 'quick') {
+            const parsedAmount = parseNonNegativeNumber(amount);
+            if (parsedAmount === null || parsedAmount <= 0) return setError('El monto total debe ser mayor a 0.');
+        }
+
         if (mode === 'itemized') {
-            if (items.some(i => !i.desc.trim() || !(parseFloat(i.amount) > 0))) {
-                return setError('Completa la descripción y monto de todos los artículos.');
+            for (const item of items) {
+                const qty = parseNonNegativeNumber(item.quantity);
+                const itemAmount = parseNonNegativeNumber(item.amount);
+                if (!item.desc.trim() || qty === null || qty <= 0 || itemAmount === null || itemAmount <= 0) {
+                    return setError('Completa la descripción, cantidad y monto de todos los artículos.');
+                }
             }
             if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
         }
 
-        let finalSplits: any[] = [];
+        let finalSplits: ExpenseSplitDraft[] = [];
+
         if (splitType === 'equal') {
             if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
             finalSplits = distributeAmountEqually(totalAmount, selectedMembers, paidById);
         } else if (splitType === 'exact') {
+            const calculatedSplits: ExpenseSplitDraft[] = [];
             let sum = 0;
-            selectedMembers.forEach(id => {
-                const val = parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0;
+            for (const id of selectedMembers) {
+                const raw = String(splits[id]?.exact ?? '');
+                const val = parseNonNegativeNumber(raw);
+                if (val === null) return setError('Todos los montos exactos deben ser números válidos y no negativos.');
                 sum += val;
-            });
+                calculatedSplits.push({ user_id: id, amount_owed: val });
+            }
 
-            const calculatedSplits = selectedMembers.map(id => ({
-                user_id: id,
-                amount_owed: parseFloat(String(splits[id]?.exact ?? '0').replace(/[^0-9.]/g, '')) || 0
-            }));
-
-            // In simple mode (mode === 'quick'), if exact sum doesn't match total, offer shortcut modal to overwrite total
             if (mode === 'quick' && Math.abs(sum - totalAmount) > 0.05) {
                 if (sum > 0) {
-                    setMismatchData({
-                        exactSum: sum,
-                        currentTotal: totalAmount,
-                        finalSplits: calculatedSplits
-                    });
+                    setMismatchData({ exactSum: sum, currentTotal: totalAmount, finalSplits: calculatedSplits });
                     setShowExactMismatchModal(true);
                     return;
-                } else {
-                    return setError('Ingresa los montos individuales de cada participante.');
                 }
+                return setError('Ingresa los montos individuales de cada participante.');
             }
 
-            if (Math.abs(sum - totalAmount) > 0.05) {
-                return setError('La suma exacta no coincide con el total.');
-            }
+            if (Math.abs(sum - totalAmount) > 0.05) return setError('La suma exacta no coincide con el total.');
             finalSplits = calculatedSplits;
         } else if (splitType === 'percentage') {
             if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
             let sum = 0;
-            selectedMembers.forEach(id => {
-                const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
+            const percentages: Array<{ user_id: string; pct: number }> = [];
+            for (const id of selectedMembers) {
+                const raw = String(splits[id]?.pct ?? '');
+                const val = parseNonNegativeNumber(raw);
+                if (val === null || val > 100) return setError('Todos los porcentajes deben estar entre 0% y 100%.');
                 sum += val;
-            });
+                percentages.push({ user_id: id, pct: val });
+            }
             if (Math.abs(sum - 100) > 0.05) return setError('La suma de porcentajes debe ser 100%.');
-            const rawSplits = selectedMembers.map(id => {
-                const val = parseFloat(String(splits[id]?.pct ?? '0').replace(/[^0-9.]/g, '')) || 0;
-                return { user_id: id, amount_owed: totalAmount * (val / 100) };
-            });
-            finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
+            finalSplits = normalizeSplitsToTotal(totalAmount, percentages.map(({ user_id, pct }) => ({ user_id, amount_owed: totalAmount * (pct / 100) })), paidById);
         } else if (splitType === 'shares') {
             if (totalAmount <= 0) return setError('El monto total debe ser mayor a 0.');
+            const rawSplits: ExpenseSplitDraft[] = [];
             let sum = 0;
-            selectedMembers.forEach(id => {
+            for (const id of selectedMembers) {
                 const raw = splits[id]?.shares;
-                const val = raw !== undefined && String(raw).trim() !== ''
-                    ? (parseFloat(String(raw).replace(/[^0-9.]/g, '')) || 0)
-                    : 1;
+                const val = raw !== undefined && String(raw).trim() !== '' ? parseNonNegativeNumber(String(raw)) : 1;
+                if (val === null) return setError('Las cuotas deben ser números válidos y no negativos.');
                 sum += val;
-            });
+                rawSplits.push({ user_id: id, amount_owed: val });
+            }
             if (sum <= 0) return setError('Al menos un participante debe tener cuotas mayores a 0.');
-            const rawSplits = selectedMembers.map(id => {
-                const raw = splits[id]?.shares;
-                const val = raw !== undefined && String(raw).trim() !== ''
-                    ? (parseFloat(String(raw).replace(/[^0-9.]/g, '')) || 0)
-                    : 1;
-                return { user_id: id, amount_owed: totalAmount * (val / sum) };
-            });
-            finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
+            finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits.map((split) => ({ ...split, amount_owed: totalAmount * (split.amount_owed / sum) })), paidById);
         } else if (splitType === 'itemized') {
             const shares = calculateItemizedShares();
-            const rawSplits = selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 }));
-            finalSplits = normalizeSplitsToTotal(totalAmount, rawSplits, paidById);
+            finalSplits = normalizeSplitsToTotal(totalAmount, selectedMembers.map(id => ({ user_id: id, amount_owed: shares[id] ?? 0 })), paidById);
         }
 
-        const nonZeroSplits = finalSplits.filter(s => (s.amount_owed ?? 0) > 0.001);
-        if (nonZeroSplits.length === 0) {
+        if (finalSplits.filter((split) => split.amount_owed > 0.001).length === 0) {
             return setError('El gasto debe tener al menos un participante con monto mayor a 0.');
         }
 
@@ -615,37 +655,140 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
+
+        uploadControllerRef.current?.abort();
+        const controller = new AbortController();
+        uploadControllerRef.current = controller;
+        const requestId = uploadRequestIdRef.current + 1;
+        uploadRequestIdRef.current = requestId;
+
         try {
             setIsUploading(true);
+            setError(null);
             const fd = new FormData();
             fd.append('file', file);
             fd.append('type', 'expense_receipt');
             fd.append('entityId', Date.now().toString());
-            const res = await fetch('/api/upload', { method: 'POST', body: fd });
+            const res = await fetch('/api/upload', { method: 'POST', body: fd, signal: controller.signal });
             if (!res.ok) throw new Error('Error al subir');
             const data = await res.json();
-            if (data.url) setReceiptUrl(data.url);
-        } catch (err: any) {
-            setError(err.message || 'No se pudo subir la foto.');
+            if (requestId === uploadRequestIdRef.current && data.url) setReceiptUrl(data.url);
+        } catch (err: unknown) {
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            if (err instanceof Error && err.name === 'AbortError') return;
+            setError(err instanceof Error ? err.message : 'No se pudo subir la foto.');
         } finally {
-            setIsUploading(false);
+            if (requestId === uploadRequestIdRef.current) {
+                setIsUploading(false);
+                uploadControllerRef.current = null;
+            }
         }
     };
+
+    const handleRemoveReceipt = () => {
+        uploadControllerRef.current?.abort();
+        uploadControllerRef.current = null;
+        uploadRequestIdRef.current += 1;
+        setIsUploading(false);
+        setReceiptUrl('');
+        setError(null);
+    };
+
+    const handleClose = () => {
+        if (isSubmittingRef.current || isUploadingRef.current) return;
+        uploadControllerRef.current?.abort();
+        uploadControllerRef.current = null;
+        uploadRequestIdRef.current += 1;
+        setIsUploading(false);
+        setShowExactMismatchModal(false);
+        const previousFocus = previousFocusRef.current;
+        previousFocusRef.current = null;
+        previousFocus?.focus();
+        onClose();
+    };
+
+    useEffect(() => {
+        if (!isOpen) {
+            uploadControllerRef.current?.abort();
+            uploadControllerRef.current = null;
+            uploadRequestIdRef.current += 1;
+            setIsUploading(false);
+            setIsSubmitting(false);
+            setShowExactMismatchModal(false);
+            if (wasOpenRef.current) {
+                const previousFocus = previousFocusRef.current;
+                previousFocusRef.current = null;
+                wasOpenRef.current = false;
+                previousFocus?.focus();
+            }
+            return;
+        }
+
+        if (wasOpenRef.current) return;
+        wasOpenRef.current = true;
+        previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const frame = window.requestAnimationFrame(() => {
+            const modal = modalRef.current;
+            const focusables = modal?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
+            focusables?.[0]?.focus();
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const modal = showExactMismatchModal ? mismatchModalRef.current : modalRef.current;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                if (showExactMismatchModal) {
+                    setShowExactMismatchModal(false);
+                } else {
+                    handleClose();
+                }
+                return;
+            }
+            if (event.key !== 'Tab' || !modal) return;
+            const focusables = Array.from(modal.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
+            if (!focusables.length) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, showExactMismatchModal]);
+
+    useEffect(() => {
+        if (!showExactMismatchModal) return;
+        const frame = window.requestAnimationFrame(() => {
+            const focusables = mismatchModalRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
+            focusables?.[0]?.focus();
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [showExactMismatchModal]);
 
     if (!isOpen) return null;
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
+            className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto"
+            role="presentation">
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="new-expense-modal-title"
                 className="bg-white rounded-[24px] sm:rounded-3xl shadow-2xl w-full max-w-lg sm:max-w-xl md:max-w-2xl flex flex-col my-auto max-h-[92vh] sm:max-h-[90vh] overflow-hidden transition-all duration-200">
 
                 {/* Header */}
                 <div
                     className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-100 shrink-0">
                     <div className="flex items-center space-x-2 sm:space-x-3">
-                        <h2 className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">
+                        <h2 id="new-expense-modal-title" className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">
                             {expenseToEdit ? 'Editar gasto' : 'Nuevo gasto'}
                         </h2>
                         {!expenseToEdit && (
@@ -683,7 +826,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={handleClose}
                         aria-label="Cerrar modal"
                         className="p-2 -mr-1 rounded-full hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-colors"
                     >
@@ -869,7 +1012,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                     className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Fecha</label>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setShowTimeInput(!showTimeInput)}
+                                                    onClick={() => setShowTimeInput((previous) => !previous)}
                                                     className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer transition-colors"
                                                 >
                                                     <Clock className="w-3 h-3" />
@@ -1020,7 +1163,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setReceiptUrl('')}
+                                                    onClick={handleRemoveReceipt}
+                                                            disabled={isUploading}
                                                     className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition cursor-pointer"
                                                     title="Quitar foto"
                                                     aria-label="Quitar foto"
@@ -1068,7 +1212,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                                         {/* Table Rows */}
                                         <div className="divide-y divide-zinc-100">
-                                            {items.map((item, idx) => {
+                                            {items.map((item) => {
                                                 return (
                                                     <div
                                                         key={item.id}
@@ -1083,9 +1227,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                 placeholder="Descripción del artículo..."
                                                                 value={item.desc}
                                                                 onChange={e => {
-                                                                    const newItems = [...items];
-                                                                    newItems[idx].desc = e.target.value;
-                                                                    setItems(newItems);
+                                                                    updateItem(item.id, { desc: e.target.value });
                                                                 }}
                                                                 className="w-full px-2.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
                                                             />
@@ -1097,9 +1239,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                 placeholder="1"
                                                                 value={item.quantity}
                                                                 onChange={e => {
-                                                                    const newItems = [...items];
-                                                                    newItems[idx].quantity = e.target.value;
-                                                                    setItems(newItems);
+                                                                    updateItem(item.id, { quantity: e.target.value });
                                                                 }}
                                                                 className="w-full px-1.5 py-1.5 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-center text-xs font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors"
                                                             />
@@ -1113,9 +1253,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                 <FormattedCurrencyInput
                                                                     value={item.amount}
                                                                     onChange={val => {
-                                                                        const newItems = [...items];
-                                                                        newItems[idx].amount = val;
-                                                                        setItems(newItems);
+                                                                        updateItem(item.id, { amount: val });
                                                                     }}
                                                                     currency={currency}
                                                                     hideSymbol
@@ -1127,9 +1265,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => {
-                                                                            const newItems = [...items];
-                                                                            newItems[idx].amountType = 'each';
-                                                                            setItems(newItems);
+                                                                            updateItem(item.id, { amountType: 'each' });
                                                                         }}
                                                                         className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${item.amountType === 'each'
                                                                             ? 'bg-white text-zinc-900 shadow-2xs'
@@ -1142,9 +1278,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => {
-                                                                            const newItems = [...items];
-                                                                            newItems[idx].amountType = 'total';
-                                                                            setItems(newItems);
+                                                                            updateItem(item.id, { amountType: 'total' });
                                                                         }}
                                                                         className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${item.amountType === 'total'
                                                                             ? 'bg-white text-zinc-900 shadow-2xs'
@@ -1180,9 +1314,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     placeholder="Descripción (ej. Panes, Jugo...)"
                                                                     value={item.desc}
                                                                     onChange={e => {
-                                                                        const newItems = [...items];
-                                                                        newItems[idx].desc = e.target.value;
-                                                                        setItems(newItems);
+                                                                        updateItem(item.id, { desc: e.target.value });
                                                                     }}
                                                                     className="flex-1 min-w-0 px-3 py-2 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                                                                 />
@@ -1209,9 +1341,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                         placeholder="1"
                                                                         value={item.quantity}
                                                                         onChange={e => {
-                                                                            const newItems = [...items];
-                                                                            newItems[idx].quantity = e.target.value;
-                                                                            setItems(newItems);
+                                                                            updateItem(item.id, { quantity: e.target.value });
                                                                         }}
                                                                         className="w-10 text-center bg-transparent text-xs font-bold text-zinc-900 focus:outline-none"
                                                                     />
@@ -1225,11 +1355,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     </span>
                                                                     <FormattedCurrencyInput
                                                                         value={item.amount}
-                                                                        onChange={val => {
-                                                                            const newItems = [...items];
-                                                                            newItems[idx].amount = val;
-                                                                            setItems(newItems);
-                                                                        }}
+                                                                        onChange={val => updateItem(item.id, { amount: val })}
                                                                         currency={currency}
                                                                         hideSymbol
                                                                         placeholder="0"
@@ -1240,9 +1366,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                const newItems = [...items];
-                                                                                newItems[idx].amountType = 'each';
-                                                                                setItems(newItems);
+                                                                                updateItem(item.id, { amountType: 'each' });
                                                                             }}
                                                                             className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${item.amountType === 'each'
                                                                                 ? 'bg-white text-zinc-900 shadow-2xs'
@@ -1254,9 +1378,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                const newItems = [...items];
-                                                                                newItems[idx].amountType = 'total';
-                                                                                setItems(newItems);
+                                                                                updateItem(item.id, { amountType: 'total' });
                                                                             }}
                                                                             className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all cursor-pointer ${item.amountType === 'total'
                                                                                 ? 'bg-white text-zinc-900 shadow-2xs'
@@ -1438,7 +1560,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                         });
                                                         setSplits(updatedSplits);
                                                     }
-                                                    setSplitType(type as any);
+                                                    setSplitType(type);
                                                 }}
                                                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${splitType === type
                                                     ? 'bg-zinc-900 text-white shadow-2xs'
@@ -1460,11 +1582,11 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                 if (splitType === 'shares') {
                                                     const totalShares = selectedMembers.reduce((acc, memId) => {
                                                         const raw = splits[memId]?.shares;
-                                                        const val = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
+                                                        const val = raw !== undefined && String(raw).trim() !== '' ? (parseNonNegativeNumber(String(raw)) ?? 0) : 1;
                                                         return acc + val;
                                                     }, 0);
                                                     const rawUser = splits[p.id]?.shares;
-                                                    const userShares = rawUser !== undefined && String(rawUser).trim() !== '' ? (parseFloat(rawUser) || 0) : 1;
+                                                    const userShares = rawUser !== undefined && String(rawUser).trim() !== '' ? (parseNonNegativeNumber(String(rawUser)) ?? 0) : 1;
                                                     liveAmountShares = totalShares > 0 ? (userShares / totalShares) * totalAmount : 0;
                                                 }
 
@@ -1495,7 +1617,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     type="button"
                                                                     onClick={() => {
                                                                         const raw = splits[p.id]?.shares;
-                                                                        const cur = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
+                                                                        const cur = raw !== undefined && String(raw).trim() !== '' ? (parseNonNegativeNumber(String(raw)) ?? 0) : 1;
                                                                         setSplits({
                                                                             ...splits,
                                                                             [p.id]: {
@@ -1526,7 +1648,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                     type="button"
                                                                     onClick={() => {
                                                                         const raw = splits[p.id]?.shares;
-                                                                        const cur = raw !== undefined && String(raw).trim() !== '' ? (parseFloat(raw) || 0) : 1;
+                                                                        const cur = raw !== undefined && String(raw).trim() !== '' ? (parseNonNegativeNumber(String(raw)) ?? 0) : 1;
                                                                         setSplits({
                                                                             ...splits,
                                                                             [p.id]: {
@@ -1606,8 +1728,8 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-zinc-100">
-                                                            {items.map((item, idx) => {
-                                                                const itemQty = parseFloat(item.quantity) || 1;
+                                                            {items.map((item) => {
+                                                                const itemQty = parseNonNegativeNumber(item.quantity) ?? 1;
                                                                 const amt = getItemTotal(item);
                                                                 return (
                                                                     <tr key={item.id}
@@ -1630,10 +1752,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                         placeholder="0"
                                                                                         value={val}
                                                                                         onChange={e => {
-                                                                                            const newItems = [...items];
-                                                                                            if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                            newItems[idx].shares![mId] = e.target.value;
-                                                                                            setItems(newItems);
+                                                                                            updateItemShares(item.id, mId, e.target.value);
                                                                                         }}
                                                                                         className="w-11 mx-auto px-1 py-1 bg-zinc-50 focus:bg-white border border-zinc-200 rounded-lg text-center text-xs font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-200 shadow-2xs transition-colors"
                                                                                     />
@@ -1649,15 +1768,15 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                             ) : (
                                                 /* Mobile-Optimized Cards View */
                                                 <div className="flex flex-col space-y-2.5">
-                                                    {items.map((item, idx) => {
-                                                        const itemQty = parseFloat(item.quantity) || 1;
+                                                    {items.map((item) => {
+                                                        const itemQty = parseNonNegativeNumber(item.quantity) ?? 1;
                                                         const amt = getItemTotal(item);
                                                         const isExpanded = expandedItems.includes(item.id);
 
                                                         let sumShares = 0;
                                                         let assignedCount = 0;
                                                         selectedMembers.forEach(id => {
-                                                            const s = item.shares?.[id] !== undefined ? parseFloat(item.shares[id] as string) || 0 : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                                                            const s = item.shares?.[id] !== undefined ? (parseNonNegativeNumber(item.shares[id] as string) ?? 0) : (item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
                                                             sumShares += s;
                                                             if (s > 0) assignedCount += 1;
                                                         });
@@ -1721,12 +1840,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
-                                                                                        const newItems = [...items];
-                                                                                        if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                        selectedMembers.forEach(mId => {
-                                                                                            newItems[idx].shares![mId] = '1';
-                                                                                        });
-                                                                                        setItems(newItems);
+                                                                                        updateItemSharesForMembers(item.id, Object.fromEntries(selectedMembers.map((mId) => [mId, '1'])));
                                                                                     }}
                                                                                     className="px-2 py-0.5 text-[10px] font-bold bg-white hover:bg-zinc-100 border border-zinc-200 rounded-lg text-zinc-700 shadow-2xs transition-colors"
                                                                                 >
@@ -1735,12 +1849,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
-                                                                                        const newItems = [...items];
-                                                                                        if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                        selectedMembers.forEach(mId => {
-                                                                                            newItems[idx].shares![mId] = mId === currentProfile?.id ? '1' : '0';
-                                                                                        });
-                                                                                        setItems(newItems);
+                                                                                        updateItemSharesForMembers(item.id, Object.fromEntries(selectedMembers.map((mId) => [mId, mId === currentProfile?.id ? '1' : '0'])));
                                                                                     }}
                                                                                     className="px-2 py-0.5 text-[10px] font-bold bg-white hover:bg-zinc-100 border border-zinc-200 rounded-lg text-zinc-700 shadow-2xs transition-colors"
                                                                                 >
@@ -1749,12 +1858,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
-                                                                                        const newItems = [...items];
-                                                                                        if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                        selectedMembers.forEach(mId => {
-                                                                                            newItems[idx].shares![mId] = '0';
-                                                                                        });
-                                                                                        setItems(newItems);
+                                                                                        updateItemSharesForMembers(item.id, Object.fromEntries(selectedMembers.map((mId) => [mId, '0'])));
                                                                                     }}
                                                                                     className="px-2 py-0.5 text-[10px] font-bold bg-white hover:bg-zinc-100 border border-zinc-200 rounded-lg text-zinc-500 shadow-2xs transition-colors"
                                                                                 >
@@ -1771,7 +1875,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                 if (!p) return null;
 
                                                                                 const valStr = item.shares?.[mId] !== undefined ? item.shares[mId] : (item.assignedTo.length === 0 || item.assignedTo.includes(mId) ? '1' : '0');
-                                                                                const valNum = parseFloat(valStr) || 0;
+                                                                                const valNum = parseNonNegativeNumber(valStr) ?? 0;
                                                                                 const shareCost = sumShares > 0 ? (amt * (valNum / sumShares)) : 0;
 
                                                                                 return (
@@ -1806,11 +1910,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                             <button
                                                                                                 type="button"
                                                                                                 onClick={() => {
-                                                                                                    const newItems = [...items];
-                                                                                                    if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                                    const currentVal = parseFloat(valStr) || 0;
-                                                                                                    newItems[idx].shares![mId] = String(Math.max(0, currentVal - 1));
-                                                                                                    setItems(newItems);
+                                                                                                    updateItemShares(item.id, mId, String(Math.max(0, valNum - 1)));
                                                                                                 }}
                                                                                                 className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs transition-colors"
                                                                                                 title="Restar cuota"
@@ -1823,10 +1923,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                                 placeholder="0"
                                                                                                 value={valStr}
                                                                                                 onChange={e => {
-                                                                                                    const newItems = [...items];
-                                                                                                    if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                                    newItems[idx].shares![mId] = e.target.value;
-                                                                                                    setItems(newItems);
+                                                                                                    updateItemShares(item.id, mId, e.target.value);
                                                                                                 }}
                                                                                                 className={`w-9 h-6 text-center text-xs font-bold rounded-lg border focus:outline-none transition-colors ${valNum > 0
                                                                                                     ? 'bg-zinc-50 border-zinc-300 text-zinc-900 focus:bg-white focus:ring-2 focus:ring-zinc-200'
@@ -1836,11 +1933,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                                                                             <button
                                                                                                 type="button"
                                                                                                 onClick={() => {
-                                                                                                    const newItems = [...items];
-                                                                                                    if (!newItems[idx].shares) newItems[idx].shares = {};
-                                                                                                    const currentVal = parseFloat(valStr) || 0;
-                                                                                                    newItems[idx].shares![mId] = String(currentVal + 1);
-                                                                                                    setItems(newItems);
+                                                                                                    updateItemShares(item.id, mId, String(valNum + 1));
                                                                                                 }}
                                                                                                 className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs transition-colors"
                                                                                                 title="Sumar cuota"
@@ -1934,7 +2027,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         ) : (
                             <button
                                 onClick={handleSubmit}
-                                disabled={isSubmitting || isMutating}
+                                disabled={isSubmitting || isMutating || isUploading}
                                 className="flex-1 px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
                             >
                                 {(isSubmitting || isMutating) ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> :
@@ -1948,11 +2041,16 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 {/* Modal de confirmación para ajustar total según suma exacta (Solo modo Simple) */}
                 {showExactMismatchModal && mismatchData && (
                     <div
-                        className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-zinc-950/50 backdrop-blur-xs animate-in fade-in duration-150">
+                        className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-zinc-950/50 backdrop-blur-xs animate-in fade-in duration-150"
+                        role="presentation">
                         <div
+                            ref={mismatchModalRef}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="expense-mismatch-title"
                             className="bg-white rounded-2xl p-5 sm:p-6 shadow-2xl max-w-sm w-full border border-zinc-100 flex flex-col gap-4 animate-in zoom-in-95 duration-150">
                             <div>
-                                <h3 className="text-base font-bold text-zinc-900">¿Actualizar el total del gasto?</h3>
+                                <h3 id="expense-mismatch-title" className="text-base font-bold text-zinc-900">¿Actualizar el total del gasto?</h3>
                                 <p className="text-xs text-zinc-600 mt-1.5 leading-relaxed">
                                     La suma de los montos ingresados (<strong
                                         className="text-zinc-900 font-bold">{formatCurrency(mismatchData.exactSum, currency)}</strong>)
@@ -1971,7 +2069,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                         setAmount(String(updatedSum));
                                         await executeSave(updatedSum, splitsToSave);
                                     }}
-                                    disabled={isSubmitting || isMutating}
+                                    disabled={isSubmitting || isUploading || isMutating}
                                     className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-98 flex items-center justify-center cursor-pointer disabled:opacity-50"
                                 >
                                     {(isSubmitting || isMutating) ?

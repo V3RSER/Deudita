@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Group } from '@/lib/types';
 import { DateFilterMode, DatePreset } from '@/lib/transaction-date-utils';
 import { Calendar, Clock, FolderKanban, RotateCcw, Search, SlidersHorizontal, Tag, UserCheck, X, } from 'lucide-react';
@@ -27,8 +27,6 @@ interface TransactionFilterBarProps {
     showGroupFilter?: boolean;
     showCategoryFilter?: boolean;
     showSearch?: boolean;
-    totalCount?: number;
-    myCount?: number;
 }
 
 const DATE_PRESET_OPTIONS: Array<{ id: DatePreset; label: string }> = [
@@ -52,14 +50,15 @@ export function TransactionFilterBar({
     showSearch = true,
 }: Readonly<TransactionFilterBarProps>) {
     const [isOpen, setIsOpen] = useState(false);
+    const filterIdPrefix = useId().replace(/:/g, '');
 
+    const hasCustomDateRange = Boolean(filters.customStartDate || filters.customEndDate || filters.datePreset === 'custom');
     const activeFiltersCount =
         (filters.scope === 'mine' ? 1 : 0) +
-        (filters.datePreset !== 'all' ? 1 : 0) +
+        (hasCustomDateRange || filters.datePreset !== 'all' ? 1 : 0) +
         (filters.dateMode !== 'expense_date' ? 1 : 0) +
-        (filters.category !== 'all' ? 1 : 0) +
-        (filters.groupId !== 'all' ? 1 : 0) +
-        (filters.customStartDate || filters.customEndDate ? 1 : 0);
+        (showCategoryFilter && filters.category !== 'all' ? 1 : 0) +
+        (showGroupFilter && filters.groupId !== 'all' ? 1 : 0);
 
     const isFiltered = activeFiltersCount > 0 || filters.searchTerm.trim().length > 0;
 
@@ -97,19 +96,19 @@ export function TransactionFilterBar({
         });
     }
 
-    if (filters.datePreset !== 'all') {
-        activeChips.push({
-            id: 'datePreset',
-            label: getPresetLabel(filters.datePreset),
-            onRemove: () => onFilterChange({ datePreset: 'all', customStartDate: '', customEndDate: '' }),
-        });
-    } else if (filters.customStartDate || filters.customEndDate) {
+    if (filters.datePreset === 'custom' || filters.customStartDate || filters.customEndDate) {
         const start = filters.customStartDate || '...';
         const end = filters.customEndDate || '...';
         activeChips.push({
             id: 'customDate',
             label: `${start} a ${end}`,
             onRemove: () => onFilterChange({ customStartDate: '', customEndDate: '', datePreset: 'all' }),
+        });
+    } else if (filters.datePreset !== 'all') {
+        activeChips.push({
+            id: 'datePreset',
+            label: getPresetLabel(filters.datePreset),
+            onRemove: () => onFilterChange({ datePreset: 'all', customStartDate: '', customEndDate: '' }),
         });
     }
 
@@ -229,11 +228,12 @@ export function TransactionFilterBar({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                         {/* Filter 1: Participación */}
                         <div className="bg-white p-3 rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                            <label htmlFor={`${filterIdPrefix}-scope`} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
                                 <UserCheck className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Participación</span>
                             </label>
                             <CustomSelect
+                                id={`${filterIdPrefix}-scope`}
                                 value={filters.scope}
                                 onChange={(val) => onFilterChange({ scope: val as 'all' | 'mine' })}
                                 options={[
@@ -246,11 +246,12 @@ export function TransactionFilterBar({
 
                         {/* Filter 2: Periodo de Fechas */}
                         <div className="bg-white p-3 rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                            <label htmlFor={`${filterIdPrefix}-date-preset`} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
                                 <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Periodo</span>
                             </label>
                             <CustomSelect
+                                id={`${filterIdPrefix}-date-preset`}
                                 value={filters.datePreset}
                                 onChange={(val) => {
                                     onFilterChange({
@@ -284,11 +285,12 @@ export function TransactionFilterBar({
 
                         {/* Filter 3: Criterio de Fecha */}
                         <div className="bg-white p-3 rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                            <label htmlFor={`${filterIdPrefix}-date-mode`} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
                                 <Clock className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Criterio de fecha</span>
                             </label>
                             <CustomSelect
+                                id={`${filterIdPrefix}-date-mode`}
                                 value={filters.dateMode}
                                 onChange={(val) => onFilterChange({ dateMode: val as DateFilterMode })}
                                 options={[
@@ -302,11 +304,12 @@ export function TransactionFilterBar({
                         {/* Filter 4: Categoría (si aplica) */}
                         {showCategoryFilter && (
                             <div className="bg-white p-3 rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
-                                <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                                <label htmlFor={`${filterIdPrefix}-category`} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
                                     <Tag className="w-3.5 h-3.5 text-zinc-400" />
                                     <span>Categoría</span>
                                 </label>
                                 <CustomSelect
+                                    id={`${filterIdPrefix}-category`}
                                     value={filters.category}
                                     onChange={(val) => onFilterChange({ category: val })}
                                     options={[
@@ -343,11 +346,12 @@ export function TransactionFilterBar({
                         {/* Filter 5: Grupo (si aplica) */}
                         {showGroupFilter && (
                             <div className="bg-white p-3 rounded-xl border border-zinc-200/90 shadow-2xs space-y-1.5">
-                                <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+                                <label htmlFor={`${filterIdPrefix}-group`} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
                                     <FolderKanban className="w-3.5 h-3.5 text-zinc-400" />
                                     <span>Grupo</span>
                                 </label>
                                 <CustomSelect
+                                    id={`${filterIdPrefix}-group`}
                                     value={filters.groupId}
                                     onChange={(val) => onFilterChange({ groupId: val })}
                                     options={[
@@ -368,11 +372,13 @@ export function TransactionFilterBar({
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
-                                    <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                                    <label htmlFor={`${filterIdPrefix}-custom-start`} className="block text-[11px] font-medium text-zinc-400 mb-1">
                                         Desde
                                     </label>
                                     <input
+                                        id={`${filterIdPrefix}-custom-start`}
                                         type="date"
+                                        max={filters.customEndDate || undefined}
                                         value={filters.customStartDate}
                                         onChange={(e) =>
                                             onFilterChange({
@@ -384,11 +390,13 @@ export function TransactionFilterBar({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                                    <label htmlFor={`${filterIdPrefix}-custom-end`} className="block text-[11px] font-medium text-zinc-400 mb-1">
                                         Hasta
                                     </label>
                                     <input
+                                        id={`${filterIdPrefix}-custom-end`}
                                         type="date"
+                                        min={filters.customStartDate || undefined}
                                         value={filters.customEndDate}
                                         onChange={(e) =>
                                             onFilterChange({

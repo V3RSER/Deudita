@@ -35,7 +35,7 @@ export function FormattedCurrencyInput({
     const numVal = parseCurrencyAmount(value, currency);
 
     const formattedDisplay =
-        value !== '' && value !== undefined && value !== null && !isNaN(numVal) && numVal > 0
+        value !== '' && value !== undefined && value !== null && !isNaN(numVal) && numVal >= 0
             ? (hideSymbol ? new Intl.NumberFormat('es-CO', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 2
@@ -43,19 +43,46 @@ export function FormattedCurrencyInput({
             : '';
 
     const displayValue = isFocused
-        ? (editingValue !== null ? editingValue : (value ? String(value) : ''))
+        ? (editingValue !== null ? editingValue : (value !== '' && value !== undefined && value !== null ? String(value) : ''))
         : formattedDisplay;
 
     const parseRawValue = (raw: string): string => {
-        let s = raw.trim();
-        if (!s) return '';
-        // If it has multiple dots, or dots followed by 3 digits (e.g. 150.000 or 1.500.000), treat dots as thousand separators
-        if (/\.\d{3}/.test(s) && !/\.\d{1,2}$/.test(s)) {
-            s = s.replace(/\./g, '').replace(',', '.');
+        const input = raw.trim();
+        if (!input) return '';
+
+        const sanitized = input.replace(/[^0-9.,]/g, '');
+        if (!sanitized) return '';
+
+        const lastComma = sanitized.lastIndexOf(',');
+        const lastDot = sanitized.lastIndexOf('.');
+        const hasComma = lastComma >= 0;
+        const hasDot = lastDot >= 0;
+
+        let normalized: string;
+        if (hasComma && hasDot) {
+            const decimalSeparator = lastComma > lastDot ? ',' : '.';
+            const thousandsSeparator = decimalSeparator === ',' ? '.' : ',';
+            normalized = sanitized.replaceAll(thousandsSeparator, '');
+            const separatorIndex = normalized.lastIndexOf(decimalSeparator);
+            normalized = separatorIndex >= 0
+                ? `${normalized.slice(0, separatorIndex).replaceAll(decimalSeparator, '')}.${normalized.slice(separatorIndex + 1).replaceAll(decimalSeparator, '')}`
+                : normalized.replaceAll(decimalSeparator, '');
+        } else if (hasComma || hasDot) {
+            const separator = hasComma ? ',' : '.';
+            const separatorIndex = sanitized.lastIndexOf(separator);
+            const digitsAfter = sanitized.length - separatorIndex - 1;
+            const occurrences = sanitized.split(separator).length - 1;
+
+            if (occurrences > 1 || digitsAfter === 3) {
+                normalized = sanitized.replaceAll(separator, '');
+            } else {
+                normalized = `${sanitized.slice(0, separatorIndex).replaceAll(separator, '')}.${sanitized.slice(separatorIndex + 1)}`;
+            }
         } else {
-            s = s.replace(',', '.');
+            normalized = sanitized;
         }
-        return s.replace(/[^0-9.]/g, '');
+
+        return normalized;
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,7 +109,7 @@ export function FormattedCurrencyInput({
             inputMode="decimal"
             required={required}
             disabled={disabled}
-            autoFocus={false}
+            autoFocus={autoFocus}
             value={displayValue}
             onChange={handleInputChange}
             onFocus={handleFocus}
