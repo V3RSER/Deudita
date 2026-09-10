@@ -283,11 +283,12 @@ export async function POST(req: NextRequest) {
             .single();
 
         // Fallback si alguna columna opcional no existe
-        if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time'))) {
+        if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time') || expErr.message?.includes('split_config'))) {
             console.warn('[API /api/expenses] Reintentando inserción sin columnas opcionales:', expErr.message);
             delete expenseInsertPayload.category;
             delete expenseInsertPayload.notes;
             delete expenseInsertPayload.expense_time;
+            delete expenseInsertPayload.split_config;
 
             const fallbackRes = await clientSupabase
                 .from('expenses')
