@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
 import { ArrowRightLeft, ChevronDown, ChevronUp, Users } from 'lucide-react';
@@ -42,7 +42,7 @@ const AVATAR_COLOR_PALETTES = [
 
 export function getParticipantAvatarColor(idOrName: string) {
     let hash = 0;
-    for (let i = 0; i < idOrName.length; i++) {
+    for (let i = 0; i < idOrName.length; i += 1) {
         hash = idOrName.charCodeAt(i) + ((hash << 5) - hash);
     }
     const index = Math.abs(hash) % AVATAR_COLOR_PALETTES.length;
@@ -52,28 +52,21 @@ export function getParticipantAvatarColor(idOrName: string) {
 export function getInitials(name?: string | null, email?: string | null): string {
     if (name && name.trim().length > 0) {
         const parts = name.trim().split(/\s+/);
-        if (parts.length >= 2) {
-            return (parts[0][0] + parts[1][0]).toUpperCase();
-        }
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
         return parts[0].slice(0, 2).toUpperCase();
     }
-    if (email && email.trim().length > 0) {
-        return email.trim().slice(0, 2).toUpperCase();
-    }
+    if (email && email.trim().length > 0) return email.trim().slice(0, 2).toUpperCase();
     return 'U';
 }
 
 export function formatSimpleFraction(val: number): string {
-    if (isNaN(val) || val <= 0) return '0';
+    if (!Number.isFinite(val) || val <= 0) return '0';
 
     const roundedInt = Math.round(val);
-    if (Math.abs(val - roundedInt) < 0.001) {
-        return String(roundedInt);
-    }
+    if (Math.abs(val - roundedInt) < 0.001) return String(roundedInt);
 
-    // Only single-character vulgar fractions for values strictly between 0 and 1
     if (val > 0 && val < 1) {
-        const singleCharFractions: { val: number; char: string }[] = [
+        const singleCharFractions = [
             { val: 1 / 2, char: '½' },
             { val: 1 / 3, char: '⅓' },
             { val: 2 / 3, char: '⅔' },
@@ -91,54 +84,179 @@ export function formatSimpleFraction(val: number): string {
             { val: 7 / 8, char: '⅞' },
         ];
 
-        for (const f of singleCharFractions) {
-            if (Math.abs(val - f.val) < 0.015) {
-                return f.char;
-            }
+        for (const fraction of singleCharFractions) {
+            if (Math.abs(val - fraction.val) < 0.008) return fraction.char;
         }
     }
 
-    // If > 1 or obscure fraction, output as clean decimal (max 2 decimals)
-    const rounded = Math.round(val * 100) / 100;
-    return rounded.toString().replace(/\.?0+$/, '');
+    return (Math.round(val * 100) / 100).toString().replace(/\.?0+$/, '');
+}
+
+function useExpandedUsers(participants: ParticipantSummaryData[], defaultExpanded: boolean) {
+    const initialState = useMemo(() => {
+        const next: Record<string, boolean> = {};
+        participants.forEach((participant) => {
+            next[participant.userId] = defaultExpanded && Boolean(participant.breakdown?.length);
+        });
+        return next;
+    }, [participants, defaultExpanded]);
+
+    const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(initialState);
+
+    useEffect(() => {
+        setExpandedUsers((previous) => {
+            const next: Record<string, boolean> = {};
+            let changed = Object.keys(previous).length !== participants.length;
+
+            participants.forEach((participant) => {
+                const hasExisting = Object.prototype.hasOwnProperty.call(previous, participant.userId);
+                const nextValue = hasExisting
+                    ? previous[participant.userId]
+                    : defaultExpanded && Boolean(participant.breakdown?.length);
+                next[participant.userId] = nextValue;
+                if (!hasExisting || previous[participant.userId] !== nextValue) changed = true;
+            });
+
+            return changed ? next : previous;
+        });
+    }, [participants, defaultExpanded]);
+
+    return [expandedUsers, setExpandedUsers] as const;
+}
+
+function BreakdownList({ breakdown, currency }: { breakdown: ParticipantItemBreakdown[]; currency: string }) {
+    const occurrenceMap = new Map<string, number>();
+
+    return (
+        <div className="mt-2.5 pt-2 border-t border-dashed border-zinc-200 space-y-1.5 pl-9">
+            {breakdown.map((item) => {
+                const baseKey = `${item.desc}|${item.qty}|${item.cost}`;
+                const occurrence = occurrenceMap.get(baseKey) ?? 0;
+                occurrenceMap.set(baseKey, occurrence + 1);
+                const cleanQty = formatSimpleFraction(item.qty);
+
+                return (
+                    <div
+                        key={`${baseKey}|${occurrence}`}
+                        className="flex items-center justify-between text-xs py-0.5 text-zinc-600 hover:text-zinc-900"
+                    >
+                        <div className="flex items-center space-x-1.5 min-w-0 pr-2">
+                            <span className="font-semibold text-zinc-800 shrink-0">{cleanQty} ·</span>
+                            <span className="truncate">{item.desc}</span>
+                        </div>
+                        <span className="font-semibold text-zinc-800 shrink-0 text-[11px]">
+                            {formatCurrency(item.cost, currency)}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function ParticipantRow({
+    participant,
+    currency,
+    isExpanded,
+    currentUserId,
+    onToggle,
+}: {
+    participant: ParticipantSummaryData;
+    currency: string;
+    isExpanded: boolean;
+    currentUserId?: string;
+    onToggle: () => void;
+}) {
+    const profile = participant.profile;
+    const hasBreakdown = Boolean(participant.breakdown?.length);
+    const isCurrentUser = participant.userId === currentUserId;
+    const displayName = profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0];
+
+    const content = (
+        <>
+            <div className="flex items-center space-x-2.5 min-w-0 flex-1 text-left">
+                <UserAvatar profile={profile} name={profile?.full_name} size="sm" />
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-xs font-bold truncate ${isCurrentUser ? 'text-emerald-700' : 'text-zinc-900'}`}>
+                            {displayName}
+                        </span>
+                        {isCurrentUser && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md shrink-0">
+                                Tú
+                            </span>
+                        )}
+                        {participant.shares !== undefined && participant.shares !== null && String(participant.shares).trim() !== '' && (
+                            <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
+                                {participant.shares} {String(participant.shares) === '1' ? 'cuota' : 'cuotas'}
+                            </span>
+                        )}
+                    </div>
+                    {hasBreakdown && (
+                        <span className="text-[10px] text-zinc-400 font-medium block">
+                            {participant.breakdown!.length} {participant.breakdown!.length === 1 ? 'artículo' : 'artículos'}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs sm:text-sm font-bold text-zinc-900">
+                    {formatCurrency(participant.amount, currency)}
+                </span>
+                {hasBreakdown && (
+                    <span className="w-5 h-5 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center transition-colors">
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </span>
+                )}
+            </div>
+        </>
+    );
+
+    return (
+        <div className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
+            {hasBreakdown ? (
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Colapsar' : 'Expandir'} artículos de ${displayName}`}
+                    className="w-full flex items-center justify-between gap-2 rounded-lg text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+                >
+                    {content}
+                </button>
+            ) : (
+                <div className="w-full flex items-center justify-between gap-2">{content}</div>
+            )}
+
+            {hasBreakdown && isExpanded && <BreakdownList breakdown={participant.breakdown!} currency={currency} />}
+        </div>
+    );
 }
 
 export function ExpenseParticipantSummary({
     participants,
     currency,
+    currentUserId,
     title = 'Resumen por participante',
     splitTypeLabel,
     defaultExpanded = false,
 }: ExpenseParticipantSummaryProps) {
-    const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
-        const initial: Record<string, boolean> = {};
-        participants.forEach((p) => {
-            initial[p.userId] = defaultExpanded;
-        });
-        return initial;
-    });
+    const [expandedUsers, setExpandedUsers] = useExpandedUsers(participants, defaultExpanded);
+
+    if (!participants || participants.length === 0) return null;
 
     const toggleUser = (userId: string) => {
-        setExpandedUsers((prev) => ({
-            ...prev,
-            [userId]: !prev[userId],
-        }));
+        setExpandedUsers((previous) => ({ ...previous, [userId]: !previous[userId] }));
     };
-
-    if (!participants || participants.length === 0) {
-        return null;
-    }
 
     return (
         <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {title && (
-                <div
-                    className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
+                <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                            {title}
-                        </span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">{title}</span>
                     </div>
                     {splitTypeLabel && (
                         <span className="text-[10px] font-semibold text-zinc-600 bg-zinc-200/70 px-2 py-0.5 rounded-md">
@@ -149,94 +267,16 @@ export function ExpenseParticipantSummary({
             )}
 
             <div className="divide-y divide-zinc-100">
-                {participants.map((p) => {
-                    const profile = p.profile;
-                    const hasBreakdown = Boolean(p.breakdown && p.breakdown.length > 0);
-                    const isExpanded = expandedUsers[p.userId] ?? false;
-                    return (
-                        <div key={p.userId}
-                            className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
-                            <div
-                                className={`flex items-center justify-between gap-2 ${hasBreakdown ? 'cursor-pointer select-none' : ''
-                                    }`}
-                                onClick={() => hasBreakdown && toggleUser(p.userId)}
-                            >
-                                {/* Avatar and Name */}
-                                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                    <UserAvatar
-                                        profile={profile}
-                                        name={profile?.full_name}
-                                        size="sm"
-                                    />
-
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className="text-xs font-bold text-zinc-900 truncate">
-                                                {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
-                                            </span>
-                                            {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
-                                                <span
-                                                    className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
-                                                    {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {hasBreakdown && (
-                                            <span className="text-[10px] text-zinc-400 font-medium block">
-                                                {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Amount and Chevron */}
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                                        {formatCurrency(p.amount, currency)}
-                                    </span>
-                                    {hasBreakdown && (
-                                        <button
-                                            type="button"
-                                            aria-label="Expandir artículos"
-                                            className="w-5 h-5 rounded-md bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-500 transition-colors cursor-pointer"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleUser(p.userId);
-                                            }}
-                                        >
-                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> :
-                                                <ChevronDown className="w-3.5 h-3.5" />}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Items Breakdown */}
-                            {hasBreakdown && isExpanded && (
-                                <div className="mt-2.5 pt-2 border-t border-dashed border-zinc-200 space-y-1.5 pl-9">
-                                    {p.breakdown!.map((item, idx) => {
-                                        const cleanQty = formatSimpleFraction(item.qty);
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className="flex items-center justify-between text-xs py-0.5 text-zinc-600 hover:text-zinc-900"
-                                            >
-                                                <div className="flex items-center space-x-1.5 min-w-0 pr-2">
-                                                    <span
-                                                        className="font-semibold text-zinc-800 shrink-0">{cleanQty} ·</span>
-                                                    <span className="truncate">{item.desc}</span>
-                                                </div>
-                                                <span className="font-semibold text-zinc-800 shrink-0 text-[11px]">
-                                                    {formatCurrency(item.cost, currency)}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                {participants.map((participant) => (
+                    <ParticipantRow
+                        key={participant.userId}
+                        participant={participant}
+                        currency={currency}
+                        currentUserId={currentUserId}
+                        isExpanded={expandedUsers[participant.userId] ?? false}
+                        onToggle={() => toggleUser(participant.userId)}
+                    />
+                ))}
             </div>
         </div>
     );
@@ -257,80 +297,53 @@ export function ExpenseMoneyFlow({
     participants,
     defaultExpanded = false,
 }: ExpenseMoneyFlowProps) {
-    const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>(() => {
-        const initial: Record<string, boolean> = {};
-        participants.forEach((p) => {
-            initial[p.userId] = Boolean(defaultExpanded && p.breakdown && p.breakdown.length > 0);
-        });
-        return initial;
-    });
+    const [expandedUsers, setExpandedUsers] = useExpandedUsers(participants, defaultExpanded);
+
+    const hasAnyBreakdown = participants.some((participant) => participant.breakdown?.length);
+    const allBreakdownsExpanded = hasAnyBreakdown && participants.every(
+        (participant) => !participant.breakdown?.length || Boolean(expandedUsers[participant.userId])
+    );
 
     const toggleUser = (userId: string) => {
-        setExpandedUsers((prev) => ({
-            ...prev,
-            [userId]: !prev[userId],
-        }));
+        setExpandedUsers((previous) => ({ ...previous, [userId]: !previous[userId] }));
     };
-
-    const hasAnyBreakdown = participants.some((p) => p.breakdown && p.breakdown.length > 0);
-    const allBreakdownsExpanded =
-        hasAnyBreakdown &&
-        participants.every((p) => !p.breakdown?.length || Boolean(expandedUsers[p.userId]));
 
     const toggleAllBreakdowns = () => {
         const nextState = !allBreakdownsExpanded;
-        const next: Record<string, boolean> = {};
-        participants.forEach((p) => {
-            if (p.breakdown && p.breakdown.length > 0) {
-                next[p.userId] = nextState;
-            }
+        setExpandedUsers((previous) => {
+            const next = { ...previous };
+            participants.forEach((participant) => {
+                if (participant.breakdown?.length) next[participant.userId] = nextState;
+            });
+            return next;
         });
-        setExpandedUsers((prev) => ({ ...prev, ...next }));
     };
 
     return (
         <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-            {/* Header: Flujo del dinero (no split type badge) */}
-            <div
-                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
+            <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                     <ArrowRightLeft className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                        Flujo del dinero
-                    </span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Flujo del dinero</span>
                 </div>
             </div>
 
-            {/* Payer Row (Total pagado) */}
             <div className="p-3 border-b border-zinc-100 bg-zinc-50/40 flex items-center justify-between gap-2">
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                    <UserAvatar
-                        profile={payerProfile}
-                        name={payerProfile?.full_name}
-                        size="sm"
-                    />
+                    <UserAvatar profile={payerProfile} name={payerProfile?.full_name} size="sm" />
                     <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold text-zinc-900 truncate">
                             {payerProfile?.full_name || (payerProfile?.email || 'Usuario').split('@')[0]}
                         </div>
-                        <span className="text-[10px] text-zinc-500 font-medium block">
-                            Pagó el total del gasto
-                        </span>
+                        <span className="text-[10px] text-zinc-500 font-medium block">Pagó el total del gasto</span>
                     </div>
                 </div>
-
-                {/* Total pagado number - styled with identical visual style and color */}
                 <div className="text-right shrink-0">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
-                        Total pagado
-                    </span>
-                    <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                        {formatCurrency(totalAmount, currency)}
-                    </span>
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">Total pagado</span>
+                    <span className="text-xs sm:text-sm font-bold text-zinc-900">{formatCurrency(totalAmount, currency)}</span>
                 </div>
             </div>
 
-            {/* Participants Distribution */}
             <div className="p-2 sm:p-2.5 space-y-1">
                 <div className="px-2 pt-1 pb-1 flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
@@ -340,114 +353,25 @@ export function ExpenseMoneyFlow({
                         <button
                             type="button"
                             onClick={toggleAllBreakdowns}
+                            aria-label={allBreakdownsExpanded ? 'Colapsar todos los artículos' : 'Desplegar todos los artículos'}
                             className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 border border-emerald-200/60 shadow-2xs"
                         >
-                            {allBreakdownsExpanded ? (
-                                <>
-                                    <ChevronUp className="w-3 h-3 text-emerald-700" />
-                                    <span>Colapsar artículos</span>
-                                </>
-                            ) : (
-                                <>
-                                    <ChevronDown className="w-3 h-3 text-emerald-700" />
-                                    <span>Desplegar artículos</span>
-                                </>
-                            )}
+                            {allBreakdownsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            <span>{allBreakdownsExpanded ? 'Colapsar artículos' : 'Desplegar artículos'}</span>
                         </button>
                     )}
                 </div>
 
                 <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200/70 overflow-hidden bg-white">
-                    {participants.map((p) => {
-                        const profile = p.profile;
-                        const hasBreakdown = Boolean(p.breakdown && p.breakdown.length > 0);
-                        const isExpanded = expandedUsers[p.userId] ?? false;
-
-                        return (
-                            <div key={p.userId}
-                                className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/50">
-                                <div
-                                    className={`flex items-center justify-between gap-2 ${hasBreakdown ? 'cursor-pointer select-none' : ''
-                                        }`}
-                                    onClick={() => hasBreakdown && toggleUser(p.userId)}
-                                >
-                                    {/* Avatar and Name */}
-                                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                        <UserAvatar
-                                            profile={profile}
-                                            name={profile?.full_name}
-                                            size="sm"
-                                        />
-
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="text-xs font-bold text-zinc-900 truncate">
-                                                    {profile?.full_name?.split(' ')[0] || (profile?.email || 'Usuario').split('@')[0]}
-                                                </span>
-                                                {p.shares !== undefined && p.shares !== null && String(p.shares).trim() !== '' && (
-                                                    <span
-                                                        className="text-[10px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-1.5 py-0.2 rounded shrink-0">
-                                                        {p.shares} {String(p.shares) === '1' ? 'cuota' : 'cuotas'}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {hasBreakdown && (
-                                                <span className="text-[10px] text-zinc-400 font-medium block">
-                                                    {p.breakdown!.length} {p.breakdown!.length === 1 ? 'artículo' : 'artículos'}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Amount and Expand Button - matching styling and color */}
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                                            {formatCurrency(p.amount, currency)}
-                                        </span>
-                                        {hasBreakdown && (
-                                            <button
-                                                type="button"
-                                                aria-label="Expandir artículos"
-                                                className="w-5 h-5 rounded-md bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-500 transition-colors cursor-pointer"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleUser(p.userId);
-                                                }}
-                                            >
-                                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> :
-                                                    <ChevronDown className="w-3.5 h-3.5" />}
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Items Breakdown */}
-                                {hasBreakdown && isExpanded && (
-                                    <div
-                                        className="mt-2.5 pt-2 border-t border-dashed border-zinc-200 space-y-1.5 pl-9">
-                                        {p.breakdown!.map((item, idx) => {
-                                            const cleanQty = formatSimpleFraction(item.qty);
-                                            return (
-                                                <div
-                                                    key={idx}
-                                                    className="flex items-center justify-between text-xs py-0.5 text-zinc-600 hover:text-zinc-900"
-                                                >
-                                                    <div className="flex items-center space-x-1.5 min-w-0 pr-2">
-                                                        <span
-                                                            className="font-semibold text-zinc-800 shrink-0">{cleanQty} ·</span>
-                                                        <span className="truncate">{item.desc}</span>
-                                                    </div>
-                                                    <span className="font-semibold text-zinc-800 shrink-0 text-xs">
-                                                        {formatCurrency(item.cost, currency)}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {participants.map((participant) => (
+                        <ParticipantRow
+                            key={participant.userId}
+                            participant={participant}
+                            currency={currency}
+                            isExpanded={expandedUsers[participant.userId] ?? false}
+                            onToggle={() => toggleUser(participant.userId)}
+                        />
+                    ))}
                 </div>
             </div>
         </div>

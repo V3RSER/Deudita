@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
-import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
+import { FormattedCurrencyInput } from '@/components/my-expenses/FormattedCurrencyInput';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Payment } from '@/lib/types';
 import {

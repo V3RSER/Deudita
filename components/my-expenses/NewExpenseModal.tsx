@@ -6,7 +6,7 @@ import { useExpense } from '@/lib/expense-context';
 import { Expense, ExpenseSplitConfig } from '@/lib/types';
 import { getExpenseSplitConfig, saveLocalSplitConfig, serializeNotesWithConfig, } from '@/lib/split-config-utils';
 import { distributeAmountEqually, formatCurrency, normalizeSplitsToTotal } from '@/lib/balance-utils';
-import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
+import { FormattedCurrencyInput } from '@/components/my-expenses/FormattedCurrencyInput';
 import {
     AlertCircle,
     ArrowLeft,
