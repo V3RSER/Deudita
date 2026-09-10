@@ -203,36 +203,3 @@ begin
 end;
 $$;
 
--- Seed inicial de tipos de gastos
-insert into public.expense_types (key, label, is_default, active)
-values
-  ('compra', 'Compra', true, true),
-  ('transferencia', 'Transferencia', true, true),
-  ('retiro', 'Retiro', true, true),
-  ('pago', 'Pago', true, true),
-  ('suscripcion', 'Suscripción', false, true),
-  ('factura', 'Factura', false, true)
-on conflict (key) do nothing;
-
--- Seed inicial de entidades financieras colombianas
-insert into public.entities (id, name, country)
-values
-  ('a0000000-0000-0000-0000-000000000001', 'Bancolombia', 'CO'),
-  ('a0000000-0000-0000-0000-000000000002', 'Davivienda', 'CO'),
-  ('a0000000-0000-0000-0000-000000000003', 'Nequi', 'CO'),
-  ('a0000000-0000-0000-0000-000000000004', 'Nu Colombia', 'CO'),
-  ('a0000000-0000-0000-0000-000000000005', 'Scotiabank Colpatria', 'CO')
-on conflict (id) do nothing;
-
--- Seed de patrones de correo de entidades
-insert into public.entity_email_patterns (entity_id, pattern)
-values
-  ('a0000000-0000-0000-0000-000000000001', 'notificaciones@notificacionesbancolombia.com'),
-  ('a0000000-0000-0000-0000-000000000001', 'mensajes@bancolombia.com.co'),
-  ('a0000000-0000-0000-0000-000000000002', 'notificaciones@davivienda.com'),
-  ('a0000000-0000-0000-0000-000000000002', 'avisos@davivienda.com'),
-  ('a0000000-0000-0000-0000-000000000003', 'notificaciones@nequi.com.co'),
-  ('a0000000-0000-0000-0000-000000000003', 'notificaciones@nequi.com'),
-  ('a0000000-0000-0000-0000-000000000004', 'notificaciones@nu.com.co'),
-  ('a0000000-0000-0000-0000-000000000004', 'help@nu.com.co')
-on conflict do nothing;
