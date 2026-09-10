@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>Prueba de correo — Deudita</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; color: #202124; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .muted { color: #6b7280; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 18px; margin-top: 16px; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    button, select, input { font: inherit; }
+    button { border: 0; border-radius: 7px; padding: 9px 14px; cursor: pointer; background: #1a73e8; color: white; }
+    button.secondary { background: #eef2f7; color: #202124; }
+    button:disabled { opacity: .55; cursor: default; }
+    input, select { border: 1px solid #c9cdd3; border-radius: 7px; padding: 9px 10px; background: white; }
+    input.search { min-width: 320px; flex: 1; }
+    .search-mode { display: none; width: 100%; }
+    .search-mode.active { display: flex; gap: 10px; }
+    .status { margin-top: 12px; color: #5f6368; min-height: 20px; }
+    .emails { margin-top: 12px; display: grid; gap: 8px; }
+    .email { text-align: left; border: 1px solid #ddd; background: white; color: #202124; padding: 12px; border-radius: 8px; cursor: pointer; }
+    .email:hover { border-color: #1a73e8; }
+    .email.selected { border: 2px solid #1a73e8; padding: 11px; }
+    .email-head { display: flex; justify-content: space-between; gap: 12px; }
+    .subject { font-weight: 600; }
+    .from { margin-top: 4px; color: #5f6368; font-size: 13px; }
+    .snippet { margin-top: 7px; color: #4b5563; font-size: 13px; }
+    .detail { white-space: pre-wrap; word-break: break-word; background: #f8f9fa; border-radius: 7px; padding: 12px; max-height: 300px; overflow: auto; }
+    .result { margin-top: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .kv { background: #f8f9fa; padding: 10px; border-radius: 7px; }
+    .kv b { display: block; font-size: 12px; color: #6b7280; margin-bottom: 3px; }
+    .error { color: #b42318; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Probar un correo</h1>
+  <div class="muted">Selecciona un correo de Gmail y ejecuta el mismo flujo de matching.</div>
+
+  <div class="card">
+    <div class="toolbar">
+      <label for="source">Obtener:</label>
+      <select id="source">
+        <option value="recent">Últimos correos</option>
+        <option value="search">Buscar correos</option>
+      </select>
+
+      <select id="count" title="Cantidad">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+      </select>
+
+      <button id="loadBtn" onclick="loadEmails()">Cargar correos</button>
+    </div>
+
+    <div id="searchBox" class="search-mode" style="margin-top:10px;">
+      <input id="query" class="search" placeholder="Ej.: from:banco@ejemplo.com OR subject:transferencia">
+      <button onclick="loadEmails()">Buscar</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    <div id="emails" class="emails"></div>
+  </div>
+
+  <div id="selectedCard" class="card" style="display:none;">
+    <h2 style="font-size:18px;">Correo seleccionado</h2>
+    <div id="selectedMeta"></div>
+    <div id="selectedBody" class="detail" style="margin-top:10px;"></div>
+    <div class="toolbar" style="margin-top:12px;">
+      <button id="testBtn" onclick="testSelected()">Probar matching</button>
+      <button id="candidateBtn" class="secondary" onclick="createCandidate()" disabled>Crear candidato</button>
+    </div>
+    <div id="result" class="result"></div>
+  </div>
+</div>
+
+<script>
+  let emails = [];
+  let selected = null;
+  let lastMatch = null;
+
+  document.getElementById('source').addEventListener('change', function () {
+    document.getElementById('searchBox').classList.toggle('active', this.value === 'search');
+  });
+
+  function setStatus(text, error) {
+    const el = document.getElementById('status');
+    el.textContent = text || '';
+    el.className = 'status' + (error ? ' error' : '');
+  }
+
+  function loadEmails() {
+    const source = document.getElementById('source').value;
+    const count = Number(document.getElementById('count').value);
+    const query = document.getElementById('query').value.trim();
+
+    if (source === 'search' && !query) {
+      setStatus('Escribe algo para buscar.', true);
+      return;
+    }
+
+    setStatus('Cargando correos…');
+    document.getElementById('emails').innerHTML = '';
+    document.getElementById('selectedCard').style.display = 'none';
+
+    google.script.run
+      .withSuccessHandler(function (rows) {
+        emails = rows || [];
+        renderEmails();
+        setStatus(emails.length ? emails.length + ' correo(s) encontrado(s).' : 'No se encontraron correos.');
+      })
+      .withFailureHandler(function (err) {
+        setStatus(err && err.message ? err.message : String(err), true);
+      })
+      .getTestEmails({ mode: source, count: count, query: query });
+  }
+
+  function renderEmails() {
+    const container = document.getElementById('emails');
+    container.innerHTML = '';
+
+    emails.forEach(function (email, index) {
+      const button = document.createElement('button');
+      button.className = 'email';
+      button.onclick = function () { selectEmail(index); };
+
+      const date = new Date(email.date).toLocaleString();
+      button.innerHTML =
+        '<div class="email-head">' +
+          '<span class="subject">' + esc(email.subject || '(sin asunto)') + '</span>' +
+          '<span class="muted">' + esc(date) + '</span>' +
+        '</div>' +
+        '<div class="from">' + esc(email.from || '') + '</div>' +
+        '<div class="snippet">' + esc(email.snippet || '') + '</div>';
+
+      container.appendChild(button);
+    });
+  }
+
+  function selectEmail(index) {
+    selected = emails[index];
+    lastMatch = null;
+
+    document.querySelectorAll('.email').forEach(function (el, i) {
+      el.classList.toggle('selected', i === index);
+    });
+
+    document.getElementById('selectedCard').style.display = 'block';
+    document.getElementById('selectedMeta').innerHTML =
+      '<div class="grid">' +
+        kv('De', selected.from) +
+        kv('Fecha', new Date(selected.date).toLocaleString()) +
+        kv('Asunto', selected.subject || '(sin asunto)') +
+      '</div>';
+
+    document.getElementById('selectedBody').textContent = 'Cargando cuerpo…';
+    document.getElementById('result').innerHTML = '';
+    document.getElementById('candidateBtn').disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function (email) {
+        selected = email;
+        document.getElementById('selectedBody').textContent = email.body || '(sin cuerpo)';
+      })
+      .withFailureHandler(function (err) {
+        document.getElementById('selectedBody').textContent = '';
+        document.getElementById('result').innerHTML = '<div class="error">' + esc(err.message || String(err)) + '</div>';
+      })
+      .getTestEmailById(selected.id);
+  }
+
+  function testSelected() {
+    if (!selected) return;
+
+    setStatus('Ejecutando matching…');
+    document.getElementById('testBtn').disabled = true;
+    document.getElementById('candidateBtn').disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        lastMatch = result;
+        document.getElementById('testBtn').disabled = false;
+        document.getElementById('candidateBtn').disabled = !result || !result.winner;
+        renderResult(result);
+        setStatus('Prueba completada.');
+      })
+      .withFailureHandler(function (err) {
+        document.getElementById('testBtn').disabled = false;
+        setStatus(err.message || String(err), true);
+      })
+      .testSelectedEmail(selected.id);
+  }
+
+  function createCandidate() {
+    if (!selected || !lastMatch || !lastMatch.winner) return;
+
+    document.getElementById('candidateBtn').disabled = true;
+    setStatus('Creando candidato…');
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        setStatus('Candidato creado correctamente.');
+        renderCandidateResult(result);
+      })
+      .withFailureHandler(function (err) {
+        document.getElementById('candidateBtn').disabled = false;
+        setStatus(err.message || String(err), true);
+      })
+      .createCandidateFromTest(selected.id);
+  }
+
+  function renderResult(result) {
+    if (!result) {
+      document.getElementById('result').innerHTML = '<div class="error">No hubo resultado.</div>';
+      return;
+    }
+
+    const winner = result.winner;
+    let html = '<h3>Resultado</h3>';
+
+    if (winner) {
+      html += '<div class="grid">' +
+        kv('Plantilla', winner.templateName || winner.template?.name || '') +
+        kv('Entidad', winner.entityName || winner.entityId || '') +
+        kv('Monto', winner.amount || '') +
+        kv('Comercio', winner.merchant || '') +
+        kv('Fecha', winner.date || '') +
+        kv('Hora', winner.time || '') +
+        kv('Moneda', winner.currency || '') +
+        kv('Cuenta', winner.source_account || '') +
+      '</div>';
+    } else {
+      html += '<p>No se encontró una plantilla compatible.</p>';
+    }
+
+    html += '<details style="margin-top:12px;"><summary>Ver diagnóstico completo</summary>' +
+      '<pre class="detail">' + esc(JSON.stringify(result, null, 2)) + '</pre></details>';
+
+    document.getElementById('result').innerHTML = html;
+  }
+
+  function renderCandidateResult(result) {
+    document.getElementById('result').insertAdjacentHTML(
+      'afterbegin',
+      '<div class="kv" style="margin-bottom:10px;"><b>Candidato</b>' +
+      esc(JSON.stringify(result)) + '</div>'
+    );
+  }
+
+  function kv(label, value) {
+    return '<div class="kv"><b>' + esc(label) + '</b>' + esc(value == null ? '' : String(value)) + '</div>';
+  }
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+</script>
+</body>
+</html>

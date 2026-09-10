@@ -34,6 +34,10 @@ const DEBUG_MATCHING = false;
 // ------------------------------------------------------------
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.mode === 'test') {
+    return renderEmailTestApp();
+  }
+
   const token = e && e.parameter ? e.parameter.token : null;
 
   if (!token) {
@@ -95,10 +99,11 @@ function syncExpenseEmails() {
     return;
   }
 
-  // El cron solo adapta el catálogo de plantillas al tipo de entidad que
-  // ya consume diagnoseEmailMatching(). El matching permanece íntegramente
-  // en email-matching.ts.
+  // La adaptación del payload de la API al catálogo que consume el motor es
+  // infraestructura del cron. El matching/extracción pertenece al motor
+  // compartido y vive en email-matching.ts.
   const entities = buildCatalogEntitiesFromTemplates(templates);
+  const matcher = createProductionEmailMatcher(templates, entities);
 
   const sinceEpoch = getLastSyncEpoch();
   const query = `in:inbox -label:${PROCESSED_LABEL} after:${sinceEpoch}`;
@@ -128,36 +133,26 @@ function syncExpenseEmails() {
       const sender = message.getFrom() || '';
       const body = message.getPlainBody() || '';
 
-      // Se utiliza exactamente la misma función que usa el frontend para
-      // probar los correos. El winner contiene los datos que necesitamos
-      // para crear el candidato.
-      const diagnosis = diagnoseEmailMatching(
+      // ESTA ES LA ÚNICA llamada de matching del cron.
+      // La implementación viene directamente de email-matching.ts.
+      const match = matchEmailForProduction(
+        matcher,
         sender,
         subject,
-        body,
-        templates,
-        entities
+        body
       );
 
-      if (!diagnosis || !diagnosis.matched || !diagnosis.winner) continue;
-
-      const winner = diagnosis.winner;
-      const template = winner.template;
-      const match = {
-        templateId: template.id,
-        amount: winner.extractedAmount,
-        currency: winner.extractedCurrency,
-        merchant: winner.extractedMerchant,
-        entityId: template.entity_id || null,
-        sourceAccount: winner.extractedSourceAccount,
-        date: winner.extractedDate,
-        time: winner.extractedTime,
-        concept: buildCandidateConcept(template, winner.extractedMerchant),
-      };
+      if (!match) continue;
 
       matchesFound++;
       matchesByTemplate[match.templateId] =
         (matchesByTemplate[match.templateId] || 0) + 1;
+
+      if (DEBUG_MATCHING) {
+        console.log(
+          `MATCH ${match.templateId} | ${sender} | ${subject} | ${match.amount}`
+        );
+      }
 
       const sent = sendCandidate(token, message, match);
       if (sent) {
@@ -231,24 +226,7 @@ function buildCatalogEntitiesFromTemplates(templates) {
 }
 
 // ------------------------------------------------------------
-// 3) ADAPTACIÓN DEL RESULTADO AL CANDIDATO
-// ------------------------------------------------------------
-
-function buildCandidateConcept(template, merchant) {
-  const cleanMerchant = merchant ? String(merchant).trim() : null;
-  const expenseType = template && template.expense_type_label
-    ? String(template.expense_type_label).trim()
-    : null;
-
-  if (expenseType && cleanMerchant) {
-    return `${expenseType} · ${cleanMerchant}`;
-  }
-
-  return cleanMerchant || expenseType || null;
-}
-
-// ------------------------------------------------------------
-// 4) ENVÍO DEL CANDIDATO
+// 3) ENVÍO DEL CANDIDATO
 // ------------------------------------------------------------
 
 function sendCandidate(token, message, match) {

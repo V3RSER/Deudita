@@ -1,0 +1,7 @@
+*
+!.claspignore
+!script-google-cron-job.js
+!script-google-test-ui.js
+!test-ui.html
+!email-cleaning.js
+!email-matching.js
