@@ -1,38 +1,32 @@
 /**
- * ============================================================
- * PANEL DE PRUEBAS DE MATCHING — Apps Script
- * ============================================================
+ * PANEL DE PRUEBAS — Apps Script
  *
- * Este archivo NO implementa matching, limpieza ni extracción.
- * Reutiliza directamente las funciones del motor compartido:
- *   - diagnoseEmailMatching()
- *   - getTemplatesWithCache()
- *   - sendCandidate()
- *
- * Uso:
- *   Abrir el Web App con ?mode=test
- *
- * Permite buscar cualquier correo de Gmail mediante una consulta de Gmail,
- * seleccionar uno y ejecutar el mismo flujo de matching sin esperar al cron.
- * También permite crear el candidato del correo seleccionado, usando el mismo
- * sendCandidate() que utiliza el cron.
- * ============================================================
+ * Este archivo únicamente expone la bandeja de Gmail al frontend.
+ * Al seleccionar un correo, el frontend llama al flujo de producción
+ * syncExpenseEmails(messageId), definido en script-google-cron-job.js.
  */
+function renderEmailTestApp() {
+  return HtmlService
+    .createHtmlOutputFromFile('test-ui')
+    .setTitle('Deudita — Prueba de correo')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 
 function getTestEmails(options) {
   options = options || {};
-  const mode = options.mode || 'recent';
+
+  const mode = options.mode === 'search' ? 'search' : 'recent';
   const count = Math.min(Math.max(Number(options.count) || 10, 1), 50);
   const query = String(options.query || '').trim();
 
-  let threads;
-
-  if (mode === 'search' && query) {
-    threads = GmailApp.search(query, 0, count);
-  } else {
-    threads = GmailApp.search('in:anywhere', 0, count);
+  if (mode === 'search' && !query) {
+    throw new Error('Escribe algo para buscar.');
   }
 
+  // GmailApp.search devuelve hilos. Para el panel necesitamos mensajes,
+  // por eso recuperamos los mensajes de esos hilos y ordenamos al final.
+  const searchQuery = mode === 'search' ? query : 'in:anywhere';
+  const threads = GmailApp.search(searchQuery, 0, count);
   const emails = [];
 
   threads.forEach(thread => {
@@ -44,37 +38,14 @@ function getTestEmails(options) {
         from: message.getFrom(),
         to: message.getTo(),
         subject: message.getSubject(),
-        snippet: String(message.getPlainBody() || '').replace(/\s+/g, ' ').trim().slice(0, 220)
+        snippet: String(message.getPlainBody() || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 220),
       });
     });
   });
 
-  emails.sort((a, b) => new Date(b.date) - new Date(a.date));
-
+  emails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   return emails.slice(0, count);
-}
-
-
-function getTestEmailById(messageId) {
-  const id = String(messageId || '').trim();
-  if (!id) throw new Error('Falta el ID del correo.');
-
-  const message = GmailApp.getMessageById(id);
-  if (!message) throw new Error('No se encontró el correo.');
-
-  return {
-    id: message.getId(),
-    threadId: message.getThread().getId(),
-    date: message.getDate().toISOString(),
-    from: message.getFrom(),
-    to: message.getTo(),
-    subject: message.getSubject(),
-    body: message.getPlainBody() || ''
-  };
-}
-
-function renderEmailTestApp() {
-  return HtmlService
-    .createHtmlOutputFromFile('test-ui')
-    .setTitle('Deudita — Prueba de correo');
 }

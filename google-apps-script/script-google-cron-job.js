@@ -81,7 +81,7 @@ function installTriggerIfMissing() {
 // 2) SINCRONIZACIÓN PERIÓDICA
 // ------------------------------------------------------------
 
-function syncExpenseEmails() {
+function syncExpenseEmails(selectedMessageId) {
   const startTime = Date.now();
   const token = getWebhookToken();
 
@@ -94,6 +94,8 @@ function syncExpenseEmails() {
     GmailApp.createLabel(PROCESSED_LABEL);
 
   const templates = getTemplatesWithCache(token);
+  console.log(`CATALOG | templates=${templates.length}`);
+
   if (!templates.length) {
     console.log('No hay plantillas disponibles.');
     return;
@@ -107,7 +109,14 @@ function syncExpenseEmails() {
 
   const sinceEpoch = getLastSyncEpoch();
   const query = `in:inbox -label:${PROCESSED_LABEL} after:${sinceEpoch}`;
-  const threads = GmailApp.search(query, 0, MAX_THREADS_PER_RUN);
+  const threads = selectedMessageId
+    ? [GmailApp.getMessageById(String(selectedMessageId).trim()).getThread()]
+    : GmailApp.search(query, 0, MAX_THREADS_PER_RUN);
+
+  console.log(
+    `SYNC INPUT | modo=${selectedMessageId ? 'correo-seleccionado' : 'cron'} | ` +
+    `messageId=${selectedMessageId || 'n/a'} | hilos=${threads.length}`
+  );
 
   let latestMessageEpoch = sinceEpoch;
   let messagesProcessed = 0;
@@ -121,6 +130,10 @@ function syncExpenseEmails() {
     const messages = thread.getMessages();
 
     for (const message of messages) {
+      if (selectedMessageId && message.getId() !== String(selectedMessageId).trim()) {
+        continue;
+      }
+
       messagesProcessed++;
 
       const messageDate = message.getDate();
@@ -135,11 +148,20 @@ function syncExpenseEmails() {
 
       // ESTA ES LA ÚNICA llamada de matching del cron.
       // La implementación viene directamente de email-matching.ts.
+      console.log(
+        `MESSAGE | id=${message.getId()} | from=${sender} | subject=${subject}`
+      );
+
       const match = matchEmailForProduction(
         matcher,
         sender,
         subject,
         body
+      );
+
+      console.log(
+        `MATCH RESULT | messageId=${message.getId()} | matched=${Boolean(match)} | ` +
+        `json=${JSON.stringify(match)}`
       );
 
       if (!match) continue;
@@ -169,7 +191,7 @@ function syncExpenseEmails() {
     label.addToThreads(processedThreads);
   }
 
-  if (threads.length > 0) {
+  if (threads.length > 0 && !selectedMessageId) {
     setLastSyncEpoch(latestMessageEpoch - 60);
   }
 
@@ -230,6 +252,26 @@ function buildCatalogEntitiesFromTemplates(templates) {
 // ------------------------------------------------------------
 
 function sendCandidate(token, message, match) {
+  const payload = {
+    gmail_message_id: message.getId(),
+    template_id: match.templateId,
+    amount: match.amount,
+    currency: match.currency,
+    merchant: match.merchant,
+    entity: match.entityId,
+    sourceAccount: match.sourceAccount,
+    date: match.date,
+    time: match.time,
+    concept: match.concept,
+    received_at: message.getDate().toISOString(),
+  };
+
+  const payloadJson = JSON.stringify(payload);
+
+  console.log(
+    `EXPENSE CANDIDATE REQUEST | messageId=${message.getId()} | json=${payloadJson}`
+  );
+
   const response = UrlFetchApp.fetch(
     `${BACKEND_BASE_URL}/api/expense-candidate`,
     {
@@ -238,28 +280,22 @@ function sendCandidate(token, message, match) {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      payload: JSON.stringify({
-        gmail_message_id: message.getId(),
-        template_id: match.templateId,
-        amount: match.amount,
-        currency: match.currency,
-        merchant: match.merchant,
-        entity: match.entityId,
-        sourceAccount: match.sourceAccount,
-        date: match.date,
-        time: match.time,
-        concept: match.concept,
-        received_at: message.getDate().toISOString(),
-      }),
+      payload: payloadJson,
       muteHttpExceptions: true,
     }
   );
 
   const code = response.getResponseCode();
+  const responseText = response.getContentText();
+
+  console.log(
+    `EXPENSE CANDIDATE RESPONSE | messageId=${message.getId()} | ` +
+    `status=${code} | body=${responseText}`
+  );
 
   if (code < 200 || code >= 300) {
     console.warn(
-      `expense-candidate respondió ${code} para el mensaje ${message.getId()}: ${response.getContentText()}`
+      `expense-candidate respondió ${code} para el mensaje ${message.getId()}: ${responseText}`
     );
     return false;
   }
