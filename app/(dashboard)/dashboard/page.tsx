@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { DashboardSummary } from '@/components/DashboardSummary';
 import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
-import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { NewExpenseModal } from '@/components/my-expenses/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
 
 export default function DashboardPage() {

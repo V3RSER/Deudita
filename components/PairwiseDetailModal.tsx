@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Expense, Group, PairwiseBalance, Payment, Profile } from '@/lib/types';
 import { calculatePairwiseDebtDetail, formatCurrency, } from '@/lib/balance-utils';
-import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { GenericExpenseList } from '@/components/my-expenses/GenericExpenseList';
 import {
     ArrowLeft,
     ArrowRight,

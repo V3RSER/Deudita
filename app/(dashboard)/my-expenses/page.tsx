@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { AllExpensesView } from '@/components/my-expenses/AllExpensesView';
-import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { NewExpenseModal } from '@/components/my-expenses/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
 import { Expense, Payment } from '@/lib/types';
 

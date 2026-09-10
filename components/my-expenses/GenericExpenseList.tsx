@@ -15,7 +15,7 @@ import {
     ExpenseMoneyFlow,
     ParticipantItemBreakdown,
     ParticipantSummaryData
-} from '@/components/ExpenseParticipantSummary';
+} from '@/components/my-expenses/ExpenseParticipantSummary';
 import { getExpenseSplitConfig } from '@/lib/split-config-utils';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import {

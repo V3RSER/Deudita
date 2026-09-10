@@ -5,7 +5,7 @@ import { useExpense } from '@/lib/expense-context';
 import { ActiveTab, Navbar } from '@/components/Navbar';
 import { usePathname, useRouter } from 'next/navigation';
 import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
-import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { NewExpenseModal } from '@/components/my-expenses/NewExpenseModal';
 import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {

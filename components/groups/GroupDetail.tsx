@@ -49,7 +49,7 @@ import { EditGroupModal } from '@/components/groups/EditGroupModal';
 import { GroupSettingsModal } from '@/components/groups/GroupSettingsModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
-import { GenericExpenseList } from '@/components/GenericExpenseList';
+import { GenericExpenseList } from '@/components/my-expenses/GenericExpenseList';
 
 type AuditObject = Record<string, unknown>;
 type AuditChanges = AuditObject & {

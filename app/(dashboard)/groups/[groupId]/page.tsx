@@ -5,7 +5,7 @@ import { GroupDetail } from '@/components/groups/GroupDetail';
 import { useExpense } from '@/lib/expense-context';
 import { Expense, Payment } from '@/lib/types';
 import { useParams, useRouter } from 'next/navigation';
-import { NewExpenseModal } from '@/components/NewExpenseModal';
+import { NewExpenseModal } from '@/components/my-expenses/NewExpenseModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
 import { AddMemberModal } from '@/components/groups/AddMemberModal';
 import { InviteLinkModal } from '@/components/groups/InviteLinkModal';

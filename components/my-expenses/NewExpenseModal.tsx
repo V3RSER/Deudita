@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_EXPENSE_CATEGORY, EXPENSE_CATEGORY_GROUPS, getCategoryConfig } from '@/lib/expense-category-utils';
 import { CustomSelect } from '@/components/ui/CustomSelect';
-import { ExpenseParticipantSummary, ParticipantSummaryData } from '@/components/ExpenseParticipantSummary';
+import { ExpenseParticipantSummary, ParticipantSummaryData } from '@/components/my-expenses/ExpenseParticipantSummary';
 import {
     combineDateAndTimeToISO,
     extractTimeFromISO,
