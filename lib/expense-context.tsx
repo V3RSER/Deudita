@@ -84,7 +84,7 @@ interface ExpenseContextType {
     ) => Promise<{ expense: Expense; draftId: string }>;
     discardDraft: (draftId: string) => Promise<void>;
     addDraft: (draft: Omit<ExpenseDraft, 'id' | 'created_at' | 'user_id' | 'status'>) => Promise<ExpenseDraft>;
-    reloadFromSupabase: (fullSync?: boolean) => Promise<void>;
+    reloadFromSupabase: (fullSync?: boolean, showLoading?: boolean) => Promise<void>;
     refreshData: (fullSync?: boolean) => Promise<void>;
     logout: () => Promise<void>;
 }
@@ -111,6 +111,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const operationsRef = useRef<Array<{ id: number; label: string }>>([]);
     const nextOperationIdRef = useRef(0);
     const reloadSequenceRef = useRef(0);
+    const hasLoadedInitialRef = useRef(false);
+    const currentProfileRef = useRef<Profile | null>(null);
 
     const runOperation = async <T,>(operationLabel: string, action: () => Promise<T>): Promise<T> => {
         const operationId = ++nextOperationIdRef.current;
@@ -127,9 +129,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const reloadFromSupabase = useCallback(async (fullSync: boolean = false) => {
+    const reloadFromSupabase = useCallback(async (fullSync: boolean = false, showLoading: boolean = false) => {
         const requestId = ++reloadSequenceRef.current;
-        setLoading(true);
+        if (showLoading || !hasLoadedInitialRef.current) {
+            setLoading(true);
+        }
         try {
             const url = fullSync ? '/api/sync?full=true' : '/api/sync';
             const res = await fetch(url);
@@ -137,6 +141,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 if (requestId !== reloadSequenceRef.current) return;
                 if (res.status === 401) {
                     setCurrentProfile(null);
+                    currentProfileRef.current = null;
                     setProfiles([]);
                     setGroups([]);
                     setMembers([]);
@@ -148,13 +153,15 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                     setNotifications([]);
                     setHiddenFriendIds([]);
                 }
-                setLoading(false);
                 return;
             }
 
             const data = await res.json();
             if (requestId !== reloadSequenceRef.current) return;
-            if (data.profile) setCurrentProfile(data.profile as Profile);
+            if (data.profile) {
+                setCurrentProfile(data.profile as Profile);
+                currentProfileRef.current = data.profile as Profile;
+            }
             if (data.profiles) setProfiles(data.profiles as Profile[]);
             if (data.groups) setGroups(data.groups as Group[]);
             if (data.members) setMembers(data.members as GroupMember[]);
@@ -215,18 +222,42 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         } catch (err) {
             console.error('Error al sincronizar datos:', err);
         } finally {
-            if (requestId === reloadSequenceRef.current) setLoading(false);
+            if (requestId === reloadSequenceRef.current) {
+                hasLoadedInitialRef.current = true;
+                setLoading(false);
+            }
         }
     }, []);
 
     useEffect(() => {
+        // Initial session data load (with loading state)
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        void reloadFromSupabase(true);
+        void reloadFromSupabase(true, true);
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
-            if (event !== 'INITIAL_SESSION') {
-                void reloadFromSupabase(true);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session) => {
+            if (event === 'SIGNED_OUT') {
+                setCurrentProfile(null);
+                currentProfileRef.current = null;
+                setProfiles([]);
+                setGroups([]);
+                setMembers([]);
+                setExpenses([]);
+                setPayments([]);
+                setDrafts([]);
+                setAuditLogs([]);
+                setPendingInvites([]);
+                setNotifications([]);
+                setHiddenFriendIds([]);
+                setLoading(false);
+            } else if (event === 'SIGNED_IN') {
+                // If a new/different user signs in, reload session data in background without blocking UI
+                if (session?.user?.id && session.user.id !== currentProfileRef.current?.id) {
+                    void reloadFromSupabase(true, false);
+                }
+            } else if (event === 'USER_UPDATED') {
+                void reloadFromSupabase(false, false);
             }
+            // Ignore 'TOKEN_REFRESHED' and 'INITIAL_SESSION' (token refresh occurs routinely on tab switch/focus and shouldn't trigger UI-blocking reloads)
         });
 
         return () => {
@@ -238,6 +269,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         ++reloadSequenceRef.current;
         await supabase.auth.signOut();
         setCurrentProfile(null);
+        currentProfileRef.current = null;
         setProfiles([]);
         setGroups([]);
         setMembers([]);
