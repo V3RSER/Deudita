@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useEffect, useState} from 'react';
-import {useExpense} from '@/lib/expense-context';
-import {Check, Copy, Link as LinkIcon, Loader2, MessageCircle, RefreshCw, Share2, X,} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useExpense } from '@/lib/expense-context';
+import { Check, Copy, Link as LinkIcon, Loader2, MessageCircle, RefreshCw, Share2, X, } from 'lucide-react';
 
 interface InviteLinkModalProps {
     isOpen: boolean;
@@ -10,8 +10,8 @@ interface InviteLinkModalProps {
     groupId: string;
 }
 
-export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkModalProps>) {
-    const {userGroups, getGroupInviteLink, regenerateGroupInviteLink} = useExpense();
+export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLinkModalProps>) {
+    const { userGroups, getGroupInviteLink, regenerateGroupInviteLink } = useExpense();
 
     const [linkData, setLinkData] = useState<{
         inviteUrl: string;
@@ -127,7 +127,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                     <div className="flex items-center space-x-2.5">
                         <div
                             className="w-8 h-8 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0">
-                            <LinkIcon className="w-4 h-4 text-emerald-400"/>
+                            <LinkIcon className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div>
                             <h3 className="font-bold text-zinc-900 text-sm">Enlace de Invitación</h3>
@@ -138,7 +138,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                         onClick={onClose}
                         className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer"
                     >
-                        <X className="w-4 h-4"/>
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -152,7 +152,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
 
                     {isLoading ? (
                         <div className="py-6 flex flex-col items-center justify-center space-y-2 text-zinc-500">
-                            <Loader2 className="w-5 h-5 animate-spin text-emerald-600"/>
+                            <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
                             <span className="text-xs">Cargando enlace...</span>
                         </div>
                     ) : linkData ? (
@@ -171,20 +171,19 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                                 <button
                                     type="button"
                                     onClick={handleCopy}
-                                    className={`w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-98 cursor-pointer ${
-                                        copied
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-zinc-900 hover:bg-zinc-800 text-white'
-                                    }`}
+                                    className={`w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-semibold shadow-xs transition-all active:scale-98 cursor-pointer ${copied
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-zinc-900 hover:bg-zinc-800 text-white'
+                                        }`}
                                 >
                                     {copied ? (
                                         <>
-                                            <Check className="w-4 h-4 text-white"/>
+                                            <Check className="w-4 h-4 text-white" />
                                             <span>¡Enlace copiado!</span>
                                         </>
                                     ) : (
                                         <>
-                                            <Copy className="w-4 h-4 text-zinc-300"/>
+                                            <Copy className="w-4 h-4 text-zinc-300" />
                                             <span>Copiar enlace</span>
                                         </>
                                     )}
@@ -196,7 +195,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                                         onClick={handleShare}
                                         className="flex items-center justify-center space-x-1.5 py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200/80 text-zinc-800 rounded-xl text-xs font-medium transition-all active:scale-98 cursor-pointer"
                                     >
-                                        <Share2 className="w-3.5 h-3.5 text-zinc-600"/>
+                                        <Share2 className="w-3.5 h-3.5 text-zinc-600" />
                                         <span>Compartir</span>
                                     </button>
 
@@ -205,7 +204,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                                         onClick={handleWhatsAppShare}
                                         className="flex items-center justify-center space-x-1.5 py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium transition-all active:scale-98 cursor-pointer"
                                     >
-                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600"/>
+                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                                         <span>WhatsApp</span>
                                     </button>
                                 </div>
@@ -219,7 +218,7 @@ export function InviteLinkModal({isOpen, onClose, groupId}: Readonly<InviteLinkM
                                     disabled={isRegenerating || isLoading}
                                     className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-zinc-500 hover:text-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
                                 >
-                                    <RefreshCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin' : ''}`}/>
+                                    <RefreshCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin' : ''}`} />
                                     <span>Renovar enlace</span>
                                 </button>
                                 <button

@@ -49,7 +49,7 @@ function UnifiedBalanceCard({
     isSimplified,
     onOpenSettleModal,
     onSelectPairwise,
-}: BalanceCardProps) {
+}: Readonly<BalanceCardProps>) {
     const isDebtor =
         pairwise.debtor.id === currentProfile?.id ||
         (!isSimplified && pairwise.debtorSponsor?.id === currentProfile?.id);
