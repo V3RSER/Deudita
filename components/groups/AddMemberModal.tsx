@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
@@ -12,7 +12,6 @@ interface AddMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
     groupId?: string;
-    initialTab?: 'link' | 'new' | 'friends';
 }
 
 export function AddMemberModal({
@@ -36,6 +35,8 @@ export function AddMemberModal({
     const [addedMemberName, setAddedMemberName] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+    const modalRef = useRef<HTMLDivElement>(null);
+    const previousFocusedElementRef = useRef<HTMLElement | null>(null);
     const prevIsOpenRef = useRef(false);
     const prevGroupIdRef = useRef<string | undefined>(groupId);
 
@@ -50,8 +51,9 @@ export function AddMemberModal({
         }
         const isOpening = !prevIsOpenRef.current;
         const isGroupChanged = groupId !== prevGroupIdRef.current;
+        const needsInitialGroup = !groupId && !selectedGroupId && userGroups.length > 0;
 
-        if (isOpening || isGroupChanged) {
+        if (isOpening || isGroupChanged || needsInitialGroup) {
             prevIsOpenRef.current = true;
             prevGroupIdRef.current = groupId;
             setSelectedGroupId(groupId ?? userGroups[0]?.id ?? '');
@@ -62,38 +64,31 @@ export function AddMemberModal({
             setErrorMsg(null);
             setIsSubmitting(false);
         }
-    }, [isOpen, groupId, userGroups]);
-
-    if (!isOpen) return null;
+    }, [isOpen, groupId, userGroups, selectedGroupId]);
 
     // Filter friends who are NOT currently in this group
-    const groupMemberUserIds = new Set(
-        members.filter((m) => m.group_id === activeGroupId).map((m) => m.user_id)
+    const groupMemberUserIds = useMemo(
+        () => new Set(members.filter((m) => m.group_id === activeGroupId).map((m) => m.user_id)),
+        [members, activeGroupId]
     );
 
-    const availableFriends = profiles.filter((p) => {
+    const availableFriends = useMemo(() => profiles.filter((p) => {
         if (!p.id || p.id === currentProfile?.id) return false;
         if (groupMemberUserIds.has(p.id)) return false;
         return true;
-    });
+    }), [profiles, currentProfile?.id, groupMemberUserIds]);
 
     const query = friendSearch.trim().toLowerCase();
-    const filteredFriends = availableFriends.filter((p) => {
+    const filteredFriends = useMemo(() => availableFriends.filter((p) => {
         if (!query) return true;
         const nameMatch = p.full_name ? p.full_name.toLowerCase().includes(query) : false;
         const emailMatch = !isTempEmail(p.email) && p.email ? p.email.toLowerCase().includes(query) : false;
         return nameMatch || emailMatch;
-    });
+    }), [availableFriends, query]);
+
 
     const handleNameChange = (val: string) => {
-        if (val.includes('@') && !email) {
-            const parts = val.trim().split('@');
-            const cleanName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : '';
-            setName(cleanName);
-            setEmail(val.trim().toLowerCase());
-        } else {
-            setName(val);
-        }
+        setName(val);
     };
 
     const handleAddNewMember = async (e: React.FormEvent) => {
@@ -104,8 +99,10 @@ export function AddMemberModal({
             setIsSubmitting(true);
             setErrorMsg(null);
 
-            const cleanName = name.trim();
-            const cleanEmail = email.trim() ? email.trim().toLowerCase() : undefined;
+            const rawName = name.trim();
+            const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawName);
+            const cleanEmail = email.trim() ? email.trim().toLowerCase() : looksLikeEmail ? rawName.toLowerCase() : undefined;
+            const cleanName = looksLikeEmail && !email.trim() ? rawName.split('@')[0] || rawName : rawName;
 
             await addGroupInvite(activeGroupId, cleanEmail, cleanName);
             setAddedMemberName(cleanName);
@@ -145,13 +142,51 @@ export function AddMemberModal({
     };
 
     const handleCloseModal = () => {
+        if (isSubmitting) return;
         handleResetForNext();
         onClose();
     };
 
+    useEffect(() => {
+        if (!isOpen) return;
+        previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = modalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleTab = (event: KeyboardEvent) => {
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first = current[0], last = current[current.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleTab);
+        return () => {
+            document.removeEventListener('keydown', handleTab);
+            previousFocusedElementRef.current?.focus();
+            previousFocusedElementRef.current = null;
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); handleCloseModal(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, isSubmitting]);
+
+    if (!isOpen) return null;
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) handleCloseModal(); }}>
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="add-member-modal-title"
                 className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-zinc-200 animate-in fade-in zoom-in-95 duration-150">
                 {/* Header */}
                 <div className="bg-zinc-900 text-white px-6 py-5 flex items-center justify-between">
@@ -161,7 +196,7 @@ export function AddMemberModal({
                             <UserPlus className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div>
-                            <h2 className="text-base font-bold text-white">
+                            <h2 id="add-member-modal-title" className="text-base font-bold text-white">
                                 {addedMemberName ? '¡Integrante añadido!' : 'Añadir Integrante'}
                             </h2>
                             <p className="text-xs text-zinc-400">
@@ -171,7 +206,10 @@ export function AddMemberModal({
                     </div>
 
                     <button
+                        type="button"
                         onClick={handleCloseModal}
+                        disabled={isSubmitting}
+                        aria-label="Cerrar"
                         className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
                     >
                         <X className="w-5 h-5" />
@@ -192,10 +230,11 @@ export function AddMemberModal({
                     {!groupId && userGroups.length > 1 && !addedMemberName && (
                         <div>
                             <label
-                                className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
+                                htmlFor="add-member-group" className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                                 Grupo de Destino *
                             </label>
                             <CustomSelect
+                                id="add-member-group"
                                 value={activeGroupId}
                                 onChange={(val) => setSelectedGroupId(val)}
                                 options={userGroups.map((g) => ({
@@ -247,10 +286,12 @@ export function AddMemberModal({
                             <form onSubmit={handleAddNewMember} className="space-y-3.5">
                                 <div>
                                     <label
+                                        htmlFor="add-member-name"
                                         className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                                         Nombre o Apodo *
                                     </label>
                                     <input
+                                        id="add-member-name"
                                         type="text"
                                         required
                                         placeholder="Ej. Mateo Gómez o Mamá"
@@ -262,6 +303,7 @@ export function AddMemberModal({
 
                                 <div>
                                     <label
+                                        htmlFor="add-member-email"
                                         className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">
                                         Correo Electrónico (Opcional)
                                     </label>
@@ -270,7 +312,8 @@ export function AddMemberModal({
                                         <input
                                             type="email"
                                             placeholder="mateo@ejemplo.com"
-                                            value={email}
+                                            id="add-member-email"
+                                          value={email}
                                             onChange={(e) => setEmail(e.target.value)}
                                             className="w-full pl-9 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:bg-white transition-all placeholder:text-zinc-400"
                                         />
@@ -315,7 +358,8 @@ export function AddMemberModal({
                                                 placeholder="Buscar amigo..."
                                                 value={friendSearch}
                                                 onChange={(e) => setFriendSearch(e.target.value)}
-                                                className="w-full pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-medium text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                                                id="add-member-search"
+                                                 className="w-full pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-medium text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900"
                                             />
                                         </div>
                                     )}

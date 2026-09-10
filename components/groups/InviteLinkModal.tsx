@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useExpense } from '@/lib/expense-context';
 import { Check, Copy, Link as LinkIcon, Loader2, MessageCircle, RefreshCw, Share2, X, } from 'lucide-react';
 
@@ -21,12 +21,19 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
     const [isRegenerating, setIsRegenerating] = useState(false);
     const [copied, setCopied] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const previousFocusedElementRef = useRef<HTMLElement | null>(null);
 
     const group = userGroups.find((g) => g.id === groupId);
     const groupName = group ? group.name : 'Grupo';
 
     useEffect(() => {
         if (!isOpen || !groupId) return;
+
+        setLinkData(null);
+        setCopied(false);
+        setErrorMsg(null);
 
         let isMounted = true;
 
@@ -60,14 +67,48 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
         };
     }, [isOpen, groupId, getGroupInviteLink]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = modalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first=current[0], last=current[current.length-1];
+            if (event.shiftKey && document.activeElement===first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement===last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => { document.removeEventListener('keydown', handleKeyDown); previousFocusedElementRef.current?.focus(); previousFocusedElementRef.current=null; };
+    }, [isOpen, onClose]);
+
+    useEffect(() => {
+        return () => {
+            if (copyResetTimeoutRef.current) {
+                clearTimeout(copyResetTimeoutRef.current);
+            }
+        };
+    }, []);
+
     if (!isOpen) return null;
 
     const handleCopy = async () => {
         if (!linkData?.inviteUrl) return;
-        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+
+        try {
+            if (typeof navigator === 'undefined' || !navigator.clipboard) {
+                throw new Error('Tu navegador no permite copiar automáticamente. Selecciona el enlace manualmente para copiarlo.');
+            }
             await navigator.clipboard.writeText(linkData.inviteUrl);
             setCopied(true);
-            setTimeout(() => setCopied(false), 2500);
+            if (copyResetTimeoutRef.current) clearTimeout(copyResetTimeoutRef.current);
+            copyResetTimeoutRef.current = setTimeout(() => setCopied(false), 2500);
+        } catch (err: unknown) {
+            setErrorMsg(err instanceof Error ? err.message : 'No se pudo copiar el enlace');
         }
     };
 
@@ -82,8 +123,11 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
                     url: linkData.inviteUrl,
                 });
                 return;
-            } catch {
-                // User dismissed share dialog
+            } catch (err: unknown) {
+                // A user cancellation is not an error; other failures fall back to copy.
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    return;
+                }
             }
         }
         await handleCopy();
@@ -93,7 +137,7 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
         if (!linkData?.inviteUrl) return;
         const text = encodeURIComponent(`¡Hola! Únete al grupo "${groupName}" en Deudita para organizar y dividir gastos juntos: ${linkData.inviteUrl}`);
         if (typeof window !== 'undefined') {
-            window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+            window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank', 'noopener,noreferrer');
         }
     };
 
@@ -119,8 +163,12 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="invite-link-modal-title"
                 className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-zinc-200 animate-in fade-in zoom-in-95 duration-150">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-zinc-100">
@@ -130,12 +178,14 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
                             <LinkIcon className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-zinc-900 text-sm">Enlace de Invitación</h3>
+                            <h3 id="invite-link-modal-title" className="font-bold text-zinc-900 text-sm">Enlace de Invitación</h3>
                             <p className="text-xs text-zinc-500 truncate max-w-[180px]">{groupName}</p>
                         </div>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
+                        aria-label="Cerrar"
                         className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-full transition-colors cursor-pointer"
                     >
                         <X className="w-4 h-4" />
@@ -158,13 +208,15 @@ export function InviteLinkModal({ isOpen, onClose, groupId }: Readonly<InviteLin
                     ) : linkData ? (
                         <>
                             {/* URL Display */}
-                            <div
+                            <button
+                                type="button"
                                 onClick={handleCopy}
-                                className="flex items-center bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200 rounded-xl px-3 py-2.5 text-xs font-mono text-zinc-700 select-all cursor-pointer transition-colors"
+                                className="w-full flex items-center text-left bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200 rounded-xl px-3 py-2.5 text-xs font-mono text-zinc-700 transition-colors"
                                 title="Haz clic para copiar"
+                                aria-label="Copiar enlace de invitación"
                             >
                                 <span className="truncate flex-1">{linkData.inviteUrl}</span>
-                            </div>
+                            </button>
 
                             {/* Action Buttons Menu */}
                             <div className="space-y-2 pt-1">

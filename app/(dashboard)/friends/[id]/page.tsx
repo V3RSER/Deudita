@@ -8,7 +8,7 @@ import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { getCategoryConfig } from '@/lib/expense-category-utils';
 import { formatDisplayEmail, isTempEmail } from '@/lib/utils';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { SettleDebtModal } from '@/components/SettleDebtModal';
 import {
     ArrowLeft,

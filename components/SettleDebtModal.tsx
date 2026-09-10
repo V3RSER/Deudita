@@ -5,7 +5,7 @@ import { useExpense } from '@/lib/expense-context';
 import { calculatePairwiseBalances, formatCurrency } from '@/lib/balance-utils';
 import { PaymentInstructionsView } from '@/components/PaymentInstructionsView';
 import { FormattedCurrencyInput } from '@/components/FormattedCurrencyInput';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Payment } from '@/lib/types';
 import {
     AlertCircle,

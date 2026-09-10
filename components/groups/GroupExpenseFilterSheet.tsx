@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     CalendarDays,
     Check,
@@ -72,6 +72,19 @@ function GroupExpenseFilterSheetModal({
             Boolean(filters.customStartDate || filters.customEndDate)
     );
     const [activePicker, setActivePicker] = useState<'period' | 'category' | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+    const [validationError, setValidationError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setStagedFilters({ ...filters });
+        setIsMoreFiltersOpen(
+            filters.scope === 'mine' ||
+            filters.dateMode !== 'expense_date' ||
+            Boolean(filters.customStartDate || filters.customEndDate)
+        );
+        setActivePicker(null);
+    }, [filters]);
 
     const handlePeriodSelect = (presetId: DatePreset | string) => {
         setStagedFilters((prev) => ({
@@ -104,9 +117,33 @@ function GroupExpenseFilterSheetModal({
     };
 
     const handleApply = () => {
+        setValidationError(null);
+        if (stagedFilters.datePreset === 'custom' && stagedFilters.customStartDate && stagedFilters.customEndDate && stagedFilters.customStartDate > stagedFilters.customEndDate) {
+            setValidationError('La fecha inicial no puede ser posterior a la fecha final.');
+            return;
+        }
         onApplyFilters(stagedFilters);
         onClose();
     };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = modalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first=current[0], last=current[current.length-1];
+            if (event.shiftKey && document.activeElement===first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement===last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => { document.removeEventListener('keydown', handleKeyDown); previousFocusedElementRef.current?.focus(); previousFocusedElementRef.current=null; };
+    }, [isOpen, onClose]);
 
     // Get human-readable label for selected period
     const getSelectedPeriodLabel = () => {
@@ -130,7 +167,7 @@ function GroupExpenseFilterSheetModal({
     const moreFiltersCount =
         (stagedFilters.scope === 'mine' ? 1 : 0) +
         (stagedFilters.dateMode !== 'expense_date' ? 1 : 0) +
-        (stagedFilters.customStartDate || stagedFilters.customEndDate ? 1 : 0);
+        (stagedFilters.datePreset === 'custom' ? 1 : 0);
 
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -143,6 +180,7 @@ function GroupExpenseFilterSheetModal({
 
             {/* Bottom sheet content container */}
             <div
+                ref={modalRef}
                 className="relative z-50 w-full max-w-lg bg-white rounded-t-[32px] shadow-2xl px-5 pt-3.5 pb-7 space-y-4 animate-in slide-in-from-bottom duration-250 border-t border-zinc-100 max-h-[90vh] overflow-y-auto"
                 role="dialog"
                 aria-modal="true"
@@ -448,10 +486,11 @@ function GroupExpenseFilterSheetModal({
                                     </span>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                                            <label htmlFor="group-filter-start-date" className="block text-[10px] font-medium text-zinc-400 mb-1">
                                                 Desde
                                             </label>
                                             <input
+                                                id="group-filter-start-date"
                                                 type="date"
                                                 value={stagedFilters.customStartDate}
                                                 onChange={(e) =>
@@ -465,10 +504,11 @@ function GroupExpenseFilterSheetModal({
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                                            <label htmlFor="group-filter-end-date" className="block text-[10px] font-medium text-zinc-400 mb-1">
                                                 Hasta
                                             </label>
                                             <input
+                                                id="group-filter-end-date"
                                                 type="date"
                                                 value={stagedFilters.customEndDate}
                                                 onChange={(e) =>
@@ -487,6 +527,12 @@ function GroupExpenseFilterSheetModal({
                         </div>
                     )}
                 </div>
+
+                {validationError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700" role="alert">
+                        {validationError}
+                    </div>
+                )}
 
                 {/* Primary Action Button: "Aplicar filtros" */}
                 <div className="pt-1">

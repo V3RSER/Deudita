@@ -47,9 +47,35 @@ import {
 } from '@/lib/transaction-date-utils';
 import { EditGroupModal } from '@/components/groups/EditGroupModal';
 import { GroupSettingsModal } from '@/components/groups/GroupSettingsModal';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { PairwiseDetailModal } from '@/components/PairwiseDetailModal';
 import { GenericExpenseList } from '@/components/GenericExpenseList';
+
+type AuditObject = Record<string, unknown>;
+type AuditChanges = AuditObject & {
+    details?: unknown;
+    amount_before?: number | string;
+    amount_after?: number | string;
+    payer_name_before?: string;
+    payer_name_after?: string;
+    description_before?: string;
+    description_after?: string;
+    added_names?: unknown;
+    removed_names?: unknown;
+    old?: unknown;
+    new?: unknown;
+    summary?: string;
+    description?: string;
+    total_amount?: number | string;
+};
+
+function isAuditObject(value: unknown): value is AuditObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
 
 interface GroupDetailProps {
     group: Group;
@@ -128,21 +154,23 @@ export function GroupDetail({
 
     const [selectedPairwiseForDetail, setSelectedPairwiseForDetail] = useState<PairwiseBalance | null>(null);
     const [selectedMemberForDetail, setSelectedMemberForDetail] = useState<Profile | null>(null);
+    const [expenseIdToScroll, setExpenseIdToScroll] = useState<string | null>(null);
     const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+    const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
 
     const isOwner = Boolean(currentProfile?.id && group.owner_id === currentProfile.id);
-    const groupExpenses = expenses.filter((e) => e.group_id === group.id);
-    const groupPayments = payments.filter((p) => p.group_id === group.id);
+    const groupExpenses = useMemo(() => expenses.filter((e) => e.group_id === group.id), [expenses, group.id]);
+    const groupPayments = useMemo(() => payments.filter((p) => p.group_id === group.id), [payments, group.id]);
 
     const activeFiltersCount =
         (filters.datePreset !== 'all' ? 1 : 0) +
         (filters.category !== 'all' ? 1 : 0) +
         (filters.scope === 'mine' ? 1 : 0) +
         (filters.dateMode !== 'expense_date' ? 1 : 0) +
-        (filters.customStartDate || filters.customEndDate ? 1 : 0);
+        (filters.datePreset === 'custom' ? 1 : 0);
 
     const groupCategories = useMemo(() => {
         return Array.from(new Set(groupExpenses.map((e) => e.category || 'Varios'))).filter(Boolean);
@@ -152,14 +180,10 @@ export function GroupDetail({
         return getAvailableTransactionMonths([...groupExpenses, ...groupPayments], filters.dateMode);
     }, [groupExpenses, groupPayments, filters.dateMode]);
 
-    const groupMembers = members.filter((m) => m.group_id === group.id);
-    const memberProfiles = groupMembers
-        .map((m) => profiles.find((p) => p.id === m.user_id))
-        .filter((p): p is NonNullable<typeof p> => p !== undefined);
-
+    const groupMembers = useMemo(() => members.filter((m) => m.group_id === group.id), [members, group.id]);
     // Balances
-    const simplifiedGroupPairwise = calculateSimplifiedBalances(expenses, payments, profiles, group.id);
-    const directGroupPairwise = calculateDirectBalances(expenses, payments, profiles, group.id);
+    const simplifiedGroupPairwise = useMemo(() => calculateSimplifiedBalances(expenses, payments, profiles, group.id), [expenses, payments, profiles, group.id]);
+    const directGroupPairwise = useMemo(() => calculateDirectBalances(expenses, payments, profiles, group.id), [expenses, payments, profiles, group.id]);
     const groupPairwise = isSimplifiedBalances ? simplifiedGroupPairwise : directGroupPairwise;
 
     const groupUserSummaries = useMemo(() => {
@@ -171,12 +195,13 @@ export function GroupDetail({
     const effectiveCurrency = group.currency ?? currentProfile?.currency ?? 'COP';
 
     // Filtered transactions
-    const filteredExpenses = groupExpenses.filter((exp) => {
+    const normalizedSearchTerm = filters.searchTerm.trim().toLowerCase();
+    const filteredExpenses = useMemo(() => groupExpenses.filter((exp) => {
         const paidBy = profiles.find((p) => p.id === exp.paid_by);
         const matchesSearch =
-            !filters.searchTerm.trim() ||
-            (exp.description ? exp.description.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-            (paidBy?.full_name ? paidBy.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+            !normalizedSearchTerm ||
+            (exp.description ? exp.description.toLowerCase() : '').includes(normalizedSearchTerm) ||
+            (paidBy?.full_name ? paidBy.full_name.toLowerCase().includes(normalizedSearchTerm) : false);
 
         if (!matchesSearch) return false;
         if (filters.category !== 'all' && (exp.category || 'Varios') !== filters.category) return false;
@@ -192,16 +217,16 @@ export function GroupDetail({
             start: filters.customStartDate,
             end: filters.customEndDate,
         });
-    });
+    }), [groupExpenses, profiles, normalizedSearchTerm, filters.category, filters.scope, filters.dateMode, filters.datePreset, filters.customStartDate, filters.customEndDate, currentProfile?.id]);
 
-    const filteredPayments = groupPayments.filter((p) => {
+    const filteredPayments = useMemo(() => groupPayments.filter((p) => {
         const payer = profiles.find((prof) => prof.id === p.paid_by);
         const receiver = profiles.find((prof) => prof.id === p.paid_to);
         const matchesSearch =
-            !filters.searchTerm.trim() ||
-            (p.note ? p.note.toLowerCase() : '').includes(filters.searchTerm.toLowerCase()) ||
-            (payer?.full_name ? payer.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false) ||
-            (receiver?.full_name ? receiver.full_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) : false);
+            !normalizedSearchTerm ||
+            (p.note ? p.note.toLowerCase() : '').includes(normalizedSearchTerm) ||
+            (payer?.full_name ? payer.full_name.toLowerCase().includes(normalizedSearchTerm) : false) ||
+            (receiver?.full_name ? receiver.full_name.toLowerCase().includes(normalizedSearchTerm) : false);
 
         if (!matchesSearch) return false;
 
@@ -215,38 +240,49 @@ export function GroupDetail({
             start: filters.customStartDate,
             end: filters.customEndDate,
         });
-    });
+    }), [groupPayments, profiles, normalizedSearchTerm, filters.scope, filters.dateMode, filters.datePreset, filters.customStartDate, filters.customEndDate, currentProfile?.id]);
 
     const handleDeleteGroup = async () => {
         setIsDeletingGroup(true);
+        setDeleteGroupError(null);
         try {
             await deleteGroup(group.id);
             setIsDeleteModalOpen(false);
             onBack();
+        } catch (err: unknown) {
+            setDeleteGroupError(err instanceof Error ? err.message : 'No se pudo eliminar el grupo. Inténtalo nuevamente.');
         } finally {
             setIsDeletingGroup(false);
         }
     };
 
     // Activity calculation
-    const groupAuditLogs = (auditLogs ?? []).filter((a) => a.group_id === group.id);
-    const sortedGroupAuditLogs = [...groupAuditLogs].sort(
+    const groupAuditLogs = useMemo(() => (auditLogs ?? []).filter((a) => a.group_id === group.id), [auditLogs, group.id]);
+    const sortedGroupAuditLogs = useMemo(() => [...groupAuditLogs].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    ), [groupAuditLogs]);
 
     const groupImageUrl = getGroupImage(group);
 
+    React.useEffect(() => {
+        if (!expenseIdToScroll || activeTab !== 'expenses') return;
+        const element = document.getElementById(`expense-${expenseIdToScroll}`);
+        if (!element) return;
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setExpenseIdToScroll(null);
+    }, [expenseIdToScroll, activeTab]);
+
     const renderLogChanges = (log: ExpenseAuditLog) => {
         if (log.action !== 'update' || !log.changes) return null;
-        const changes = log.changes as Record<string, any>;
+        const changes = log.changes as AuditChanges;
         const detailsList: React.ReactNode[] = [];
 
         // 1. Array of string details from rich audit logging
-        if (Array.isArray(changes.details) && changes.details.length > 0) {
+        if (isStringArray(changes.details) && changes.details.length > 0) {
             return (
                 <div className="flex flex-col gap-1 pt-1">
-                    {changes.details.map((detail: string, idx: number) => (
-                        <div key={idx} className="flex items-center gap-1.5 text-xs text-zinc-600">
+                    {changes.details.map((detail) => (
+                        <div key={detail} className="flex items-center gap-1.5 text-xs text-zinc-600">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                             <span>{detail}</span>
                         </div>
@@ -287,7 +323,7 @@ export function GroupDetail({
             );
         }
 
-        if (Array.isArray(changes.added_names) && changes.added_names.length > 0) {
+        if (isStringArray(changes.added_names) && changes.added_names.length > 0) {
             detailsList.push(
                 <span key="added"
                     className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
@@ -296,7 +332,7 @@ export function GroupDetail({
             );
         }
 
-        if (Array.isArray(changes.removed_names) && changes.removed_names.length > 0) {
+        if (isStringArray(changes.removed_names) && changes.removed_names.length > 0) {
             detailsList.push(
                 <span key="removed"
                     className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded text-[11px] font-medium">
@@ -306,7 +342,7 @@ export function GroupDetail({
         }
 
         // 3. PostgreSQL trigger old/new structures
-        if (changes.old && changes.new && typeof changes.old === 'object' && typeof changes.new === 'object') {
+        if (isAuditObject(changes.old) && isAuditObject(changes.new)) {
             const oldObj = changes.old;
             const newObj = changes.new;
 
@@ -367,8 +403,8 @@ export function GroupDetail({
 
         return (
             <div className="flex flex-col gap-1 pt-1 text-xs text-zinc-700">
-                {detailsList.map((node, i) => (
-                    <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                {React.Children.toArray(detailsList).map((node) => (
+                    <div key={node.key ?? 'detail'} className="flex items-center gap-1.5 flex-wrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                         {node}
                     </div>
@@ -383,7 +419,7 @@ export function GroupDetail({
             <div
                 className="relative w-full rounded-3xl overflow-hidden shadow-xs border border-zinc-800/80 bg-zinc-950 text-white">
                 {/* Background photo with subtle blur */}
-                {group.image_url ? (
+                {groupImageUrl ? (
                     <Image
                         src={groupImageUrl}
                         alt={group.name}
@@ -409,7 +445,7 @@ export function GroupDetail({
                             </h1>
                             <p className="text-xs text-zinc-300 font-medium flex items-center gap-1.5 mt-0.5">
                                 <Users className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                <span>{memberProfiles.length} {memberProfiles.length === 1 ? 'miembro' : 'miembros'}</span>
+                                <span>{groupMembers.length} {groupMembers.length === 1 ? 'miembro' : 'miembros'}</span>
                             </p>
                         </div>
 
@@ -592,6 +628,7 @@ export function GroupDetail({
                         showGroupBadge={false}
                         pageSize={30}
                         initialExpandedExpenseId={initialExpenseId}
+                        targetExpenseId={expenseIdToScroll}
                     />
 
                 </div>
@@ -647,7 +684,7 @@ export function GroupDetail({
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {groupPairwise.map((p, idx) => {
+                            {groupPairwise.map((p) => {
                                 const isMyDebt = p.debtor.id === currentProfile?.id;
                                 const isOwedToMe = p.creditor.id === currentProfile?.id;
                                 const debtorName = p.debtor.full_name || 'Integrante';
@@ -655,12 +692,16 @@ export function GroupDetail({
 
                                 return (
                                     <div
-                                        key={idx}
-                                        onClick={() => setSelectedPairwiseForDetail(p)}
-                                        className={`bg-white rounded-2xl border shadow-2xs p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-zinc-300 transition-all ${isOwedToMe ? 'border-emerald-200' : isMyDebt ? 'border-rose-200' : 'border-zinc-200/80'
+                                        key={`${p.debtor.id}-${p.creditor.id}`}
+                                        className={`bg-white rounded-2xl border shadow-2xs p-4 flex items-center justify-between gap-3 transition-all ${isOwedToMe ? 'border-emerald-200' : isMyDebt ? 'border-rose-200' : 'border-zinc-200/80'
                                             }`}
                                     >
-                                        <div className="flex items-center space-x-3 min-w-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPairwiseForDetail(p)}
+                                            className="flex items-center space-x-3 min-w-0 flex-1 text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                                            aria-label={`Ver detalle de la deuda de ${debtorName} a ${creditorName}`}
+                                        >
                                             <div className="flex items-center -space-x-2 shrink-0">
                                                 <UserAvatar
                                                     profile={p.debtor}
@@ -689,9 +730,10 @@ export function GroupDetail({
                                                     {formatCurrency(p.amount, effectiveCurrency)}
                                                 </div>
                                             </div>
-                                        </div>
+                                        </button>
 
                                         <button
+                                            type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 onOpenSettleModal(group.id, p.debtor.id, p.creditor.id, p.amount);
@@ -713,7 +755,7 @@ export function GroupDetail({
                 <div className="space-y-4 pt-1">
                     <div className="flex items-center justify-between gap-3 px-1">
                         <h3 className="font-semibold text-zinc-900 text-base">
-                            Integrantes ({memberProfiles.length})
+                            Integrantes ({groupMembers.length})
                         </h3>
                         <div className="flex items-center gap-2">
                             <button
@@ -734,38 +776,42 @@ export function GroupDetail({
                     </div>
 
                     <div className="space-y-2">
-                        {memberProfiles.map((p) => {
-                            const memberRecord = groupMembers.find((m) => m.user_id === p.id);
-                            const isGroupOwner = memberRecord?.role === 'owner';
+                        {groupMembers.map((member) => {
+                            const p = profiles.find((profile) => profile.id === member.user_id);
+                            const isGroupOwner = member.role === 'owner';
+                            const memberName = p?.full_name ?? 'Integrante';
 
                             return (
                                 <div
-                                    key={p.id}
-                                    onClick={() => setSelectedMemberForDetail(p)}
-                                    className="bg-white hover:bg-zinc-50 rounded-2xl p-3.5 border border-zinc-200/80 flex items-center justify-between shadow-2xs cursor-pointer transition"
+                                    key={member.user_id}
+                                    role={p ? 'button' : undefined}
+                                    tabIndex={p ? 0 : undefined}
+                                    onClick={() => p && setSelectedMemberForDetail(p)}
+                                    onKeyDown={(e) => {
+                                        if (p && (e.key === 'Enter' || e.key === ' ')) {
+                                            e.preventDefault();
+                                            setSelectedMemberForDetail(p);
+                                        }
+                                    }}
+                                    className={`bg-white rounded-2xl p-3.5 border border-zinc-200/80 flex items-center justify-between shadow-2xs transition ${p ? 'hover:bg-zinc-50 cursor-pointer' : ''}`}
                                 >
                                     <div className="flex items-center space-x-3 overflow-hidden">
-                                        <UserAvatar
-                                            profile={p}
-                                            name={p.full_name}
-                                            size="lg"
-                                            className="shrink-0"
-                                        />
+                                        {p ? (
+                                            <UserAvatar profile={p} name={memberName} size="lg" className="shrink-0" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center shrink-0">
+                                                <Users className="w-5 h-5" />
+                                            </div>
+                                        )}
                                         <div className="min-w-0">
                                             <div className="flex items-center space-x-2">
-                                                <h4 className="font-semibold text-zinc-900 text-sm truncate">{p.full_name}</h4>
-                                                {isGroupOwner && (
-                                                    <span
-                                                        className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase px-1.5 py-0.2 rounded-md">
-                                                        Admin
-                                                    </span>
-                                                )}
+                                                <h4 className="font-semibold text-zinc-900 text-sm truncate">{memberName}</h4>
+                                                {isGroupOwner && <span className="bg-amber-100 text-amber-800 text-[9px] font-bold uppercase px-1.5 py-0.2 rounded-md">Admin</span>}
                                             </div>
-                                            <p className="text-xs text-zinc-500 truncate mt-0.5">{formatDisplayEmail(p.email)}</p>
+                                            <p className="text-xs text-zinc-500 truncate mt-0.5">{p ? formatDisplayEmail(p.email) : 'Perfil no disponible'}</p>
                                         </div>
                                     </div>
-
-                                    <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                                    {p && <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />}
                                 </div>
                             );
                         })}
@@ -797,21 +843,18 @@ export function GroupDetail({
                                 return (
                                     <div
                                         key={log.id}
+                                        role={isClickable ? 'button' : undefined}
+                                        tabIndex={isClickable ? 0 : undefined}
                                         onClick={() => {
-                                            if (associatedExpense) {
-                                                setActiveTab('expenses');
-                                                setExpandedExpenseIds((prev) => {
-                                                    const next = new Set(prev);
-                                                    next.add(associatedExpense.id);
-                                                    return next;
-                                                });
-                                                setTimeout(() => {
-                                                    const el = document.getElementById(`expense-${associatedExpense.id}`);
-                                                    if (el) {
-                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    }
-                                                }, 100);
-                                            }
+                                            if (!associatedExpense) return;
+                                            setActiveTab('expenses');
+                                            setExpenseIdToScroll(associatedExpense.id);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (!associatedExpense || (e.key !== 'Enter' && e.key !== ' ')) return;
+                                            e.preventDefault();
+                                            setActiveTab('expenses');
+                                            setExpenseIdToScroll(associatedExpense.id);
                                         }}
                                         className={`p-3.5 sm:p-4 flex items-start justify-between gap-3 transition ${isClickable ? 'cursor-pointer hover:bg-zinc-50/80 active:bg-zinc-100/70' : ''
                                             }`}
@@ -911,6 +954,7 @@ export function GroupDetail({
                 }}
                 onDeleteGroup={() => {
                     setIsSettingsModalOpen(false);
+                    setDeleteGroupError(null);
                     setIsDeleteModalOpen(true);
                 }}
             />
@@ -927,10 +971,10 @@ export function GroupDetail({
             {/* Delete Group Confirm Modal */}
             <ConfirmModal
                 isOpen={isDeleteModalOpen}
-                onClose={() => setIsDeleteModalOpen(false)}
+                onClose={() => { setIsDeleteModalOpen(false); setDeleteGroupError(null); }}
                 onConfirm={handleDeleteGroup}
                 title="¿Eliminar grupo?"
-                description="Esta acción no se puede deshacer. Todos los gastos y pagos registrados en este grupo serán eliminados permanentemente."
+                description={deleteGroupError ?? "Esta acción no se puede deshacer. Todos los gastos y pagos registrados en este grupo serán eliminados permanentemente."}
                 confirmText="Sí, eliminar"
                 cancelText="Cancelar"
                 variant="danger"

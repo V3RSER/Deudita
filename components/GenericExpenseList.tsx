@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { Expense, Group, Payment, Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/balance-utils';
@@ -17,7 +17,7 @@ import {
     ParticipantSummaryData
 } from '@/components/ExpenseParticipantSummary';
 import { getExpenseSplitConfig } from '@/lib/split-config-utils';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import {
     ArrowRight,
     Calendar,
@@ -71,6 +71,7 @@ interface GenericExpenseListProps {
     onDeletePayment?: (paymentId: string) => void;
     showGroupBadge?: boolean;
     initialExpandedExpenseId?: string | null;
+    targetExpenseId?: string | null;
     pageSize?: number;
 }
 
@@ -143,9 +144,12 @@ export function GenericExpenseList({
     onDeletePayment,
     showGroupBadge = true,
     initialExpandedExpenseId,
+    targetExpenseId,
     pageSize = 20,
 }: Readonly<GenericExpenseListProps>) {
     const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+    const proofModalRef = useRef<HTMLDivElement>(null);
+    const previousProofFocusRef = useRef<HTMLElement | null>(null);
     const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
     const [userToggledPaymentIds, setUserToggledPaymentIds] = useState<Map<string, boolean>>(new Map());
     const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
@@ -153,33 +157,89 @@ export function GenericExpenseList({
     const [isDeletingExpense, setIsDeletingExpense] = useState(false);
     const [isDeletingPayment, setIsDeletingPayment] = useState(false);
     const [extraPages, setExtraPages] = useState<number>(0);
-    const [prevFilterKey, setPrevFilterKey] = useState<string>(`${expenses.length}_${payments.length}_${dateFilterMode}`);
     const currentFilterKey = `${expenses.length}_${payments.length}_${dateFilterMode}`;
-    if (prevFilterKey !== currentFilterKey) {
-        setPrevFilterKey(currentFilterKey);
+    const previousFilterKeyRef = useRef(currentFilterKey);
+
+    useEffect(() => {
+        if (previousFilterKeyRef.current === currentFilterKey) return;
+        previousFilterKeyRef.current = currentFilterKey;
         setExtraPages(0);
-    }
+        setUserToggledExpenseIds(new Map());
+        setUserToggledPaymentIds(new Map());
+    }, [currentFilterKey]);
+
+    const transactions: UnifiedTransaction[] = useMemo(() => [
+        ...expenses.map((e) => {
+            const eff = getEffectiveTransactionDate(e, dateFilterMode);
+            return {
+                type: 'expense' as const,
+                date: eff.timestamp,
+                dateObj: eff.dateObj,
+                isUpdated: eff.isUpdated,
+                hasExplicitTime: eff.hasExplicitTime,
+                data: e,
+            };
+        }),
+        ...payments.map((p) => {
+            const eff = getEffectiveTransactionDate(p, dateFilterMode);
+            return {
+                type: 'payment' as const,
+                date: eff.timestamp,
+                dateObj: eff.dateObj,
+                isUpdated: eff.isUpdated,
+                hasExplicitTime: eff.hasExplicitTime,
+                data: p,
+            };
+        }),
+    ].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime()), [expenses, payments, dateFilterMode]);
+
+    const requestedExpenseId = targetExpenseId ?? initialExpandedExpenseId ?? null;
+    const targetExpenseIndex = useMemo(
+        () => requestedExpenseId ? transactions.findIndex((tx) => tx.type === 'expense' && tx.data.id === requestedExpenseId) : -1,
+        [requestedExpenseId, transactions]
+    );
+
+    useEffect(() => {
+        if (!selectedProofUrl) return;
+        previousProofFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = proofModalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); setSelectedProofUrl(null); return; }
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first = current[0], last = current[current.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => { document.removeEventListener('keydown', handleKeyDown); previousProofFocusRef.current?.focus(); previousProofFocusRef.current = null; };
+    }, [selectedProofUrl]);
+
+    useEffect(() => {
+        if (targetExpenseIndex < 0) return;
+        const requiredExtraPages = Math.max(0, Math.ceil((targetExpenseIndex + 1) / pageSize) - 1);
+        setExtraPages((prev) => Math.max(prev, requiredExtraPages));
+    }, [targetExpenseIndex, pageSize]);
+
     const visibleCount = pageSize + extraPages * pageSize;
 
-    // Scroll to targeted expense card if initialExpandedExpenseId provided
-    React.useEffect(() => {
-        if (initialExpandedExpenseId) {
-            const timer = setTimeout(() => {
-                const el = document.getElementById(`expense-card-${initialExpandedExpenseId}`);
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 150);
-
-            return () => clearTimeout(timer);
-        }
-    }, [initialExpandedExpenseId]);
+    useEffect(() => {
+        if (!requestedExpenseId || targetExpenseIndex < 0 || targetExpenseIndex >= visibleCount) return;
+        const frame = window.requestAnimationFrame(() => {
+            const el = document.getElementById(`expense-card-${requestedExpenseId}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [requestedExpenseId, targetExpenseIndex, visibleCount]);
 
     const isExpenseExpanded = (id: string) => {
         if (userToggledExpenseIds.has(id)) {
             return Boolean(userToggledExpenseIds.get(id));
         }
-        return id === initialExpandedExpenseId;
+        return id === initialExpandedExpenseId || id === targetExpenseId;
     };
 
     const toggleExpenseExpanded = (id: string) => {
@@ -203,32 +263,6 @@ export function GenericExpenseList({
             return next;
         });
     };
-
-    // Combine and sort chronologically (most recent first) according to active date filter mode
-    const transactions: UnifiedTransaction[] = [
-        ...expenses.map((e) => {
-            const eff = getEffectiveTransactionDate(e, dateFilterMode);
-            return {
-                type: 'expense' as const,
-                date: eff.timestamp,
-                dateObj: eff.dateObj,
-                isUpdated: eff.isUpdated,
-                hasExplicitTime: eff.hasExplicitTime,
-                data: e,
-            };
-        }),
-        ...payments.map((p) => {
-            const eff = getEffectiveTransactionDate(p, dateFilterMode);
-            return {
-                type: 'payment' as const,
-                date: eff.timestamp,
-                dateObj: eff.dateObj,
-                isUpdated: eff.isUpdated,
-                hasExplicitTime: eff.hasExplicitTime,
-                data: p,
-            };
-        }),
-    ].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
 
     if (transactions.length === 0) {
         return (
@@ -356,7 +390,6 @@ export function GenericExpenseList({
                                         badgeColorClass = 'text-rose-600 font-semibold';
                                     } else {
                                         badgeText = 'no participas';
-                                        badgeColorClass = 'text-zinc-400';
                                     }
                                 }
 
@@ -374,8 +407,6 @@ export function GenericExpenseList({
                                         leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
                                     } else if (myTotalOwed > 0.01) {
                                         leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
-                                    } else {
-                                        leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
                                     }
                                 }
 
@@ -398,7 +429,17 @@ export function GenericExpenseList({
                                     >
                                         <div
                                             className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-expanded={isExpanded}
+                                            aria-controls={`expense-content-${exp.id}`}
                                             onClick={() => toggleExpenseExpanded(exp.id)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    toggleExpenseExpanded(exp.id);
+                                                }
+                                            }}
                                         >
                                             <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                                                 {/* Date Block: Day on top, Month below */}
@@ -539,7 +580,7 @@ export function GenericExpenseList({
 
                                         {/* EXPANDED CONTENT */}
                                         {isExpanded && (
-                                            <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
+                                            <div id={`expense-content-${exp.id}`} className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
                                                 {/* Content Grid */}
                                                 {(() => {
                                                     const hasItems = Boolean(exp.items && exp.items.length > 0);
@@ -684,9 +725,11 @@ export function GenericExpenseList({
                                                                                 </div>
                                                                             </div>
                                                                             <div className="p-3">
-                                                                                <div
+                                                                                <button
+                                                                                    type="button"
+                                                                                    aria-label="Ver comprobante"
                                                                                     onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
-                                                                                    className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                                                                    className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs text-left"
                                                                                 >
                                                                                     <Image
                                                                                         src={exp.receipt_url!}
@@ -702,7 +745,7 @@ export function GenericExpenseList({
                                                                                             className="w-3.5 h-3.5" />
                                                                                         <span>Ver</span>
                                                                                     </div>
-                                                                                </div>
+                                                                                </button>
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -795,7 +838,7 @@ export function GenericExpenseList({
                             const payer = profiles.find((p) => p.id === payment.paid_by);
                             const receiver = profiles.find((p) => p.id === payment.paid_to);
                             const groupObj = userGroups.find((g) => g.id === payment.group_id);
-                            const currency = groupCurrency || groupObj?.currency || currentProfile?.currency;
+                            const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
 
                             const isIpaid = payment.paid_by === currentProfile?.id;
                             const isIreceived = payment.paid_to === currentProfile?.id;
@@ -940,7 +983,7 @@ export function GenericExpenseList({
 
                                     {/* EXPANDED PAYMENT CONTENT */}
                                     {isExpanded && (
-                                        <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
+                                        <div id={`payment-content-${payment.id}`} className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
                                             {/* Transfer Flow Graphic: Matching SettleDebtModal style */}
                                             <div
                                                 className="bg-zinc-50/90 border border-zinc-200/90 rounded-2xl p-3 sm:p-3.5 relative shadow-2xs">
@@ -1068,9 +1111,11 @@ export function GenericExpenseList({
                                                                 </div>
                                                             </div>
                                                             <div className="p-3">
-                                                                <div
+                                                                <button
+                                                                    type="button"
                                                                     onClick={() => setSelectedProofUrl(payment.proof_url ?? null)}
-                                                                    className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                                                    aria-label="Ver comprobante de pago"
+                                                                    className="group/img relative block w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs text-left"
                                                                 >
                                                                     <Image
                                                                         src={payment.proof_url!}
@@ -1085,7 +1130,7 @@ export function GenericExpenseList({
                                                                         <ExternalLink className="w-3.5 h-3.5" />
                                                                         <span>Ver</span>
                                                                     </div>
-                                                                </div>
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     )}
@@ -1228,10 +1273,18 @@ export function GenericExpenseList({
             {/* Proof Modal */}
             {selectedProofUrl && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm"
+                    role="presentation"
+                    onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedProofUrl(null); }}
+                >
+                    <div
+                        ref={proofModalRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="proof-modal-title"
+                        className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
                         <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-                            <h3 className="font-bold text-zinc-900 text-base">Comprobante de Pago</h3>
+                            <h3 id="proof-modal-title" className="font-bold text-zinc-900 text-base">Comprobante de Pago</h3>
                             <button
                                 type="button"
                                 onClick={() => setSelectedProofUrl(null)}

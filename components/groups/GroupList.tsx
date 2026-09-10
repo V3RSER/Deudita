@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Group } from '@/lib/types';
@@ -27,6 +27,16 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: Readonly<GroupListP
         rejectGroupInvite
     } = useExpense();
     const [processingInviteId, setProcessingInviteId] = React.useState<string | null>(null);
+
+    const groupBalances = useMemo(() => {
+        return new Map(
+            userGroups.map((group) => {
+                const summary = calculateUserSummaries(expenses, payments, profiles, group.id)
+                    .find((s) => s.user.id === currentProfile?.id);
+                return [group.id, summary?.netBalance ?? 0] as const;
+            })
+        );
+    }, [userGroups, expenses, payments, profiles, currentProfile?.id]);
 
     const handleAcceptInvite = async (inviteId: string) => {
         try {
@@ -146,20 +156,18 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: Readonly<GroupListP
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {userGroups.map((group) => {
-                        // Calculate current user's balance in this specific group
-                        const userSummaries = calculateUserSummaries(expenses, payments, profiles, group.id);
-                        const mySummary = userSummaries.find((s) => s.user.id === currentProfile?.id);
-                        const netBalance = mySummary ? mySummary.netBalance : 0;
+                        const netBalance = groupBalances.get(group.id) ?? 0;
 
                         const groupImg = getGroupImage(group);
                         const catConfig = getGroupCategoryConfig(group.category);
                         const CategoryIcon = catConfig.icon;
 
                         return (
-                            <div
+                            <button
+                                type="button"
                                 key={group.id}
                                 onClick={() => onSelectGroup(group)}
-                                className="group bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-xs hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-3.5 relative overflow-hidden active:scale-[0.98]"
+                                className="group w-full bg-white rounded-2xl p-4 ring-1 ring-zinc-200 shadow-xs hover:shadow-md hover:ring-emerald-500/30 transition-all cursor-pointer flex items-center gap-3.5 relative overflow-hidden active:scale-[0.98] text-left"
                             >
                                 {/* Square rounded image or Icon */}
                                 <div
@@ -202,7 +210,7 @@ export function GroupList({ onSelectGroup, onOpenNewGroup }: Readonly<GroupListP
 
                                 <ChevronRight
                                     className="w-4 h-4 text-zinc-300 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-                            </div>
+                            </button>
                         );
                     })}
                 </div>

@@ -25,7 +25,7 @@ export function ConfirmModal({
     cancelText = 'Cancelar',
     variant = 'danger',
     isLoading = false,
-}: ConfirmModalProps) {
+}: Readonly<ConfirmModalProps>) {
     if (!isOpen) return null;
 
     const isDanger = variant === 'danger';
@@ -38,8 +38,8 @@ export function ConfirmModal({
                 <div className="flex items-start justify-between">
                     <div
                         className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isDanger
-                                ? 'bg-rose-100 text-rose-600'
-                                : 'bg-amber-100 text-amber-600'
+                            ? 'bg-rose-100 text-rose-600'
+                            : 'bg-amber-100 text-amber-600'
                             }`}
                     >
                         {isDanger ? (
@@ -76,8 +76,8 @@ export function ConfirmModal({
                         onClick={onConfirm}
                         disabled={isLoading}
                         className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-1.5 ${isDanger
-                                ? 'bg-rose-600 hover:bg-rose-700'
-                                : 'bg-zinc-900 hover:bg-zinc-800'
+                            ? 'bg-rose-600 hover:bg-rose-700'
+                            : 'bg-zinc-900 hover:bg-zinc-800'
                             }`}
                     >
                         {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1 text-white" />}

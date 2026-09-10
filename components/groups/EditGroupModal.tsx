@@ -17,11 +17,10 @@ interface EditGroupModalProps {
     isOpen: boolean;
     group: Group;
     onClose: () => void;
-    onDeleted?: () => void;
 }
 
-export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupModalProps) {
-    const { updateGroup, deleteGroup, isMutating } = useExpense();
+export function EditGroupModal({ isOpen, group, onClose }: EditGroupModalProps) {
+    const { updateGroup, isMutating } = useExpense();
 
     const [name, setName] = useState(group.name);
     const [category, setCategory] = useState<GroupCategory>(group.category ?? 'home');
@@ -33,6 +32,9 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const uploadAbortRef = useRef<AbortController | null>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const previousFocusedElementRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -47,7 +49,9 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
         }
     }, [isOpen, group]);
 
-    if (!isOpen) return null;
+    useEffect(() => {
+        return () => uploadAbortRef.current?.abort();
+    }, []);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -55,6 +59,10 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
 
         setIsUploading(true);
         setErrorMessage(null);
+
+        uploadAbortRef.current?.abort();
+        const controller = new AbortController();
+        uploadAbortRef.current = controller;
 
         try {
             const formData = new FormData();
@@ -64,6 +72,7 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
             const res = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData,
+                signal: controller.signal,
             });
 
             if (!res.ok) {
@@ -72,19 +81,21 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
             }
 
             const data = await res.json();
-            if (data.url) {
-                setGroupImageUrl(data.url);
-            }
+            if (data.url) setGroupImageUrl(data.url);
         } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') return;
             const msg = err instanceof Error ? err.message : 'No se pudo subir la foto del grupo';
             setErrorMessage(msg);
         } finally {
-            setIsUploading(false);
+            if (uploadAbortRef.current === controller) {
+                uploadAbortRef.current = null;
+                setIsUploading(false);
+            }
         }
     };
 
     const handleSubmit = async () => {
-        if (isSubmitting) return;
+        if (isSubmitting || isUploading) return;
         setErrorMessage(null);
 
         const groupName = name.trim();
@@ -113,20 +124,70 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
         }
     };
 
+    const handleClose = () => {
+        if (isSubmitting || isUploading) return;
+        uploadAbortRef.current?.abort();
+        onClose();
+    };
+
+    useEffect(() => {
+        return () => uploadAbortRef.current?.abort();
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = modalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleTab = (event: KeyboardEvent) => {
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first = current[0], last = current[current.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleTab);
+        return () => {
+            document.removeEventListener('keydown', handleTab);
+            previousFocusedElementRef.current?.focus();
+            previousFocusedElementRef.current = null;
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); handleClose(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, isSubmitting, isUploading]);
+
+    if (!isOpen) return null;
+
     const selectedCatConfig = getGroupCategoryConfig(category);
     const CategoryIcon = selectedCatConfig.icon;
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto">
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md overflow-y-auto"
+            role="presentation"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+        >
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="edit-group-modal-title"
                 className="bg-white rounded-[24px] shadow-2xl w-full max-w-md flex flex-col my-auto max-h-[95vh] overflow-hidden transition-all duration-300">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
-                    <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+                    <h2 id="edit-group-modal-title" className="text-lg font-bold text-zinc-900 tracking-tight">
                         Editar grupo
                     </h2>
-                    <button onClick={onClose}
+                    <button type="button" onClick={handleClose} disabled={isSubmitting || isUploading} aria-label="Cerrar"
                         className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
                         <X className="w-5 h-5" />
                     </button>
@@ -163,7 +224,9 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
                                 )}
                             </div>
                             <div className="flex-1 flex flex-col gap-2">
+                                <label htmlFor="edit-group-name" className="sr-only">Nombre del grupo</label>
                                 <input
+                                    id="edit-group-name"
                                     type="text"
                                     value={name}
                                     onChange={e => setName(e.target.value)}
@@ -186,10 +249,11 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
                         <div
                             className="bg-white border border-zinc-200 rounded-2xl p-3 space-y-2 shadow-sm overflow-hidden">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Descripción
+                                <label htmlFor="edit-group-description" className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Descripción
                                     (opcional)</label>
                                 <input
                                     type="text"
+                                    id="edit-group-description"
                                     value={description}
                                     onChange={e => setDescription(e.target.value)}
                                     placeholder="Breve descripción del grupo"
@@ -199,8 +263,7 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
 
                             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                                 <div className="space-y-1">
-                                    <label
-                                        className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Categoría</label>
                                     <CustomSelect
                                         value={category}
                                         onChange={val => setCategory(val as GroupCategory)}
@@ -222,8 +285,7 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label
-                                        className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Moneda
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-0.5">Moneda
                                         principal</label>
                                     <CustomSelect
                                         value={selectedCurrency}
@@ -269,11 +331,11 @@ export function EditGroupModal({ isOpen, group, onClose, onDeleted }: EditGroupM
                 <div className="p-4 border-t border-zinc-100 bg-zinc-50/80 shrink-0 rounded-b-[24px]">
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting || isMutating || !name.trim()}
+                        disabled={isSubmitting || isMutating || isUploading || !name.trim()}
                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center disabled:opacity-50 cursor-pointer"
                     >
-                        {(isSubmitting || isMutating) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                        <span>{(isSubmitting || isMutating) ? 'Guardando cambios...' : 'Guardar cambios'}</span>
+                        {(isSubmitting || isMutating || isUploading) ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        <span>{isUploading ? 'Subiendo foto...' : (isSubmitting || isMutating) ? 'Guardando cambios...' : 'Guardar cambios'}</span>
                     </button>
                 </div>
             </div>

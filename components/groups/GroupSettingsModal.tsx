@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link as LinkIcon, Pencil, Trash2, UserPlus, X } from 'lucide-react';
 
 interface GroupSettingsModalProps {
@@ -22,17 +22,42 @@ export function GroupSettingsModal({
     onDeleteGroup,
     canEdit = true,
 }: Readonly<GroupSettingsModalProps>) {
+    const modalRef = useRef<HTMLDivElement>(null);
+    const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const modal = modalRef.current;
+        const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
+        Array.from(modal?.querySelectorAll<HTMLElement>(selector) ?? [])[0]?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+            if (event.key !== 'Tab' || !modal) return;
+            const current = Array.from(modal.querySelectorAll<HTMLElement>(selector));
+            if (!current.length) return;
+            const first=current[0], last=current[current.length-1];
+            if (event.shiftKey && document.activeElement===first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement===last) { event.preventDefault(); first.focus(); }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => { document.removeEventListener('keydown', handleKeyDown); previousFocusedElementRef.current?.focus(); previousFocusedElementRef.current=null; };
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-950/40 backdrop-blur-md" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="group-settings-modal-title"
                 className="bg-white rounded-[24px] shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transition-all duration-300">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
-                    <h2 className="text-lg font-bold text-zinc-900 tracking-tight">
+                    <h2 id="group-settings-modal-title" className="text-lg font-bold text-zinc-900 tracking-tight">
                         Configuración del grupo
                     </h2>
-                    <button onClick={onClose}
+                    <button type="button" onClick={onClose} aria-label="Cerrar"
                         className="p-2 -mr-2 rounded-full hover:bg-zinc-100 text-zinc-500 transition">
                         <X className="w-5 h-5" />
                     </button>
@@ -41,6 +66,7 @@ export function GroupSettingsModal({
                 <div className="p-2 space-y-1">
                     {canEdit && (
                         <button
+                            type="button"
                             onClick={onEditGroup}
                             className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-zinc-50 text-left transition-colors cursor-pointer"
                         >
@@ -87,6 +113,7 @@ export function GroupSettingsModal({
                 {canEdit && (
                     <div className="p-2 border-t border-zinc-100 mt-2 bg-zinc-50/50">
                         <button
+                            type="button"
                             onClick={onDeleteGroup}
                             className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-rose-50 hover:text-rose-700 text-rose-600 text-left transition-colors cursor-pointer"
                         >

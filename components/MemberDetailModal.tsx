@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useExpense } from '@/lib/expense-context';
 import { Profile } from '@/lib/types';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import {
     AlertCircle,
     Check,
