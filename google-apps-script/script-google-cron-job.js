@@ -345,14 +345,11 @@ function getTemplatesWithCache(token, forceRefresh = false) {
     }
 
     const baseUrl = getBackendBaseUrl();
-    const cleanToken = String(token || '').trim();
-
     const response = UrlFetchApp.fetch(
-        `${baseUrl}/api/email-templates?token=${encodeURIComponent(cleanToken)}`,
+        `${baseUrl}/api/email-templates`,
         {
             headers: {
-                Authorization: `Bearer ${cleanToken}`,
-                'X-Webhook-Token': cleanToken,
+                Authorization: `Bearer ${token}`,
             },
             muteHttpExceptions: true,
         }
