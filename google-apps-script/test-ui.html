@@ -182,7 +182,16 @@
 <body>
 <div class="wrap">
     <h1>Probar un correo</h1>
-    <div class="muted">Selecciona un correo de Gmail para ejecutar el flujo completo.</div>
+    <div class="muted">Selecciona un correo de Gmail para ejecutar el flujo completo de detección y creación de gasto borrador.</div>
+
+    <div id="connBar" style="margin-top: 14px; padding: 10px 14px; background: #e8f0fe; border-radius: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div>
+            <b>Conexión:</b> <span id="connBackend">Cargando...</span> | <b>Token Webhook:</b> <span id="connToken">Verificando...</span>
+        </div>
+        <div>
+            <button onclick="promptToken()" class="secondary" style="padding: 4px 10px; font-size: 12px;">Configurar Token</button>
+        </div>
+    </div>
 
     <div class="card">
         <div class="toolbar">
@@ -204,6 +213,41 @@
 <script>
     let emails = [];
     let running = false;
+
+    function checkConnection() {
+        google.script.run
+            .withSuccessHandler(function (info) {
+                if (info) {
+                    document.getElementById('connBackend').textContent = info.backendUrl || 'Por defecto';
+                    const tokenSpan = document.getElementById('connToken');
+                    if (info.hasToken) {
+                        tokenSpan.textContent = 'Activo (' + (info.tokenMasked || 'OK') + ')';
+                        tokenSpan.style.color = '#137333';
+                    } else {
+                        tokenSpan.textContent = 'No configurado ⚠️';
+                        tokenSpan.style.color = '#c5221f';
+                    }
+                }
+            })
+            .getConnectionInfo();
+    }
+
+    function promptToken() {
+        const val = prompt('Ingresa tu token de webhook de Deudita (lo obtienes en la app al presionar "Conectar Gmail"):');
+        if (val && val.trim()) {
+            setStatus('Guardando token…');
+            google.script.run
+                .withSuccessHandler(function () {
+                    setStatus('Token guardado correctamente.');
+                    checkConnection();
+                    refreshCache();
+                })
+                .withFailureHandler(function (err) {
+                    setStatus(err && err.message ? err.message : String(err), true);
+                })
+                .saveTokenFromUi(val.trim());
+        }
+    }
 
     function setStatus(text, error) {
         const el = document.getElementById('status');
@@ -271,10 +315,21 @@
         setStatus('Ejecutando el flujo completo para el correo seleccionado…');
 
         google.script.run
-            .withSuccessHandler(function () {
+            .withSuccessHandler(function (res) {
                 running = false;
                 renderEmails();
-                setStatus('Proceso completado. Revisa los registros de ejecución de Apps Script.');
+                if (res && res.error) {
+                    setStatus('Error: ' + res.error, true);
+                } else if (res && res.expensesSent > 0) {
+                    setStatus('✅ Gasto borrador creado exitosamente en Deudita (revisa la sección Borradores de la app).');
+                } else if (res && res.expensesFailed > 0) {
+                    const errDetail = res.lastResult && res.lastResult.error ? res.lastResult.error : 'Código de error en la API';
+                    setStatus('❌ Error al crear el borrador en /api/expenses: ' + errDetail, true);
+                } else if (res && res.matchesFound === 0) {
+                    setStatus('ℹ️ El correo fue analizado pero no coincidió con ninguna plantilla de entidad bancaria.');
+                } else {
+                    setStatus('Proceso completado.');
+                }
             })
             .withFailureHandler(function (err) {
                 running = false;
@@ -310,7 +365,10 @@
             .replace(/'/g, '&#039;');
     }
 
-    window.addEventListener('load', loadEmails);
+    window.addEventListener('load', function () {
+        checkConnection();
+        loadEmails();
+    });
 </script>
 </body>
 </html>
