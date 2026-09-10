@@ -9,9 +9,47 @@ import {
     UserSummaryBalance
 } from './types';
 
+function normalizeCurrencyCode(currency?: string | null): string {
+    const normalized = currency?.trim().toUpperCase();
+    return normalized || 'COP';
+}
+
+function buildExpenseCurrencyByGroup(expenses: Expense[]): Map<string, string> {
+    const byGroup = new Map<string, string>();
+    expenses.forEach((expense) => {
+        if (!expense.group_id || !expense.currency) return;
+        const currency = normalizeCurrencyCode(expense.currency);
+        const existing = byGroup.get(expense.group_id);
+        if (!existing) {
+            byGroup.set(expense.group_id, currency);
+        } else if (existing !== currency) {
+            // Mark mixed groups explicitly; callers must not silently consolidate them.
+            byGroup.set(expense.group_id, 'MIXED');
+        }
+    });
+    return byGroup;
+}
+
+function getRecordCurrency(record: Expense | Payment, expenseCurrencyByGroup?: Map<string, string>): string {
+    if ('currency' in record && record.currency) return normalizeCurrencyCode(record.currency);
+    if ('group_id' in record && record.group_id && expenseCurrencyByGroup) {
+        const inferred = expenseCurrencyByGroup.get(record.group_id);
+        if (inferred && inferred !== 'MIXED') return inferred;
+    }
+    return 'COP';
+}
+
+function getDistinctCurrencies(expenses: Expense[], payments: Payment[]): string[] {
+    const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(expenses);
+    return Array.from(new Set([
+        ...expenses.map((expense) => getRecordCurrency(expense, expenseCurrencyByGroup)),
+        ...payments.map((payment) => getRecordCurrency(payment, expenseCurrencyByGroup)),
+    ]));
+}
+
 export function formatCurrency(amount: number, currencyCode?: string): string {
-    const num = isNaN(amount) ? 0 : amount;
-    const code = currencyCode && currencyCode.trim() ? currencyCode.trim().toUpperCase() : 'COP';
+    const num = Number.isFinite(amount) ? amount : 0;
+    const code = normalizeCurrencyCode(currencyCode);
 
     const currencySymbols: Record<string, string> = {
         COP: '$',
@@ -77,19 +115,36 @@ export function getEntryTimestamp(record: {
 
 export function buildSponsorshipMap(profiles: Profile[]): Map<string, string> {
     const map = new Map<string, string>();
-    profiles.forEach((p) => {
-        if (p.managed_user_ids && Array.isArray(p.managed_user_ids)) {
-            p.managed_user_ids.forEach((depId) => {
-                if (depId && depId !== p.id) {
-                    map.set(depId, p.id);
-                }
-            });
+    const orderedProfiles = [...profiles].sort((a, b) => a.id.localeCompare(b.id));
+
+    const wouldCreateCycle = (dependentId: string, sponsorId: string): boolean => {
+        const visited = new Set<string>([dependentId]);
+        let cursor: string | undefined = sponsorId;
+        while (cursor) {
+            if (visited.has(cursor)) return true;
+            visited.add(cursor);
+            cursor = map.get(cursor);
         }
+        return false;
+    };
+
+    orderedProfiles.forEach((profile) => {
+        const managedIds = Array.isArray(profile.managed_user_ids)
+            ? Array.from(new Set(profile.managed_user_ids.filter((id) => id && id !== profile.id)))
+            : [];
+
+        managedIds.sort().forEach((dependentId) => {
+            if (map.has(dependentId)) return;
+            if (wouldCreateCycle(dependentId, profile.id)) return;
+            map.set(dependentId, profile.id);
+        });
     });
+
     return map;
 }
 
 export interface ManagedUserDetail {
+    currency?: string;
     user: Profile;
     sponsor: Profile;
     totalSpent: number;
@@ -105,7 +160,21 @@ export function calculateManagedSummary(
 ): ManagedUserDetail[] {
     const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
     const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+    const currencies = getDistinctCurrencies(filteredExpenses, filteredPayments);
 
+    if (currencies.length > 1) {
+        const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(filteredExpenses);
+        return currencies.flatMap((currency) =>
+            calculateManagedSummary(
+                profiles,
+                filteredExpenses.filter((expense) => getRecordCurrency(expense, expenseCurrencyByGroup) === currency),
+                filteredPayments.filter((payment) => getRecordCurrency(payment, expenseCurrencyByGroup) === currency),
+                groupId
+            ).map((detail) => ({ ...detail, currency }))
+        );
+    }
+
+    const currency = currencies[0] ?? 'COP';
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
 
@@ -123,12 +192,12 @@ export function calculateManagedSummary(
 
         filteredExpenses.forEach((exp) => {
             if (exp.paid_by === p.id) {
-                totalPaid += exp.total_amount;
+                if (Number.isFinite(exp.total_amount) && exp.total_amount > 0) totalPaid += exp.total_amount;
             }
             if (exp.splits) {
                 exp.splits.forEach((s) => {
                     if (s.user_id === p.id) {
-                        totalSpent += s.amount_owed;
+                        if (Number.isFinite(s.amount_owed) && s.amount_owed > 0) totalSpent += s.amount_owed;
                     }
                 });
             }
@@ -136,16 +205,17 @@ export function calculateManagedSummary(
 
         filteredPayments.forEach((pay) => {
             if (pay.paid_by === p.id) {
-                totalPaid += pay.amount;
+                if (Number.isFinite(pay.amount) && pay.amount > 0) totalPaid += pay.amount;
             }
             if (pay.paid_to === p.id) {
-                totalSpent += pay.amount;
+                if (Number.isFinite(pay.amount) && pay.amount > 0) totalSpent += pay.amount;
             }
         });
 
         const individualNet = totalPaid - totalSpent; // positive = spent less than paid, negative = owes
 
         details.push({
+            currency,
             user: p,
             sponsor,
             totalSpent,
@@ -168,32 +238,65 @@ export function normalizeSplitsToTotal<T extends { user_id: string; amount_owed:
     preferredUserId?: string
 ): T[] {
     if (!splits || splits.length === 0) return [];
-    const targetCents = Math.round(totalAmount * 100);
-    if (targetCents <= 0) return splits;
 
-    // Clone splits and calculate rounded cents
+    const targetCents = Math.max(0, Math.round((Number(totalAmount) || 0) * 100));
     const rounded = splits.map((s) => ({
         ...s,
-        amount_owed: Math.round((Number(s.amount_owed) || 0) * 100),
+        amount_owed: Math.max(0, Math.round((Number(s.amount_owed) || 0) * 100)),
     }));
 
-    const currentCentsSum = rounded.reduce((acc, s) => acc + s.amount_owed, 0);
+    let currentCentsSum = rounded.reduce((acc, s) => acc + s.amount_owed, 0);
     let diffCents = targetCents - currentCentsSum;
 
-    if (diffCents !== 0) {
-        // Determine priority index (e.g. preferred user or first with positive amount)
-        let priorityIdx = preferredUserId ? rounded.findIndex((s) => s.user_id === preferredUserId) : -1;
-        if (priorityIdx === -1) {
-            priorityIdx = 0;
+    if (diffCents > 0) {
+        let priorityIdx = preferredUserId
+            ? rounded.findIndex((s) => s.user_id === preferredUserId)
+            : -1;
+        if (priorityIdx < 0) priorityIdx = 0;
+
+        const baseAddition = Math.floor(diffCents / rounded.length);
+        const remainder = diffCents % rounded.length;
+        if (baseAddition > 0) {
+            rounded.forEach((item) => {
+                item.amount_owed += baseAddition;
+            });
+        }
+        for (let i = 0; i < remainder; i += 1) {
+            rounded[(priorityIdx + i) % rounded.length].amount_owed += 1;
+        }
+        diffCents = 0;
+    } else if (diffCents < 0) {
+        // Remove excess cents without ever taking a split below zero.
+        // Prefer reducing non-preferred participants first so the payer preference is preserved.
+        const preferredIndex = preferredUserId
+            ? rounded.findIndex((s) => s.user_id === preferredUserId)
+            : -1;
+        const indexes = rounded
+            .map((_, index) => index)
+            .sort((a, b) => {
+                if (a === preferredIndex) return 1;
+                if (b === preferredIndex) return -1;
+                return rounded[b].amount_owed - rounded[a].amount_owed;
+            });
+
+        for (const index of indexes) {
+            if (diffCents === 0) break;
+            const removable = Math.min(rounded[index].amount_owed, Math.abs(diffCents));
+            rounded[index].amount_owed -= removable;
+            diffCents += removable;
         }
 
-        // Adjust in whole cents
-        while (diffCents !== 0) {
-            const step = diffCents > 0 ? 1 : -1;
-            rounded[priorityIdx].amount_owed += step;
-            diffCents -= step;
-            priorityIdx = (priorityIdx + 1) % rounded.length;
+        // This should only be reachable when targetCents is inconsistent with the input domain.
+        // Keep the invariant explicit rather than emitting negative money.
+        if (diffCents !== 0) {
+            return rounded.map((s) => ({ ...s, amount_owed: Number((s.amount_owed / 100).toFixed(2)) }));
         }
+    }
+
+    currentCentsSum = rounded.reduce((acc, s) => acc + s.amount_owed, 0);
+    if (currentCentsSum !== targetCents && rounded.length > 0) {
+        // Final defensive correction in case floating/rounding logic above was affected by malformed input.
+        rounded[0].amount_owed = Math.max(0, rounded[0].amount_owed + (targetCents - currentCentsSum));
     }
 
     return rounded.map((s) => ({
@@ -210,14 +313,15 @@ export function distributeAmountEqually(
     userIds: string[],
     preferredUserId?: string
 ): { user_id: string; amount_owed: number }[] {
-    if (!userIds || userIds.length === 0) return [];
-    const totalCents = Math.round(totalAmount * 100);
-    const n = userIds.length;
+    const uniqueUserIds = Array.from(new Set((userIds || []).filter((id) => typeof id === 'string' && id.trim() !== '')));
+    if (uniqueUserIds.length === 0) return [];
+    const totalCents = Math.round((Number(totalAmount) || 0) * 100);
+    const n = uniqueUserIds.length;
     const baseCents = Math.floor(totalCents / n);
     let remainderCents = totalCents - baseCents * n;
 
     // Prioritize preferred user for remainder cents if present
-    const orderedIds = [...userIds];
+    const orderedIds = [...uniqueUserIds];
     if (preferredUserId && orderedIds.includes(preferredUserId)) {
         const idx = orderedIds.indexOf(preferredUserId);
         orderedIds.splice(idx, 1);
@@ -243,8 +347,49 @@ export function calculateDirectBalances(
     profiles: Profile[],
     groupId?: string
 ): PairwiseBalance[] {
-    const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
-    const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+    if (!groupId) {
+        const currencies = getDistinctCurrencies(expenses, payments);
+        const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(expenses);
+        if (currencies.length > 1) {
+            return currencies.flatMap((currency) =>
+                calculateDirectBalancesForScope(
+                    expenses.filter((e) => getRecordCurrency(e, expenseCurrencyByGroup) === currency),
+                    payments.filter((p) => getRecordCurrency(p, expenseCurrencyByGroup) === currency),
+                    profiles,
+                    undefined,
+                    currency
+                )
+            );
+        }
+        const filteredExpenses = expenses;
+        const filteredPayments = payments;
+        return calculateDirectBalancesForScope(filteredExpenses, filteredPayments, profiles, undefined, currencies[0] ?? 'COP');
+    }
+    const groupExpenses = expenses.filter((e) => e.group_id === groupId);
+    const groupPayments = payments.filter((p) => p.group_id === groupId);
+    const currencies = getDistinctCurrencies(groupExpenses, groupPayments);
+    const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(groupExpenses);
+    if (currencies.length > 1) {
+        return currencies.flatMap((currency) =>
+            calculateDirectBalancesForScope(
+                groupExpenses.filter((e) => getRecordCurrency(e, expenseCurrencyByGroup) === currency),
+                groupPayments.filter((p) => getRecordCurrency(p, expenseCurrencyByGroup) === currency),
+                profiles,
+                groupId,
+                currency
+            )
+        );
+    }
+    return calculateDirectBalancesForScope(groupExpenses, groupPayments, profiles, groupId, currencies[0] ?? 'COP');
+}
+
+function calculateDirectBalancesForScope(
+    filteredExpenses: Expense[],
+    filteredPayments: Payment[],
+    profiles: Profile[],
+    groupId?: string,
+    currency = 'COP'
+): PairwiseBalance[] {
 
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
@@ -315,6 +460,7 @@ export function calculateDirectBalances(
                             debtor,
                             amount: Math.round(net * 100) / 100,
                             group_id: groupId,
+                            currency,
                             debtorSponsor: debtorSponsorId ? profileMap.get(debtorSponsorId) : undefined,
                             creditorSponsor: creditorSponsorId ? profileMap.get(creditorSponsorId) : undefined,
                         });
@@ -330,6 +476,7 @@ export function calculateDirectBalances(
                             debtor,
                             amount: Math.round(Math.abs(net) * 100) / 100,
                             group_id: groupId,
+                            currency,
                             debtorSponsor: debtorSponsorId ? profileMap.get(debtorSponsorId) : undefined,
                             creditorSponsor: creditorSponsorId ? profileMap.get(creditorSponsorId) : undefined,
                         });
@@ -367,7 +514,7 @@ function simplifySingleScopeBalances(
                 const rawDebtor = split.user_id;
                 const effDebtor = getEffectiveId(rawDebtor);
 
-                totalSplits += split.amount_owed;
+                totalSplits += Math.max(0, Number(split.amount_owed) || 0);
                 if (split.amount_owed > 0) {
                     const currentEffDebtor = netMap.get(effDebtor) ?? 0;
                     netMap.set(effDebtor, currentEffDebtor - split.amount_owed);
@@ -396,7 +543,7 @@ function simplifySingleScopeBalances(
         const effPayer = getEffectiveId(rawPayer);
         const effReceiver = getEffectiveId(rawReceiver);
 
-        if (effPayer !== effReceiver) {
+        if (effPayer !== effReceiver && Number(p.amount) > 0) {
             const currentPayer = netMap.get(effPayer) ?? 0;
             netMap.set(effPayer, currentPayer + p.amount);
 
@@ -404,7 +551,7 @@ function simplifySingleScopeBalances(
             netMap.set(effReceiver, currentReceiver - p.amount);
         }
 
-        if (rawPayer !== rawReceiver) {
+        if (rawPayer !== rawReceiver && Number(p.amount) > 0) {
             const currentRawPayer = individualNetMap.get(rawPayer) ?? 0;
             individualNetMap.set(rawPayer, currentRawPayer + p.amount);
 
@@ -515,9 +662,35 @@ export function calculateSimplifiedBalances(
     if (groupId) {
         const filteredExpenses = expenses.filter((e) => e.group_id === groupId);
         const filteredPayments = payments.filter((p) => p.group_id === groupId);
-        return simplifySingleScopeBalances(filteredExpenses, filteredPayments, profiles, groupId).sort(
-            (a, b) => b.amount - a.amount
-        );
+        const currencies = getDistinctCurrencies(filteredExpenses, filteredPayments);
+        if (currencies.length > 1) {
+            const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(filteredExpenses);
+            return currencies.flatMap((currency) =>
+                simplifySingleScopeBalances(
+                    filteredExpenses.filter((e) => getRecordCurrency(e, expenseCurrencyByGroup) === currency),
+                    filteredPayments.filter((p) => getRecordCurrency(p, expenseCurrencyByGroup) === currency),
+                    profiles,
+                    groupId
+                ).map((balance) => ({ ...balance, currency }))
+            ).sort((a, b) => b.amount - a.amount);
+        }
+        const currency = currencies[0] ?? 'COP';
+        return simplifySingleScopeBalances(filteredExpenses, filteredPayments, profiles, groupId)
+            .map((balance) => ({ ...balance, currency }))
+            .sort((a, b) => b.amount - a.amount);
+    }
+
+    const currencies = getDistinctCurrencies(expenses, payments);
+    const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(expenses);
+    if (currencies.length > 1) {
+        return currencies.flatMap((currency) =>
+            simplifySingleScopeBalances(
+                expenses.filter((e) => getRecordCurrency(e, expenseCurrencyByGroup) === currency),
+                payments.filter((p) => getRecordCurrency(p, expenseCurrencyByGroup) === currency),
+                profiles,
+                undefined
+            ).map((balance) => ({ ...balance, currency }))
+        ).sort((a, b) => b.amount - a.amount);
     }
 
     // Consolidated across multiple groups: simplify within each group then aggregate
@@ -532,6 +705,7 @@ export function calculateSimplifiedBalances(
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
 
+    const consolidatedCurrency = currencies[0] ?? 'COP';
     const combinedDebtMap = new Map<string, number>();
     const debtorBreakdownMap = new Map<string, ManagedContribution[]>();
     const creditorBreakdownMap = new Map<string, ManagedContribution[]>();
@@ -589,6 +763,7 @@ export function calculateSimplifiedBalances(
                     const debtor = profileMap.get(p1.id);
                     if (creditor && debtor) {
                         results.push({
+                            currency: consolidatedCurrency,
                             creditor,
                             debtor,
                             amount: Math.round(net * 100) / 100,
@@ -603,6 +778,7 @@ export function calculateSimplifiedBalances(
                     const debtor = profileMap.get(p2.id);
                     if (creditor && debtor) {
                         results.push({
+                            currency: consolidatedCurrency,
                             creditor,
                             debtor,
                             amount: Math.round(Math.abs(net) * 100) / 100,
@@ -641,6 +817,19 @@ export function calculateUserSummaries(
 ): UserSummaryBalance[] {
     const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
     const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+    const currencies = getDistinctCurrencies(filteredExpenses, filteredPayments);
+    if (currencies.length > 1) {
+        const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(filteredExpenses);
+        return currencies.flatMap((currency) =>
+            calculateUserSummaries(
+                filteredExpenses.filter((e) => getRecordCurrency(e, expenseCurrencyByGroup) === currency),
+                filteredPayments.filter((p) => getRecordCurrency(p, expenseCurrencyByGroup) === currency),
+                profiles,
+                groupId
+            ).map((summary) => ({ ...summary, currency }))
+        );
+    }
+    const currency = currencies[0] ?? 'COP';
 
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
@@ -669,12 +858,12 @@ export function calculateUserSummaries(
 
         filteredExpenses.forEach((exp) => {
             if (targetUserIds.includes(exp.paid_by)) {
-                totalPaid += exp.total_amount;
+                if (Number.isFinite(exp.total_amount) && exp.total_amount > 0) totalPaid += exp.total_amount;
             }
             if (exp.splits) {
                 exp.splits.forEach((s) => {
                     if (targetUserIds.includes(s.user_id)) {
-                        totalOwedShare += s.amount_owed;
+                        if (Number.isFinite(s.amount_owed) && s.amount_owed > 0) totalOwedShare += s.amount_owed;
                     }
                 });
             }
@@ -682,10 +871,10 @@ export function calculateUserSummaries(
 
         filteredPayments.forEach((p) => {
             if (targetUserIds.includes(p.paid_by)) {
-                totalPaymentsMade += p.amount;
+                if (Number.isFinite(p.amount) && p.amount > 0) totalPaymentsMade += p.amount;
             }
             if (targetUserIds.includes(p.paid_to)) {
-                totalPaymentsReceived += p.amount;
+                if (Number.isFinite(p.amount) && p.amount > 0) totalPaymentsReceived += p.amount;
             }
         });
 
@@ -700,6 +889,7 @@ export function calculateUserSummaries(
             netBalance,
             managedUsers: managedProfiles.length > 0 ? managedProfiles : undefined,
             managedBy: sponsorProfile,
+            currency,
         };
     });
 }
@@ -899,6 +1089,12 @@ export function calculatePairwiseDebtDetail(
     const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
     const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
 
+    const currencies = getDistinctCurrencies(filteredExpenses, filteredPayments);
+    if (currencies.length > 1) {
+        throw new Error('No se puede calcular un detalle de deuda con monedas mezcladas. Selecciona un alcance con una sola moneda.');
+    }
+    const calculationCurrency = currencies[0] ?? 'COP';
+
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
 
@@ -932,7 +1128,7 @@ export function calculatePairwiseDebtDetail(
         if (creditorIds.includes(exp.paid_by) && exp.splits) {
             exp.splits.forEach((s) => {
                 if (debtorIds.includes(s.user_id) && s.amount_owed > 0) {
-                    const g = groupMap.get(exp.group_id);
+                    const g = exp.group_id ? groupMap.get(exp.group_id) : undefined;
                     const entryTime = getEntryTimestamp(exp);
                     rawPrimaryDebts.push({
                         expense: exp,
@@ -941,10 +1137,10 @@ export function calculatePairwiseDebtDetail(
                         participantProfile: profileMap.get(s.user_id),
                         payerProfile: profileMap.get(exp.paid_by),
                         isManagedParticipant: s.user_id !== debtor.id,
-                        date: exp.expense_date || exp.created_at || '1970-01-01',
+                        date: exp.expense_date || exp.created_at || '',
                         entryTime,
                         groupName: g?.name,
-                        currency: g?.currency || 'COP',
+                        currency: exp.currency || g?.currency || calculationCurrency,
                     });
                 }
             });
@@ -983,7 +1179,7 @@ export function calculatePairwiseDebtDetail(
                 payerProfile: profileMap.get(pay.paid_by),
                 receiverProfile: profileMap.get(pay.paid_to),
                 groupName: g?.name,
-                date: pay.payment_date || pay.created_at || '1970-01-01',
+                date: pay.payment_date || pay.created_at || '',
                 entryTime,
             });
         }
@@ -992,7 +1188,7 @@ export function calculatePairwiseDebtDetail(
     // Payments from Creditor to Debtor (if any, reduce offset pool)
     let reversePayments = 0;
     filteredPayments.forEach((pay) => {
-        if (creditorIds.includes(pay.paid_by) && debtorIds.includes(pay.paid_to)) {
+        if (creditorIds.includes(pay.paid_by) && debtorIds.includes(pay.paid_to) && Number(pay.amount) > 0) {
             reversePayments += pay.amount;
         }
     });
@@ -1018,7 +1214,7 @@ export function calculatePairwiseDebtDetail(
         if (debtorIds.includes(exp.paid_by) && exp.splits) {
             exp.splits.forEach((s) => {
                 if (creditorIds.includes(s.user_id) && s.amount_owed > 0) {
-                    const g = groupMap.get(exp.group_id);
+                    const g = exp.group_id ? groupMap.get(exp.group_id) : undefined;
                     const entryTime = getEntryTimestamp(exp);
                     rawReverseOffsets.push({
                         expense: exp,
@@ -1028,7 +1224,7 @@ export function calculatePairwiseDebtDetail(
                         participantProfile: profileMap.get(s.user_id),
                         isManagedParticipant: s.user_id !== creditor.id,
                         groupName: g?.name,
-                        date: exp.expense_date || exp.created_at || '1970-01-01',
+                        date: exp.expense_date || exp.created_at || '',
                         entryTime,
                     });
                 }
@@ -1152,36 +1348,39 @@ export function calculatePairwiseDebtDetail(
     });
 
     // 6. Direct items between debtor and creditor
-    const pendingExpenses: DebtBreakdownItem[] = rawPrimaryDebts
-        .map((pDebt) => ({
-            expense: pDebt.expense,
-            split: pDebt.split,
-            originalAmount: pDebt.originalAmount,
-            paidAmount: 0,
-            pendingAmount: pDebt.originalAmount,
-            isFullyPaid: false,
-            isPartiallyPaid: false,
-            participantProfile: pDebt.participantProfile,
-            payerProfile: pDebt.payerProfile,
-            isManagedParticipant: pDebt.isManagedParticipant,
-            groupName: pDebt.groupName,
-            currency: pDebt.currency,
-        }))
+    const pendingExpenses: DebtBreakdownItem[] = calculatedDebts
+        .filter((item) => !item.isFullyPaid)
+        .map((item) => ({ ...item }))
         .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
 
-    const settledExpenses: DebtBreakdownItem[] = [];
+    const settledExpenses: DebtBreakdownItem[] = calculatedDebts
+        .filter((item) => item.isFullyPaid)
+        .map((item) => ({ ...item }))
+        .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
 
-    const appliedPayments: AppliedPaymentItem[] = rawPayments
-        .map((p) => ({
-            payment: p.payment,
-            amountApplied: p.amount,
-            payerProfile: p.payerProfile,
-            receiverProfile: p.receiverProfile,
-            groupName: p.groupName,
-        }))
-        .sort((a, b) => new Date(b.payment.payment_date || '').getTime() - new Date(a.payment.payment_date || '').getTime());
-
+    const appliedPayments: AppliedPaymentItem[] = [];
     const settledPayments: AppliedPaymentItem[] = [];
+    offsetPool.forEach((offset) => {
+        if (offset.type !== 'payment' || !offset.payment) return;
+        if (offset.appliedToActive > 0.009) {
+            appliedPayments.push({
+                payment: offset.payment.payment,
+                amountApplied: Math.round(offset.appliedToActive * 100) / 100,
+                payerProfile: offset.payment.payerProfile,
+                receiverProfile: offset.payment.receiverProfile,
+                groupName: offset.payment.groupName,
+            });
+        }
+        if (offset.consumedBySettled > 0.009) {
+            settledPayments.push({
+                payment: offset.payment.payment,
+                amountApplied: Math.round(offset.consumedBySettled * 100) / 100,
+                payerProfile: offset.payment.payerProfile,
+                receiverProfile: offset.payment.receiverProfile,
+                groupName: offset.payment.groupName,
+            });
+        }
+    });
 
     const reverseOffsets: ReverseOffsetItem[] = rawReverseOffsets
         .map((r) => ({
@@ -1195,11 +1394,11 @@ export function calculatePairwiseDebtDetail(
         }))
         .sort((a, b) => new Date(b.expense.expense_date || '').getTime() - new Date(a.expense.expense_date || '').getTime());
 
-    const totalOriginalDebt = pendingExpenses.reduce((sum, d) => sum + d.originalAmount, 0);
-    const totalPaymentsApplied = appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
+    const totalOriginalDebt = calculatedDebts.reduce((sum, d) => sum + d.originalAmount, 0);
+    const totalPaymentsApplied = appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0)
+        + settledPayments.reduce((sum, p) => sum + p.amountApplied, 0);
     const totalReverseOffsets = reverseOffsets.reduce((sum, r) => sum + r.amount, 0);
 
-    // Direct 1-to-1 balance between debtor and creditor
     const directPair = calculateDirectBalances(filteredExpenses, filteredPayments, profiles, groupId).find(
         (pb) => pb.debtor.id === debtor.id && pb.creditor.id === creditor.id
     );
@@ -1214,8 +1413,8 @@ export function calculatePairwiseDebtDetail(
 
     if (isSimplified && !skipSimplification) {
         const currencyForFormatting = groupId
-            ? groups.find((g) => g.id === groupId)?.currency || 'COP'
-            : 'COP';
+            ? groups.find((g) => g.id === groupId)?.currency || calculationCurrency
+            : calculationCurrency;
 
         const getExpensesForPair = (payerId: string, partId: string): Expense[] => {
             return filteredExpenses.filter((e) => {
@@ -1251,16 +1450,6 @@ export function calculatePairwiseDebtDetail(
             const isDiscount = diff > 0.009;
             const totalCompensated = Math.abs(diff);
             const simplifiedAmount = rawSimplifiedAmount;
-
-            // Diagnostic logging for balance calculation verification
-            console.log({
-                debtor: debtor.full_name,
-                creditor: creditor.full_name,
-                netDirectBalance,
-                simplifiedAmount,
-                totalCompensated,
-                isDiscount,
-            });
 
             // Invariant check: difference with simplified amount from network must be within 0.01 tolerance
             const expectedSimplified = isDiscount
@@ -1305,7 +1494,7 @@ export function calculatePairwiseDebtDetail(
                     directWithCreditor: number;
                     simplifiedWithDebtor: number;
                     simplifiedWithCreditor: number;
-                    role: string;
+                    role: ThirdPartyTriangulation['role'];
                 }
 
                 const compBreakdownItems: CompBreakdownItem[] = [];
@@ -1556,22 +1745,6 @@ export function calculatePairwiseDebtDetail(
                     }
                 }
 
-                // Diagnostic verification and logging for all relevantRelations (Requirement 1)
-                relevantRelations.forEach((rel) => {
-                    const directPair = allDirectDebts.find(
-                        (b) => b.debtor.id === rel.from.id && b.creditor.id === rel.to.id
-                    );
-                    const directVal = directPair ? directPair.amount : 0;
-                    const simplifiedPair = allSimplifiedDebts.find(
-                        (b) => b.debtor.id === rel.from.id && b.creditor.id === rel.to.id
-                    );
-                    const simplifiedVal = simplifiedPair ? simplifiedPair.amount : 0;
-                    const differs = Math.abs(directVal - simplifiedVal) > 0.01;
-                    console.log(
-                        `[PairwiseRelationCheck: ${rel.from.full_name || 'Deudor'} -> ${rel.to.full_name || 'Acreedor'}] direction=${rel.direction}, directAmount=${directVal}, simplifiedAmount=${simplifiedVal}, graphAmount=${rel.amount}, differs=${differs}`
-                    );
-                });
-
                 // 1. COMPENSATION FORMULA & LABEL: Justifies ONLY the compensation amount (e.g. $53,500)
                 let compFormula = '';
                 let compLabel = '';
@@ -1772,7 +1945,7 @@ export function calculatePairwiseDebtDetail(
                         thirdPartyName: item.partyName,
                         amount: item.amount,
                         isDiscount,
-                        role: item.role as any,
+                        role: item.role,
                         shortSummary: isDiscount
                             ? `Transferencia redirigida de ${formatCurrency(item.amount, currencyForFormatting)} a ${item.partyName}`
                             : `Deuda directa de ${formatCurrency(item.directWithDebtor || item.amount, currencyForFormatting)} con ${item.partyName} absorbida por ${creditorDisplayName}`,
@@ -1929,6 +2102,10 @@ export function calculateMemberAccountStatement(
 ): MemberAccountStatement {
     const filteredExpenses = groupId ? expenses.filter((e) => e.group_id === groupId) : expenses;
     const filteredPayments = groupId ? payments.filter((p) => p.group_id === groupId) : payments;
+    const currencies = getDistinctCurrencies(filteredExpenses, filteredPayments);
+    if (currencies.length > 1) {
+        throw new Error('No se puede calcular un estado de cuenta con monedas mezcladas. Selecciona un grupo o una moneda.');
+    }
 
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
@@ -2081,7 +2258,7 @@ export function calculateMemberAccountStatement(
 
                 const isFullyPaid = splitOwed < 0.009;
                 const isPartiallyPaid = splitPaid > 0.009 && !isFullyPaid;
-                const g = groupMap.get(item.expense.group_id);
+                const g = item.expense.group_id ? groupMap.get(item.expense.group_id) : undefined;
 
                 const breakdownItem: DebtBreakdownItem = {
                     expense: item.expense,
@@ -2155,7 +2332,7 @@ export function calculateMemberAccountStatement(
 
             // Member's consumptions from peer are fully settled
             debtsFromMember.forEach((item) => {
-                const g = groupMap.get(item.expense.group_id);
+                const g = item.expense.group_id ? groupMap.get(item.expense.group_id) : undefined;
                 settledDebtBreakdown.push({
                     expense: item.expense,
                     split: item.split,
@@ -2175,7 +2352,7 @@ export function calculateMemberAccountStatement(
         } else {
             // Net is 0 (fully settled)
             debtsFromMember.forEach((item) => {
-                const g = groupMap.get(item.expense.group_id);
+                const g = item.expense.group_id ? groupMap.get(item.expense.group_id) : undefined;
                 settledDebtBreakdown.push({
                     expense: item.expense,
                     split: item.split,
@@ -2242,10 +2419,12 @@ export function calculateMemberAccountStatement(
     const totalPendingDebt = Math.round(
         pendingDebtBreakdown.reduce((sum, item) => sum + item.pendingAmount, 0) * 100
     ) / 100;
-    const totalSettledDebt = Math.round(
-        settledDebtBreakdown.reduce((sum, item) => sum + item.originalAmount, 0) * 100
-    ) / 100;
-    const totalConsumedDebt = Math.round((totalPendingDebt + totalSettledDebt) * 100) / 100;
+    const totalConsumedDebt = Math.round((
+        pendingDebtBreakdown.reduce((sum, item) => sum + item.originalAmount, 0)
+        + settledDebtBreakdown.reduce((sum, item) => sum + item.originalAmount, 0)
+    ) * 100) / 100;
+    // Includes amounts already paid on partially settled consumptions plus fully settled consumptions.
+    const totalSettledDebt = Math.round((totalConsumedDebt - totalPendingDebt) * 100) / 100;
 
     const totalActiveRecoverable = Math.round(
         Array.from(peerBreakdowns.values()).reduce((sum, p) => sum + p.pendingRecoverAmount, 0) * 100

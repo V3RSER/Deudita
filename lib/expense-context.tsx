@@ -1,11 +1,13 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Expense,
     ExpenseAuditLog,
     ExpenseDraft,
     ExpenseSplit,
+    ExpenseItemInput,
+    ExpenseSplitInput,
     Group,
     GroupCategory,
     GroupInvite,
@@ -67,8 +69,8 @@ interface ExpenseContextType {
     acceptGroupInvite: (inviteId: string) => Promise<string>;
     rejectGroupInvite: (inviteId: string) => Promise<void>;
     markNotificationAsRead: (notificationId?: string) => Promise<void>;
-    addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<Expense>;
-    updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: any[], splits?: any[]) => Promise<Expense>;
+    addExpense: (expense: Omit<Expense, 'id' | 'created_at'>, items?: ExpenseItemInput[], splits?: ExpenseSplitInput[]) => Promise<Expense>;
+    updateExpense: (id: string, expense: Omit<Expense, 'id' | 'created_at'>, items?: ExpenseItemInput[], splits?: ExpenseSplitInput[]) => Promise<Expense>;
     deleteExpense: (id: string) => Promise<void>;
     addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
     updatePayment: (id: string, payment: Omit<Payment, 'id' | 'created_at'>) => Promise<Payment>;
@@ -105,32 +107,53 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [hiddenFriendIds, setHiddenFriendIds] = useState<string[]>([]);
 
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
+    const operationsRef = useRef<Array<{ id: number; label: string }>>([]);
+    const nextOperationIdRef = useRef(0);
+    const reloadSequenceRef = useRef(0);
 
     const runOperation = async <T,>(operationLabel: string, action: () => Promise<T>): Promise<T> => {
+        const operationId = ++nextOperationIdRef.current;
+        operationsRef.current.push({ id: operationId, label: operationLabel });
         setIsMutating(true);
         setActiveOperation(operationLabel);
         try {
             return await action();
         } finally {
-            setIsMutating(false);
-            setActiveOperation(null);
+            operationsRef.current = operationsRef.current.filter((operation) => operation.id !== operationId);
+            const lastOperation = operationsRef.current.at(-1);
+            setIsMutating(operationsRef.current.length > 0);
+            setActiveOperation(lastOperation?.label ?? null);
         }
     };
 
     const reloadFromSupabase = useCallback(async (fullSync: boolean = false) => {
+        const requestId = ++reloadSequenceRef.current;
+        setLoading(true);
         try {
             const url = fullSync ? '/api/sync?full=true' : '/api/sync';
             const res = await fetch(url);
             if (!res.ok) {
+                if (requestId !== reloadSequenceRef.current) return;
                 if (res.status === 401) {
                     setCurrentProfile(null);
+                    setProfiles([]);
+                    setGroups([]);
+                    setMembers([]);
+                    setExpenses([]);
+                    setPayments([]);
+                    setDrafts([]);
+                    setAuditLogs([]);
+                    setPendingInvites([]);
+                    setNotifications([]);
+                    setHiddenFriendIds([]);
                 }
                 setLoading(false);
                 return;
             }
 
             const data = await res.json();
+            if (requestId !== reloadSequenceRef.current) return;
             if (data.profile) setCurrentProfile(data.profile as Profile);
             if (data.profiles) setProfiles(data.profiles as Profile[]);
             if (data.groups) setGroups(data.groups as Group[]);
@@ -175,8 +198,9 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                             }
                             // Fetch latest data to include the newly joined group
                             const refreshRes = await fetch('/api/sync');
-                            if (refreshRes.ok) {
+                            if (refreshRes.ok && requestId === reloadSequenceRef.current) {
                                 const refreshed = await refreshRes.json();
+                                if (requestId !== reloadSequenceRef.current) return;
                                 if (refreshed.groups) setGroups(refreshed.groups as Group[]);
                                 if (refreshed.members) setMembers(refreshed.members as GroupMember[]);
                                 if (refreshed.profiles) setProfiles(refreshed.profiles as Profile[]);
@@ -191,7 +215,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         } catch (err) {
             console.error('Error al sincronizar datos:', err);
         } finally {
-            setLoading(false);
+            if (requestId === reloadSequenceRef.current) setLoading(false);
         }
     }, []);
 
@@ -211,20 +235,35 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     }, [reloadFromSupabase, supabase]);
 
     const logout = async () => {
+        ++reloadSequenceRef.current;
         await supabase.auth.signOut();
         setCurrentProfile(null);
+        setProfiles([]);
+        setGroups([]);
+        setMembers([]);
+        setExpenses([]);
+        setPayments([]);
+        setDrafts([]);
+        setAuditLogs([]);
+        setPendingInvites([]);
+        setNotifications([]);
+        setHiddenFriendIds([]);
     };
 
     const completeOnboarding = async (): Promise<void> => {
         if (!currentProfile) return;
+        const previousProfile = currentProfile;
         setCurrentProfile((prev) => (prev ? { ...prev, onboarding_completed: true } : null));
         try {
-            await fetch('/api/profile', {
+            const res = await fetch('/api/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ onboarding_completed: true }),
             });
+            if (!res.ok) throw new Error('No se pudo guardar el estado de onboarding');
         } catch (err) {
+            setCurrentProfile(previousProfile);
+            setProfiles((prev) => prev.map((profile) => profile.id === previousProfile.id ? previousProfile : profile));
             console.warn('[ExpenseContext] Could not persist onboarding status:', err);
         }
     };
@@ -298,9 +337,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                     event: '*',
                     schema: 'public',
                     table: 'expenses',
-                    filter: filterClause,
                 },
-                async (payload: RealtimePostgresChangesPayload<Record<string, any>>) => {
+                async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
                         const newRecord = payload.new as { id?: string; group_id?: string };
                         if (!newRecord?.id || !newRecord.group_id) return;
@@ -326,9 +364,17 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                         });
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedRecord = payload.new as { id?: string; group_id?: string };
-                        if (!updatedRecord?.id || !updatedRecord.group_id) return;
-                        // Client-side defense in depth
-                        if (!groupIds.includes(updatedRecord.group_id)) return;
+                        const oldRecord = payload.old as { id?: string; group_id?: string };
+                        if (!updatedRecord?.id) return;
+                        const newInScope = Boolean(updatedRecord.group_id && groupIds.includes(updatedRecord.group_id));
+                        const oldInScope = Boolean(oldRecord?.group_id && groupIds.includes(oldRecord.group_id));
+
+                        if (!newInScope) {
+                            if (oldInScope) {
+                                setExpenses((prev) => prev.filter((e) => e.id !== updatedRecord.id));
+                            }
+                            return;
+                        }
 
                         // Hydrate full row with items and splits relations
                         const { data, error } = await supabase
@@ -365,9 +411,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                     event: '*',
                     schema: 'public',
                     table: 'payments',
-                    filter: filterClause,
                 },
-                (payload: RealtimePostgresChangesPayload<Record<string, any>>) => {
+                (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
                         const newRecord = payload.new as Payment;
                         if (!newRecord?.id || !newRecord.group_id) return;
@@ -380,9 +425,17 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                         });
                     } else if (payload.eventType === 'UPDATE') {
                         const updatedRecord = payload.new as Payment;
-                        if (!updatedRecord?.id || !updatedRecord.group_id) return;
-                        // Client-side defense in depth
-                        if (!groupIds.includes(updatedRecord.group_id)) return;
+                        const oldRecord = payload.old as { id?: string; group_id?: string };
+                        if (!updatedRecord?.id) return;
+                        const newInScope = Boolean(updatedRecord.group_id && groupIds.includes(updatedRecord.group_id));
+                        const oldInScope = Boolean(oldRecord?.group_id && groupIds.includes(oldRecord.group_id));
+
+                        if (!newInScope) {
+                            if (oldInScope) {
+                                setPayments((prev) => prev.filter((p) => p.id !== updatedRecord.id));
+                            }
+                            return;
+                        }
 
                         setPayments((prev) => {
                             if (prev.some((p) => p.id === updatedRecord.id)) {
@@ -449,10 +502,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 body: JSON.stringify({ targetUserId, shouldManage }),
             });
             if (!res.ok) {
-                await updateProfile({ managed_user_ids: updatedList });
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData?.error ? String(errData.error) : 'No se pudo actualizar la relación de administración');
             }
-        } catch {
-            await updateProfile({ managed_user_ids: updatedList });
+        } catch (error) {
+            setCurrentProfile(currentProfile);
+            setProfiles((prev) =>
+                prev.map((p) => {
+                    if (p.id === currentProfile.id) return currentProfile;
+                    if (p.id === targetUserId) return { ...p, managed_by: currentProfile.managed_user_ids?.includes(targetUserId) ? currentProfile.id : undefined };
+                    return p;
+                })
+            );
+            await reloadFromSupabase();
+            throw error;
         }
 
         await reloadFromSupabase();
@@ -587,10 +650,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            try {
-                await res.json();
-            } catch {
-                throw new Error('Respuesta inválida del servidor al eliminar el grupo');
+            if (res.status !== 204) {
+                await res.text().catch(() => '');
             }
 
             await reloadFromSupabase(false);
@@ -707,10 +768,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            try {
-                await res.json();
-            } catch {
-                throw new Error('Respuesta inválida del servidor al eliminar al amigo');
+            if (res.status !== 204) {
+                await res.text().catch(() => '');
             }
 
             await reloadFromSupabase(false);
@@ -763,10 +822,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            try {
-                await res.json();
-            } catch {
-                throw new Error('Respuesta inválida del servidor al rechazar la invitación');
+            if (res.status !== 204) {
+                await res.text().catch(() => '');
             }
 
             await reloadFromSupabase(false);
@@ -795,10 +852,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
             throw new Error(message);
         }
 
-        try {
-            await res.json();
-        } catch {
-            throw new Error('Respuesta inválida del servidor al actualizar notificaciones');
+        if (res.status !== 204) {
+            await res.text().catch(() => '');
         }
 
         setNotifications((prev) =>
@@ -813,8 +868,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
     const addExpense = async (
         expense: Omit<Expense, 'id' | 'created_at'>,
-        items?: any[],
-        splits?: any[]
+        items?: ExpenseItemInput[],
+        splits?: ExpenseSplitInput[]
     ): Promise<Expense> => {
         return await runOperation('Guardando gasto...', async () => {
             const res = await fetch('/api/expenses', {
@@ -855,8 +910,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     const updateExpense = async (
         id: string,
         expense: Omit<Expense, 'id' | 'created_at'>,
-        items?: any[],
-        splits?: any[]
+        items?: ExpenseItemInput[],
+        splits?: ExpenseSplitInput[]
     ): Promise<Expense> => {
         return await runOperation('Actualizando gasto y participantes...', async () => {
             const res = await fetch(`/api/expenses/${id}`, {
@@ -912,10 +967,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            try {
-                await res.json();
-            } catch {
-                throw new Error('Respuesta inválida del servidor al eliminar el gasto');
+            if (res.status !== 204) {
+                await res.text().catch(() => '');
             }
 
             setExpenses((prev) => prev.filter((e) => e.id !== id));
@@ -1007,10 +1060,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            try {
-                await res.json();
-            } catch {
-                throw new Error('Respuesta inválida del servidor al eliminar el pago');
+            if (res.status !== 204) {
+                await res.text().catch(() => '');
             }
 
             setPayments((prev) => prev.filter((p) => p.id !== id));
@@ -1053,15 +1104,23 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(message);
             }
 
-            let data: any;
+            let data: { expense?: Expense } | Expense;
             try {
                 data = await res.json();
             } catch {
                 throw new Error('Respuesta inválida del servidor al confirmar el borrador');
             }
 
-            const confirmedExpense: Expense = data.expense || data;
-            if (confirmedExpense?.id) {
+            const confirmedExpense: Expense | null =
+                'expense' in data && data.expense
+                    ? data.expense
+                    : 'id' in data
+                        ? data
+                        : null;
+            if (!confirmedExpense?.id) {
+                throw new Error('La respuesta del servidor no contiene el gasto confirmado');
+            }
+            if (confirmedExpense.id) {
                 setExpenses((prev) => [confirmedExpense, ...prev.filter((e) => e.id !== confirmedExpense.id)]);
             }
             setDrafts((prev) => prev.filter((d) => d.id !== draftId));
@@ -1160,10 +1219,13 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
-    const userGroups = useMemo(
-        () => groups.filter((g) => members.some((m) => m.group_id === g.id && m.user_id === currentProfile?.id)),
-        [groups, members, currentProfile?.id]
-    );
+    const userGroups = useMemo(() => {
+        const userId = currentProfile?.id;
+        if (!userId) return [];
+        return groups.filter(
+            (g) => g.owner_id === userId || members.some((m) => m.group_id === g.id && m.user_id === userId)
+        );
+    }, [groups, members, currentProfile?.id]);
 
     return (
         <ExpenseContext.Provider

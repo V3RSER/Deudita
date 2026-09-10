@@ -1,5 +1,15 @@
 import { Expense, Payment } from './types';
 
+const ZERO_DECIMAL_CURRENCIES = new Set(['CLP', 'COP', 'JPY', 'KRW', 'VND']);
+
+function parseLocalDateOnly(dateStr: string): Date | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+}
+
+
 export type DateFilterMode = 'expense_date' | 'entry_date';
 
 /**
@@ -43,6 +53,7 @@ export function combineDateAndTimeToISO(dateStr: string, timeStr?: string): stri
         dateStr = getTodayDateString();
     }
     const time = timeStr && timeStr.trim() !== '' ? timeStr.trim() : '00:00';
+    if (!/^\d{2}:\d{2}$/.test(time)) return '';
     const cleanDate = dateStr.split('T')[0];
     const [yearStr, monthStr, dayStr] = cleanDate.split('-');
     const [hourStr, minuteStr] = time.split(':');
@@ -53,8 +64,13 @@ export function combineDateAndTimeToISO(dateStr: string, timeStr?: string): stri
     const hour = parseInt(hourStr || '0', 10);
     const minute = parseInt(minuteStr || '0', 10);
 
+    const validDateParts = Number.isInteger(year) && Number.isInteger(monthIndex) && Number.isInteger(day) && Number.isInteger(hour) && Number.isInteger(minute)
+        && monthIndex >= 0 && monthIndex <= 11 && day >= 1 && day <= 31 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+    if (!validDateParts) return '';
+
     const dateObj = new Date(year, monthIndex, day, hour, minute, 0, 0);
-    return isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString();
+    if (dateObj.getFullYear() !== year || dateObj.getMonth() !== monthIndex || dateObj.getDate() !== day) return '';
+    return dateObj.toISOString();
 }
 
 /**
@@ -83,20 +99,22 @@ export function getRecordEntryDateInfo(record: {
     updated_at?: string | null;
 }): { timestamp: string; dateObj: Date; isUpdated: boolean } {
     const createdDate = new Date(record.created_at);
+    const hasValidCreatedDate = !isNaN(createdDate.getTime());
     if (record.updated_at) {
         const updatedDate = new Date(record.updated_at);
-        // If updatedDate is valid and differs by more than 2 seconds
-        if (!isNaN(updatedDate.getTime()) && Math.abs(updatedDate.getTime() - createdDate.getTime()) > 2000) {
+        // Prefer a valid update timestamp when creation metadata is invalid, or when
+        // the update is meaningfully newer than the creation timestamp.
+        if (!isNaN(updatedDate.getTime()) && (!hasValidCreatedDate || updatedDate.getTime() - createdDate.getTime() > 2000)) {
             return {
                 timestamp: record.updated_at,
                 dateObj: updatedDate,
-                isUpdated: true,
+                isUpdated: hasValidCreatedDate,
             };
         }
     }
     return {
-        timestamp: record.created_at,
-        dateObj: isNaN(createdDate.getTime()) ? new Date() : createdDate,
+        timestamp: hasValidCreatedDate ? record.created_at : '',
+        dateObj: createdDate,
         isUpdated: false,
     };
 }
@@ -122,9 +140,10 @@ export function getRecordEventDateInfo(record: {
                 return { timestamp: record.expense_time, dateObj: d, hasExplicitTime: timeStr !== '00:00' };
             }
         }
-        const [year, month, day] = record.expense_date.split('-').map(Number);
-        const d = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0);
-        return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
+        const d = parseLocalDateOnly(record.expense_date);
+        if (d) {
+            return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
+        }
     }
 
     // Payment check
@@ -136,21 +155,25 @@ export function getRecordEventDateInfo(record: {
                 return { timestamp: record.payment_time, dateObj: d, hasExplicitTime: timeStr !== '00:00' };
             }
         }
-        const [year, month, day] = record.payment_date.split('-').map(Number);
-        const d = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0);
-        return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
+        const d = parseLocalDateOnly(record.payment_date);
+        if (d) {
+            return { timestamp: d.toISOString(), dateObj: d, hasExplicitTime: false };
+        }
     }
 
     // Fallback to created_at
     const d = new Date(record.created_at);
-    return { timestamp: record.created_at, dateObj: isNaN(d.getTime()) ? new Date() : d, hasExplicitTime: true };
+    if (!isNaN(d.getTime())) {
+        return { timestamp: record.created_at, dateObj: d, hasExplicitTime: false };
+    }
+    return { timestamp: '', dateObj: new Date(NaN), hasExplicitTime: false };
 }
 
 /**
  * Returns the effective timestamp and sorting Date object for any transaction under the given filter mode
  */
 export function getEffectiveTransactionDate(
-    tx: Expense | Payment | any,
+    tx: Expense | Payment,
     mode: DateFilterMode = 'expense_date'
 ): { dateObj: Date; timestamp: string; isUpdated: boolean; hasExplicitTime: boolean; mode: DateFilterMode } {
     if (mode === 'entry_date') {
@@ -255,8 +278,8 @@ export function isDateMatchingFilter(
     preset: DatePreset | string,
     customRange?: { start?: string; end?: string }
 ): boolean {
-    if (isNaN(dateObj.getTime())) return true;
     if (!preset || preset === 'all') return true;
+    if (isNaN(dateObj.getTime())) return false;
 
     const now = new Date();
     const year = dateObj.getFullYear();
@@ -280,10 +303,15 @@ export function isDateMatchingFilter(
     }
 
     if (preset === 'this_week') {
-        const sevenDaysAgo = new Date(now);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        sevenDaysAgo.setHours(0, 0, 0, 0);
-        return dateObj.getTime() >= sevenDaysAgo.getTime() && dateObj.getTime() <= now.getTime() + 86400000;
+        const startOfWeek = new Date(now);
+        startOfWeek.setHours(0, 0, 0, 0);
+        const dayOfWeek = startOfWeek.getDay(); // Sunday = 0, Monday = 1
+        const daysSinceMonday = (dayOfWeek + 6) % 7;
+        startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
+
+        const endOfToday = new Date(now);
+        endOfToday.setHours(23, 59, 59, 999);
+        return dateObj.getTime() >= startOfWeek.getTime() && dateObj.getTime() <= endOfToday.getTime();
     }
 
     if (preset === 'this_month') {
@@ -317,65 +345,62 @@ export function isDateMatchingFilter(
  */
 export function parseCurrencyAmount(val: unknown, currency?: string): number {
     if (typeof val === 'number') {
-        return isNaN(val) ? 0 : val;
+        return Number.isFinite(val) ? val : 0;
     }
-    if (!val) return 0;
+    if (val === null || val === undefined) return 0;
+
     const str = String(val).trim();
     if (!str) return 0;
 
-    // Remove currency signs, spaces and non-numeric/non-separator chars
+    const negative = /^-/.test(str);
     const clean = str.replace(/[^0-9.,]/g, '');
     if (!clean) return 0;
 
     const hasComma = clean.includes(',');
     const hasDot = clean.includes('.');
+    let parsed = 0;
 
     if (hasComma && hasDot) {
         const lastCommaIndex = clean.lastIndexOf(',');
         const lastDotIndex = clean.lastIndexOf('.');
         if (lastCommaIndex > lastDotIndex) {
-            // e.g. 1.250,50 -> dot is thousand separator, comma is decimal
-            const numStr = clean.replace(/\./g, '').replace(',', '.');
-            return parseFloat(numStr) || 0;
+            // 1.250,50 -> 1250.50
+            parsed = Number.parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
         } else {
-            // e.g. 1,250.50 -> comma is thousand separator, dot is decimal
-            const numStr = clean.replace(/,/g, '');
-            return parseFloat(numStr) || 0;
+            // 1,250.50 -> 1250.50
+            parsed = Number.parseFloat(clean.replace(/,/g, '')) || 0;
         }
-    }
-
-    if (hasDot && !hasComma) {
+    } else if (hasDot && !hasComma) {
         const parts = clean.split('.');
         if (parts.length > 2) {
-            // Multiple dots e.g. 1.500.000 -> thousands separator
-            return parseFloat(clean.replace(/\./g, '')) || 0;
+            parsed = Number.parseFloat(clean.replace(/\./g, '')) || 0;
+        } else {
+            const decimalPart = parts[1] || '';
+            const normalizedCurrency = currency?.trim().toUpperCase();
+            const isZeroDecimalCurrency = normalizedCurrency ? ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency) : false;
+            if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
+                parsed = Number.parseFloat(clean.replace(/\./g, '')) || 0;
+            } else {
+                parsed = Number.parseFloat(clean) || 0;
+            }
         }
-        // Single dot: e.g. 50.000 vs 50.00
-        const decimalPart = parts[1] || '';
-        const isZeroDecimalCurrency = currency === 'COP' || currency === 'CLP' || currency === 'KRW' || currency === 'JPY' || !currency;
-        if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
-            // e.g. 50.000 in COP/CLP -> 50000
-            return parseFloat(clean.replace(/\./g, '')) || 0;
-        }
-        return parseFloat(clean) || 0;
-    }
-
-    if (hasComma && !hasDot) {
+    } else if (hasComma && !hasDot) {
         const parts = clean.split(',');
         if (parts.length > 2) {
-            // Multiple commas e.g. 1,500,000 -> thousands separator
-            return parseFloat(clean.replace(/,/g, '')) || 0;
+            parsed = Number.parseFloat(clean.replace(/,/g, '')) || 0;
+        } else {
+            const decimalPart = parts[1] || '';
+            const normalizedCurrency = currency?.trim().toUpperCase();
+            const isZeroDecimalCurrency = normalizedCurrency ? ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency) : false;
+            if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
+                parsed = Number.parseFloat(clean.replace(/,/g, '')) || 0;
+            } else {
+                parsed = Number.parseFloat(clean.replace(',', '.')) || 0;
+            }
         }
-        const decimalPart = parts[1] || '';
-        const isZeroDecimalCurrency = currency === 'COP' || currency === 'CLP' || currency === 'KRW' || currency === 'JPY' || !currency;
-        if (decimalPart.length === 3 || (isZeroDecimalCurrency && decimalPart.length > 2)) {
-            // e.g. 50,000 in COP
-            return parseFloat(clean.replace(/,/g, '')) || 0;
-        }
-        // Single comma with 1 or 2 digits e.g. 50,50 -> 50.50
-        return parseFloat(clean.replace(',', '.')) || 0;
+    } else {
+        parsed = Number.parseFloat(clean) || 0;
     }
 
-    return parseFloat(clean) || 0;
+    return negative ? -parsed : parsed;
 }
-

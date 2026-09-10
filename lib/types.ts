@@ -4,6 +4,16 @@ export function generateUUID(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
     }
+
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = (Math.random() * 16) | 0;
         const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -93,7 +103,7 @@ export interface Notification {
         managed_user_name?: string;
         invited_by_name?: string;
         invited_by_email?: string;
-        [key: string]: any;
+        [key: string]: unknown;
     };
     is_read: boolean;
     created_at: string;
@@ -116,6 +126,10 @@ export interface ExpenseSplit {
 }
 
 export type SplitType = 'equal' | 'exact' | 'percentage' | 'shares' | 'itemized';
+
+export type ExpenseItemInput = Pick<ExpenseItem, 'description' | 'amount'> & Partial<Pick<ExpenseItem, 'id' | 'expense_id' | 'created_at'>>;
+
+export type ExpenseSplitInput = Pick<ExpenseSplit, 'user_id' | 'amount_owed'> & Partial<Pick<ExpenseSplit, 'id' | 'expense_id' | 'created_at'>>;
 
 export interface ExpenseSplitConfig {
     version: 1;
@@ -177,7 +191,7 @@ export interface ExpenseAuditLog {
     group_id: string;
     user_id: string;
     action: 'create' | 'update' | 'delete';
-    changes?: Record<string, any>;
+    changes?: Record<string, unknown>;
     created_at: string;
     user?: Profile;
 }
@@ -209,6 +223,7 @@ export interface Payment {
     paid_by: string;
     paid_to: string;
     amount: number;
+    currency?: string | null;
     payment_date: string;
     payment_time?: string;
     note?: string;
@@ -225,6 +240,8 @@ export interface ManagedContribution {
 }
 
 export interface PairwiseBalance {
+    /** Currency in which the balance is denominated. Required for cross-group calculations. */
+    currency?: string;
     creditor: Profile;
     debtor: Profile;
     amount: number;
@@ -239,6 +256,8 @@ export interface PairwiseBalance {
 }
 
 export interface UserSummaryBalance {
+    /** Currency in which the summary is denominated when calculated across scopes. */
+    currency?: string;
     user: Profile;
     totalPaid: number;
     totalOwedShare: number;
