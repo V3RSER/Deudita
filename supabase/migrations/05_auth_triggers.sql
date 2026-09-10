@@ -1,9 +1,9 @@
 -- ============================================================================
--- 04_auth_triggers.sql
+-- 05_auth_triggers.sql
 -- Lógica de alta de usuario: fusión de perfiles temporales por token/email,
 -- unión a grupos vía invitación, y trigger sobre auth.users.
 -- Consolidado desde 0001 (§9) — estado final. Depende de 01_core_schema.sql
--- y 03_notifications_and_managed_users.sql (usa public.notifications).
+-- y 02_notifications_and_managed_users.sql (usa public.notifications).
 -- ============================================================================
 
 create or replace function public.claim_temp_profile(temp_id uuid, real_id uuid)

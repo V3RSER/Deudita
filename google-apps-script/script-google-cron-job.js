@@ -9,21 +9,22 @@ const DEBUG_MATCHING = false;
 // ------------------------------------------------------------
 
 function doGet(e) {
+    const token = e?.parameter ? (e.parameter.token || e.parameter.webhook_token) : null;
+    if (token) {
+        const props = PropertiesService.getUserProperties();
+        props.setProperty('WEBHOOK_TOKEN', String(token).trim());
+        CacheService.getUserCache().remove('TEMPLATES_JSON');
+    }
+
     if (e?.parameter?.mode === 'test') {
         return renderEmailTestApp();
     }
 
-    const token = e?.parameter ? e.parameter.token : null;
-
-    if (!token) {
+    if (!token && !getWebhookToken()) {
         return HtmlService.createHtmlOutput(
             '<p>Falta el token de conexión. Vuelve a la app y presiona "Conectar Gmail" de nuevo.</p>'
         );
     }
-
-    const props = PropertiesService.getUserProperties();
-    props.setProperty('WEBHOOK_TOKEN', token);
-    CacheService.getUserCache().remove('TEMPLATES_JSON');
 
     ensureLabelExists(PROCESSED_LABEL);
     installTriggerIfMissing();
@@ -61,8 +62,15 @@ function syncExpenseEmails(selectedMessageId) {
     const token = getWebhookToken();
 
     if (!token) {
-        console.warn('syncExpenseEmails: usuario sin WEBHOOK_TOKEN.');
-        return;
+        console.warn('syncExpenseEmails: usuario sin WEBHOOK_TOKEN configurado en UserProperties.');
+        return {
+            success: false,
+            error: 'No hay WEBHOOK_TOKEN configurado. Guarda tu token de Deudita primero.',
+            messagesProcessed: 0,
+            matchesFound: 0,
+            expensesSent: 0,
+            expensesFailed: 0,
+        };
     }
 
     const label = GmailApp.getUserLabelByName(PROCESSED_LABEL) ||
@@ -73,7 +81,14 @@ function syncExpenseEmails(selectedMessageId) {
 
     if (!templates.length) {
         console.log('No hay plantillas disponibles.');
-        return;
+        return {
+            success: true,
+            warning: 'No hay plantillas disponibles en el catálogo.',
+            messagesProcessed: 0,
+            matchesFound: 0,
+            expensesSent: 0,
+            expensesFailed: 0,
+        };
     }
 
     // La adaptación del payload de la API al catálogo que consume el motor es
@@ -98,6 +113,7 @@ function syncExpenseEmails(selectedMessageId) {
     let matchesFound = 0;
     let expensesSent = 0;
     let expensesFailed = 0;
+    let lastExpenseResult = null;
     const matchesByTemplate = {};
     const processedThreads = [];
 
@@ -151,8 +167,9 @@ function syncExpenseEmails(selectedMessageId) {
                 );
             }
 
-            const sent = sendExpense(token, message, match);
-            if (sent) {
+            const sendResult = sendExpense(token, message, match);
+            lastExpenseResult = sendResult;
+            if (sendResult && sendResult.success) {
                 expensesSent++;
             } else {
                 expensesFailed++;
@@ -181,6 +198,15 @@ function syncExpenseEmails(selectedMessageId) {
     if (matchesFound > 0) {
         console.log(`Matches por plantilla: ${JSON.stringify(matchesByTemplate)}`);
     }
+
+    return {
+        success: expensesFailed === 0 && (expensesSent > 0 || (matchesFound === 0 && messagesProcessed > 0)),
+        messagesProcessed,
+        matchesFound,
+        expensesSent,
+        expensesFailed,
+        lastResult: lastExpenseResult,
+    };
 }
 
 /**
@@ -227,6 +253,8 @@ function buildCatalogEntitiesFromTemplates(templates) {
 // ------------------------------------------------------------
 
 function sendExpense(token, message, match) {
+    const cleanToken = String(token || '').trim();
+
     const payload = {
         gmail_message_id: message.getId(),
         template_id: match.templateId,
@@ -243,6 +271,8 @@ function sendExpense(token, message, match) {
         expense_type: match.expenseType || match.expense_type || null,
         received_at: message.getDate().toISOString(),
         is_draft: true,
+        webhook_token: cleanToken,
+        token: cleanToken,
     };
 
     const payloadJson = JSON.stringify(payload);
@@ -251,13 +281,17 @@ function sendExpense(token, message, match) {
         `EXPENSE CREATE REQUEST | messageId=${message.getId()} | json=${payloadJson}`
     );
 
+    const baseUrl = getBackendBaseUrl();
+    const endpoint = `${baseUrl}/api/expenses?token=${encodeURIComponent(cleanToken)}`;
+
     const response = UrlFetchApp.fetch(
-        `${BACKEND_BASE_URL}/api/expenses`,
+        endpoint,
         {
             method: 'post',
             contentType: 'application/json',
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${cleanToken}`,
+                'X-Webhook-Token': cleanToken,
             },
             payload: payloadJson,
             muteHttpExceptions: true,
@@ -276,10 +310,18 @@ function sendExpense(token, message, match) {
         console.warn(
             `/api/expenses respondió ${code} para el mensaje ${message.getId()}: ${responseText}`
         );
-        return false;
+        return {
+            success: false,
+            statusCode: code,
+            error: responseText,
+        };
     }
 
-    return true;
+    return {
+        success: true,
+        statusCode: code,
+        body: responseText,
+    };
 }
 
 // ------------------------------------------------------------
@@ -302,11 +344,15 @@ function getTemplatesWithCache(token, forceRefresh = false) {
         return templates;
     }
 
+    const baseUrl = getBackendBaseUrl();
+    const cleanToken = String(token || '').trim();
+
     const response = UrlFetchApp.fetch(
-        `${BACKEND_BASE_URL}/api/email-templates`,
+        `${baseUrl}/api/email-templates?token=${encodeURIComponent(cleanToken)}`,
         {
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${cleanToken}`,
+                'X-Webhook-Token': cleanToken,
             },
             muteHttpExceptions: true,
         }
@@ -355,9 +401,17 @@ function refreshTemplatesCacheForTest() {
 // ------------------------------------------------------------
 
 function getWebhookToken() {
-    return PropertiesService
+    const stored = PropertiesService
         .getUserProperties()
         .getProperty('WEBHOOK_TOKEN');
+    return stored ? stored.trim() : null;
+}
+
+function getBackendBaseUrl() {
+    const custom = PropertiesService
+        .getUserProperties()
+        .getProperty('BACKEND_BASE_URL');
+    return (custom && custom.trim()) ? custom.trim().replace(/\/+$/, '') : BACKEND_BASE_URL;
 }
 
 function getLastSyncEpoch() {

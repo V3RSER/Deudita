@@ -349,10 +349,16 @@ async function resolveExpenseTypeId(
 
 export async function GET(req: NextRequest) {
     try {
-        const authorization = req.headers.get('authorization') || '';
+        const url = new URL(req.url);
+        const authorization = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+        const customToken = req.headers.get('x-webhook-token') || req.headers.get('X-Webhook-Token') || '';
+        const queryToken = url.searchParams.get('token') || url.searchParams.get('webhook_token') || '';
+
         const bearerToken = authorization.startsWith('Bearer ')
             ? authorization.slice(7).trim()
-            : null;
+            : ((authorization && !authorization.includes(' ') ? authorization.trim() : null)
+                || (customToken ? customToken.trim() : null)
+                || (queryToken ? queryToken.trim() : null));
 
         if (bearerToken) {
             const db = getDirectClient();

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 03_notifications_and_managed_users.sql
+-- 02_notifications_and_managed_users.sql
 -- Notificaciones y usuarios gestionados (patrocinio).
 -- Consolidado desde 0001 (§6) y 0002 (§1-2) — estado final.
 -- ============================================================================

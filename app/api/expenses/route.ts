@@ -25,39 +25,94 @@ function getDirectClient() {
  */
 export async function POST(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
-        const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+        const url = new URL(req.url);
+        const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+        const customTokenHeader = req.headers.get('x-webhook-token') || req.headers.get('X-Webhook-Token') || '';
+        const queryToken = url.searchParams.get('token') || url.searchParams.get('webhook_token') || '';
+
+        const body = await req.json().catch(() => ({}));
+        const rawExpense = (body && typeof body === 'object' && body.expense && typeof body.expense === 'object') ? body.expense : (body || {});
+
+        const bodyToken = (typeof body.webhook_token === 'string' && body.webhook_token)
+            || (typeof body.token === 'string' && body.token)
+            || (typeof rawExpense.webhook_token === 'string' && rawExpense.webhook_token)
+            || (typeof rawExpense.token === 'string' && rawExpense.token)
+            || '';
+
+        // Extraer token de webhook de cualquier canal posible (Header Bearer, Header X-Webhook-Token, Query param, o Body)
+        let webhookToken: string | null = null;
+        if (authHeader.startsWith('Bearer ')) {
+            const extracted = authHeader.substring(7).trim();
+            if (extracted) webhookToken = extracted;
+        } else if (authHeader && !authHeader.includes(' ')) {
+            webhookToken = authHeader.trim();
+        }
+
+        if (!webhookToken && customTokenHeader) {
+            webhookToken = customTokenHeader.trim();
+        }
+        if (!webhookToken && queryToken) {
+            webhookToken = queryToken.trim();
+        }
+        if (!webhookToken && bodyToken) {
+            webhookToken = bodyToken.trim();
+        }
 
         let targetUserId: string | null = null;
         let isWebhookAuth = false;
         let clientSupabase: any = null;
 
-        if (bearerToken) {
+        if (webhookToken) {
             // 1. Autenticación por webhook_token (Google Apps Script)
             const directClient = getDirectClient();
-            const { data: connection, error: connErr } = await directClient
-                .from('email_ingest_connections')
-                .select('user_id, status')
-                .eq('webhook_token', bearerToken)
-                .eq('status', 'active')
-                .maybeSingle();
 
-            if (connErr || !connection) {
+            // Usar la función RPC 'resolve_user_by_webhook_token' con SECURITY DEFINER
+            // Esto evita que las políticas RLS de 'email_ingest_connections' bloqueen la lectura de usuarios anónimos
+            const { data: rpcUserId, error: rpcUserErr } = await directClient.rpc(
+                'resolve_user_by_webhook_token',
+                { p_token: webhookToken }
+            );
+
+            if (rpcUserId) {
+                targetUserId = rpcUserId;
+            } else {
+                // Fallback directo a la tabla si la función RPC no existiera
+                const { data: connection } = await directClient
+                    .from('email_ingest_connections')
+                    .select('user_id, status')
+                    .eq('webhook_token', webhookToken)
+                    .eq('status', 'active')
+                    .maybeSingle();
+
+                if (connection?.user_id) {
+                    targetUserId = connection.user_id;
+                }
+            }
+
+            if (!targetUserId) {
+                console.warn('[API /api/expenses] Token de webhook rechazado o inactivo:', {
+                    hasToken: Boolean(webhookToken),
+                    rpcError: rpcUserErr?.message,
+                });
                 return NextResponse.json(
                     { error: 'Token de webhook inválido o inactivo' },
                     { status: 401 }
                 );
             }
 
-            targetUserId = connection.user_id;
+            targetUserId = String(targetUserId);
             isWebhookAuth = true;
             clientSupabase = directClient;
 
-            // Actualizar timestamp de última sincronización
-            await directClient
-                .from('email_ingest_connections')
-                .update({ last_sync_at: new Date().toISOString() })
-                .eq('user_id', connection.user_id);
+            // Intentar actualizar timestamp de última sincronización
+            try {
+                await directClient
+                    .from('email_ingest_connections')
+                    .update({ last_sync_at: new Date().toISOString() })
+                    .eq('user_id', targetUserId);
+            } catch {
+                // Ignorar si RLS restringe el UPDATE
+            }
         } else {
             // 2. Autenticación por sesión activa de usuario
             const serverClient = await createClient();
@@ -76,8 +131,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Usuario no identificado' }, { status: 401 });
         }
 
-        const body = await req.json().catch(() => ({}));
-        const rawExpense = body.expense || body;
         const rawItems = Array.isArray(body.items) ? body.items : (Array.isArray(rawExpense.items) ? rawExpense.items : []);
         const rawSplits = Array.isArray(body.splits) ? body.splits : (Array.isArray(rawExpense.splits) ? rawExpense.splits : []);
 
@@ -85,7 +138,12 @@ export async function POST(req: NextRequest) {
             rawExpense.gmail_message_id || body.gmail_message_id || body.gmailMessageId || ''
         ).trim() || null;
 
-        const templateId = rawExpense.template_id || body.template_id || body.templateId || null;
+        const rawTemplateId = rawExpense.template_id || body.template_id || body.templateId || null;
+        // Postgres requiere UUID válido o null
+        const isValidUuid = typeof rawTemplateId === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawTemplateId.trim());
+        const templateId = isValidUuid ? rawTemplateId.trim() : null;
+
         const sourceAccount = rawExpense.source_account || rawExpense.sourceAccount || body.source_account || body.sourceAccount || null;
         const entity = rawExpense.entity || body.entity || null;
         const expenseType = rawExpense.expense_type || rawExpense.expenseType || body.expense_type || body.expenseType || null;
@@ -130,9 +188,39 @@ export async function POST(req: NextRequest) {
             rawExpense.description || body.description || rawExpense.merchant || body.merchant || rawExpense.concept || body.concept || entity || 'Gasto'
         ).trim();
 
-        // Fecha y hora
-        const expenseDate = rawExpense.expense_date || body.expense_date || body.date || new Date().toISOString().split('T')[0];
-        const expenseTime = rawExpense.expense_time || body.expense_time || body.time || null;
+        // Normalización de fecha para asegurar compatibilidad con Postgres date (YYYY-MM-DD)
+        const normalizeDateForPostgres = (rawDateStr?: string | null): string => {
+            if (!rawDateStr || typeof rawDateStr !== 'string') {
+                return new Date().toISOString().split('T')[0];
+            }
+            const clean = rawDateStr.trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+                return clean;
+            }
+            // Formato DD/MM/YYYY o DD-MM-YYYY
+            const dmy4 = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+            if (dmy4) {
+                const [, d, m, y] = dmy4;
+                return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+            }
+            // Formato DD/MM/YY o DD-MM-YY (ej. 05/09/26 -> 2026-09-05)
+            const dmy2 = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+            if (dmy2) {
+                const [, d, m, y] = dmy2;
+                const fullYear = 2000 + parseInt(y, 10);
+                return `${fullYear}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+            }
+            const parsed = new Date(clean);
+            if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString().split('T')[0];
+            }
+            return new Date().toISOString().split('T')[0];
+        };
+
+        const expenseDate = normalizeDateForPostgres(
+            rawExpense.expense_date || body.expense_date || rawExpense.date || body.date
+        );
+        const expenseTime = rawExpense.expense_time || body.expense_time || rawExpense.time || body.time || null;
 
         // Grupo
         let rawGroupId = rawExpense.group_id !== undefined ? rawExpense.group_id : (body.group_id !== undefined ? body.group_id : null);
@@ -152,10 +240,10 @@ export async function POST(req: NextRequest) {
         const receivedAt = body.received_at || body.receivedAt || new Date().toISOString();
         const rawSnippet = body.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency} ${parsedAmount}`;
 
-        // Si es una llamada desde el webhook y queremos usar la función Postgres optimizada
-        if (isWebhookAuth && bearerToken) {
+        // Si es una llamada desde el webhook, usar la función Postgres con SECURITY DEFINER
+        if (isWebhookAuth && webhookToken) {
             const { data: rpcData, error: rpcErr } = await clientSupabase.rpc('insert_expense_for_webhook', {
-                p_token: bearerToken,
+                p_token: webhookToken,
                 p_gmail_message_id: gmailMessageId,
                 p_template_id: templateId,
                 p_amount: parsedAmount,
@@ -173,19 +261,37 @@ export async function POST(req: NextRequest) {
 
             if (!rpcErr && rpcData) {
                 const expenseId = rpcData.expense_id || rpcData.id;
-                const { data: fullExpense } = await clientSupabase
-                    .from('expenses')
-                    .select('*, items:expense_items(*), splits:expense_splits(*)')
-                    .eq('id', expenseId)
-                    .maybeSingle();
 
                 return NextResponse.json({
-                    ...rpcData,
+                    success: true,
+                    inserted: Boolean(rpcData.inserted ?? true),
                     id: expenseId,
-                    expense: fullExpense,
+                    expense_id: expenseId,
+                    is_draft: true,
+                    status: 'draft',
+                    message: rpcData.message || 'Gasto guardado en modo borrador exitosamente',
+                    expense: {
+                        id: expenseId,
+                        group_id: null,
+                        paid_by: targetUserId,
+                        created_by: targetUserId,
+                        total_amount: parsedAmount,
+                        description,
+                        expense_date: expenseDate,
+                        expense_time: expenseTime,
+                        currency,
+                        entity,
+                        source_account: sourceAccount,
+                        is_draft: true,
+                        gmail_message_id: gmailMessageId,
+                        template_id: templateId,
+                        expense_type: expenseType,
+                        source: 'gmail',
+                    },
+                    ...rpcData,
                 });
             }
-            console.warn('[API /api/expenses] Webhook RPC fallback a inserción directa:', rpcErr?.message);
+            console.warn('[API /api/expenses] Webhook RPC error/fallback:', rpcErr?.message);
         }
 
         // Parseo de ítems
@@ -283,11 +389,12 @@ export async function POST(req: NextRequest) {
             .single();
 
         // Fallback si alguna columna opcional no existe
-        if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time'))) {
+        if (expErr && (expErr.code === 'PGRST204' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time') || expErr.message?.includes('split_config'))) {
             console.warn('[API /api/expenses] Reintentando inserción sin columnas opcionales:', expErr.message);
             delete expenseInsertPayload.category;
             delete expenseInsertPayload.notes;
             delete expenseInsertPayload.expense_time;
+            delete expenseInsertPayload.split_config;
 
             const fallbackRes = await clientSupabase
                 .from('expenses')

@@ -104,12 +104,13 @@ export async function PUT(
             .select()
             .single();
 
-        if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time') || expErr.message?.includes('updated_at') || expErr.message?.includes('updated_by'))) {
+        if (expErr && (expErr.code === 'PGRST204' || expErr.code === 'PGRST116' || expErr.message?.includes('category') || expErr.message?.includes('notes') || expErr.message?.includes('expense_time') || expErr.message?.includes('updated_at') || expErr.message?.includes('updated_by') || expErr.message?.includes('split_config'))) {
             delete updatePayload.category;
             delete updatePayload.notes;
             delete updatePayload.expense_time;
             delete updatePayload.updated_at;
             delete updatePayload.updated_by;
+            delete updatePayload.split_config;
 
             const fallbackRes = await supabase
                 .from('expenses')

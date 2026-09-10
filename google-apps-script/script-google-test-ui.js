@@ -49,3 +49,26 @@ function getTestEmails(options) {
     emails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return emails.slice(0, count);
 }
+
+function getConnectionInfo() {
+    const token = getWebhookToken();
+    const backendUrl = getBackendBaseUrl();
+    return {
+        hasToken: Boolean(token),
+        tokenMasked: token && token.length > 8 ? `${token.slice(0, 6)}...${token.slice(-4)}` : (token ? 'Configurado' : null),
+        backendUrl: backendUrl,
+    };
+}
+
+function saveTokenFromUi(token) {
+    if (!token || !token.trim()) {
+        throw new Error('El token no puede estar vacío');
+    }
+    const clean = token.trim();
+    PropertiesService.getUserProperties().setProperty('WEBHOOK_TOKEN', clean);
+    CacheService.getUserCache().remove('TEMPLATES_JSON');
+    return {
+        success: true,
+        tokenMasked: clean.length > 8 ? `${clean.slice(0, 6)}...${clean.slice(-4)}` : 'Configurado',
+    };
+}

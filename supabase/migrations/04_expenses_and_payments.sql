@@ -1,11 +1,12 @@
 -- ============================================================================
--- 02_expenses_and_payments.sql
--- Gastos, ítems, splits, pagos, auditoría, vista de balances y realtime.
+-- 04_expenses_and_payments.sql
+-- Gastos, ítems, splits, pagos, auditoría, vista de balances, realtime
+-- y función de ingesta webhook insert_expense_for_webhook.
 -- Consolidado desde 0001 (§3-4, 7), 0002 (§4-6), 0009, 0010 — estado final.
 --
 -- NOTA: incluye group_id nullable (gastos personales / sin grupo, 0009) y
--- todas las columnas de ingesta por Gmail directamente en public.expenses
--- (0009 unificó lo que antes vivía en expense_drafts; 0010 eliminó esa tabla).
+-- todas las columnas de ingesta por Gmail directamente en public.expenses,
+-- incluyendo split_config jsonb.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -33,6 +34,7 @@ create table public.expenses (
   template_id uuid references public.email_templates(id),
   gmail_message_id text,
   raw_snippet text,
+  split_config jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   updated_by uuid references public.profiles(id)
@@ -311,3 +313,163 @@ create policy "delete_group_payments" on public.payments
     or paid_by = auth.uid()
     or paid_to = auth.uid()
   );
+
+-- ============================================================================
+-- RPC DE INGESTA GMAIL (WEBHOOK)
+-- Inserta un gasto en modo borrador ("sin grupo"), con soporte de ítems
+-- y configuración de split_config jsonb.
+-- Requiere public.resolve_user_by_webhook_token (definida en 03_email_templates...).
+-- ============================================================================
+create or replace function public.insert_expense_for_webhook(
+  p_token text,
+  p_gmail_message_id text,
+  p_template_id uuid default null,
+  p_amount numeric default null,
+  p_currency text default null,
+  p_merchant text default null,
+  p_entity text default null,
+  p_source_account text default null,
+  p_date date default current_date,
+  p_time text default null,
+  p_concept text default null,
+  p_received_at timestamptz default null,
+  p_expense_type text default null,
+  p_items jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_expense_id uuid;
+  v_raw_snippet text;
+  v_description text;
+  v_item jsonb;
+  v_item_desc text;
+  v_item_amount numeric;
+  v_is_itemized boolean := false;
+  v_split_config jsonb;
+begin
+  v_user_id := public.resolve_user_by_webhook_token(p_token);
+
+  if v_user_id is null then
+    raise exception 'Token de webhook inválido o inactivo';
+  end if;
+
+  if p_gmail_message_id is null or length(trim(p_gmail_message_id)) = 0 then
+    raise exception 'gmail_message_id es requerido';
+  end if;
+
+  -- Verificar si ya existe en expenses
+  select id into v_expense_id
+  from public.expenses
+  where gmail_message_id = trim(p_gmail_message_id)
+  limit 1;
+
+  if v_expense_id is not null then
+    return jsonb_build_object(
+      'success', true,
+      'inserted', false,
+      'expense_id', v_expense_id,
+      'is_draft', true,
+      'message', 'Gasto ya registrado previamente'
+    );
+  end if;
+
+  v_description := coalesce(nullif(trim(p_merchant), ''), nullif(trim(p_concept), ''), 'Gasto detectado');
+
+  v_raw_snippet :=
+      coalesce(p_entity, 'Notificación')
+      || ': '
+      || v_description
+      || ' por '
+      || coalesce(p_currency, 'COP')
+      || ' '
+      || coalesce(p_amount::text, '0');
+
+  v_is_itemized := jsonb_typeof(p_items) = 'array' and jsonb_array_length(p_items) > 0;
+
+  if v_is_itemized then
+    v_split_config := jsonb_build_object(
+      'version', 1,
+      'splitType', 'itemized',
+      'mode', 'itemized',
+      'items', p_items
+    );
+  else
+    v_split_config := jsonb_build_object(
+      'version', 1,
+      'splitType', 'equal',
+      'mode', 'quick'
+    );
+  end if;
+
+  -- Insertar gasto en modo borrador (sin grupo)
+  insert into public.expenses (
+    group_id,
+    paid_by,
+    created_by,
+    total_amount,
+    description,
+    expense_date,
+    expense_time,
+    source,
+    is_draft,
+    source_account,
+    entity,
+    currency,
+    template_id,
+    gmail_message_id,
+    raw_snippet,
+    expense_type,
+    split_config,
+    created_at
+  )
+  values (
+    null,
+    v_user_id,
+    v_user_id,
+    coalesce(p_amount, 0),
+    v_description,
+    coalesce(p_date, current_date),
+    p_time,
+    'gmail',
+    true,
+    p_source_account,
+    p_entity,
+    coalesce(p_currency, 'COP'),
+    p_template_id,
+    trim(p_gmail_message_id),
+    v_raw_snippet,
+    p_expense_type,
+    v_split_config,
+    coalesce(p_received_at, now())
+  )
+  returning id into v_expense_id;
+
+  -- Si es desglosado, insertar ítems
+  if v_is_itemized then
+    for v_item in select * from jsonb_array_elements(p_items)
+    loop
+      v_item_desc := coalesce(v_item->>'description', v_item->>'desc', 'Artículo');
+      v_item_amount := coalesce((v_item->>'amount')::numeric, 0);
+
+      insert into public.expense_items (expense_id, description, amount)
+      values (v_expense_id, v_item_desc, v_item_amount);
+    end loop;
+  end if;
+
+  return jsonb_build_object(
+    'success', true,
+    'inserted', true,
+    'expense_id', v_expense_id,
+    'is_draft', true,
+    'is_itemized', v_is_itemized,
+    'status', 'draft',
+    'message', 'Gasto guardado en modo borrador'
+  );
+end;
+$$;
+
