@@ -207,36 +207,6 @@ function DiagnosticStatusBadge({passed, isWinner}: Readonly<{ passed: boolean; i
     );
 }
 
-function EmailCardMatchStatus({
-                                  survivingCount,
-                                  winner,
-                              }: Readonly<{ survivingCount: number; winner?: DiagnosisResult['winner'] }>) {
-    if (survivingCount === 1 && winner) {
-        return (
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"/>
-        <span>Coincide</span>
-      </span>
-        );
-    }
-
-    if (survivingCount > 1) {
-        return (
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"/>
-        <span>Conflicto ({survivingCount})</span>
-      </span>
-        );
-    }
-
-    return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
-      <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 shrink-0"/>
-      <span>Sin plantilla</span>
-    </span>
-    );
-}
-
 function DiagnosisSummaryBadge({
                                    matchedCount,
                                    winner,

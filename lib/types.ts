@@ -99,13 +99,6 @@ export interface Notification {
     created_at: string;
 }
 
-export interface ManagedUser {
-    id: string;
-    sponsor_id: string;
-    managed_user_id: string;
-    created_at: string;
-}
-
 export interface ExpenseItem {
     id: string;
     expense_id: string;
@@ -233,18 +226,6 @@ export interface UserTemplatePreference {
     user_id: string;
     template_id: string;
     enabled: boolean;
-}
-
-export interface EmailTemplateWithPreference extends EmailTemplate {
-    enabled: boolean;
-}
-
-export interface EmailIngestConnection {
-    user_id: string;
-    webhook_token: string;
-    last_sync_at?: string | null;
-    status: 'active' | 'inactive';
-    created_at: string;
 }
 
 export interface Payment {

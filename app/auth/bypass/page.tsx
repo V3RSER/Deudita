@@ -1,12 +1,10 @@
 'use client';
 
 import React, {useState} from 'react';
-import {useRouter} from 'next/navigation';
 import {createClient} from '@/lib/supabase/client';
 import {AlertCircle, ArrowRight, Check, CheckCircle2, Copy, Info, KeyRound, Loader2, Terminal} from 'lucide-react';
 
 export default function AuthBypassPage() {
-    const router = useRouter();
     const [sessionInput, setSessionInput] = useState('');
     const [accessToken, setAccessToken] = useState('');
     const [refreshToken, setRefreshToken] = useState('');

@@ -42,7 +42,7 @@ export function GroupExpenseFilterSheet({
     onApplyFilters,
     availableMonths = [],
     categories = [],
-}: GroupExpenseFilterSheetProps) {
+}: Readonly<GroupExpenseFilterSheetProps>) {
     if (!isOpen) return null;
 
     return (
@@ -62,7 +62,7 @@ function GroupExpenseFilterSheetModal({
     onApplyFilters,
     availableMonths = [],
     categories = [],
-}: Omit<GroupExpenseFilterSheetProps, 'isOpen'>) {
+}: Readonly<Omit<GroupExpenseFilterSheetProps, 'isOpen'>>) {
     // Temporary staging state inside the bottom sheet
     const [stagedFilters, setStagedFilters] = useState<TransactionFilterState>(() => ({ ...filters }));
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(
@@ -173,10 +173,10 @@ function GroupExpenseFilterSheetModal({
                             type="button"
                             onClick={() => setActivePicker(activePicker === 'period' ? null : 'period')}
                             className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between gap-2 cursor-pointer ${activePicker === 'period'
-                                    ? 'border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-500/30'
-                                    : stagedFilters.datePreset !== 'all'
-                                        ? 'border-zinc-300 bg-zinc-50/60'
-                                        : 'border-zinc-200/90 bg-white hover:border-zinc-300'
+                                ? 'border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-500/30'
+                                : stagedFilters.datePreset !== 'all'
+                                    ? 'border-zinc-300 bg-zinc-50/60'
+                                    : 'border-zinc-200/90 bg-white hover:border-zinc-300'
                                 }`}
                         >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -209,8 +209,8 @@ function GroupExpenseFilterSheetModal({
                                                 type="button"
                                                 onClick={() => handlePeriodSelect(option.id)}
                                                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-left transition cursor-pointer ${isSelected
-                                                        ? 'bg-emerald-50 text-emerald-700 font-bold'
-                                                        : 'text-zinc-700 hover:bg-zinc-100/80'
+                                                    ? 'bg-emerald-50 text-emerald-700 font-bold'
+                                                    : 'text-zinc-700 hover:bg-zinc-100/80'
                                                     }`}
                                             >
                                                 <span className="truncate">{option.label}</span>
@@ -233,8 +233,8 @@ function GroupExpenseFilterSheetModal({
                                                         type="button"
                                                         onClick={() => handlePeriodSelect(month.value)}
                                                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-left transition cursor-pointer ${isSelected
-                                                                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                                                                : 'text-zinc-700 hover:bg-zinc-100/80'
+                                                            ? 'bg-emerald-50 text-emerald-700 font-bold'
+                                                            : 'text-zinc-700 hover:bg-zinc-100/80'
                                                             }`}
                                                     >
                                                         <span className="truncate">{month.label}</span>
@@ -256,10 +256,10 @@ function GroupExpenseFilterSheetModal({
                             type="button"
                             onClick={() => setActivePicker(activePicker === 'category' ? null : 'category')}
                             className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between gap-2 cursor-pointer ${activePicker === 'category'
-                                    ? 'border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-500/30'
-                                    : stagedFilters.category !== 'all'
-                                        ? 'border-zinc-300 bg-zinc-50/60'
-                                        : 'border-zinc-200/90 bg-white hover:border-zinc-300'
+                                ? 'border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-500/30'
+                                : stagedFilters.category !== 'all'
+                                    ? 'border-zinc-300 bg-zinc-50/60'
+                                    : 'border-zinc-200/90 bg-white hover:border-zinc-300'
                                 }`}
                         >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -301,8 +301,8 @@ function GroupExpenseFilterSheetModal({
                                         type="button"
                                         onClick={() => handleCategorySelect('all')}
                                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-left transition cursor-pointer ${stagedFilters.category === 'all'
-                                                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                                                : 'text-zinc-700 hover:bg-zinc-100/80'
+                                            ? 'bg-emerald-50 text-emerald-700 font-bold'
+                                            : 'text-zinc-700 hover:bg-zinc-100/80'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2 min-w-0">
@@ -327,8 +327,8 @@ function GroupExpenseFilterSheetModal({
                                                 type="button"
                                                 onClick={() => handleCategorySelect(cat)}
                                                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-left transition cursor-pointer ${isSelected
-                                                        ? 'bg-emerald-50 text-emerald-700 font-bold'
-                                                        : 'text-zinc-700 hover:bg-zinc-100/80'
+                                                    ? 'bg-emerald-50 text-emerald-700 font-bold'
+                                                    : 'text-zinc-700 hover:bg-zinc-100/80'
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-2 min-w-0">
@@ -391,8 +391,8 @@ function GroupExpenseFilterSheetModal({
                                         type="button"
                                         onClick={() => setStagedFilters({ ...stagedFilters, scope: 'all' })}
                                         className={`h-9 rounded-xl text-xs font-semibold border transition cursor-pointer ${stagedFilters.scope === 'all'
-                                                ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                                : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                                             }`}
                                     >
                                         Todos los movimientos
@@ -401,8 +401,8 @@ function GroupExpenseFilterSheetModal({
                                         type="button"
                                         onClick={() => setStagedFilters({ ...stagedFilters, scope: 'mine' })}
                                         className={`h-9 rounded-xl text-xs font-semibold border transition cursor-pointer ${stagedFilters.scope === 'mine'
-                                                ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                                : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                                             }`}
                                     >
                                         Solo mis movimientos
@@ -421,8 +421,8 @@ function GroupExpenseFilterSheetModal({
                                         type="button"
                                         onClick={() => setStagedFilters({ ...stagedFilters, dateMode: 'expense_date' })}
                                         className={`h-9 rounded-xl text-xs font-semibold border transition cursor-pointer ${stagedFilters.dateMode === 'expense_date'
-                                                ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                                : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                                             }`}
                                     >
                                         Fecha del gasto
@@ -431,8 +431,8 @@ function GroupExpenseFilterSheetModal({
                                         type="button"
                                         onClick={() => setStagedFilters({ ...stagedFilters, dateMode: 'entry_date' })}
                                         className={`h-9 rounded-xl text-xs font-semibold border transition cursor-pointer ${stagedFilters.dateMode === 'entry_date'
-                                                ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                                                : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                                             }`}
                                     >
                                         Fecha de registro

@@ -153,9 +153,6 @@ export function ExpenseParticipantSummary({
                     const profile = p.profile;
                     const hasBreakdown = Boolean(p.breakdown && p.breakdown.length > 0);
                     const isExpanded = expandedUsers[p.userId] ?? false;
-                    const avatarColorStyle = getParticipantAvatarColor(profile?.id || p.userId || profile?.full_name || 'user');
-                    const initials = getInitials(profile?.full_name, profile?.email);
-
                     return (
                         <div key={p.userId}
                             className="px-3 py-2 sm:px-3.5 sm:py-2 transition-colors hover:bg-zinc-50/40">
@@ -291,9 +288,6 @@ export function ExpenseMoneyFlow({
         setExpandedUsers((prev) => ({ ...prev, ...next }));
     };
 
-    const payerAvatarColor = getParticipantAvatarColor(payerProfile?.id || payerProfile?.full_name || 'payer');
-    const payerInitials = getInitials(payerProfile?.full_name, payerProfile?.email);
-
     return (
         <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
             {/* Header: Flujo del dinero (no split type badge) */}
@@ -368,8 +362,6 @@ export function ExpenseMoneyFlow({
                         const profile = p.profile;
                         const hasBreakdown = Boolean(p.breakdown && p.breakdown.length > 0);
                         const isExpanded = expandedUsers[p.userId] ?? false;
-                        const avatarColorStyle = getParticipantAvatarColor(profile?.id || p.userId || profile?.full_name || 'user');
-                        const initials = getInitials(profile?.full_name, profile?.email);
 
                         return (
                             <div key={p.userId}

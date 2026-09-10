@@ -11,7 +11,6 @@ import { MemberDetailModal } from '@/components/MemberDetailModal';
 import { AddFriendModal } from '@/components/AddFriendModal';
 import {
     CheckCircle2,
-    Plus,
     Search,
     ShieldCheck,
     TrendingDown,

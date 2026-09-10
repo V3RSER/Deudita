@@ -1276,15 +1276,6 @@ export function calculatePairwiseDebtDetail(
                 const debtorDisplayName = debtor.full_name?.trim() || 'Deudor';
                 const creditorDisplayName = creditor.full_name?.trim() || 'Acreedor';
 
-                // Identify direct relationships in the network (excluding the direct debtor-creditor pair itself)
-                const creditorDebtsToOthers = allDirectDebts
-                    .filter((b) => b.debtor.id === creditor.id && b.creditor.id !== debtor.id)
-                    .sort((a, b) => b.amount - a.amount);
-
-                const othersDebtsToCreditor = allDirectDebts
-                    .filter((b) => b.creditor.id === creditor.id && b.debtor.id !== debtor.id)
-                    .sort((a, b) => b.amount - a.amount);
-
                 const debtorDebtsToOthers = allDirectDebts
                     .filter((b) => b.debtor.id === debtor.id && b.creditor.id !== creditor.id)
                     .sort((a, b) => b.amount - a.amount);

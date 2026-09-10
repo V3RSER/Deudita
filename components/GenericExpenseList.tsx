@@ -387,7 +387,6 @@ export function GenericExpenseList({
 
                                 // Event and Entry date infos
                                 const eventInfo = getRecordEventDateInfo(exp);
-                                const entryInfo = getRecordEntryDateInfo(exp);
 
                                 return (
                                     <div
@@ -806,7 +805,6 @@ export function GenericExpenseList({
                             const isExpanded = isPaymentExpanded(payment.id);
 
                             const eventInfo = getRecordEventDateInfo(payment);
-                            const explicitPayTime = payment.payment_time ? extractTimeFromISO(payment.payment_time) : '';
 
                             const updatedBy = payment.updated_by ? profiles.find((p) => p.id === payment.updated_by) : null;
                             const hasProof = Boolean(payment.proof_url);

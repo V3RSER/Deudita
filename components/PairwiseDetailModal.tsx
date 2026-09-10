@@ -177,7 +177,6 @@ export function PairwiseDetailModal({
     const totalPaymentsApplied = detail.appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
     const totalActiveRecoverable = Math.round((totalReverseOffsets + totalPaymentsApplied) * 100) / 100;
 
-    const triangulations = detail.optimizationDetail?.triangulations || [];
     const hasCompensations = isSimplified && (detail.optimizationDetail?.totalCompensated || 0) > 0.009;
 
     const allSectionsExpanded =
@@ -193,15 +192,6 @@ export function PairwiseDetailModal({
             recovers: nextState,
             distribution: nextState,
             calculation: nextState,
-        });
-    };
-
-    const toggleTriangulationExpand = (idx: number) => {
-        setExpandedTriangulationIndexes((prev) => {
-            const next = new Set(prev);
-            if (next.has(idx)) next.delete(idx);
-            else next.add(idx);
-            return next;
         });
     };
 
