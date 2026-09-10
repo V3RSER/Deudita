@@ -1,21 +1,25 @@
 import nodemailer from 'nodemailer';
 
 interface SendInviteParams {
-  to: string;
-  inviterName: string;
-  inviterEmail: string;
-  groupName: string;
-  inviteUrl: string;
+    to: string;
+    inviterName: string;
+    inviterEmail: string;
+    groupName: string;
+    inviteUrl: string;
 }
 
 export async function sendGroupInviteEmail({
-  to,
-  inviterName,
-  inviterEmail,
-  groupName,
-  inviteUrl,
-}: SendInviteParams): Promise<{ success: boolean; simulated?: boolean; message?: string }> {
-  const htmlContent = `
+                                               to,
+                                               inviterName,
+                                               inviterEmail,
+                                               groupName,
+                                               inviteUrl,
+                                           }: SendInviteParams): Promise<{
+    success: boolean;
+    simulated?: boolean;
+    message?: string
+}> {
+    const htmlContent = `
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -70,43 +74,43 @@ export async function sendGroupInviteEmail({
     </html>
   `;
 
-  // Check if custom SMTP env credentials exist
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+    // Check if custom SMTP env credentials exist
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
 
-  if (smtpHost && smtpUser && smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: Boolean(process.env.SMTP_SECURE === 'true'),
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
+    if (smtpHost && smtpUser && smtpPass) {
+        try {
+            const transporter = nodemailer.createTransport({
+                host: smtpHost,
+                port: Number(process.env.SMTP_PORT) || 587,
+                secure: Boolean(process.env.SMTP_SECURE === 'true'),
+                auth: {
+                    user: smtpUser,
+                    pass: smtpPass,
+                },
+            });
 
-      await transporter.sendMail({
-        from: `"${inviterName} vía Deudita" <${smtpUser}>`,
-        to,
-        subject: `Te han invitado al grupo "${groupName}" en Deudita`,
-        html: htmlContent,
-      });
+            await transporter.sendMail({
+                from: `"${inviterName} vía Deudita" <${smtpUser}>`,
+                to,
+                subject: `Te han invitado al grupo "${groupName}" en Deudita`,
+                html: htmlContent,
+            });
 
-      console.log(`[Email] Enviado correo de invitación exitosamente a ${to}`);
-      return { success: true };
-    } catch (err: unknown) {
-      console.error('[Email] Error al enviar mediante SMTP:', err);
-      // Fallback to successful response with invite link logged
+            console.log(`[Email] Enviado correo de invitación exitosamente a ${to}`);
+            return {success: true};
+        } catch (err: unknown) {
+            console.error('[Email] Error al enviar mediante SMTP:', err);
+            // Fallback to successful response with invite link logged
+        }
     }
-  }
 
-  // Simulated email delivery logging
-  console.log(`[Email Simulación] Invitación preparada para ${to}:`);
-  console.log(`  De: ${inviterName} (${inviterEmail})`);
-  console.log(`  Grupo: ${groupName}`);
-  console.log(`  Enlace de unirse: ${inviteUrl}`);
+    // Simulated email delivery logging
+    console.log(`[Email Simulación] Invitación preparada para ${to}:`);
+    console.log(`  De: ${inviterName} (${inviterEmail})`);
+    console.log(`  Grupo: ${groupName}`);
+    console.log(`  Enlace de unirse: ${inviteUrl}`);
 
-  return { success: true, simulated: true, message: 'Invitación generada correctamente' };
+    return {success: true, simulated: true, message: 'Invitación generada correctamente'};
 }

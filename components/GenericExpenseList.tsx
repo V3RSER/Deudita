@@ -1,1187 +1,1264 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import Image from 'next/image';
-import { Expense, Payment, Profile, Group } from '@/lib/types';
-import { formatCurrency } from '@/lib/balance-utils';
-import { getCategoryConfig } from '@/lib/expense-category-utils';
+import {Expense, Group, Payment, Profile} from '@/lib/types';
+import {formatCurrency} from '@/lib/balance-utils';
+import {getCategoryConfig} from '@/lib/expense-category-utils';
 import {
-  DateFilterMode,
-  getEffectiveTransactionDate,
-  getRecordEventDateInfo,
-  getRecordEntryDateInfo,
-  formatHumanDate,
-  extractTimeFromISO,
+    DateFilterMode,
+    extractTimeFromISO,
+    formatHumanDate,
+    getEffectiveTransactionDate,
+    getRecordEntryDateInfo,
+    getRecordEventDateInfo,
 } from '@/lib/transaction-date-utils';
-import { ExpenseMoneyFlow, ParticipantSummaryData, ParticipantItemBreakdown } from '@/components/ExpenseParticipantSummary';
-import { getExpenseSplitConfig, extractNotesAndConfig } from '@/lib/split-config-utils';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import {
-  Receipt,
-  HandCoins,
-  FileText,
-  Pencil,
-  Trash2,
-  ExternalLink,
-  ArrowRight,
-  CheckCircle2,
-  X,
-  ChevronDown,
-  ChevronUp,
-  ChevronRight,
-  User,
-  Users,
-  Clock,
-  Calendar,
-  ImageIcon,
-  ShoppingBag,
-  Layers,
-  Loader2,
-  CreditCard,
+    ExpenseMoneyFlow,
+    ParticipantItemBreakdown,
+    ParticipantSummaryData
+} from '@/components/ExpenseParticipantSummary';
+import {getExpenseSplitConfig} from '@/lib/split-config-utils';
+import {ConfirmModal} from '@/components/ConfirmModal';
+import {
+    ArrowRight,
+    Calendar,
+    ChevronDown,
+    ChevronUp,
+    Clock,
+    CreditCard,
+    ExternalLink,
+    FileText,
+    HandCoins,
+    ImageIcon,
+    Pencil,
+    Receipt,
+    ShoppingBag,
+    Trash2,
+    X,
 } from 'lucide-react';
 
 type UnifiedTransaction =
-  | {
+    | {
     type: 'expense';
     date: string;
     dateObj: Date;
     isUpdated: boolean;
     hasExplicitTime: boolean;
     data: Expense;
-  }
-  | {
+}
+    | {
     type: 'payment';
     date: string;
     dateObj: Date;
     isUpdated: boolean;
     hasExplicitTime: boolean;
     data: Payment;
-  };
+};
 
 interface GenericExpenseListProps {
-  expenses: Expense[];
-  payments: Payment[];
-  profiles: Profile[];
-  userGroups: Group[];
-  currentProfile: Profile | null;
-  pairwisePartnerProfile?: Profile | null;
-  isSimplified?: boolean;
-  groupCurrency?: string;
-  dateFilterMode?: DateFilterMode;
-  onSelectExpense?: (expense: Expense) => void;
-  onEditExpense?: (expense: Expense) => void;
-  onDeleteExpense?: (expenseId: string) => void;
-  onEditPayment?: (payment: Payment) => void;
-  onDeletePayment?: (paymentId: string) => void;
-  showGroupBadge?: boolean;
-  initialExpandedExpenseId?: string | null;
-  pageSize?: number;
+    expenses: Expense[];
+    payments: Payment[];
+    profiles: Profile[];
+    userGroups: Group[];
+    currentProfile: Profile | null;
+    pairwisePartnerProfile?: Profile | null;
+    isSimplified?: boolean;
+    groupCurrency?: string;
+    dateFilterMode?: DateFilterMode;
+    onSelectExpense?: (expense: Expense) => void;
+    onEditExpense?: (expense: Expense) => void;
+    onDeleteExpense?: (expenseId: string) => void;
+    onEditPayment?: (payment: Payment) => void;
+    onDeletePayment?: (paymentId: string) => void;
+    showGroupBadge?: boolean;
+    initialExpandedExpenseId?: string | null;
+    pageSize?: number;
 }
 
 const MONTH_NAMES_ES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
 const MONTH_ABBR_ES = [
-  'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-  'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
+    'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+    'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
 ];
 
 function parseTxDate(dateInput: string | Date) {
-  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-  if (!isNaN(d.getTime())) {
-    const year = d.getFullYear();
-    const monthIndex = d.getMonth();
-    const dayNum = d.getDate();
-    const dayStr = dayNum < 10 ? `0${dayNum}` : `${dayNum}`;
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    const timeStr = `${hours}:${minutes}`;
-    const monthAbbr = MONTH_ABBR_ES[monthIndex];
-    const monthLabel = `${MONTH_NAMES_ES[monthIndex]} ${year}`;
-    const key = `${year}-${monthIndex < 9 ? '0' : ''}${monthIndex}`;
-    return { year, monthIndex, dayStr, timeStr, monthAbbr, monthLabel, key };
-  }
-  return { year: 2026, monthIndex: 0, dayStr: '01', timeStr: '00:00', monthAbbr: 'ENE', monthLabel: 'Enero 2026', key: '2026-00' };
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const monthIndex = d.getMonth();
+        const dayNum = d.getDate();
+        const dayStr = dayNum < 10 ? `0${dayNum}` : `${dayNum}`;
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+        const monthAbbr = MONTH_ABBR_ES[monthIndex];
+        const monthLabel = `${MONTH_NAMES_ES[monthIndex]} ${year}`;
+        const key = `${year}-${monthIndex < 9 ? '0' : ''}${monthIndex}`;
+        return {year, monthIndex, dayStr, timeStr, monthAbbr, monthLabel, key};
+    }
+    return {
+        year: 2026,
+        monthIndex: 0,
+        dayStr: '01',
+        timeStr: '00:00',
+        monthAbbr: 'ENE',
+        monthLabel: 'Enero 2026',
+        key: '2026-00'
+    };
 }
 
 function formatFullDateTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  const dateFormatted = d.toLocaleDateString('es-ES', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const timeFormatted = d.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  return `${dateFormatted}, ${timeFormatted}`;
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const dateFormatted = d.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+    const timeFormatted = d.toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    return `${dateFormatted}, ${timeFormatted}`;
 }
 
 export function GenericExpenseList({
-  expenses,
-  payments,
-  profiles,
-  userGroups,
-  currentProfile,
-  pairwisePartnerProfile,
-  isSimplified = true,
-  groupCurrency,
-  dateFilterMode = 'expense_date',
-  onSelectExpense,
-  onEditExpense,
-  onDeleteExpense,
-  onEditPayment,
-  onDeletePayment,
-  showGroupBadge = true,
-  initialExpandedExpenseId,
-  pageSize = 20,
-}: GenericExpenseListProps) {
-  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-  const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
-  const [userToggledPaymentIds, setUserToggledPaymentIds] = useState<Map<string, boolean>>(new Map());
-  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
-  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
-  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
-  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
-  const [extraPages, setExtraPages] = useState<number>(0);
-  const [prevFilterKey, setPrevFilterKey] = useState<string>(`${expenses.length}_${payments.length}_${dateFilterMode}`);
-  const currentFilterKey = `${expenses.length}_${payments.length}_${dateFilterMode}`;
-  if (prevFilterKey !== currentFilterKey) {
-    setPrevFilterKey(currentFilterKey);
-    setExtraPages(0);
-  }
-  const visibleCount = pageSize + extraPages * pageSize;
+                                       expenses,
+                                       payments,
+                                       profiles,
+                                       userGroups,
+                                       currentProfile,
+                                       pairwisePartnerProfile,
+                                       isSimplified = true,
+                                       groupCurrency,
+                                       dateFilterMode = 'expense_date',
+                                       onSelectExpense,
+                                       onEditExpense,
+                                       onDeleteExpense,
+                                       onEditPayment,
+                                       onDeletePayment,
+                                       showGroupBadge = true,
+                                       initialExpandedExpenseId,
+                                       pageSize = 20,
+                                   }: GenericExpenseListProps) {
+    const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+    const [userToggledExpenseIds, setUserToggledExpenseIds] = useState<Map<string, boolean>>(new Map());
+    const [userToggledPaymentIds, setUserToggledPaymentIds] = useState<Map<string, boolean>>(new Map());
+    const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+    const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
+    const [isDeletingExpense, setIsDeletingExpense] = useState(false);
+    const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+    const [extraPages, setExtraPages] = useState<number>(0);
+    const [prevFilterKey, setPrevFilterKey] = useState<string>(`${expenses.length}_${payments.length}_${dateFilterMode}`);
+    const currentFilterKey = `${expenses.length}_${payments.length}_${dateFilterMode}`;
+    if (prevFilterKey !== currentFilterKey) {
+        setPrevFilterKey(currentFilterKey);
+        setExtraPages(0);
+    }
+    const visibleCount = pageSize + extraPages * pageSize;
 
-  // Scroll to targeted expense card if initialExpandedExpenseId provided
-  React.useEffect(() => {
-    if (initialExpandedExpenseId) {
-      const timer = setTimeout(() => {
-        const el = document.getElementById(`expense-card-${initialExpandedExpenseId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Scroll to targeted expense card if initialExpandedExpenseId provided
+    React.useEffect(() => {
+        if (initialExpandedExpenseId) {
+            const timer = setTimeout(() => {
+                const el = document.getElementById(`expense-card-${initialExpandedExpenseId}`);
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                }
+            }, 150);
+
+            return () => clearTimeout(timer);
         }
-      }, 150);
+    }, [initialExpandedExpenseId]);
 
-      return () => clearTimeout(timer);
+    const isExpenseExpanded = (id: string) => {
+        if (userToggledExpenseIds.has(id)) {
+            return Boolean(userToggledExpenseIds.get(id));
+        }
+        return id === initialExpandedExpenseId;
+    };
+
+    const toggleExpenseExpanded = (id: string) => {
+        setUserToggledExpenseIds((prev) => {
+            const next = new Map(prev);
+            const currently = isExpenseExpanded(id);
+            next.set(id, !currently);
+            return next;
+        });
+    };
+
+    const isPaymentExpanded = (id: string) => {
+        return Boolean(userToggledPaymentIds.get(id));
+    };
+
+    const togglePaymentExpanded = (id: string) => {
+        setUserToggledPaymentIds((prev) => {
+            const next = new Map(prev);
+            const currently = Boolean(next.get(id));
+            next.set(id, !currently);
+            return next;
+        });
+    };
+
+    // Combine and sort chronologically (most recent first) according to active date filter mode
+    const transactions: UnifiedTransaction[] = [
+        ...expenses.map((e) => {
+            const eff = getEffectiveTransactionDate(e, dateFilterMode);
+            return {
+                type: 'expense' as const,
+                date: eff.timestamp,
+                dateObj: eff.dateObj,
+                isUpdated: eff.isUpdated,
+                hasExplicitTime: eff.hasExplicitTime,
+                data: e,
+            };
+        }),
+        ...payments.map((p) => {
+            const eff = getEffectiveTransactionDate(p, dateFilterMode);
+            return {
+                type: 'payment' as const,
+                date: eff.timestamp,
+                dateObj: eff.dateObj,
+                isUpdated: eff.isUpdated,
+                hasExplicitTime: eff.hasExplicitTime,
+                data: p,
+            };
+        }),
+    ].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+
+    if (transactions.length === 0) {
+        return (
+            <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-12 text-center text-zinc-500">
+                <Receipt className="w-12 h-12 text-zinc-300 mx-auto mb-3"/>
+                <h3 className="font-semibold text-zinc-900 text-base">No hay movimientos registrados</h3>
+                <p className="text-xs text-zinc-500 mt-1">Los gastos y pagos de deuda aparecerán aquí.</p>
+            </div>
+        );
     }
-  }, [initialExpandedExpenseId]);
 
-  const isExpenseExpanded = (id: string) => {
-    if (userToggledExpenseIds.has(id)) {
-      return Boolean(userToggledExpenseIds.get(id));
-    }
-    return id === initialExpandedExpenseId;
-  };
+    // Paginated visible transactions
+    const visibleTransactions = transactions.slice(0, visibleCount);
+    const hasMoreTransactions = transactions.length > visibleCount;
+    const remainingCount = transactions.length - visibleCount;
 
-  const toggleExpenseExpanded = (id: string) => {
-    setUserToggledExpenseIds((prev) => {
-      const next = new Map(prev);
-      const currently = isExpenseExpanded(id);
-      next.set(id, !currently);
-      return next;
+    // Group visible transactions by month
+    const groupedByMonth: { key: string; label: string; items: UnifiedTransaction[] }[] = [];
+
+    visibleTransactions.forEach((tx) => {
+        const parsed = parseTxDate(tx.dateObj);
+        let existing = groupedByMonth.find((g) => g.key === parsed.key);
+        if (!existing) {
+            existing = {key: parsed.key, label: parsed.monthLabel, items: []};
+            groupedByMonth.push(existing);
+        }
+        existing.items.push(tx);
     });
-  };
 
-  const isPaymentExpanded = (id: string) => {
-    return Boolean(userToggledPaymentIds.get(id));
-  };
-
-  const togglePaymentExpanded = (id: string) => {
-    setUserToggledPaymentIds((prev) => {
-      const next = new Map(prev);
-      const currently = Boolean(next.get(id));
-      next.set(id, !currently);
-      return next;
-    });
-  };
-
-  // Combine and sort chronologically (most recent first) according to active date filter mode
-  const transactions: UnifiedTransaction[] = [
-    ...expenses.map((e) => {
-      const eff = getEffectiveTransactionDate(e, dateFilterMode);
-      return {
-        type: 'expense' as const,
-        date: eff.timestamp,
-        dateObj: eff.dateObj,
-        isUpdated: eff.isUpdated,
-        hasExplicitTime: eff.hasExplicitTime,
-        data: e,
-      };
-    }),
-    ...payments.map((p) => {
-      const eff = getEffectiveTransactionDate(p, dateFilterMode);
-      return {
-        type: 'payment' as const,
-        date: eff.timestamp,
-        dateObj: eff.dateObj,
-        isUpdated: eff.isUpdated,
-        hasExplicitTime: eff.hasExplicitTime,
-        data: p,
-      };
-    }),
-  ].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-
-  if (transactions.length === 0) {
     return (
-      <div className="bg-white rounded-2xl ring-1 ring-zinc-200 p-12 text-center text-zinc-500">
-        <Receipt className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
-        <h3 className="font-semibold text-zinc-900 text-base">No hay movimientos registrados</h3>
-        <p className="text-xs text-zinc-500 mt-1">Los gastos y pagos de deuda aparecerán aquí.</p>
-      </div>
-    );
-  }
-
-  // Paginated visible transactions
-  const visibleTransactions = transactions.slice(0, visibleCount);
-  const hasMoreTransactions = transactions.length > visibleCount;
-  const remainingCount = transactions.length - visibleCount;
-
-  // Group visible transactions by month
-  const groupedByMonth: { key: string; label: string; items: UnifiedTransaction[] }[] = [];
-
-  visibleTransactions.forEach((tx) => {
-    const parsed = parseTxDate(tx.dateObj);
-    let existing = groupedByMonth.find((g) => g.key === parsed.key);
-    if (!existing) {
-      existing = { key: parsed.key, label: parsed.monthLabel, items: [] };
-      groupedByMonth.push(existing);
-    }
-    existing.items.push(tx);
-  });
-
-  return (
-    <div className="space-y-4">
-      {groupedByMonth.map((group) => (
-        <div key={group.key} className="space-y-2">
-          {/* Monthly Section Header Cut */}
-          <div className="flex items-center space-x-2.5 px-1 py-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
+        <div className="space-y-4">
+            {groupedByMonth.map((group) => (
+                <div key={group.key} className="space-y-2">
+                    {/* Monthly Section Header Cut */}
+                    <div className="flex items-center space-x-2.5 px-1 py-0.5">
+            <span
+                className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 px-2.5 py-0.5 rounded-full border border-zinc-200/80 flex items-center space-x-1.5">
               {dateFilterMode === 'entry_date' ? (
-                <Clock className="w-3 h-3 text-indigo-600" />
+                  <Clock className="w-3 h-3 text-indigo-600"/>
               ) : (
-                <Calendar className="w-3 h-3 text-zinc-500" />
+                  <Calendar className="w-3 h-3 text-zinc-500"/>
               )}
-              <span>{group.label}</span>
+                <span>{group.label}</span>
             </span>
-            <div className="h-px bg-zinc-200/70 flex-1" />
-          </div>
+                        <div className="h-px bg-zinc-200/70 flex-1"/>
+                    </div>
 
-          <div className="space-y-2">
-            {group.items.map((tx) => {
-              const parsed = parseTxDate(tx.dateObj);
+                    <div className="space-y-2">
+                        {group.items.map((tx) => {
+                            const parsed = parseTxDate(tx.dateObj);
 
-              if (tx.type === 'expense') {
-                const exp = tx.data;
-                const groupObj = userGroups.find((g) => g.id === exp.group_id);
-                const paidBy = profiles.find((p) => p.id === exp.paid_by);
-                const createdBy = profiles.find((p) => p.id === exp.created_by);
-                const updatedBy = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
-                const catConfig = getCategoryConfig(exp.category);
-                const CategoryIcon = catConfig.icon;
-                const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
+                            if (tx.type === 'expense') {
+                                const exp = tx.data;
+                                const groupObj = userGroups.find((g) => g.id === exp.group_id);
+                                const paidBy = profiles.find((p) => p.id === exp.paid_by);
+                                const createdBy = profiles.find((p) => p.id === exp.created_by);
+                                const updatedBy = exp.updated_by ? profiles.find((p) => p.id === exp.updated_by) : null;
+                                const catConfig = getCategoryConfig(exp.category);
+                                const CategoryIcon = catConfig.icon;
+                                const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
 
-                const managedIds = isSimplified
-                  ? (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id)
-                  : [];
-                const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
+                                const managedIds = isSimplified
+                                    ? (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id)
+                                    : [];
+                                const myEffectiveIds = currentProfile ? [currentProfile.id, ...managedIds] : [];
 
-                const partnerManagedIds = isSimplified
-                  ? (pairwisePartnerProfile?.managed_user_ids || []).filter((id) => id !== pairwisePartnerProfile?.id)
-                  : [];
-                const partnerEffectiveIds = pairwisePartnerProfile ? [pairwisePartnerProfile.id, ...partnerManagedIds] : [];
+                                const partnerManagedIds = isSimplified
+                                    ? (pairwisePartnerProfile?.managed_user_ids || []).filter((id) => id !== pairwisePartnerProfile?.id)
+                                    : [];
+                                const partnerEffectiveIds = pairwisePartnerProfile ? [pairwisePartnerProfile.id, ...partnerManagedIds] : [];
 
-                const isPayer = Boolean(currentProfile && myEffectiveIds.includes(exp.paid_by));
-                const isPartnerPayer = Boolean(pairwisePartnerProfile && partnerEffectiveIds.includes(exp.paid_by));
+                                const isPayer = Boolean(currentProfile && myEffectiveIds.includes(exp.paid_by));
+                                const isPartnerPayer = Boolean(pairwisePartnerProfile && partnerEffectiveIds.includes(exp.paid_by));
 
-                const myFamilySplits = exp.splits?.filter((s) => myEffectiveIds.includes(s.user_id)) || [];
-                const myTotalOwed = myFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
+                                const myFamilySplits = exp.splits?.filter((s) => myEffectiveIds.includes(s.user_id)) || [];
+                                const myTotalOwed = myFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
 
-                const partnerFamilySplits = exp.splits?.filter((s) => partnerEffectiveIds.includes(s.user_id)) || [];
-                const partnerTotalOwed = partnerFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
+                                const partnerFamilySplits = exp.splits?.filter((s) => partnerEffectiveIds.includes(s.user_id)) || [];
+                                const partnerTotalOwed = partnerFamilySplits.reduce((acc, s) => acc + s.amount_owed, 0);
 
-                let badgeText = '';
-                let badgeColorClass = 'text-zinc-400';
+                                let badgeText = '';
+                                let badgeColorClass = 'text-zinc-400';
 
-                if (pairwisePartnerProfile) {
-                  // In 1-to-1 pairwise context:
-                  if (isPayer) {
-                    // Current profile paid: recovers ONLY what partner owes in this expense
-                    if (partnerTotalOwed > 0) {
-                      badgeText = `recuperas ${formatCurrency(partnerTotalOwed, currency)}`;
-                      badgeColorClass = 'text-emerald-600 font-semibold';
-                    } else {
-                      badgeText = 'sin aporte de ' + (pairwisePartnerProfile.full_name?.split(' ')[0] || 'contraparte');
-                      badgeColorClass = 'text-zinc-400';
-                    }
-                  } else if (isPartnerPayer) {
-                    // Partner paid: current profile owes what they split
-                    if (myTotalOwed > 0) {
-                      badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                      badgeColorClass = 'text-rose-600 font-semibold';
-                    } else {
-                      badgeText = 'no participas';
-                      badgeColorClass = 'text-zinc-400';
-                    }
-                  } else {
-                    // 3rd party paid
-                    if (myTotalOwed > 0) {
-                      badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                      badgeColorClass = 'text-rose-600 font-semibold';
-                    } else {
-                      badgeText = 'no participas';
-                      badgeColorClass = 'text-zinc-400';
-                    }
-                  }
-                } else {
-                  // General / Group feed context
-                  const recovers = isPayer ? Math.max(0, exp.total_amount - myTotalOwed) : 0;
-                  if (isPayer && recovers > 0) {
-                    badgeText = `recuperas ${formatCurrency(recovers, currency)}`;
-                    badgeColorClass = 'text-emerald-600 font-semibold';
-                  } else if (isPayer) {
-                    badgeText = 'pagaste todo';
-                    badgeColorClass = 'text-emerald-600 font-semibold';
-                  } else if (myTotalOwed > 0) {
-                    badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
-                    badgeColorClass = 'text-rose-600 font-semibold';
-                  } else {
-                    badgeText = 'no participas';
-                    badgeColorClass = 'text-zinc-400';
-                  }
-                }
+                                if (pairwisePartnerProfile) {
+                                    // In 1-to-1 pairwise context:
+                                    if (isPayer) {
+                                        // Current profile paid: recovers ONLY what partner owes in this expense
+                                        if (partnerTotalOwed > 0) {
+                                            badgeText = `recuperas ${formatCurrency(partnerTotalOwed, currency)}`;
+                                            badgeColorClass = 'text-emerald-600 font-semibold';
+                                        } else {
+                                            badgeText = 'sin aporte de ' + (pairwisePartnerProfile.full_name?.split(' ')[0] || 'contraparte');
+                                            badgeColorClass = 'text-zinc-400';
+                                        }
+                                    } else if (isPartnerPayer) {
+                                        // Partner paid: current profile owes what they split
+                                        if (myTotalOwed > 0) {
+                                            badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                                            badgeColorClass = 'text-rose-600 font-semibold';
+                                        } else {
+                                            badgeText = 'no participas';
+                                            badgeColorClass = 'text-zinc-400';
+                                        }
+                                    } else {
+                                        // 3rd party paid
+                                        if (myTotalOwed > 0) {
+                                            badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                                            badgeColorClass = 'text-rose-600 font-semibold';
+                                        } else {
+                                            badgeText = 'no participas';
+                                            badgeColorClass = 'text-zinc-400';
+                                        }
+                                    }
+                                } else {
+                                    // General / Group feed context
+                                    const recovers = isPayer ? Math.max(0, exp.total_amount - myTotalOwed) : 0;
+                                    if (isPayer && recovers > 0) {
+                                        badgeText = `recuperas ${formatCurrency(recovers, currency)}`;
+                                        badgeColorClass = 'text-emerald-600 font-semibold';
+                                    } else if (isPayer) {
+                                        badgeText = 'pagaste todo';
+                                        badgeColorClass = 'text-emerald-600 font-semibold';
+                                    } else if (myTotalOwed > 0) {
+                                        badgeText = `debes ${formatCurrency(myTotalOwed, currency)}`;
+                                        badgeColorClass = 'text-rose-600 font-semibold';
+                                    } else {
+                                        badgeText = 'no participas';
+                                        badgeColorClass = 'text-zinc-400';
+                                    }
+                                }
 
-                let leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
-                if (pairwisePartnerProfile) {
-                  if (isPayer && partnerTotalOwed > 0) {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
-                  } else if (isPartnerPayer && myTotalOwed > 0) {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
-                  } else if (isPayer) {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
-                  }
-                } else {
-                  if (isPayer) {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
-                  } else if (myTotalOwed > 0.01) {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
-                  } else {
-                    leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
-                  }
-                }
+                                let leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
+                                if (pairwisePartnerProfile) {
+                                    if (isPayer && partnerTotalOwed > 0) {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                                    } else if (isPartnerPayer && myTotalOwed > 0) {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
+                                    } else if (isPayer) {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                                    }
+                                } else {
+                                    if (isPayer) {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-emerald-500';
+                                    } else if (myTotalOwed > 0.01) {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-rose-400';
+                                    } else {
+                                        leftBorderAccent = 'border-l-[3.5px] border-l-zinc-300';
+                                    }
+                                }
 
-                const isExpanded = isExpenseExpanded(exp.id);
-                const isTargeted = initialExpandedExpenseId === exp.id;
+                                const isExpanded = isExpenseExpanded(exp.id);
+                                const isTargeted = initialExpandedExpenseId === exp.id;
 
-                // Event and Entry date infos
-                const eventInfo = getRecordEventDateInfo(exp);
-                const entryInfo = getRecordEntryDateInfo(exp);
+                                // Event and Entry date infos
+                                const eventInfo = getRecordEventDateInfo(exp);
+                                const entryInfo = getRecordEntryDateInfo(exp);
 
-                return (
-                  <div
-                    id={`expense-card-${exp.id}`}
-                    key={`exp-${exp.id}`}
-                    className={`bg-white rounded-2xl border border-zinc-200/85 ${leftBorderAccent} shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isTargeted
-                      ? 'ring-2 ring-emerald-500/30'
-                      : isExpanded
-                        ? 'ring-1 ring-emerald-500/20 shadow-xs'
-                        : ''
-                      }`}
-                  >
-                    <div
-                      className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
-                      onClick={() => toggleExpenseExpanded(exp.id)}
-                    >
-                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                        {/* Date Block: Day on top, Month below */}
-                        <div
-                          className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
-                            ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                            : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
-                            }`}
-                        >
+                                return (
+                                    <div
+                                        id={`expense-card-${exp.id}`}
+                                        key={`exp-${exp.id}`}
+                                        className={`bg-white rounded-2xl border border-zinc-200/85 ${leftBorderAccent} shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isTargeted
+                                            ? 'ring-2 ring-emerald-500/30'
+                                            : isExpanded
+                                                ? 'ring-1 ring-emerald-500/20 shadow-xs'
+                                                : ''
+                                        }`}
+                                    >
+                                        <div
+                                            className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                                            onClick={() => toggleExpenseExpanded(exp.id)}
+                                        >
+                                            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                                {/* Date Block: Day on top, Month below */}
+                                                <div
+                                                    className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                                                        ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
+                                                        : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
+                                                    }`}
+                                                >
                           <span className="text-xs sm:text-sm font-bold leading-none">
                             {parsed.dayStr}
                           </span>
-                          <span
-                            className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
-                              }`}
-                          >
+                                                    <span
+                                                        className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                                                        }`}
+                                                    >
                             {parsed.monthAbbr}
                           </span>
-                        </div>
+                                                </div>
 
-                        {/* Category Icon Box */}
-                        <div
-                          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
-                          title={catConfig.name}
-                        >
-                          <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-                        </div>
+                                                {/* Category Icon Box */}
+                                                <div
+                                                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border ${catConfig.bgClass} ${catConfig.textClass} ${catConfig.borderClass || 'border-zinc-200/50'}`}
+                                                    title={catConfig.name}
+                                                >
+                                                    <CategoryIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5"/>
+                                                </div>
 
-                        {/* Description, Category Badge & Subtitle */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h3
-                              className={`text-sm font-semibold text-zinc-900 truncate leading-snug ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
-                                }`}
-                            >
-                              {exp.description}
-                            </h3>
-                            <span
-                              className={`text-[10px] font-medium px-1.5 py-0.2 rounded-md ${catConfig.bgClass} ${catConfig.textClass} border ${catConfig.borderClass || 'border-zinc-200/50'} shrink-0`}
-                            >
+                                                {/* Description, Category Badge & Subtitle */}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <h3
+                                                            className={`text-sm font-semibold text-zinc-900 truncate leading-snug ${!isExpanded ? 'group-hover:text-emerald-700' : 'text-zinc-950 font-bold'
+                                                            }`}
+                                                        >
+                                                            {exp.description}
+                                                        </h3>
+                                                        <span
+                                                            className={`text-[10px] font-medium px-1.5 py-0.2 rounded-md ${catConfig.bgClass} ${catConfig.textClass} border ${catConfig.borderClass || 'border-zinc-200/50'} shrink-0`}
+                                                        >
                               {exp.category || 'General'}
                             </span>
-                            {exp.source === 'gmail' && (
-                              <span className="bg-zinc-900 text-white text-[8px] uppercase font-semibold tracking-widest px-1 py-0.2 rounded shrink-0">
+                                                        {exp.source === 'gmail' && (
+                                                            <span
+                                                                className="bg-zinc-900 text-white text-[8px] uppercase font-semibold tracking-widest px-1 py-0.2 rounded shrink-0">
                                 AI
                               </span>
-                            )}
-                            {exp.is_draft && (
-                              <span className="bg-amber-100 text-amber-900 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border border-amber-300 shrink-0">
+                                                        )}
+                                                        {exp.is_draft && (
+                                                            <span
+                                                                className="bg-amber-100 text-amber-900 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border border-amber-300 shrink-0">
                                 Borrador
                               </span>
-                            )}
-                            {dateFilterMode === 'entry_date' && tx.isUpdated && (
-                              <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
+                                                        )}
+                                                        {dateFilterMode === 'entry_date' && tx.isUpdated && (
+                                                            <span
+                                                                className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0">
                                 Editado
                               </span>
-                            )}
-                          </div>
+                                                        )}
+                                                    </div>
 
-                          {/* Subtitle row */}
-                          <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
-                            {showGroupBadge && groupObj && (
-                              <>
+                                                    {/* Subtitle row */}
+                                                    <div
+                                                        className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
+                                                        {showGroupBadge && groupObj && (
+                                                            <>
                                 <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
                                   {groupObj.name}
                                 </span>
-                                <span>•</span>
-                              </>
-                            )}
-                            <span className="truncate">
+                                                                <span>•</span>
+                                                            </>
+                                                        )}
+                                                        <span className="truncate">
                               Pagó <span className="font-medium text-zinc-700">{paidBy ? paidBy.full_name : 'Alguien'}</span>
                             </span>
-                            {exp.source_account && (
-                              <>
-                                <span>•</span>
-                                <span className="font-mono text-zinc-600 font-medium">
+                                                        {exp.source_account && (
+                                                            <>
+                                                                <span>•</span>
+                                                                <span className="font-mono text-zinc-600 font-medium">
                                   💳 *{exp.source_account}
                                 </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                      {/* Right Amount & Personal Share info beneath amount */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex flex-col items-end justify-center text-right">
+                                            {/* Right Amount & Personal Share info beneath amount */}
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <div className="flex flex-col items-end justify-center text-right">
                           <span className="text-xs sm:text-sm font-bold text-zinc-900 leading-tight">
                             {formatCurrency(exp.total_amount, currency)}
                           </span>
-                          <span className={`text-[10px] sm:text-xs leading-tight mt-0.5 font-semibold ${badgeColorClass}`}>
+                                                    <span
+                                                        className={`text-[10px] sm:text-xs leading-tight mt-0.5 font-semibold ${badgeColorClass}`}>
                             {badgeText}
                           </span>
-                        </div>
+                                                </div>
 
-                        {/* Icon-only buttons when expanded */}
-                        {isExpanded && (
-                          <div className="flex items-center gap-1 pl-1 border-l border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
-                            {onEditExpense && (
-                              <button
-                                type="button"
-                                onClick={() => onEditExpense(exp)}
-                                title="Editar gasto"
-                                aria-label="Editar gasto"
-                                className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {onDeleteExpense && (
-                              <button
-                                type="button"
-                                onClick={() => setExpenseToDelete(exp.id)}
-                                title="Eliminar gasto"
-                                aria-label="Eliminar gasto"
-                                className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                                                {/* Icon-only buttons when expanded */}
+                                                {isExpanded && (
+                                                    <div
+                                                        className="flex items-center gap-1 pl-1 border-l border-zinc-200/80"
+                                                        onClick={(e) => e.stopPropagation()}>
+                                                        {onEditExpense && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => onEditExpense(exp)}
+                                                                title="Editar gasto"
+                                                                aria-label="Editar gasto"
+                                                                className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
+                                                            >
+                                                                <Pencil className="w-3.5 h-3.5"/>
+                                                            </button>
+                                                        )}
+                                                        {onDeleteExpense && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpenseToDelete(exp.id)}
+                                                                title="Eliminar gasto"
+                                                                aria-label="Eliminar gasto"
+                                                                className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5"/>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
-                        )}
-                      </div>
-                    </div>
+                                                {isExpanded ? (
+                                                    <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                ) : (
+                                                    <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                                )}
+                                            </div>
+                                        </div>
 
-                    {/* EXPANDED CONTENT */}
-                    {isExpanded && (
-                      <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
-                        {/* Content Grid */}
-                        {(() => {
-                          const hasItems = Boolean(exp.items && exp.items.length > 0);
-                          const { userNote: cleanNotes, splitConfig } = getExpenseSplitConfig(exp);
-                          const hasNotes = Boolean(cleanNotes && cleanNotes.trim().length > 0);
-                          const hasReceipt = Boolean(exp.receipt_url);
-                          const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
+                                        {/* EXPANDED CONTENT */}
+                                        {isExpanded && (
+                                            <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
+                                                {/* Content Grid */}
+                                                {(() => {
+                                                    const hasItems = Boolean(exp.items && exp.items.length > 0);
+                                                    const {
+                                                        userNote: cleanNotes,
+                                                        splitConfig
+                                                    } = getExpenseSplitConfig(exp);
+                                                    const hasNotes = Boolean(cleanNotes && cleanNotes.trim().length > 0);
+                                                    const hasReceipt = Boolean(exp.receipt_url);
+                                                    const hasSecondaryDetails = hasItems || hasNotes || hasReceipt;
 
-                          const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
-                            const profile = profiles.find((p) => p.id === split.user_id);
-                            const userAmt = split.amount_owed;
-                            const breakdown: ParticipantItemBreakdown[] = [];
+                                                    const participantSummaryList: ParticipantSummaryData[] = (exp.splits || []).map((split) => {
+                                                        const profile = profiles.find((p) => p.id === split.user_id);
+                                                        const userAmt = split.amount_owed;
+                                                        const breakdown: ParticipantItemBreakdown[] = [];
 
-                            // Accurate item breakdown: use splitConfig.items if present, else fallback to exp.items
-                            const cfgItems = splitConfig?.items;
-                            if (cfgItems && Array.isArray(cfgItems) && cfgItems.length > 0) {
-                              const allParticipantIds = (exp.splits || []).map((s) => s.user_id);
-                              cfgItems.forEach((item, idx) => {
-                                const qty = parseFloat(item.quantity) || 1;
-                                const amt = parseFloat(item.amount) || 0;
-                                const itemTotal = item.amountType === 'each' ? qty * amt : amt;
-                                const val = item.shares?.[split.user_id] !== undefined
-                                  ? parseFloat(item.shares[split.user_id] as string) || 0
-                                  : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(split.user_id) ? 1 : 0);
+                                                        // Accurate item breakdown: use splitConfig.items if present, else fallback to exp.items
+                                                        const cfgItems = splitConfig?.items;
+                                                        if (cfgItems && Array.isArray(cfgItems) && cfgItems.length > 0) {
+                                                            const allParticipantIds = (exp.splits || []).map((s) => s.user_id);
+                                                            cfgItems.forEach((item, idx) => {
+                                                                const qty = parseFloat(item.quantity) || 1;
+                                                                const amt = parseFloat(item.amount) || 0;
+                                                                const itemTotal = item.amountType === 'each' ? qty * amt : amt;
+                                                                const val = item.shares?.[split.user_id] !== undefined
+                                                                    ? parseFloat(item.shares[split.user_id] as string) || 0
+                                                                    : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(split.user_id) ? 1 : 0);
 
-                                if (val > 0) {
-                                  let sumShares = 0;
-                                  allParticipantIds.forEach((id) => {
-                                    sumShares += item.shares?.[id] !== undefined
-                                      ? parseFloat(item.shares[id] as string) || 0
-                                      : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
-                                  });
-                                  if (sumShares > 0 && itemTotal > 0) {
-                                    const userItemQty = qty * (val / sumShares);
-                                    const userItemCost = itemTotal * (val / sumShares);
-                                    breakdown.push({
-                                      desc: item.desc || `Artículo ${idx + 1}`,
-                                      qty: userItemQty,
-                                      cost: userItemCost,
-                                    });
-                                  }
-                                }
-                              });
-                            } else if (exp.items && exp.items.length > 0 && exp.total_amount > 0) {
-                              exp.items.forEach((item) => {
-                                const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
-                                const totalQty = match ? parseFloat(match[1]) || 1 : 1;
-                                const cleanDesc = match ? match[2].trim() : item.description;
-                                const ratio = exp.total_amount > 0 ? (userAmt / exp.total_amount) : 0;
-                                const userItemQty = totalQty * ratio;
-                                const userItemCost = item.amount * ratio;
+                                                                if (val > 0) {
+                                                                    let sumShares = 0;
+                                                                    allParticipantIds.forEach((id) => {
+                                                                        sumShares += item.shares?.[id] !== undefined
+                                                                            ? parseFloat(item.shares[id] as string) || 0
+                                                                            : (!item.assignedTo || item.assignedTo.length === 0 || item.assignedTo.includes(id) ? 1 : 0);
+                                                                    });
+                                                                    if (sumShares > 0 && itemTotal > 0) {
+                                                                        const userItemQty = qty * (val / sumShares);
+                                                                        const userItemCost = itemTotal * (val / sumShares);
+                                                                        breakdown.push({
+                                                                            desc: item.desc || `Artículo ${idx + 1}`,
+                                                                            qty: userItemQty,
+                                                                            cost: userItemCost,
+                                                                        });
+                                                                    }
+                                                                }
+                                                            });
+                                                        } else if (exp.items && exp.items.length > 0 && exp.total_amount > 0) {
+                                                            exp.items.forEach((item) => {
+                                                                const match = item.description.match(/^(\d+(?:\.\d+)?)\s*(?:·|x)\s*(.*)$/);
+                                                                const totalQty = match ? parseFloat(match[1]) || 1 : 1;
+                                                                const cleanDesc = match ? match[2].trim() : item.description;
+                                                                const ratio = exp.total_amount > 0 ? (userAmt / exp.total_amount) : 0;
+                                                                const userItemQty = totalQty * ratio;
+                                                                const userItemCost = item.amount * ratio;
 
-                                breakdown.push({
-                                  desc: cleanDesc,
-                                  qty: userItemQty,
-                                  cost: userItemCost,
-                                });
-                              });
-                            }
+                                                                breakdown.push({
+                                                                    desc: cleanDesc,
+                                                                    qty: userItemQty,
+                                                                    cost: userItemCost,
+                                                                });
+                                                            });
+                                                        }
 
-                            const userShares = splitConfig.splits?.[split.user_id]?.shares;
+                                                        const userShares = splitConfig.splits?.[split.user_id]?.shares;
 
-                            return {
-                              userId: split.user_id,
-                              profile,
-                              amount: userAmt,
-                              breakdown: breakdown.length > 0 ? breakdown : undefined,
-                              shares: splitConfig.splitType === 'shares' ? userShares : undefined,
-                            };
-                          });
+                                                        return {
+                                                            userId: split.user_id,
+                                                            profile,
+                                                            amount: userAmt,
+                                                            breakdown: breakdown.length > 0 ? breakdown : undefined,
+                                                            shares: splitConfig.splitType === 'shares' ? userShares : undefined,
+                                                        };
+                                                    });
 
-                          const isItemizedExpense = Boolean(hasItems || splitConfig?.mode === 'itemized' || splitConfig?.splitType === 'itemized');
+                                                    const isItemizedExpense = Boolean(hasItems || splitConfig?.mode === 'itemized' || splitConfig?.splitType === 'itemized');
 
-                          if (hasSecondaryDetails) {
-                            return (
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
-                                {/* Money Flow: Total pagado & Distribución de participantes */}
-                                <ExpenseMoneyFlow
-                                  totalAmount={exp.total_amount}
-                                  currency={currency}
-                                  payerProfile={paidBy}
-                                  participants={participantSummaryList}
-                                  defaultExpanded={isItemizedExpense}
-                                />
+                                                    if (hasSecondaryDetails) {
+                                                        return (
+                                                            <div
+                                                                className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
+                                                                {/* Money Flow: Total pagado & Distribución de participantes */}
+                                                                <ExpenseMoneyFlow
+                                                                    totalAmount={exp.total_amount}
+                                                                    currency={currency}
+                                                                    payerProfile={paidBy}
+                                                                    participants={participantSummaryList}
+                                                                    defaultExpanded={isItemizedExpense}
+                                                                />
 
-                                {/* Items, Notes and Receipt (right col) */}
-                                <div className="space-y-2">
-                                  {hasItems && (
-                                    <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                                      <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5">
-                                          <ShoppingBag className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                                                {/* Items, Notes and Receipt (right col) */}
+                                                                <div className="space-y-2">
+                                                                    {hasItems && (
+                                                                        <div
+                                                                            className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+                                                                            <div
+                                                                                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+                                                                                <div
+                                                                                    className="flex items-center gap-1.5">
+                                                                                    <ShoppingBag
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                    <span
+                                                                                        className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                                             Desglose de artículos ({exp.items?.length || 0})
                                           </span>
-                                        </div>
-                                      </div>
-                                      <div className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
-                                        {exp.items?.map((item, idx) => (
-                                          <div key={item.id || idx} className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors">
-                                            <div className="flex items-center space-x-2 min-w-0 pr-2">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                              <span className="font-medium text-zinc-800 truncate">{item.description}</span>
-                                            </div>
-                                            <span className="text-zinc-900 font-bold shrink-0 text-xs">
+                                                                                </div>
+                                                                            </div>
+                                                                            <div
+                                                                                className="divide-y divide-zinc-100 max-h-48 overflow-y-auto">
+                                                                                {exp.items?.map((item, idx) => (
+                                                                                    <div key={item.id || idx}
+                                                                                         className="flex items-center justify-between text-xs py-2 px-3 hover:bg-zinc-50/40 transition-colors">
+                                                                                        <div
+                                                                                            className="flex items-center space-x-2 min-w-0 pr-2">
+                                                                                            <span
+                                                                                                className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"/>
+                                                                                            <span
+                                                                                                className="font-medium text-zinc-800 truncate">{item.description}</span>
+                                                                                        </div>
+                                                                                        <span
+                                                                                            className="text-zinc-900 font-bold shrink-0 text-xs">
                                               {formatCurrency(item.amount, currency)}
                                             </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
 
-                                  {hasReceipt && (
-                                    <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                                      <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5">
-                                          <ImageIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                                                    {hasReceipt && (
+                                                                        <div
+                                                                            className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+                                                                            <div
+                                                                                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+                                                                                <div
+                                                                                    className="flex items-center gap-1.5">
+                                                                                    <ImageIcon
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                    <span
+                                                                                        className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                                             Comprobante
                                           </span>
-                                        </div>
-                                      </div>
-                                      <div className="p-3">
-                                        <div
-                                          onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
-                                          className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
-                                        >
-                                          <Image
-                                            src={exp.receipt_url!}
-                                            alt="Comprobante"
-                                            fill
-                                            className="object-cover group-hover/img:scale-105 transition-transform"
-                                            unoptimized
-                                            referrerPolicy="no-referrer"
-                                          />
-                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
-                                            <ExternalLink className="w-3.5 h-3.5" />
-                                            <span>Ver</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="p-3">
+                                                                                <div
+                                                                                    onClick={() => setSelectedProofUrl(exp.receipt_url ?? null)}
+                                                                                    className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                                                                >
+                                                                                    <Image
+                                                                                        src={exp.receipt_url!}
+                                                                                        alt="Comprobante"
+                                                                                        fill
+                                                                                        className="object-cover group-hover/img:scale-105 transition-transform"
+                                                                                        unoptimized
+                                                                                        referrerPolicy="no-referrer"
+                                                                                    />
+                                                                                    <div
+                                                                                        className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                                                                                        <ExternalLink
+                                                                                            className="w-3.5 h-3.5"/>
+                                                                                        <span>Ver</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
 
-                                  {hasNotes && (
-                                    <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                                      <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-                                        <div className="flex items-center gap-1.5">
-                                          <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                                                    {hasNotes && (
+                                                                        <div
+                                                                            className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+                                                                            <div
+                                                                                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+                                                                                <div
+                                                                                    className="flex items-center gap-1.5">
+                                                                                    <FileText
+                                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                                    <span
+                                                                                        className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                                             Notas
                                           </span>
-                                        </div>
-                                      </div>
-                                      <div className="p-3">
-                                        <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                                          {cleanNotes}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="p-3">
+                                                                                <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                                                                                    {cleanNotes}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
 
-                          // Full-width balanced splits card when there are no extra notes/items
-                          return (
-                            <ExpenseMoneyFlow
-                              totalAmount={exp.total_amount}
-                              currency={currency}
-                              payerProfile={paidBy}
-                              participants={participantSummaryList}
-                              defaultExpanded={isItemizedExpense}
-                            />
-                          );
-                        })()}
+                                                    // Full-width balanced splits card when there are no extra notes/items
+                                                    return (
+                                                        <ExpenseMoneyFlow
+                                                            totalAmount={exp.total_amount}
+                                                            currency={currency}
+                                                            payerProfile={paidBy}
+                                                            participants={participantSummaryList}
+                                                            defaultExpanded={isItemizedExpense}
+                                                        />
+                                                    );
+                                                })()}
 
-                        {/* Dedicated Detailed Date & Timestamp Metadata Footer */}
-                        <div className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                            <span>
+                                                {/* Dedicated Detailed Date & Timestamp Metadata Footer */}
+                                                <div
+                                                    className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
+                                                    <div className="flex items-center space-x-2 flex-wrap">
+                                                        <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                        <span>
                               Fecha del gasto: <strong className="font-semibold text-zinc-700">
-                                {formatHumanDate(eventInfo.dateObj, { includeTime: Boolean(exp.expense_time) })}
+                                {formatHumanDate(eventInfo.dateObj, {includeTime: Boolean(exp.expense_time)})}
                               </strong>
                             </span>
-                          </div>
+                                                    </div>
 
-                          {exp.source_account && (
-                            <div className="flex items-center space-x-2 flex-wrap">
-                              <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                              <span>
+                                                    {exp.source_account && (
+                                                        <div className="flex items-center space-x-2 flex-wrap">
+                                                            <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                            <span>
                                 Pagado con: <strong className="font-mono font-semibold text-zinc-700">*{exp.source_account}</strong>
-                                {exp.entity ? ` (${exp.entity})` : ''}
+                                                                {exp.entity ? ` (${exp.entity})` : ''}
                               </span>
-                            </div>
-                          )}
+                                                        </div>
+                                                    )}
 
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                            <span>
+                                                    <div className="flex items-center space-x-2 flex-wrap">
+                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                        <span>
                               Registrado por <strong className="font-medium text-zinc-700">{createdBy ? createdBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.created_at)}
                             </span>
-                          </div>
+                                                    </div>
 
-                          {exp.updated_at && exp.updated_at !== exp.created_at && (
-                            <div className="flex items-center space-x-2 flex-wrap">
-                              <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                              <span>
+                                                    {exp.updated_at && exp.updated_at !== exp.created_at && (
+                                                        <div className="flex items-center space-x-2 flex-wrap">
+                                                            <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                            <span>
                                 Última modificación por <strong className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(exp.updated_at)}
                               </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
 
-              // Render PAYMENT transaction with visual harmony & full parity!
-              const payment = tx.data;
-              const payer = profiles.find((p) => p.id === payment.paid_by);
-              const receiver = profiles.find((p) => p.id === payment.paid_to);
-              const groupObj = userGroups.find((g) => g.id === payment.group_id);
-              const currency = groupCurrency || groupObj?.currency || currentProfile?.currency;
+                            // Render PAYMENT transaction with visual harmony & full parity!
+                            const payment = tx.data;
+                            const payer = profiles.find((p) => p.id === payment.paid_by);
+                            const receiver = profiles.find((p) => p.id === payment.paid_to);
+                            const groupObj = userGroups.find((g) => g.id === payment.group_id);
+                            const currency = groupCurrency || groupObj?.currency || currentProfile?.currency;
 
-              const isIpaid = payment.paid_by === currentProfile?.id;
-              const isIreceived = payment.paid_to === currentProfile?.id;
-              const isExpanded = isPaymentExpanded(payment.id);
+                            const isIpaid = payment.paid_by === currentProfile?.id;
+                            const isIreceived = payment.paid_to === currentProfile?.id;
+                            const isExpanded = isPaymentExpanded(payment.id);
 
-              const eventInfo = getRecordEventDateInfo(payment);
-              const explicitPayTime = payment.payment_time ? extractTimeFromISO(payment.payment_time) : '';
+                            const eventInfo = getRecordEventDateInfo(payment);
+                            const explicitPayTime = payment.payment_time ? extractTimeFromISO(payment.payment_time) : '';
 
-              const updatedBy = payment.updated_by ? profiles.find((p) => p.id === payment.updated_by) : null;
-              const hasProof = Boolean(payment.proof_url);
-              const hasNote = Boolean(payment.note && payment.note.trim().length > 0);
+                            const updatedBy = payment.updated_by ? profiles.find((p) => p.id === payment.updated_by) : null;
+                            const hasProof = Boolean(payment.proof_url);
+                            const hasNote = Boolean(payment.note && payment.note.trim().length > 0);
 
-              return (
-                <div
-                  key={`pay-${payment.id}`}
-                  id={`payment-card-${payment.id}`}
-                  className={`bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isExpanded ? 'ring-1 ring-emerald-500/20 shadow-xs' : ''
-                    }`}
-                >
-                  {/* Collapsed / Summary Header (Click toggles expansion) */}
-                  <div
-                    onClick={() => togglePaymentExpanded(payment.id)}
-                    className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
-                  >
-                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                      {/* Date Block: Day on top, Month below */}
-                      <div
-                        className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
-                          ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
-                          : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
-                          }`}
-                      >
+                            return (
+                                <div
+                                    key={`pay-${payment.id}`}
+                                    id={`payment-card-${payment.id}`}
+                                    className={`bg-white rounded-2xl border border-zinc-200/85 border-l-[3.5px] border-l-emerald-500 shadow-2xs overflow-hidden transition-all hover:border-zinc-300 ${isExpanded ? 'ring-1 ring-emerald-500/20 shadow-xs' : ''
+                                    }`}
+                                >
+                                    {/* Collapsed / Summary Header (Click toggles expansion) */}
+                                    <div
+                                        onClick={() => togglePaymentExpanded(payment.id)}
+                                        className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 cursor-pointer select-none hover:bg-zinc-50/50 transition-colors"
+                                    >
+                                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                            {/* Date Block: Day on top, Month below */}
+                                            <div
+                                                className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 text-center select-none shadow-2xs border ${dateFilterMode === 'entry_date'
+                                                    ? 'bg-indigo-50/80 border-indigo-200/90 text-indigo-950'
+                                                    : 'bg-zinc-50 border-zinc-200/70 text-zinc-800'
+                                                }`}
+                                            >
                         <span className="text-xs sm:text-sm font-bold leading-none">
                           {parsed.dayStr}
                         </span>
-                        <span
-                          className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
-                            }`}
-                        >
+                                                <span
+                                                    className={`text-[9px] font-bold uppercase leading-none mt-0.5 ${dateFilterMode === 'entry_date' ? 'text-indigo-600' : 'text-zinc-400'
+                                                    }`}
+                                                >
                           {parsed.monthAbbr}
                         </span>
-                      </div>
+                                            </div>
 
-                      {/* Payment Icon Box */}
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                        <HandCoins className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </div>
+                                            {/* Payment Icon Box */}
+                                            <div
+                                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                                                <HandCoins className="w-4 h-4 sm:w-5 sm:h-5"/>
+                                            </div>
 
-                      {/* Payment Description & Details */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
-                            Pago a {receiver ? receiver.full_name : 'Usuario'}
-                          </h3>
-                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
+                                            {/* Payment Description & Details */}
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <h3 className="text-sm font-semibold text-zinc-900 truncate leading-snug">
+                                                        Pago a {receiver ? receiver.full_name : 'Usuario'}
+                                                    </h3>
+                                                    <span
+                                                        className="text-[10px] font-medium px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 shrink-0">
                             Saldado
                           </span>
-                          {dateFilterMode === 'entry_date' && tx.isUpdated && (
-                            <span className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
+                                                    {dateFilterMode === 'entry_date' && tx.isUpdated && (
+                                                        <span
+                                                            className="bg-amber-100 text-amber-800 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200 shrink-0 ml-1">
                               Editado
                             </span>
-                          )}
-                        </div>
+                                                    )}
+                                                </div>
 
-                        {/* Subtitle row */}
-                        <div className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
-                          {showGroupBadge && groupObj && (
-                            <>
+                                                {/* Subtitle row */}
+                                                <div
+                                                    className="flex flex-wrap items-center gap-1 text-xs text-zinc-500 mt-0.5 leading-none">
+                                                    {showGroupBadge && groupObj && (
+                                                        <>
                               <span className="font-medium text-zinc-700 bg-zinc-100 px-1 py-0.2 rounded text-[10px]">
                                 {groupObj.name}
                               </span>
-                              <span>•</span>
-                            </>
-                          )}
-                          <span className="truncate">
+                                                            <span>•</span>
+                                                        </>
+                                                    )}
+                                                    <span className="truncate">
                             {isIpaid ? 'Transferiste a ' : 'Pagó a '}
-                            <span className="font-medium text-zinc-700">{receiver ? receiver.full_name : 'Usuario'}</span>
+                                                        <span
+                                                            className="font-medium text-zinc-700">{receiver ? receiver.full_name : 'Usuario'}</span>
                           </span>
-                        </div>
-                      </div>
-                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                    {/* Right Amount & Personal Share info beneath amount */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex flex-col items-end justify-center text-right">
+                                        {/* Right Amount & Personal Share info beneath amount */}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <div className="flex flex-col items-end justify-center text-right">
                         <span className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
                           {formatCurrency(payment.amount, currency)}
                         </span>
-                        <span
-                          className={`text-xs font-semibold leading-tight mt-0.5 ${isIpaid
-                            ? 'text-emerald-600'
-                            : isIreceived
-                              ? 'text-emerald-600'
-                              : 'text-zinc-400'
-                            }`}
-                        >
+                                                <span
+                                                    className={`text-xs font-semibold leading-tight mt-0.5 ${isIpaid
+                                                        ? 'text-emerald-600'
+                                                        : isIreceived
+                                                            ? 'text-emerald-600'
+                                                            : 'text-zinc-400'
+                                                    }`}
+                                                >
                           {isIpaid ? 'pagaste' : isIreceived ? 'recibiste' : 'saldado'}
                         </span>
-                      </div>
+                                            </div>
 
-                      {/* Icon-only buttons when expanded */}
-                      {isExpanded && (
-                        <div className="flex items-center gap-1 pl-1 border-l border-zinc-200/80" onClick={(e) => e.stopPropagation()}>
-                          {onEditPayment && (
-                            <button
-                              type="button"
-                              onClick={() => onEditPayment(payment)}
-                              title="Editar pago"
-                              aria-label="Editar pago"
-                              className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {onDeletePayment && (
-                            <button
-                              type="button"
-                              onClick={() => setPaymentToDelete(payment.id)}
-                              title="Eliminar pago"
-                              aria-label="Eliminar pago"
-                              className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                                            {/* Icon-only buttons when expanded */}
+                                            {isExpanded && (
+                                                <div
+                                                    className="flex items-center gap-1 pl-1 border-l border-zinc-200/80"
+                                                    onClick={(e) => e.stopPropagation()}>
+                                                    {onEditPayment && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onEditPayment(payment)}
+                                                            title="Editar pago"
+                                                            aria-label="Editar pago"
+                                                            className="p-1 sm:p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/80 active:scale-95 transition-all cursor-pointer"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5"/>
+                                                        </button>
+                                                    )}
+                                                    {onDeletePayment && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPaymentToDelete(payment.id)}
+                                                            title="Eliminar pago"
+                                                            aria-label="Eliminar pago"
+                                                            className="p-1 sm:p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition-all cursor-pointer"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5"/>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
 
-                      {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
-                      )}
-                    </div>
-                  </div>
+                                            {isExpanded ? (
+                                                <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                            ) : (
+                                                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0"/>
+                                            )}
+                                        </div>
+                                    </div>
 
-                  {/* EXPANDED PAYMENT CONTENT */}
-                  {isExpanded && (
-                    <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
-                      {/* Transfer Flow Graphic: Matching SettleDebtModal style */}
-                      <div className="bg-zinc-50/90 border border-zinc-200/90 rounded-2xl p-3 sm:p-3.5 relative shadow-2xs">
-                        <div className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-2.5">
-                          Flujo del dinero
-                        </div>
+                                    {/* EXPANDED PAYMENT CONTENT */}
+                                    {isExpanded && (
+                                        <div className="bg-zinc-50/40 p-2.5 sm:p-3 space-y-2">
+                                            {/* Transfer Flow Graphic: Matching SettleDebtModal style */}
+                                            <div
+                                                className="bg-zinc-50/90 border border-zinc-200/90 rounded-2xl p-3 sm:p-3.5 relative shadow-2xs">
+                                                <div
+                                                    className="text-[10px] font-black uppercase tracking-wider text-zinc-400 text-center mb-2.5">
+                                                    Flujo del dinero
+                                                </div>
 
-                        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
-                          {/* Payer Card with Round Avatar */}
-                          <div className="flex-1 min-w-0">
-                            <div className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
-                              <div className="relative shrink-0">
-                                {payer?.avatar_url ? (
-                                  <Image
-                                    src={payer.avatar_url}
-                                    alt={payer.full_name}
-                                    width={36}
-                                    height={36}
-                                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
-                                    unoptimized
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                                    {payer?.full_name?.charAt(0).toUpperCase() || 'U'}
-                                  </div>
-                                )}
-                                <span className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                                                <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                                                    {/* Payer Card with Round Avatar */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div
+                                                            className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
+                                                            <div className="relative shrink-0">
+                                                                {payer?.avatar_url ? (
+                                                                    <Image
+                                                                        src={payer.avatar_url}
+                                                                        alt={payer.full_name}
+                                                                        width={36}
+                                                                        height={36}
+                                                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
+                                                                        unoptimized
+                                                                        referrerPolicy="no-referrer"
+                                                                    />
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                                                                        {payer?.full_name?.charAt(0).toUpperCase() || 'U'}
+                                                                    </div>
+                                                                )}
+                                                                <span
+                                                                    className="absolute -bottom-1 -right-1 bg-rose-500 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
                                   PAGA
                                 </span>
-                              </div>
+                                                            </div>
 
-                              <div className="min-w-0 flex-1 text-left">
-                                <div className="text-xs font-extrabold text-zinc-900 truncate">
-                                  {payer?.full_name?.split(' ')[0] || 'Pagador'}
-                                </div>
-                                <div className="text-[10px] text-zinc-400 font-medium truncate">
-                                  {payer?.full_name || 'Integrante'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                                                            <div className="min-w-0 flex-1 text-left">
+                                                                <div
+                                                                    className="text-xs font-extrabold text-zinc-900 truncate">
+                                                                    {payer?.full_name?.split(' ')[0] || 'Pagador'}
+                                                                </div>
+                                                                <div
+                                                                    className="text-[10px] text-zinc-400 font-medium truncate">
+                                                                    {payer?.full_name || 'Integrante'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                          {/* Center Flow Connector */}
-                          <div className="shrink-0 flex items-center justify-center px-1">
-                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shadow-2xs">
-                              <ArrowRight className="w-4 h-4 text-emerald-600" />
-                            </div>
-                          </div>
+                                                    {/* Center Flow Connector */}
+                                                    <div className="shrink-0 flex items-center justify-center px-1">
+                                                        <div
+                                                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shadow-2xs">
+                                                            <ArrowRight className="w-4 h-4 text-emerald-600"/>
+                                                        </div>
+                                                    </div>
 
-                          {/* Receiver Card with Round Avatar */}
-                          <div className="flex-1 min-w-0">
-                            <div className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
-                              <div className="relative shrink-0">
-                                {receiver?.avatar_url ? (
-                                  <Image
-                                    src={receiver.avatar_url}
-                                    alt={receiver.full_name}
-                                    width={36}
-                                    height={36}
-                                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
-                                    unoptimized
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                                    {receiver?.full_name?.charAt(0).toUpperCase() || 'U'}
-                                  </div>
-                                )}
-                                <span className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
+                                                    {/* Receiver Card with Round Avatar */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div
+                                                            className="relative flex items-center space-x-2 bg-white rounded-xl p-2 sm:p-2.5 border border-zinc-200 shadow-2xs">
+                                                            <div className="relative shrink-0">
+                                                                {receiver?.avatar_url ? (
+                                                                    <Image
+                                                                        src={receiver.avatar_url}
+                                                                        alt={receiver.full_name}
+                                                                        width={36}
+                                                                        height={36}
+                                                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-zinc-100"
+                                                                        unoptimized
+                                                                        referrerPolicy="no-referrer"
+                                                                    />
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                                                                        {receiver?.full_name?.charAt(0).toUpperCase() || 'U'}
+                                                                    </div>
+                                                                )}
+                                                                <span
+                                                                    className="absolute -bottom-1 -right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded-full ring-1 ring-white">
                                   RECIBE
                                 </span>
-                              </div>
+                                                            </div>
 
-                              <div className="min-w-0 flex-1 text-left">
-                                <div className="text-xs font-extrabold text-zinc-900 truncate">
-                                  {receiver?.full_name?.split(' ')[0] || 'Receptor'}
-                                </div>
-                                <div className="text-[10px] text-zinc-400 font-medium truncate">
-                                  {receiver?.full_name || 'Integrante'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                                                            <div className="min-w-0 flex-1 text-left">
+                                                                <div
+                                                                    className="text-xs font-extrabold text-zinc-900 truncate">
+                                                                    {receiver?.full_name?.split(' ')[0] || 'Receptor'}
+                                                                </div>
+                                                                <div
+                                                                    className="text-[10px] text-zinc-400 font-medium truncate">
+                                                                    {receiver?.full_name || 'Integrante'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
 
-                        {/* Central Amount Stage inside flow */}
-                        <div className="mt-3 pt-2.5 border-t border-dashed border-zinc-200 flex items-center justify-between px-1">
-                          <span className="text-[11px] font-semibold text-zinc-500">Monto transferido</span>
-                          <span className="text-sm sm:text-base font-black text-zinc-900 tracking-tight">
+                                                {/* Central Amount Stage inside flow */}
+                                                <div
+                                                    className="mt-3 pt-2.5 border-t border-dashed border-zinc-200 flex items-center justify-between px-1">
+                                                    <span className="text-[11px] font-semibold text-zinc-500">Monto transferido</span>
+                                                    <span
+                                                        className="text-sm sm:text-base font-black text-zinc-900 tracking-tight">
                             {formatCurrency(payment.amount, currency)}
                           </span>
-                        </div>
-                      </div>
+                                                </div>
+                                            </div>
 
-                      {/* Extra Details: Notes & Proof of Payment in separated, unified cards */}
-                      {(hasNote || hasProof) && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {hasProof && (
-                            <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                              <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <ImageIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                            {/* Extra Details: Notes & Proof of Payment in separated, unified cards */}
+                                            {(hasNote || hasProof) && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {hasProof && (
+                                                        <div
+                                                            className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+                                                            <div
+                                                                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <ImageIcon
+                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                    <span
+                                                                        className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                                     Comprobante
                                   </span>
-                                </div>
-                              </div>
-                              <div className="p-3">
-                                <div
-                                  onClick={() => setSelectedProofUrl(payment.proof_url ?? null)}
-                                  className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
-                                >
-                                  <Image
-                                    src={payment.proof_url!}
-                                    alt="Comprobante de pago"
-                                    fill
-                                    className="object-cover group-hover/img:scale-105 transition-transform"
-                                    unoptimized
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                    <span>Ver</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3">
+                                                                <div
+                                                                    onClick={() => setSelectedProofUrl(payment.proof_url ?? null)}
+                                                                    className="group/img relative w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 cursor-pointer bg-zinc-100 hover:border-emerald-500 transition-all shadow-2xs"
+                                                                >
+                                                                    <Image
+                                                                        src={payment.proof_url!}
+                                                                        alt="Comprobante de pago"
+                                                                        fill
+                                                                        className="object-cover group-hover/img:scale-105 transition-transform"
+                                                                        unoptimized
+                                                                        referrerPolicy="no-referrer"
+                                                                    />
+                                                                    <div
+                                                                        className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                                                                        <ExternalLink className="w-3.5 h-3.5"/>
+                                                                        <span>Ver</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
 
-                          {hasNote && (
-                            <div className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
-                              <div className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                                                    {hasNote && (
+                                                        <div
+                                                            className="bg-white rounded-xl sm:rounded-2xl border border-zinc-200/90 shadow-2xs overflow-hidden">
+                                                            <div
+                                                                className="px-3 py-2 bg-zinc-50/70 border-b border-zinc-200/70 flex items-center justify-between">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <FileText
+                                                                        className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                                    <span
+                                                                        className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                                     Notas
                                   </span>
-                                </div>
-                              </div>
-                              <div className="p-3">
-                                <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                                  {payment.note}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3">
+                                                                <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                                                                    {payment.note}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
 
-                      {/* Dedicated Detailed Date & Timestamp Metadata Footer */}
-                      <div className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                          <span>
+                                            {/* Dedicated Detailed Date & Timestamp Metadata Footer */}
+                                            <div
+                                                className="pt-2.5 border-t border-zinc-200/60 text-[11px] text-zinc-500 space-y-1 bg-white/60 p-2.5 rounded-xl">
+                                                <div className="flex items-center space-x-2 flex-wrap">
+                                                    <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0"/>
+                                                    <span>
                             Fecha del pago: <strong className="font-semibold text-zinc-700">
-                              {formatHumanDate(eventInfo.dateObj, { includeTime: Boolean(payment.payment_time) })}
+                              {formatHumanDate(eventInfo.dateObj, {includeTime: Boolean(payment.payment_time)})}
                             </strong>
                           </span>
-                        </div>
+                                                </div>
 
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          <span>
+                                                <div className="flex items-center space-x-2 flex-wrap">
+                                                    <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                    <span>
                             Registrado el {formatFullDateTime(payment.created_at)}
                           </span>
-                        </div>
+                                                </div>
 
-                        {payment.updated_at && payment.updated_at !== payment.created_at && (
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                            <span>
-                              Última modificación por <strong className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(payment.updated_at)}
+                                                {payment.updated_at && payment.updated_at !== payment.created_at && (
+                                                    <div className="flex items-center space-x-2 flex-wrap">
+                                                        <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0"/>
+                                                        <span>
+                              Última modificación por <strong
+                                                            className="font-medium text-zinc-700">{updatedBy ? updatedBy.full_name : 'Usuario'}</strong> el {formatFullDateTime(payment.updated_at)}
                             </span>
-                          </div>
-                        )}
-                      </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
-                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+            ))}
 
-      {/* Pagination / Load More Controls */}
-      {transactions.length > pageSize && (
-        <div className="pt-2 pb-4 flex flex-col items-center justify-center gap-2">
-          {hasMoreTransactions ? (
-            <button
-              type="button"
-              onClick={() => setExtraPages((prev) => prev + 1)}
-              className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-zinc-50 active:scale-[0.98] border border-zinc-200/90 hover:border-zinc-300 text-zinc-900 rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
-            >
-              <ChevronDown className="w-4 h-4 text-emerald-600" />
-              <span>
+            {/* Pagination / Load More Controls */}
+            {transactions.length > pageSize && (
+                <div className="pt-2 pb-4 flex flex-col items-center justify-center gap-2">
+                    {hasMoreTransactions ? (
+                        <button
+                            type="button"
+                            onClick={() => setExtraPages((prev) => prev + 1)}
+                            className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-zinc-50 active:scale-[0.98] border border-zinc-200/90 hover:border-zinc-300 text-zinc-900 rounded-xl font-bold text-xs shadow-2xs hover:shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                        >
+                            <ChevronDown className="w-4 h-4 text-emerald-600"/>
+                            <span>
                 Cargar más ({Math.min(pageSize, remainingCount)} de {remainingCount} restantes)
               </span>
-            </button>
-          ) : (
-            <div className="text-center py-4">
+                        </button>
+                    ) : (
+                        <div className="text-center py-4">
               <span className="text-xs font-medium text-zinc-400">
                 No hay más gastos
               </span>
-            </div>
-          )}
-          <span className="text-[11px] font-medium text-zinc-400">
+                        </div>
+                    )}
+                    <span className="text-[11px] font-medium text-zinc-400">
             Mostrando {visibleTransactions.length} de {transactions.length} movimientos
           </span>
+                </div>
+            )}
+
+            {/* Delete Expense Modal (Generic & Reusable) */}
+            <ConfirmModal
+                isOpen={Boolean(expenseToDelete)}
+                onClose={() => setExpenseToDelete(null)}
+                onConfirm={async () => {
+                    if (onDeleteExpense && expenseToDelete) {
+                        try {
+                            setIsDeletingExpense(true);
+                            await onDeleteExpense(expenseToDelete);
+                            setExpenseToDelete(null);
+                        } finally {
+                            setIsDeletingExpense(false);
+                        }
+                    }
+                }}
+                title="¿Eliminar gasto?"
+                description="¿Estás seguro de que deseas eliminar este gasto? Esta acción actualizará los balances del grupo y no se puede deshacer."
+                confirmText="Eliminar gasto"
+                cancelText="Cancelar"
+                variant="danger"
+                isLoading={isDeletingExpense}
+            />
+
+            {/* Delete Payment Modal (Generic & Reusable) */}
+            <ConfirmModal
+                isOpen={Boolean(paymentToDelete)}
+                onClose={() => setPaymentToDelete(null)}
+                onConfirm={async () => {
+                    if (onDeletePayment && paymentToDelete) {
+                        try {
+                            setIsDeletingPayment(true);
+                            await onDeletePayment(paymentToDelete);
+                            setPaymentToDelete(null);
+                        } finally {
+                            setIsDeletingPayment(false);
+                        }
+                    }
+                }}
+                title="¿Eliminar pago?"
+                description="¿Estás seguro de que deseas eliminar este pago? Esta acción restaurará la deuda correspondiente en los balances y no se puede deshacer."
+                confirmText="Eliminar pago"
+                cancelText="Cancelar"
+                variant="danger"
+                isLoading={isDeletingPayment}
+            />
+
+            {/* Proof Modal */}
+            {selectedProofUrl && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
+                        <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+                            <h3 className="font-bold text-zinc-900 text-base">Comprobante de Pago</h3>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedProofUrl(null)}
+                                className="p-1.5 text-zinc-400 hover:text-zinc-900 rounded-full"
+                            >
+                                <X className="w-5 h-5"/>
+                            </button>
+                        </div>
+                        <div
+                            className="relative w-full h-80 rounded-2xl overflow-hidden bg-zinc-100 ring-1 ring-zinc-200">
+                            <Image
+                                src={selectedProofUrl}
+                                alt="Comprobante de pago"
+                                fill
+                                className="object-contain"
+                                unoptimized
+                                referrerPolicy="no-referrer"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-
-      {/* Delete Expense Modal (Generic & Reusable) */}
-      <ConfirmModal
-        isOpen={Boolean(expenseToDelete)}
-        onClose={() => setExpenseToDelete(null)}
-        onConfirm={async () => {
-          if (onDeleteExpense && expenseToDelete) {
-            try {
-              setIsDeletingExpense(true);
-              await onDeleteExpense(expenseToDelete);
-              setExpenseToDelete(null);
-            } finally {
-              setIsDeletingExpense(false);
-            }
-          }
-        }}
-        title="¿Eliminar gasto?"
-        description="¿Estás seguro de que deseas eliminar este gasto? Esta acción actualizará los balances del grupo y no se puede deshacer."
-        confirmText="Eliminar gasto"
-        cancelText="Cancelar"
-        variant="danger"
-        isLoading={isDeletingExpense}
-      />
-
-      {/* Delete Payment Modal (Generic & Reusable) */}
-      <ConfirmModal
-        isOpen={Boolean(paymentToDelete)}
-        onClose={() => setPaymentToDelete(null)}
-        onConfirm={async () => {
-          if (onDeletePayment && paymentToDelete) {
-            try {
-              setIsDeletingPayment(true);
-              await onDeletePayment(paymentToDelete);
-              setPaymentToDelete(null);
-            } finally {
-              setIsDeletingPayment(false);
-            }
-          }
-        }}
-        title="¿Eliminar pago?"
-        description="¿Estás seguro de que deseas eliminar este pago? Esta acción restaurará la deuda correspondiente en los balances y no se puede deshacer."
-        confirmText="Eliminar pago"
-        cancelText="Cancelar"
-        variant="danger"
-        isLoading={isDeletingPayment}
-      />
-
-      {/* Proof Modal */}
-      {selectedProofUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <h3 className="font-bold text-zinc-900 text-base">Comprobante de Pago</h3>
-              <button
-                type="button"
-                onClick={() => setSelectedProofUrl(null)}
-                className="p-1.5 text-zinc-400 hover:text-zinc-900 rounded-full"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="relative w-full h-80 rounded-2xl overflow-hidden bg-zinc-100 ring-1 ring-zinc-200">
-              <Image
-                src={selectedProofUrl}
-                alt="Comprobante de pago"
-                fill
-                className="object-contain"
-                unoptimized
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    );
 }

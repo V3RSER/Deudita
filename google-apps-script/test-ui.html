@@ -1,171 +1,316 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
-  <meta charset="UTF-8">
-  <title>Prueba de correo — Deudita</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; color: #202124; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
-    h1 { margin: 0 0 6px; font-size: 24px; }
-    .muted { color: #6b7280; }
-    .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 18px; margin-top: 16px; }
-    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    button, select, input { font: inherit; }
-    button { border: 0; border-radius: 7px; padding: 9px 14px; cursor: pointer; background: #1a73e8; color: white; }
-    button.secondary { background: #eef2f7; color: #202124; }
-    button:disabled { opacity: .55; cursor: default; }
-    input, select { border: 1px solid #c9cdd3; border-radius: 7px; padding: 9px 10px; background: white; }
-    input.search { min-width: 320px; flex: 1; }
-    .search-mode { display: none; width: 100%; }
-    .search-mode.active { display: flex; gap: 10px; }
-    .status { margin-top: 12px; color: #5f6368; min-height: 20px; }
-    .emails { margin-top: 12px; display: grid; gap: 8px; }
-    .email { text-align: left; border: 1px solid #ddd; background: white; color: #202124; padding: 12px; border-radius: 8px; cursor: pointer; }
-    .email:hover { border-color: #1a73e8; }
-    .email.selected { border: 2px solid #1a73e8; padding: 11px; }
-    .email-head { display: flex; justify-content: space-between; gap: 12px; }
-    .subject { font-weight: 600; }
-    .from { margin-top: 4px; color: #5f6368; font-size: 13px; }
-    .snippet { margin-top: 7px; color: #4b5563; font-size: 13px; }
-    .detail { white-space: pre-wrap; word-break: break-word; background: #f8f9fa; border-radius: 7px; padding: 12px; max-height: 300px; overflow: auto; }
-    .result { margin-top: 14px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-    .kv { background: #f8f9fa; padding: 10px; border-radius: 7px; }
-    .kv b { display: block; font-size: 12px; color: #6b7280; margin-bottom: 3px; }
-    .error { color: #b42318; white-space: pre-wrap; }
-  </style>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <title>Prueba de correo — Deudita</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f5f6f8;
+            color: #202124;
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 24px;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 18px;
+            margin-top: 16px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button, select, input {
+            font: inherit;
+        }
+
+        button {
+            border: 0;
+            border-radius: 7px;
+            padding: 9px 14px;
+            cursor: pointer;
+            background: #1a73e8;
+            color: white;
+        }
+
+        button.secondary {
+            background: #eef2f7;
+            color: #202124;
+        }
+
+        button:disabled {
+            opacity: .55;
+            cursor: default;
+        }
+
+        input, select {
+            border: 1px solid #c9cdd3;
+            border-radius: 7px;
+            padding: 9px 10px;
+            background: white;
+        }
+
+        input.search {
+            min-width: 320px;
+            flex: 1;
+        }
+
+        .search-mode {
+            display: none;
+            width: 100%;
+        }
+
+        .search-mode.active {
+            display: flex;
+            gap: 10px;
+        }
+
+        .status {
+            margin-top: 12px;
+            color: #5f6368;
+            min-height: 20px;
+        }
+
+        .emails {
+            margin-top: 12px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .email {
+            text-align: left;
+            border: 1px solid #ddd;
+            background: white;
+            color: #202124;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .email:hover {
+            border-color: #1a73e8;
+        }
+
+        .email.selected {
+            border: 2px solid #1a73e8;
+            padding: 11px;
+        }
+
+        .email-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .subject {
+            font-weight: 600;
+        }
+
+        .from {
+            margin-top: 4px;
+            color: #5f6368;
+            font-size: 13px;
+        }
+
+        .snippet {
+            margin-top: 7px;
+            color: #4b5563;
+            font-size: 13px;
+        }
+
+        .detail {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8f9fa;
+            border-radius: 7px;
+            padding: 12px;
+            max-height: 300px;
+            overflow: auto;
+        }
+
+        .result {
+            margin-top: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .kv {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 7px;
+        }
+
+        .kv b {
+            display: block;
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 3px;
+        }
+
+        .error {
+            color: #b42318;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Probar un correo</h1>
-  <div class="muted">Selecciona un correo de Gmail para ejecutar el flujo completo.</div>
+    <h1>Probar un correo</h1>
+    <div class="muted">Selecciona un correo de Gmail para ejecutar el flujo completo.</div>
 
-  <div class="card">
-    <div class="toolbar">
-      <button id="loadBtn" onclick="loadEmails()">Cargar correos</button>
-      <button id="refreshCacheBtn" class="secondary" onclick="refreshCache()">Renovar caché</button>
-      <select id="count" title="Cantidad">
-        <option value="5">5</option>
-        <option value="10" selected>10</option>
-        <option value="20">20</option>
-        <option value="50">50</option>
-      </select>
+    <div class="card">
+        <div class="toolbar">
+            <button id="loadBtn" onclick="loadEmails()">Cargar correos</button>
+            <button id="refreshCacheBtn" class="secondary" onclick="refreshCache()">Renovar caché</button>
+            <select id="count" title="Cantidad">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+
+        <div id="status" class="status"></div>
+        <div id="emails" class="emails"></div>
     </div>
-
-    <div id="status" class="status"></div>
-    <div id="emails" class="emails"></div>
-  </div>
 </div>
 
 <script>
-  let emails = [];
-  let running = false;
+    let emails = [];
+    let running = false;
 
-  function setStatus(text, error) {
-    const el = document.getElementById('status');
-    el.textContent = text || '';
-    el.className = 'status' + (error ? ' error' : '');
-  }
+    function setStatus(text, error) {
+        const el = document.getElementById('status');
+        el.textContent = text || '';
+        el.className = 'status' + (error ? ' error' : '');
+    }
 
-  function loadEmails() {
-    const count = Number(document.getElementById('count').value);
+    function loadEmails() {
+        const count = Number(document.getElementById('count').value);
 
-    setStatus('Cargando correos…');
-    document.getElementById('loadBtn').disabled = true;
-    document.getElementById('emails').innerHTML = '';
+        setStatus('Cargando correos…');
+        document.getElementById('loadBtn').disabled = true;
+        document.getElementById('emails').innerHTML = '';
 
-    google.script.run
-      .withSuccessHandler(function (rows) {
-        emails = rows || [];
+        google.script.run
+            .withSuccessHandler(function (rows) {
+                emails = rows || [];
+                renderEmails();
+                document.getElementById('loadBtn').disabled = false;
+                setStatus(
+                    emails.length
+                        ? emails.length + ' correo(s) encontrado(s).'
+                        : 'No se encontraron correos.'
+                );
+            })
+            .withFailureHandler(function (err) {
+                document.getElementById('loadBtn').disabled = false;
+                setStatus(err && err.message ? err.message : String(err), true);
+            })
+            .getTestEmails({mode: 'recent', count: count});
+    }
+
+    function renderEmails() {
+        const container = document.getElementById('emails');
+        container.innerHTML = '';
+
+        emails.forEach(function (email, index) {
+            const button = document.createElement('button');
+            button.className = 'email';
+            button.disabled = running;
+            button.onclick = function () {
+                selectEmail(index);
+            };
+
+            const date = new Date(email.date).toLocaleString();
+            button.innerHTML =
+                '<div class="email-head">' +
+                '<span class="subject">' + esc(email.subject || '(sin asunto)') + '</span>' +
+                '<span class="muted">' + esc(date) + '</span>' +
+                '</div>' +
+                '<div class="from">' + esc(email.from || '') + '</div>' +
+                '<div class="snippet">' + esc(email.snippet || '') + '</div>';
+
+            container.appendChild(button);
+        });
+    }
+
+    function selectEmail(index) {
+        if (running || !emails[index]) return;
+
+        const email = emails[index];
+        running = true;
         renderEmails();
-        document.getElementById('loadBtn').disabled = false;
-        setStatus(
-          emails.length
-            ? emails.length + ' correo(s) encontrado(s).'
-            : 'No se encontraron correos.'
-        );
-      })
-      .withFailureHandler(function (err) {
-        document.getElementById('loadBtn').disabled = false;
-        setStatus(err && err.message ? err.message : String(err), true);
-      })
-      .getTestEmails({ mode: 'recent', count: count });
-  }
 
-  function renderEmails() {
-    const container = document.getElementById('emails');
-    container.innerHTML = '';
+        setStatus('Ejecutando el flujo completo para el correo seleccionado…');
 
-    emails.forEach(function (email, index) {
-      const button = document.createElement('button');
-      button.className = 'email';
-      button.disabled = running;
-      button.onclick = function () { selectEmail(index); };
+        google.script.run
+            .withSuccessHandler(function () {
+                running = false;
+                renderEmails();
+                setStatus('Proceso completado. Revisa los registros de ejecución de Apps Script.');
+            })
+            .withFailureHandler(function (err) {
+                running = false;
+                renderEmails();
+                setStatus(err && err.message ? err.message : String(err), true);
+            })
+            .syncExpenseEmails(email.id);
+    }
 
-      const date = new Date(email.date).toLocaleString();
-      button.innerHTML =
-        '<div class="email-head">' +
-          '<span class="subject">' + esc(email.subject || '(sin asunto)') + '</span>' +
-          '<span class="muted">' + esc(date) + '</span>' +
-        '</div>' +
-        '<div class="from">' + esc(email.from || '') + '</div>' +
-        '<div class="snippet">' + esc(email.snippet || '') + '</div>';
+    function refreshCache() {
+        setStatus('Renovando caché de plantillas…');
+        document.getElementById('refreshCacheBtn').disabled = true;
 
-      container.appendChild(button);
-    });
-  }
+        google.script.run
+            .withSuccessHandler(function (result) {
+                document.getElementById('refreshCacheBtn').disabled = false;
+                const count = Array.isArray(result) ? result.length : 0;
+                setStatus('Caché renovada. Plantillas cargadas: ' + count + '.');
+            })
+            .withFailureHandler(function (err) {
+                document.getElementById('refreshCacheBtn').disabled = false;
+                setStatus(err && err.message ? err.message : String(err), true);
+            })
+            .forceRefreshTemplates();
+    }
 
-  function selectEmail(index) {
-    if (running || !emails[index]) return;
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
-    const email = emails[index];
-    running = true;
-    renderEmails();
-
-    setStatus('Ejecutando el flujo completo para el correo seleccionado…');
-
-    google.script.run
-      .withSuccessHandler(function () {
-        running = false;
-        renderEmails();
-        setStatus('Proceso completado. Revisa los registros de ejecución de Apps Script.');
-      })
-      .withFailureHandler(function (err) {
-        running = false;
-        renderEmails();
-        setStatus(err && err.message ? err.message : String(err), true);
-      })
-      .syncExpenseEmails(email.id);
-  }
-
-  function refreshCache() {
-    setStatus('Renovando caché de plantillas…');
-    document.getElementById('refreshCacheBtn').disabled = true;
-
-    google.script.run
-      .withSuccessHandler(function (result) {
-        document.getElementById('refreshCacheBtn').disabled = false;
-        const count = Array.isArray(result) ? result.length : 0;
-        setStatus('Caché renovada. Plantillas cargadas: ' + count + '.');
-      })
-      .withFailureHandler(function (err) {
-        document.getElementById('refreshCacheBtn').disabled = false;
-        setStatus(err && err.message ? err.message : String(err), true);
-      })
-      .forceRefreshTemplates();
-  }
-
-  function esc(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  window.addEventListener('load', loadEmails);
+    window.addEventListener('load', loadEmails);
 </script>
 </body>
 </html>

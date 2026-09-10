@@ -15,11 +15,13 @@ const FIELD_LABELS = {
     currency: 'Moneda',
     source_account: 'Cuenta / Tarjeta Origen',
 };
+
 function uniqueSanitizedPatterns(patterns) {
     return Array.from(new Set(patterns
         .map((pattern) => sanitizeRegexPattern(pattern))
         .filter((pattern) => Boolean(pattern))));
 }
+
 function parseAmountValue(rawAmount) {
     if (!rawAmount)
         return null;
@@ -29,22 +31,19 @@ function parseAmountValue(rawAmount) {
     let normalized = sanitized;
     if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(normalized)) {
         normalized = normalized.replace(/\./g, '').replace(',', '.');
-    }
-    else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(normalized)) {
+    } else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(normalized)) {
         normalized = normalized.replace(/,/g, '');
-    }
-    else if (/^\d+,\d{1,2}$/.test(normalized)) {
+    } else if (/^\d+,\d{1,2}$/.test(normalized)) {
         normalized = normalized.replace(',', '.');
-    }
-    else if (/^\d+\.\d{1,2}$/.test(normalized)) {
+    } else if (/^\d+\.\d{1,2}$/.test(normalized)) {
         // Keep decimal-point values unchanged.
-    }
-    else {
+    } else {
         normalized = normalized.replace(/,/g, '');
     }
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : null;
 }
+
 /**
  * Executes a regex extraction with safe evaluation, validating capture groups.
  */
@@ -86,8 +85,7 @@ function extractWithCaptureGroup(text, regexPattern, fieldLabel) {
             reason: 'Capturado de match[0]. Falta grupo de captura (...) para compatibilidad con el motor de extracción.',
             hasCaptureGroup: false,
         };
-    }
-    catch (err) {
+    } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return {
             success: false,
@@ -97,17 +95,18 @@ function extractWithCaptureGroup(text, regexPattern, fieldLabel) {
         };
     }
 }
+
 function extractTemplateFields(template, body) {
     const fields = [
-        { field: 'amount', label: 'Monto', pattern: template.amount_regex },
-        { field: 'merchant', label: 'Comercio / Destinatario', pattern: template.merchant_regex },
-        { field: 'date', label: 'Fecha', pattern: template.date_regex },
-        { field: 'time', label: 'Hora', pattern: template.time_regex },
-        { field: 'currency', label: 'Moneda', pattern: template.currency_regex },
-        { field: 'source_account', label: 'Cuenta de origen', pattern: template.source_account_regex },
+        {field: 'amount', label: 'Monto', pattern: template.amount_regex},
+        {field: 'merchant', label: 'Comercio / Destinatario', pattern: template.merchant_regex},
+        {field: 'date', label: 'Fecha', pattern: template.date_regex},
+        {field: 'time', label: 'Hora', pattern: template.time_regex},
+        {field: 'currency', label: 'Moneda', pattern: template.currency_regex},
+        {field: 'source_account', label: 'Cuenta de origen', pattern: template.source_account_regex},
     ];
     const extracted = {};
-    for (const { field, label, pattern } of fields) {
+    for (const {field, label, pattern} of fields) {
         extracted[field] = extractWithCaptureGroup(body, pattern, label);
     }
     return {
@@ -120,6 +119,7 @@ function extractTemplateFields(template, body) {
         parsedAmount: parseAmountValue(extracted.amount.rawExtracted),
     };
 }
+
 function buildExtractedField(field, pattern, result, cleanedValue, success = result.success) {
     return {
         field,
@@ -132,8 +132,17 @@ function buildExtractedField(field, pattern, result, cleanedValue, success = res
         hasCaptureGroup: result.hasCaptureGroup,
     };
 }
+
 function buildTemplateExtractionReport(template, body) {
-    const { amountRes, merchantRes, dateRes, timeRes, currencyRes, accountRes, parsedAmount, } = extractTemplateFields(template, body);
+    const {
+        amountRes,
+        merchantRes,
+        dateRes,
+        timeRes,
+        currencyRes,
+        accountRes,
+        parsedAmount,
+    } = extractTemplateFields(template, body);
     const amountSuccess = amountRes.success && parsedAmount !== null;
     return {
         template,
@@ -149,28 +158,29 @@ function buildTemplateExtractionReport(template, body) {
         hasErrors: !amountSuccess,
     };
 }
+
 function getEvaluationWarnings(template, fields) {
     const warnings = [];
     const optionalFields = [
-        { result: fields.merchantRes, pattern: template.merchant_regex, label: 'Comercio' },
-        { result: fields.dateRes, pattern: template.date_regex, label: 'Fecha' },
-        { result: fields.timeRes, pattern: template.time_regex, label: 'Hora' },
-        { result: fields.accountRes, pattern: template.source_account_regex, label: 'Cuenta origen' },
+        {result: fields.merchantRes, pattern: template.merchant_regex, label: 'Comercio'},
+        {result: fields.dateRes, pattern: template.date_regex, label: 'Fecha'},
+        {result: fields.timeRes, pattern: template.time_regex, label: 'Hora'},
+        {result: fields.accountRes, pattern: template.source_account_regex, label: 'Cuenta origen'},
     ];
-    for (const { result, pattern, label } of optionalFields) {
+    for (const {result, pattern, label} of optionalFields) {
         if (pattern && !result.success) {
             warnings.push(`${label}: ${result.reason || 'Sin captura'}`);
-        }
-        else if (result.success && !result.hasCaptureGroup) {
+        } else if (result.success && !result.hasCaptureGroup) {
             warnings.push(`${label}: capturada sin grupo (...). Agrega paréntesis para el motor de extracción.`);
         }
     }
     return warnings;
 }
+
 function buildEntityLookup(entities, templates) {
     const entityMap = new Map();
     for (const entity of entities) {
-        entityMap.set(entity.id, { entity, templates: [] });
+        entityMap.set(entity.id, {entity, templates: []});
     }
     const orphanTemplates = new Set();
     for (const template of templates) {
@@ -180,8 +190,9 @@ function buildEntityLookup(entities, templates) {
         }
         entityMap.get(template.entity_id).templates.push(template);
     }
-    return { entityMap, orphanTemplates };
+    return {entityMap, orphanTemplates};
 }
+
 function groupTemplatesBySubject(templates, uniqueNullKeys) {
     var _a;
     const groups = new Map();
@@ -190,28 +201,27 @@ function groupTemplatesBySubject(templates, uniqueNullKeys) {
         const group = groups.get(key);
         if (group) {
             group.push(template);
-        }
-        else {
+        } else {
             groups.set(key, [template]);
         }
     }
     return groups;
 }
+
 function evaluateMatchPattern(pattern, body, subject) {
     try {
         const regex = new RegExp(pattern, 'i');
         if (regex.test(body)) {
-            return { matched: true, matchedOn: 'body' };
+            return {matched: true, matchedOn: 'body'};
         }
         if (regex.test(subject)) {
-            return { matched: true, matchedOn: 'subject' };
+            return {matched: true, matchedOn: 'subject'};
         }
         return {
             matched: false,
             reason: `El patrón de desempate /${pattern}/i no coincidió en el cuerpo ni en el asunto.`,
         };
-    }
-    catch (err) {
+    } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return {
             matched: false,
@@ -219,9 +229,10 @@ function evaluateMatchPattern(pattern, body, subject) {
         };
     }
 }
+
 function evaluateTemplateAgainstEmailContext(template, email, context, entities) {
     var _a, _b, _c;
-    const { cleanBody } = context;
+    const {cleanBody} = context;
     const sender = (email.sender || '').trim();
     const subject = (email.subject || '').trim();
     const criticalFailures = [];
@@ -247,13 +258,11 @@ function evaluateTemplateAgainstEmailContext(template, email, context, entities)
     if (!template.entity_id && !((_c = template.entity) === null || _c === void 0 ? void 0 : _c.name) && entityPatterns.length === 0) {
         l1Reason = 'La plantilla no tiene entidad ni patrón de correo configurado.';
         criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
-    }
-    else if (entityPatterns.length === 0) {
+    } else if (entityPatterns.length === 0) {
         l1Reason = `La entidad "${entityName}" no tiene patrones de correo configurados (entity_email_patterns); no puede coincidir ningún correo.`;
         criticalFailures.push(`Paso 1 (Entidad): ${l1Reason}`);
-    }
-    else {
-        const { bodyHeadLines, forwardedSender } = context;
+    } else {
+        const {bodyHeadLines, forwardedSender} = context;
         const entityMatch = matchEmailEntityPatterns(entityPatterns, sender, bodyHeadLines, forwardedSender);
         level1Passed = entityMatch.matched;
         l1MatchedPattern = entityMatch.matchedPattern;
@@ -276,13 +285,11 @@ function evaluateTemplateAgainstEmailContext(template, email, context, entities)
                 l2Reason = `El asunto ("${subject || 'vacío'}") no coincide con el patrón /${sanitizedSubject}/i.`;
                 criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
             }
-        }
-        catch (err) {
+        } catch (err) {
             l2Reason = `Error en patrón de asunto /${sanitizedSubject}/: ${err instanceof Error ? err.message : String(err)}`;
             criticalFailures.push(`Paso 2 (Asunto): ${l2Reason}`);
         }
-    }
-    else {
+    } else {
         level2Passed = true;
     }
     let level3Passed = false;
@@ -297,8 +304,7 @@ function evaluateTemplateAgainstEmailContext(template, email, context, entities)
             l3Reason = matchResult.reason || 'No coincidió el patrón de desempate.';
             criticalFailures.push(`Paso 3 (Desempate): ${l3Reason}`);
         }
-    }
-    else {
+    } else {
         level3Passed = true;
     }
     const fields = extractTemplateFields(template, cleanBody);
@@ -308,8 +314,7 @@ function evaluateTemplateAgainstEmailContext(template, email, context, entities)
             ? fields.amountRes.reason || `No coincidió con el patrón /${template.amount_regex}/i`
             : 'No se pudo convertir el monto extraído a un número válido';
         criticalFailures.push(`Paso 4 (Monto): ${reason}`);
-    }
-    else if (!fields.amountRes.hasCaptureGroup) {
+    } else if (!fields.amountRes.hasCaptureGroup) {
         warnings.push('Monto: capturado sin grupo (...). Agrega paréntesis para compatibilidad con el motor de extracción.');
     }
     warnings.push(...getEvaluationWarnings(template, fields));
@@ -361,18 +366,28 @@ function evaluateTemplateAgainstEmailContext(template, email, context, entities)
         warnings,
     };
 }
+
 function evaluateTemplateAgainstEmail(template, email, entities = []) {
     const context = buildEmailContext(email.body || email.plainBody || email.snippet || '');
-    return evaluateTemplateAgainstEmailContext(template, { sender: email.sender || '', subject: email.subject || '' }, context, entities);
+    return evaluateTemplateAgainstEmailContext(template, {
+        sender: email.sender || '',
+        subject: email.subject || ''
+    }, context, entities);
 }
+
 function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entities) {
     var _a, _b, _c, _d, _e;
-    const { cleanBody, bodyHeadLines, forwardedSender, forwardedSubject: contextForwardedSubject } = buildEmailContext(rawOrCleanBody);
-    const { entityMap, orphanTemplates } = buildEntityLookup(entities, templates);
+    const {
+        cleanBody,
+        bodyHeadLines,
+        forwardedSender,
+        forwardedSubject: contextForwardedSubject
+    } = buildEmailContext(rawOrCleanBody);
+    const {entityMap, orphanTemplates} = buildEntityLookup(entities, templates);
     const passedEntities = [];
     const discardedEntities = [];
     let l1DiscardedTemplatesCount = 0;
-    for (const [entityId, { entity, templates: entityTemplates }] of entityMap.entries()) {
+    for (const [entityId, {entity, templates: entityTemplates}] of entityMap.entries()) {
         if (entityTemplates.length === 0)
             continue;
         const entityPatterns = [
@@ -410,8 +425,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
                 templatesCount: entityTemplates.length,
                 templateNames: entityTemplates.map((template) => template.name),
             });
-        }
-        else {
+        } else {
             discardedEntities.push({
                 entityId,
                 entityName,
@@ -466,8 +480,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
                         templatesCount: groupTemplates.length,
                         templates: groupTemplates,
                     });
-                }
-                else {
+                } else {
                     discardedGroups.push({
                         entityId: passedEntity.entityId,
                         entityName: passedEntity.entityName,
@@ -479,8 +492,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
                     });
                     l2DiscardedTemplatesCount += groupTemplates.length;
                 }
-            }
-            catch (err) {
+            } catch (err) {
                 const errMessage = err instanceof Error ? err.message : String(err);
                 discardedGroups.push({
                     entityId: passedEntity.entityId,
@@ -548,8 +560,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
                 };
                 evaluatedTemplates.push(reportItem);
                 survivingTemplates.push(template);
-            }
-            else {
+            } else {
                 const isSyntaxError = (_a = matchResult.reason) === null || _a === void 0 ? void 0 : _a.startsWith('Error en expresión regular de match_pattern:');
                 const reportItem = {
                     template,
@@ -576,8 +587,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
     if (extractions.length === 1) {
         winner = extractions[0];
         winner.isWinner = true;
-    }
-    else if (extractions.length > 1) {
+    } else if (extractions.length > 1) {
         winner = extractions.find((extraction) => extraction.fields.amount.success) || extractions[0];
         winner.isWinner = true;
     }
@@ -592,7 +602,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
     }
     const templateReports = templates.map((template) => {
         var _a, _b, _c, _d, _e, _f, _g;
-        const evaluation = evaluateTemplateAgainstEmailContext(template, { sender, subject }, {
+        const evaluation = evaluateTemplateAgainstEmailContext(template, {sender, subject}, {
             cleanBody,
             bodyHeadLines,
             forwardedSender,
@@ -722,7 +732,7 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
         matched: Boolean(winner === null || winner === void 0 ? void 0 : winner.fields.amount.success),
         level1: {
             passedEntities,
-            matchingEntities: passedEntities.map(({ entityId, entityName }) => ({
+            matchingEntities: passedEntities.map(({entityId, entityName}) => ({
                 id: entityId,
                 name: entityName,
             })),
@@ -747,40 +757,41 @@ function diagnoseEmailMatching(sender, subject, rawOrCleanBody, templates, entit
         reports: templateReports,
     };
 }
+
 function matchSubjectOrBody(pattern, subject, context) {
     const cleanPattern = sanitizeRegexPattern(pattern);
     if (!cleanPattern)
-        return { matched: true };
+        return {matched: true};
     try {
         const regex = new RegExp(cleanPattern, 'i');
         if (regex.test(subject)) {
-            return { matched: true, matchedOn: 'subject' };
+            return {matched: true, matchedOn: 'subject'};
         }
         const strippedSubject = stripSubjectPrefixes(subject);
         if (strippedSubject && strippedSubject !== subject && regex.test(strippedSubject)) {
-            return { matched: true, matchedOn: 'subject' };
+            return {matched: true, matchedOn: 'subject'};
         }
         if (!context.cleanBody)
-            return { matched: false };
+            return {matched: false};
         if (context.forwardedSubject && regex.test(context.forwardedSubject)) {
-            return { matched: true, matchedOn: 'subject' };
+            return {matched: true, matchedOn: 'subject'};
         }
         if (regex.test(context.cleanBody)) {
-            return { matched: true, matchedOn: 'body' };
+            return {matched: true, matchedOn: 'body'};
         }
         const multilineRegex = new RegExp(cleanPattern, 'im');
         if (multilineRegex.test(context.cleanBody)) {
-            return { matched: true, matchedOn: 'body' };
+            return {matched: true, matchedOn: 'body'};
         }
-        return { matched: false };
-    }
-    catch {
-        return { matched: false };
+        return {matched: false};
+    } catch {
+        return {matched: false};
     }
 }
+
 function createProductionEmailMatcher(templates, entities = []) {
     var _a;
-    const { entityMap } = buildEntityLookup(entities, templates);
+    const {entityMap} = buildEntityLookup(entities, templates);
     const groups = [];
     for (const [entityId, entityData] of entityMap.entries()) {
         if (!entityData.templates.length)
@@ -801,13 +812,14 @@ function createProductionEmailMatcher(templates, entities = []) {
             subjectGroups,
         });
     }
-    return { groups };
+    return {groups};
 }
+
 function matchEmailForProduction(matcher, sender, subject, rawBody) {
     const context = buildEmailContext(rawBody || '');
     const normalizedSender = (sender || '').trim();
     const normalizedSubject = (subject || '').trim();
-    const { cleanBody, bodyHeadLines, forwardedSender, forwardedSubject } = context;
+    const {cleanBody, bodyHeadLines, forwardedSender, forwardedSubject} = context;
     for (const group of matcher.groups) {
         if (!group.entityPatterns.length)
             continue;
