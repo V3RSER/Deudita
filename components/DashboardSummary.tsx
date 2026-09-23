@@ -70,8 +70,8 @@ export function DashboardSummary({
     };
 
     const userGroupIds = new Set(userGroups.map((g) => g.id));
-    const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
-    const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
+    const userExpenses = expenses.filter((e) => Boolean(e.group_id && userGroupIds.has(e.group_id)));
+    const userPayments = payments.filter((s) => Boolean(s.group_id && userGroupIds.has(s.group_id)));
 
     // Pairwise balances
     const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);

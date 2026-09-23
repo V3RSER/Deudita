@@ -319,7 +319,7 @@ export function GenericExpenseList({
 
                             if (tx.type === 'expense') {
                                 const exp = tx.data;
-                                const groupObj = groupsById.get(exp.group_id);
+                                const groupObj = exp.group_id ? groupsById.get(exp.group_id) : undefined;
                                 const paidBy = profilesById.get(exp.paid_by);
                                 const createdBy = profilesById.get(exp.created_by);
                                 const updatedBy = exp.updated_by ? profilesById.get(exp.updated_by) : null;

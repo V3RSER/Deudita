@@ -67,8 +67,8 @@ export function FriendsView({ onOpenSettleModal }: Readonly<FriendsViewProps>) {
     });
 
     // Pairwise balances
-    const userExpenses = expenses.filter((e) => userGroupIds.has(e.group_id));
-    const userPayments = payments.filter((s) => userGroupIds.has(s.group_id));
+    const userExpenses = expenses.filter((e) => Boolean(e.group_id && userGroupIds.has(e.group_id)));
+    const userPayments = payments.filter((s) => Boolean(s.group_id && userGroupIds.has(s.group_id)));
     const consolidatedPairwise = calculatePairwiseBalances(userExpenses, userPayments, profiles);
 
     // Filter friends by search

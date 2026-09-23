@@ -63,8 +63,8 @@ export default function FriendDetailPage({
     const sharedGroups = groups.filter((g) => sharedGroupIds.has(g.id));
 
     // Shared expenses
-    const sharedExpenses = expenses.filter((e) => sharedGroupIds.has(e.group_id));
-    const sharedPayments = payments.filter((p) => sharedGroupIds.has(p.group_id));
+    const sharedExpenses = expenses.filter((e) => Boolean(e.group_id && sharedGroupIds.has(e.group_id)));
+    const sharedPayments = payments.filter((p) => Boolean(p.group_id && sharedGroupIds.has(p.group_id)));
 
     // Pairwise balance
     const pairwise = calculatePairwiseBalances(sharedExpenses, sharedPayments, profiles);

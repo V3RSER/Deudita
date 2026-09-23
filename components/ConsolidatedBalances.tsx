@@ -290,8 +290,8 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
     const [selectedPairwiseForDetail, setSelectedPairwiseForDetail] = useState<PairwiseBalance | null>(null);
 
     const userGroupIds = useMemo(() => new Set(userGroups.map((g) => g.id)), [userGroups]);
-    const userExpenses = useMemo(() => expenses.filter((e) => userGroupIds.has(e.group_id)), [expenses, userGroupIds]);
-    const userPayments = useMemo(() => payments.filter((s) => userGroupIds.has(s.group_id)), [payments, userGroupIds]);
+    const userExpenses = useMemo(() => expenses.filter((e) => Boolean(e.group_id && userGroupIds.has(e.group_id))), [expenses, userGroupIds]);
+    const userPayments = useMemo(() => payments.filter((s) => Boolean(s.group_id && userGroupIds.has(s.group_id))), [payments, userGroupIds]);
 
     // Compute both simplified and direct pairwise balances
     const simplifiedPairwise = useMemo(
