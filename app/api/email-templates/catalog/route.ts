@@ -61,18 +61,17 @@ function enrichTemplates(
         ]),
     );
 
-    return templates.map((template) => ({
-        ...template,
-        entity: template.entity_id
-            ? entityMap.get(template.entity_id) || null
-            : null,
-        entity_email_patterns: template.entity_id
-            ? entityMap.get(template.entity_id)?.patterns || []
-            : [],
-        expense_type_label: template.expense_type_id
-            ? expenseTypeMap.get(template.expense_type_id) || null
-            : null,
-    }));
+    return templates.map((template) => {
+        const entity = template.entity_id ? entityMap.get(template.entity_id) : undefined;
+        return {
+            ...template,
+            entity: entity ? { name: entity.name } : undefined,
+            entity_email_patterns: entity?.patterns || [],
+            expense_type_label: template.expense_type_id
+                ? expenseTypeMap.get(template.expense_type_id) || null
+                : null,
+        };
+    });
 }
 
 export async function GET() {
