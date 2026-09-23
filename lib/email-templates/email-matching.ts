@@ -30,8 +30,8 @@ export interface CatalogTemplate {
     time_regex: string | null;
     created_at?: string;
     entity_email_patterns?: string[];
-    entity?: { name?: string };
-    expense_type?: { name?: string };
+    entity?: { id?: string; name?: string; patterns?: string[] } | null;
+    expense_type?: { id?: string; name?: string; label?: string } | null;
 }
 
 export interface Level1EntityReport {
