@@ -179,7 +179,7 @@ async function enrichTemplates(
     );
 
     return templates.map((template) => ({
-        ...(template as CatalogTemplate),
+        ...((template as unknown) as CatalogTemplate),
         entity: template.entity_id
             ? entityMap.get(template.entity_id) || null
             : null,
