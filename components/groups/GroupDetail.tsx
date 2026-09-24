@@ -361,8 +361,8 @@ export function GroupDetail({
                 detailsList.push(
                     <span key="pg_desc" className="inline-flex items-center gap-1">
                         <span className="text-zinc-500">Concepto:</span>
-                        <span className="line-through text-zinc-400">&ldquo;{oldObj.description}&rdquo;</span>
-                        <span className="font-semibold text-zinc-800">➔ &ldquo;{newObj.description}&rdquo;</span>
+                        <span className="line-through text-zinc-400">&ldquo;{String(oldObj.description)}&rdquo;</span>
+                        <span className="font-semibold text-zinc-800">➔ &ldquo;{String(newObj.description)}&rdquo;</span>
                     </span>
                 );
             }
@@ -370,8 +370,8 @@ export function GroupDetail({
                 detailsList.push(
                     <span key="pg_cat" className="inline-flex items-center gap-1">
                         <span className="text-zinc-500">Categoría:</span>
-                        <span className="line-through text-zinc-400">{oldObj.category}</span>
-                        <span className="font-semibold text-zinc-800">➔ {newObj.category}</span>
+                        <span className="line-through text-zinc-400">{String(oldObj.category)}</span>
+                        <span className="font-semibold text-zinc-800">➔ {String(newObj.category)}</span>
                     </span>
                 );
             }
