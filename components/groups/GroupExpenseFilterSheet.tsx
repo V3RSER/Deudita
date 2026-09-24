@@ -127,7 +127,6 @@ function GroupExpenseFilterSheetModal({
     };
 
     useEffect(() => {
-        if (!isOpen) return;
         previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const modal = modalRef.current;
         const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex=\"-1\"])';
@@ -143,7 +142,7 @@ function GroupExpenseFilterSheetModal({
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => { document.removeEventListener('keydown', handleKeyDown); previousFocusedElementRef.current?.focus(); previousFocusedElementRef.current=null; };
-    }, [isOpen, onClose]);
+    }, [onClose]);
 
     // Get human-readable label for selected period
     const getSelectedPeriodLabel = () => {

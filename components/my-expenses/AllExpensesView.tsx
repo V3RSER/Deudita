@@ -97,7 +97,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
     const searchTerm = filters.searchTerm.trim().toLowerCase();
 
     const matchesSearch = useMemo(
-        () => (values: Array<string | undefined>) =>
+        () => (values: Array<string | null | undefined>) =>
             !searchTerm || values.some((value) => value?.toLowerCase().includes(searchTerm)),
         [searchTerm],
     );
@@ -113,7 +113,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
     const filteredExpenses = useMemo(
         () =>
             myExpenses.filter((expense) => {
-                const group = groupsById.get(expense.group_id);
+                const group = expense.group_id ? groupsById.get(expense.group_id) : undefined;
                 const paidBy = profilesById.get(expense.paid_by);
 
                 if (

@@ -81,7 +81,7 @@ export function CustomSelect({
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const containerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
-    const triggerRef = useRef<HTMLElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const generatedId = useId();
     const selectId = id || generatedId;
     const listboxId = `${selectId}-listbox`;

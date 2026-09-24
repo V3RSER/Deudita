@@ -17,7 +17,7 @@ import {
     Profile,
 } from './types';
 import { createClient } from '@/lib/supabase/client';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { AuthChangeEvent, RealtimePostgresChangesPayload, Session } from '@supabase/supabase-js';
 import { buildSponsorshipMap } from './balance-utils';
 
 interface ExpenseContextType {
@@ -234,7 +234,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         void reloadFromSupabase(true, true);
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
             if (event === 'SIGNED_OUT') {
                 setCurrentProfile(null);
                 currentProfileRef.current = null;
@@ -446,7 +446,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 },
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
-                        const newRecord = payload.new as Payment;
+                        const newRecord = (payload.new as unknown) as Payment;
                         if (!newRecord?.id || !newRecord.group_id) return;
                         // Client-side defense in depth
                         if (!groupIds.includes(newRecord.group_id)) return;
@@ -456,7 +456,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                             return [newRecord, ...prev];
                         });
                     } else if (payload.eventType === 'UPDATE') {
-                        const updatedRecord = payload.new as Payment;
+                        const updatedRecord = (payload.new as unknown) as Payment;
                         const oldRecord = payload.old as { id?: string; group_id?: string };
                         if (!updatedRecord?.id) return;
                         const newInScope = Boolean(updatedRecord.group_id && groupIds.includes(updatedRecord.group_id));

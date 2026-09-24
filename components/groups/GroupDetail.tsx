@@ -403,12 +403,15 @@ export function GroupDetail({
 
         return (
             <div className="flex flex-col gap-1 pt-1 text-xs text-zinc-700">
-                {React.Children.toArray(detailsList).map((node) => (
-                    <div key={node.key ?? 'detail'} className="flex items-center gap-1.5 flex-wrap">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        {node}
-                    </div>
-                ))}
+                {React.Children.toArray(detailsList).map((node, index) => {
+                    const key = React.isValidElement(node) ? node.key ?? index : index;
+                    return (
+                        <div key={key} className="flex items-center gap-1.5 flex-wrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            {node}
+                        </div>
+                    );
+                })}
             </div>
         );
     };
@@ -836,8 +839,9 @@ export function GroupDetail({
                                 const user = profiles.find((p) => p.id === log.user_id);
                                 const userName = user?.full_name ?? 'Usuario';
                                 const associatedExpense = groupExpenses.find((e) => e.id === log.expense_id);
-                                const expenseTitle = associatedExpense?.description || log.changes?.description || 'Gasto';
-                                const expenseAmount = associatedExpense?.total_amount ?? log.changes?.total_amount;
+                                const expenseTitle = String(associatedExpense?.description || log.changes?.description || 'Gasto');
+                                const rawAmount = associatedExpense?.total_amount ?? log.changes?.total_amount;
+                                const expenseAmount = rawAmount !== undefined && rawAmount !== null ? Number(rawAmount) : null;
                                 const isClickable = Boolean(associatedExpense);
 
                                 return (

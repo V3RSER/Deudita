@@ -1542,7 +1542,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                     {/* Split Type Selector Tabs */}
                                     <div
                                         className={`flex gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1 ${splitType === 'itemized' && mode === 'itemized' && !isItemizedVerticalView ? 'pt-3 mx-2' : ''}`}>
-                                        {(mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']).map(type => (
+                                        {((mode === 'itemized' ? ['itemized', 'equal', 'exact', 'shares'] : ['equal', 'exact', 'shares']) as SplitType[]).map(type => (
                                             <button
                                                 key={type}
                                                 type="button"
