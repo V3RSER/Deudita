@@ -5,11 +5,11 @@ import { verifyGoogleToken } from '@/lib/google-auth';
 
 export const dynamic = 'force-dynamic';
 
-function getGoogleToken(
+async function getGoogleToken(
     req: NextRequest,
     userMetadata: Record<string, unknown>,
-): string | null {
-    const cookieStore = cookies();
+): Promise<string | null> {
+    const cookieStore = await cookies();
     const headerToken = req.headers.get('x-google-token')?.trim();
     const cookieToken = cookieStore.get('google_provider_token')?.value?.trim();
     const metadataToken =
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const token = getGoogleToken(
+        const token = await getGoogleToken(
             req,
             (user.user_metadata || {}) as Record<string, unknown>,
         );
