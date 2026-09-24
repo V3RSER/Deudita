@@ -467,7 +467,7 @@ export async function DELETE(
 }
 
 export async function PATCH(
-    req: NextRequest,
+    req: Request,
     context: { params: Promise<{ id: string }> }
 ) {
     return PUT(req, context);
