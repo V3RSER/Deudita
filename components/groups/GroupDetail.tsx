@@ -296,9 +296,9 @@ export function GroupDetail({
             detailsList.push(
                 <span key="amount" className="inline-flex items-center gap-1">
                     <span className="text-zinc-500">Monto:</span>
-                    <span className="line-through text-zinc-400">{formatCurrency(changes.amount_before, effectiveCurrency)}</span>
+                    <span className="line-through text-zinc-400">{formatCurrency(Number(changes.amount_before), effectiveCurrency)}</span>
                     <span
-                        className="font-semibold text-zinc-800">➔ {formatCurrency(changes.amount_after, effectiveCurrency)}</span>
+                        className="font-semibold text-zinc-800">➔ {formatCurrency(Number(changes.amount_after), effectiveCurrency)}</span>
                 </span>
             );
         }
