@@ -321,7 +321,10 @@
                 if (res && res.error) {
                     setStatus('Error: ' + res.error, true);
                 } else if (res && res.expensesSent > 0) {
-                    setStatus('✅ Gasto borrador creado exitosamente en Deudita (revisa la sección Borradores de la app).');
+                    const matchInfo = res.matchedTemplateName
+                        ? ' [Plantilla: "' + res.matchedTemplateName + '"' + (res.extractedAmount ? ' | Monto: $' + res.extractedAmount + ' ' + (res.currency || '') : '') + (res.merchant ? ' | Comercio: ' + res.merchant : '') + ']'
+                        : '';
+                    setStatus('✅ Gasto borrador creado exitosamente en Deudita' + matchInfo + ' (revisa la sección Borradores de la app).');
                 } else if (res && res.expensesFailed > 0) {
                     const errDetail = res.lastResult && res.lastResult.error ? res.lastResult.error : 'Código de error en la API';
                     setStatus('❌ Error al crear el borrador en /api/expenses: ' + errDetail, true);

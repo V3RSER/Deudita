@@ -459,9 +459,20 @@ function buildEntityLookup(
     const orphanTemplates = new Set<string>();
 
     for (const template of templates) {
-        if (!template.entity_id || !entityMap.has(template.entity_id)) {
+        if (!template.entity_id) {
             orphanTemplates.add(template.id);
             continue;
+        }
+
+        if (!entityMap.has(template.entity_id)) {
+            entityMap.set(template.entity_id, {
+                entity: template.entity || {
+                    id: template.entity_id,
+                    name: template.entity?.name || template.entity_id,
+                    patterns: template.entity_email_patterns || [],
+                },
+                templates: [],
+            });
         }
 
         entityMap.get(template.entity_id)!.templates.push(template);

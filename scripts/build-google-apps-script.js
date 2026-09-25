@@ -105,7 +105,52 @@ function transpile(filePath) {
   return result.outputText;
 }
 
+function getExportFooter(name) {
+  if (name === 'email-cleaning.js') {
+    return [
+      '// Export to global scope (Google Apps Script / Node / Browser)',
+      'if (typeof globalThis !== \'undefined\') {',
+      '  if (typeof buildEmailContext !== \'undefined\') globalThis.buildEmailContext = buildEmailContext;',
+      '  if (typeof sanitizeRegexPattern !== \'undefined\') globalThis.sanitizeRegexPattern = sanitizeRegexPattern;',
+      '  if (typeof matchEmailEntityPatterns !== \'undefined\') globalThis.matchEmailEntityPatterns = matchEmailEntityPatterns;',
+      '  if (typeof resolveEmailEntity !== \'undefined\') globalThis.resolveEmailEntity = resolveEmailEntity;',
+      '}',
+      'if (typeof module !== \'undefined\' && module.exports) {',
+      '  module.exports = {',
+      '    buildEmailContext: typeof buildEmailContext !== \'undefined\' ? buildEmailContext : undefined,',
+      '    sanitizeRegexPattern: typeof sanitizeRegexPattern !== \'undefined\' ? sanitizeRegexPattern : undefined,',
+      '    matchEmailEntityPatterns: typeof matchEmailEntityPatterns !== \'undefined\' ? matchEmailEntityPatterns : undefined,',
+      '    resolveEmailEntity: typeof resolveEmailEntity !== \'undefined\' ? resolveEmailEntity : undefined,',
+      '  };',
+      '}',
+    ].join('\n');
+  }
+
+  if (name === 'email-matching.js') {
+    return [
+      '// Export to global scope (Google Apps Script / Node / Browser)',
+      'if (typeof globalThis !== \'undefined\') {',
+      '  if (typeof createProductionEmailMatcher !== \'undefined\') globalThis.createProductionEmailMatcher = createProductionEmailMatcher;',
+      '  if (typeof matchEmailForProduction !== \'undefined\') globalThis.matchEmailForProduction = matchEmailForProduction;',
+      '  if (typeof diagnoseEmailMatching !== \'undefined\') globalThis.diagnoseEmailMatching = diagnoseEmailMatching;',
+      '  if (typeof evaluateTemplateAgainstEmail !== \'undefined\') globalThis.evaluateTemplateAgainstEmail = evaluateTemplateAgainstEmail;',
+      '}',
+      'if (typeof module !== \'undefined\' && module.exports) {',
+      '  module.exports = {',
+      '    createProductionEmailMatcher: typeof createProductionEmailMatcher !== \'undefined\' ? createProductionEmailMatcher : undefined,',
+      '    matchEmailForProduction: typeof matchEmailForProduction !== \'undefined\' ? matchEmailForProduction : undefined,',
+      '    diagnoseEmailMatching: typeof diagnoseEmailMatching !== \'undefined\' ? diagnoseEmailMatching : undefined,',
+      '    evaluateTemplateAgainstEmail: typeof evaluateTemplateAgainstEmail !== \'undefined\' ? evaluateTemplateAgainstEmail : undefined,',
+      '  };',
+      '}',
+    ].join('\n');
+  }
+
+  return '';
+}
+
 function writeGenerated(name, sourcePath) {
+  const footer = getExportFooter(name);
   const output = [
     '/**',
     ' * GENERATED FILE — DO NOT EDIT MANUALLY.',
@@ -117,6 +162,8 @@ function writeGenerated(name, sourcePath) {
     ' */',
     '',
     transpile(sourcePath).trim(),
+    '',
+    footer,
     '',
   ].join('\n');
 
