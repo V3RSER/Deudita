@@ -7,3 +7,5 @@ coverage/
 !.env.example
 package-lock.json
 .idea/
+google-apps-script/email-cleaning.js
+google-apps-script/email-matching.js
