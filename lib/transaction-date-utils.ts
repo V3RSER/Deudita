@@ -53,22 +53,23 @@ export function combineDateAndTimeToISO(dateStr: string, timeStr?: string): stri
         dateStr = getTodayDateString();
     }
     const time = timeStr && timeStr.trim() !== '' ? timeStr.trim() : '00:00';
-    if (!/^\d{2}:\d{2}$/.test(time)) return '';
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(time)) return '';
     const cleanDate = dateStr.split('T')[0];
     const [yearStr, monthStr, dayStr] = cleanDate.split('-');
-    const [hourStr, minuteStr] = time.split(':');
+    const [hourStr, minuteStr, secondStr] = time.split(':');
 
     const year = parseInt(yearStr, 10);
     const monthIndex = parseInt(monthStr, 10) - 1;
     const day = parseInt(dayStr, 10);
     const hour = parseInt(hourStr || '0', 10);
     const minute = parseInt(minuteStr || '0', 10);
+    const second = parseInt(secondStr || '0', 10);
 
-    const validDateParts = Number.isInteger(year) && Number.isInteger(monthIndex) && Number.isInteger(day) && Number.isInteger(hour) && Number.isInteger(minute)
-        && monthIndex >= 0 && monthIndex <= 11 && day >= 1 && day <= 31 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+    const validDateParts = Number.isInteger(year) && Number.isInteger(monthIndex) && Number.isInteger(day) && Number.isInteger(hour) && Number.isInteger(minute) && Number.isInteger(second)
+        && monthIndex >= 0 && monthIndex <= 11 && day >= 1 && day <= 31 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
     if (!validDateParts) return '';
 
-    const dateObj = new Date(year, monthIndex, day, hour, minute, 0, 0);
+    const dateObj = new Date(year, monthIndex, day, hour, minute, second, 0);
     if (dateObj.getFullYear() !== year || dateObj.getMonth() !== monthIndex || dateObj.getDate() !== day) return '';
     return dateObj.toISOString();
 }

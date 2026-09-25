@@ -41,6 +41,20 @@ create table if not exists public.expenses (
   updated_by uuid references public.profiles(id)
 );
 
+-- Asegurar que las columnas agregadas existan en tablas ya creadas previamente
+alter table public.expenses add column if not exists is_draft boolean not null default false;
+alter table public.expenses add column if not exists source_account text;
+alter table public.expenses add column if not exists entity text;
+alter table public.expenses add column if not exists currency text default 'COP';
+alter table public.expenses add column if not exists expense_type text;
+alter table public.expenses add column if not exists template_id uuid references public.email_templates(id);
+alter table public.expenses add column if not exists gmail_message_id text;
+alter table public.expenses add column if not exists raw_snippet text;
+alter table public.expenses add column if not exists split_config jsonb;
+alter table public.expenses add column if not exists expense_time timestamptz;
+alter table public.expenses add column if not exists category text default 'General';
+alter table public.expenses add column if not exists notes text;
+
 create unique index if not exists idx_expenses_gmail_message_id
   on public.expenses(gmail_message_id)
   where gmail_message_id is not null;
@@ -389,6 +403,9 @@ declare
   v_item_amount numeric;
   v_is_itemized boolean := false;
   v_split_config jsonb;
+  v_expense_time timestamptz;
+  v_has_split_config boolean := false;
+  v_notes text;
 begin
   v_user_id := public.resolve_user_by_webhook_token(p_token);
 
@@ -427,6 +444,21 @@ begin
       || ' '
       || coalesce(p_amount::text, '0');
 
+  -- Parseo seguro de hora para timestamptz (soporta HH:MI, HH:MI:SS o timestamp completo)
+  if p_time is not null and trim(p_time) <> '' then
+    begin
+      if trim(p_time) ~ '^\d{2}:\d{2}(:\d{2})?$' then
+        v_expense_time := (coalesce(p_date, current_date)::text || ' ' || trim(p_time))::timestamptz;
+      else
+        v_expense_time := trim(p_time)::timestamptz;
+      end if;
+    exception when others then
+      v_expense_time := null;
+    end;
+  else
+    v_expense_time := null;
+  end if;
+
   v_is_itemized := jsonb_typeof(p_items) = 'array' and jsonb_array_length(p_items) > 0;
 
   if v_is_itemized then
@@ -444,48 +476,43 @@ begin
     );
   end if;
 
-  -- Insertar gasto en modo borrador (sin grupo)
-  insert into public.expenses (
-    group_id,
-    paid_by,
-    created_by,
-    total_amount,
-    description,
-    expense_date,
-    expense_time,
-    source,
-    is_draft,
-    source_account,
-    entity,
-    currency,
-    template_id,
-    gmail_message_id,
-    raw_snippet,
-    expense_type,
-    split_config,
-    created_at
-  )
-  values (
-    null,
-    v_user_id,
-    v_user_id,
-    coalesce(p_amount, 0),
-    v_description,
-    coalesce(p_date, current_date),
-    p_time,
-    'gmail',
-    true,
-    p_source_account,
-    p_entity,
-    coalesce(p_currency, 'COP'),
-    p_template_id,
-    trim(p_gmail_message_id),
-    v_raw_snippet,
-    p_expense_type,
-    v_split_config,
-    coalesce(p_received_at, now())
-  )
-  returning id into v_expense_id;
+  v_notes := '<!-- SPLIT_CONFIG:' || v_split_config::text || ' -->';
+
+  -- Comprobar si la columna split_config existe dinámicamente en la tabla expenses
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'expenses'
+      and column_name = 'split_config'
+  ) into v_has_split_config;
+
+  if v_has_split_config then
+    execute 'insert into public.expenses (
+      group_id, paid_by, created_by, total_amount, description,
+      expense_date, expense_time, source, is_draft, source_account,
+      entity, currency, template_id, gmail_message_id, raw_snippet,
+      expense_type, split_config, notes, created_at
+    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    returning id'
+    into v_expense_id
+    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+          p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
+          v_raw_snippet, p_expense_type, v_split_config, v_notes, coalesce(p_received_at, now());
+  else
+    execute 'insert into public.expenses (
+      group_id, paid_by, created_by, total_amount, description,
+      expense_date, expense_time, source, is_draft, source_account,
+      entity, currency, template_id, gmail_message_id, raw_snippet,
+      expense_type, notes, created_at
+    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    returning id'
+    into v_expense_id
+    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+          p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
+          v_raw_snippet, p_expense_type, v_notes, coalesce(p_received_at, now());
+  end if;
 
   -- Si es desglosado, insertar ítems
   if v_is_itemized then

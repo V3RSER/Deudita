@@ -220,7 +220,24 @@ export async function POST(req: NextRequest) {
         const expenseDate = normalizeDateForPostgres(
             rawExpense.expense_date || body.expense_date || rawExpense.date || body.date
         );
-        const expenseTime = rawExpense.expense_time || body.expense_time || rawExpense.time || body.time || null;
+        const rawExpenseTime = rawExpense.expense_time || body.expense_time || rawExpense.time || body.time || null;
+        let expenseTime: string | null = null;
+        let expenseTimeISO: string | null = null;
+
+        if (rawExpenseTime && typeof rawExpenseTime === 'string') {
+            const cleanTime = rawExpenseTime.trim();
+            if (/^\d{2}:\d{2}(:\d{2})?$/.test(cleanTime)) {
+                expenseTime = cleanTime;
+                const paddedTime = cleanTime.length === 5 ? `${cleanTime}:00` : cleanTime;
+                expenseTimeISO = `${expenseDate}T${paddedTime}`;
+            } else {
+                const parsedDate = new Date(cleanTime);
+                if (!isNaN(parsedDate.getTime())) {
+                    expenseTime = cleanTime;
+                    expenseTimeISO = parsedDate.toISOString();
+                }
+            }
+        }
 
         // Grupo
         let rawGroupId = rawExpense.group_id !== undefined ? rawExpense.group_id : (body.group_id !== undefined ? body.group_id : null);
@@ -240,7 +257,9 @@ export async function POST(req: NextRequest) {
         const receivedAt = body.received_at || body.receivedAt || new Date().toISOString();
         const rawSnippet = body.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency} ${parsedAmount}`;
 
-        // Si es una llamada desde el webhook, usar la función Postgres con SECURITY DEFINER
+        // Si es una llamada desde el webhook (Google Apps Script), usar la función Postgres con SECURITY DEFINER.
+        // Las peticiones de webhook no tienen sesión activa (auth.uid() = null), por lo que una inserción
+        // directa en 'expenses' fallaría siempre por RLS.
         if (isWebhookAuth && webhookToken) {
             const { data: rpcData, error: rpcErr } = await clientSupabase.rpc('insert_expense_for_webhook', {
                 p_token: webhookToken,
@@ -259,7 +278,22 @@ export async function POST(req: NextRequest) {
                 p_items: rawItems,
             });
 
-            if (!rpcErr && rpcData) {
+            if (rpcErr) {
+                console.error('[API /api/expenses] Error en RPC insert_expense_for_webhook:', {
+                    error: rpcErr,
+                    message: rpcErr.message,
+                    code: rpcErr.code,
+                });
+
+                return NextResponse.json({
+                    error: `Error al procesar el gasto de webhook en la base de datos: ${rpcErr.message}`,
+                    code: rpcErr.code,
+                    hint: rpcErr.hint || null,
+                    details: rpcErr.details || null,
+                }, { status: 500 });
+            }
+
+            if (rpcData) {
                 const expenseId = rpcData.expense_id || rpcData.id;
 
                 return NextResponse.json({
@@ -291,7 +325,10 @@ export async function POST(req: NextRequest) {
                     ...rpcData,
                 });
             }
-            console.warn('[API /api/expenses] Webhook RPC error/fallback:', rpcErr?.message);
+
+            return NextResponse.json({
+                error: 'No se obtuvo respuesta de la función de ingesta de webhook',
+            }, { status: 500 });
         }
 
         // Parseo de ítems
@@ -378,9 +415,12 @@ export async function POST(req: NextRequest) {
             split_config: splitConfig,
         };
 
-        if (expenseTime) expenseInsertPayload.expense_time = expenseTime;
+        if (expenseTimeISO) expenseInsertPayload.expense_time = expenseTimeISO;
         if (category) expenseInsertPayload.category = category;
-        if (notes) expenseInsertPayload.notes = notes;
+        const serializedNotes = notes
+            ? (splitConfig && !notes.includes('<!-- SPLIT_CONFIG:') ? `${notes}\n<!-- SPLIT_CONFIG:${JSON.stringify(splitConfig)} -->` : notes)
+            : (splitConfig ? `<!-- SPLIT_CONFIG:${JSON.stringify(splitConfig)} -->` : null);
+        if (serializedNotes) expenseInsertPayload.notes = serializedNotes;
 
         let { data: newExpense, error: expErr } = await clientSupabase
             .from('expenses')
