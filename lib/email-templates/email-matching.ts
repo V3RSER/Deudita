@@ -465,12 +465,15 @@ function buildEntityLookup(
         }
 
         if (!entityMap.has(template.entity_id)) {
+            const fallbackEntity: CatalogEntity = {
+                id: template.entity?.id || template.entity_id,
+                name: template.entity?.name || template.entity_id,
+                patterns: (template.entity?.patterns && template.entity.patterns.length > 0)
+                    ? template.entity.patterns
+                    : (template.entity_email_patterns || []),
+            };
             entityMap.set(template.entity_id, {
-                entity: template.entity || {
-                    id: template.entity_id,
-                    name: template.entity?.name || template.entity_id,
-                    patterns: template.entity_email_patterns || [],
-                },
+                entity: fallbackEntity,
                 templates: [],
             });
         }

@@ -168,7 +168,7 @@ function getEvaluationWarnings(template, fields) {
     return warnings;
 }
 function buildEntityLookup(entities, templates) {
-    var _a;
+    var _a, _b, _c;
     const entityMap = new Map();
     for (const entity of entities) {
         entityMap.set(entity.id, { entity, templates: [] });
@@ -180,12 +180,15 @@ function buildEntityLookup(entities, templates) {
             continue;
         }
         if (!entityMap.has(template.entity_id)) {
+            const fallbackEntity = {
+                id: ((_a = template.entity) === null || _a === void 0 ? void 0 : _a.id) || template.entity_id,
+                name: ((_b = template.entity) === null || _b === void 0 ? void 0 : _b.name) || template.entity_id,
+                patterns: (((_c = template.entity) === null || _c === void 0 ? void 0 : _c.patterns) && template.entity.patterns.length > 0)
+                    ? template.entity.patterns
+                    : (template.entity_email_patterns || []),
+            };
             entityMap.set(template.entity_id, {
-                entity: template.entity || {
-                    id: template.entity_id,
-                    name: ((_a = template.entity) === null || _a === void 0 ? void 0 : _a.name) || template.entity_id,
-                    patterns: template.entity_email_patterns || [],
-                },
+                entity: fallbackEntity,
                 templates: [],
             });
         }
