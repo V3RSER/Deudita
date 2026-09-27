@@ -111,6 +111,9 @@ create table if not exists public.expense_audit_logs (
   created_at timestamptz not null default now()
 );
 
+-- Asegurar que group_id sea nullable en expense_audit_logs para soportar gastos sin grupo y borradores
+alter table public.expense_audit_logs alter column group_id drop not null;
+
 create or replace function public.log_expense_changes()
 returns trigger
 language plpgsql
@@ -142,8 +145,8 @@ begin
     );
     return NEW;
   elsif TG_OP = 'DELETE' then
-    -- Solo loguea el delete si el grupo padre aún existe (evita violar FK durante cascade delete de groups)
-    if exists (select 1 from public.groups where id = OLD.group_id) then
+    -- Solo loguea el delete si no tiene grupo o si el grupo padre aún existe (evita violar FK durante cascade delete de groups)
+    if OLD.group_id is null or exists (select 1 from public.groups where id = OLD.group_id) then
       insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
       values (
         OLD.id,
@@ -324,21 +327,23 @@ create policy "insert_expense_splits" on public.expense_splits
 drop policy if exists "select_expense_audit_logs" on public.expense_audit_logs;
 create policy "select_expense_audit_logs" on public.expense_audit_logs
   for select using (
-    exists (
+    (group_id is not null and exists (
       select 1 from public.group_members gm
       where gm.group_id = expense_audit_logs.group_id
       and gm.user_id = auth.uid()
-    )
+    ))
+    or (group_id is null and user_id = auth.uid())
   );
 
 drop policy if exists "insert_expense_audit_logs" on public.expense_audit_logs;
 create policy "insert_expense_audit_logs" on public.expense_audit_logs
   for insert with check (
-    exists (
+    (group_id is not null and exists (
       select 1 from public.group_members gm
       where gm.group_id = expense_audit_logs.group_id
       and gm.user_id = auth.uid()
-    )
+    ))
+    or (group_id is null and user_id = auth.uid())
   );
 
 -- ---- payments ----
@@ -492,11 +497,16 @@ begin
       expense_date, expense_time, source, is_draft, source_account,
       entity, currency, template_id, gmail_message_id, raw_snippet,
       expense_type, split_config, notes, created_at
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    ) values (
+      null::uuid, $1::uuid, $2::uuid, $3::numeric, $4::text,
+      $5::date, $6::timestamptz, ''gmail'', true, $7::text,
+      $8::text, $9::text, $10::uuid, $11::text, $12::text,
+      $13::text, $14::jsonb, $15::text, $16::timestamptz
+    )
     returning id'
     into v_expense_id
-    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
-          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+    using v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, p_source_account,
           p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
           v_raw_snippet, p_expense_type, v_split_config, v_notes, coalesce(p_received_at, now());
   else
@@ -505,11 +515,16 @@ begin
       expense_date, expense_time, source, is_draft, source_account,
       entity, currency, template_id, gmail_message_id, raw_snippet,
       expense_type, notes, created_at
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    ) values (
+      null::uuid, $1::uuid, $2::uuid, $3::numeric, $4::text,
+      $5::date, $6::timestamptz, ''gmail'', true, $7::text,
+      $8::text, $9::text, $10::uuid, $11::text, $12::text,
+      $13::text, $14::text, $15::timestamptz
+    )
     returning id'
     into v_expense_id
-    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
-          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+    using v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, p_source_account,
           p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
           v_raw_snippet, p_expense_type, v_notes, coalesce(p_received_at, now());
   end if;

@@ -21,6 +21,69 @@ alter table public.expenses add column if not exists expense_time timestamptz;
 alter table public.expenses add column if not exists category text default 'General';
 alter table public.expenses add column if not exists notes text;
 
+-- Asegurar que group_id sea nullable en expense_audit_logs para soportar borradores sin grupo
+alter table public.expense_audit_logs alter column group_id drop not null;
+
+-- Actualizar trigger de auditoría para gastos sin grupo
+create or replace function public.log_expense_changes()
+returns trigger
+language plpgsql
+security definer
+as $$
+declare
+  v_user_id uuid;
+begin
+  v_user_id := auth.uid();
+
+  if TG_OP = 'INSERT' then
+    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+    values (
+      NEW.id,
+      NEW.group_id,
+      coalesce(v_user_id, NEW.created_by),
+      'create',
+      jsonb_build_object('new', row_to_json(NEW))
+    );
+    return NEW;
+  elsif TG_OP = 'UPDATE' then
+    insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+    values (
+      NEW.id,
+      NEW.group_id,
+      coalesce(NEW.updated_by, v_user_id, NEW.created_by),
+      'update',
+      jsonb_build_object('old', row_to_json(OLD), 'new', row_to_json(NEW))
+    );
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    if OLD.group_id is null or exists (select 1 from public.groups where id = OLD.group_id) then
+      insert into public.expense_audit_logs (expense_id, group_id, user_id, action, changes)
+      values (
+        OLD.id,
+        OLD.group_id,
+        coalesce(v_user_id, OLD.created_by),
+        'delete',
+        jsonb_build_object('old', row_to_json(OLD))
+      );
+    end if;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+-- Actualizar política RLS de auditoría para permitir ver auditoría de gastos sin grupo
+drop policy if exists "select_expense_audit_logs" on public.expense_audit_logs;
+create policy "select_expense_audit_logs" on public.expense_audit_logs
+  for select using (
+    (group_id is not null and exists (
+      select 1 from public.group_members gm
+      where gm.group_id = expense_audit_logs.group_id
+      and gm.user_id = auth.uid()
+    ))
+    or (group_id is null and user_id = auth.uid())
+  );
+
 -- 2. Índices de deduplicación y consulta de borradores
 create unique index if not exists idx_expenses_gmail_message_id
   on public.expenses(gmail_message_id)
@@ -156,11 +219,16 @@ begin
       expense_date, expense_time, source, is_draft, source_account,
       entity, currency, template_id, gmail_message_id, raw_snippet,
       expense_type, split_config, notes, created_at
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    ) values (
+      null::uuid, $1::uuid, $2::uuid, $3::numeric, $4::text,
+      $5::date, $6::timestamptz, ''gmail'', true, $7::text,
+      $8::text, $9::text, $10::uuid, $11::text, $12::text,
+      $13::text, $14::jsonb, $15::text, $16::timestamptz
+    )
     returning id'
     into v_expense_id
-    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
-          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+    using v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, p_source_account,
           p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
           v_raw_snippet, p_expense_type, v_split_config, v_notes, coalesce(p_received_at, now());
   else
@@ -169,11 +237,16 @@ begin
       expense_date, expense_time, source, is_draft, source_account,
       entity, currency, template_id, gmail_message_id, raw_snippet,
       expense_type, notes, created_at
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    ) values (
+      null::uuid, $1::uuid, $2::uuid, $3::numeric, $4::text,
+      $5::date, $6::timestamptz, ''gmail'', true, $7::text,
+      $8::text, $9::text, $10::uuid, $11::text, $12::text,
+      $13::text, $14::text, $15::timestamptz
+    )
     returning id'
     into v_expense_id
-    using null, v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
-          coalesce(p_date, current_date), v_expense_time, 'gmail', true, p_source_account,
+    using v_user_id, v_user_id, coalesce(p_amount, 0), v_description,
+          coalesce(p_date, current_date), v_expense_time, p_source_account,
           p_entity, coalesce(p_currency, 'COP'), p_template_id, trim(p_gmail_message_id),
           v_raw_snippet, p_expense_type, v_notes, coalesce(p_received_at, now());
   end if;
