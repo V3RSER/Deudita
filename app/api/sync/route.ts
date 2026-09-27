@@ -435,6 +435,7 @@ export async function GET(req: NextRequest) {
                     source_account: exp.source_account,
                     concept: exp.description,
                     expense_type: exp.expense_type || null,
+                    group_id: exp.group_id || null,
                     created_at: exp.created_at,
                     is_draft: true,
                     extracted_items: exp.items?.map((it: any) => ({

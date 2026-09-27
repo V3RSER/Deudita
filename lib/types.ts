@@ -215,6 +215,8 @@ export interface ExpenseDraft {
     concept?: string | null;
     expense_type?: string | null;
     entity_id?: string | null;
+    group_id?: string | null;
+    is_draft?: boolean;
     created_at: string;
     extracted_items?: Array<{ description: string; amount: number }>;
 }
