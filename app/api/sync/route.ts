@@ -369,8 +369,55 @@ export async function GET(req: NextRequest) {
         // 8. Unified Expense Drafts (Gastos de expenses en modo borrador is_draft = true)
         const unifiedDrafts: any[] = [];
 
+        // Pre-cargar nombres de entidades si exp.entity viene como UUID
+        const entityUuidSet = new Set<string>();
+        for (const exp of expenses) {
+            if (exp.is_draft && exp.entity && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(exp.entity).trim())) {
+                entityUuidSet.add(String(exp.entity).trim());
+            }
+        }
+
+        const entityNameMap = new Map<string, string>();
+        if (entityUuidSet.size > 0) {
+            try {
+                const { data: entityRows } = await db
+                    .from('entities')
+                    .select('id, name')
+                    .in('id', Array.from(entityUuidSet));
+                (entityRows || []).forEach((r: any) => {
+                    if (r?.id && r?.name) entityNameMap.set(r.id, r.name);
+                });
+            } catch {
+                // fallback
+            }
+        }
+
         for (const exp of expenses) {
             if (exp.is_draft) {
+                // Formatear hora limpia (HH:MM)
+                let cleanTime: string | null = null;
+                if (exp.expense_time) {
+                    if (typeof exp.expense_time === 'string' && exp.expense_time.includes('T')) {
+                        const d = new Date(exp.expense_time);
+                        if (!isNaN(d.getTime())) {
+                            const hh = String(d.getUTCHours()).padStart(2, '0');
+                            const mm = String(d.getUTCMinutes()).padStart(2, '0');
+                            cleanTime = `${hh}:${mm}`;
+                        }
+                    } else if (typeof exp.expense_time === 'string') {
+                        const m = exp.expense_time.match(/\b\d{2}:\d{2}\b/);
+                        cleanTime = m ? m[0] : exp.expense_time.slice(0, 5);
+                    }
+                }
+
+                // Resolver nombre de entidad legible
+                let resolvedEntity = exp.entity;
+                if (resolvedEntity && entityNameMap.has(resolvedEntity)) {
+                    resolvedEntity = entityNameMap.get(resolvedEntity)!;
+                } else if (resolvedEntity && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedEntity)) {
+                    resolvedEntity = exp.expense_type || 'Banco';
+                }
+
                 unifiedDrafts.push({
                     id: exp.id,
                     user_id: exp.created_by,
@@ -379,13 +426,15 @@ export async function GET(req: NextRequest) {
                     detected_amount: exp.total_amount,
                     detected_merchant: exp.description,
                     detected_date: exp.expense_date,
-                    detected_time: exp.expense_time,
+                    detected_time: cleanTime,
                     confidence: 0.95,
                     status: 'pending',
                     currency: exp.currency || 'COP',
-                    entity: exp.entity,
+                    entity: resolvedEntity,
+                    entity_id: exp.entity && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(exp.entity) ? exp.entity : null,
                     source_account: exp.source_account,
                     concept: exp.description,
+                    expense_type: exp.expense_type || null,
                     created_at: exp.created_at,
                     is_draft: true,
                     extracted_items: exp.items?.map((it: any) => ({

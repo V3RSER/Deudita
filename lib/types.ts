@@ -213,6 +213,8 @@ export interface ExpenseDraft {
     source_account?: string | null;
     detected_time?: string | null;
     concept?: string | null;
+    expense_type?: string | null;
+    entity_id?: string | null;
     created_at: string;
     extracted_items?: Array<{ description: string; amount: number }>;
 }

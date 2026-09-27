@@ -1254,10 +1254,13 @@ export interface ProductionEmailMatch {
     currency: string | null;
     merchant: string | null;
     entityId: string | null;
+    entityName?: string | null;
     sourceAccount: string | null;
     date: string | null;
     time: string | null;
     concept: string | null;
+    expenseType?: string | null;
+    rawSnippet?: string | null;
 }
 
 export function createProductionEmailMatcher(
@@ -1361,16 +1364,22 @@ export function matchEmailForProduction(
                     ? `${template.expense_type_label} · ${cleanMerchant}`
                     : cleanMerchant || template.expense_type_label || null;
 
+                const entityName = group.entity?.name || template.entity?.name || null;
+                const rawSnippet = cleanBody ? cleanBody.slice(0, 300) : null;
+
                 return {
                     templateId: template.id,
                     amount: fields.parsedAmount,
                     currency,
                     merchant: cleanMerchant,
                     entityId: template.entity_id || group.entityId || null,
+                    entityName,
                     sourceAccount,
                     date,
                     time,
                     concept,
+                    expenseType: template.expense_type_label || null,
+                    rawSnippet,
                 };
             }
         }

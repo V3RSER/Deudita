@@ -455,17 +455,23 @@ function executeLocalProductionMatch(matcher, sender, subject, rawBody) {
                     ? `${template.expense_type_label} · ${cleanMerchant}`
                     : cleanMerchant || template.expense_type_label || null;
 
+                const entityName = (group.entity && group.entity.name)
+                    ? group.entity.name
+                    : (template.entity && template.entity.name ? template.entity.name : null);
+
                 return {
                     templateId: template.id,
                     amount: parsedAmount,
                     currency: extractedCurrency ? extractedCurrency.trim() : null,
                     merchant: cleanMerchant,
                     entityId: template.entity_id || group.entityId || null,
+                    entityName: entityName,
                     sourceAccount: extractedSourceAccount ? extractedSourceAccount.trim() : null,
                     date: extractedDate ? extractedDate.trim() : null,
                     time: extractedTime ? extractedTime.trim() : null,
                     concept: concept,
                     expenseType: template.expense_type_label || null,
+                    rawSnippet: cleanBody ? cleanBody.slice(0, 300) : null,
                 };
             }
         }
@@ -637,13 +643,19 @@ if (typeof globalThis !== 'undefined') {
 function sendExpense(token, message, match) {
     const cleanToken = String(token || '').trim();
 
+    const plainBody = String(message.getPlainBody() || '').replace(/\s+/g, ' ').trim();
+    const rawSnippet = match.rawSnippet || plainBody.slice(0, 300) || null;
+    const resolvedEntity = match.entityName || (match.entity && typeof match.entity === 'string' && !match.entity.includes('-') ? match.entity : null) || (match.entity && match.entity.name) || match.entityId || 'Banco';
+
     const payload = {
         gmail_message_id: message.getId(),
         template_id: match.templateId,
         amount: match.amount,
         currency: match.currency,
         merchant: match.merchant,
-        entity: match.entityId,
+        entity: resolvedEntity,
+        entity_name: match.entityName || null,
+        entity_id: match.entityId || null,
         source_account: match.sourceAccount,
         sourceAccount: match.sourceAccount,
         date: match.date,
@@ -651,6 +663,7 @@ function sendExpense(token, message, match) {
         concept: match.concept,
         items: match.items || [],
         expense_type: match.expenseType || match.expense_type || null,
+        raw_snippet: rawSnippet,
         received_at: message.getDate().toISOString(),
         is_draft: true,
         webhook_token: cleanToken,

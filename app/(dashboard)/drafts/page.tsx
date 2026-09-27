@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { UnifiedDraftsAndTemplatesView } from '@/components/draft/UnifiedDraftsAndTemplatesView';
-import { ConfirmDraftModal } from '@/components/draft/ConfirmDraftModal';
+import { NewExpenseModal } from '@/components/my-expenses/NewExpenseModal';
 import { ExpenseDraft } from '@/lib/types';
 
 export default function DraftsPage() {
@@ -14,6 +14,11 @@ export default function DraftsPage() {
         setIsConfirmDraftOpen(true);
     };
 
+    const handleCloseModal = () => {
+        setIsConfirmDraftOpen(false);
+        setSelectedDraft(null);
+    };
+
     return (
         <>
             <UnifiedDraftsAndTemplatesView
@@ -21,11 +26,11 @@ export default function DraftsPage() {
                 onOpenConfirmDraft={handleOpenConfirmDraft}
             />
 
-            <ConfirmDraftModal
+            <NewExpenseModal
                 key={`confirm-draft-${isConfirmDraftOpen}-${selectedDraft?.id}`}
                 isOpen={isConfirmDraftOpen}
-                onClose={() => setIsConfirmDraftOpen(false)}
-                draft={selectedDraft}
+                onClose={handleCloseModal}
+                draftToConfirm={selectedDraft}
             />
         </>
     );

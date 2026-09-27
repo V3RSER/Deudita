@@ -145,7 +145,40 @@ export async function POST(req: NextRequest) {
         const templateId = isValidUuid ? rawTemplateId.trim() : null;
 
         const sourceAccount = rawExpense.source_account || rawExpense.sourceAccount || body.source_account || body.sourceAccount || null;
-        const entity = rawExpense.entity || body.entity || null;
+        let rawEntity = rawExpense.entity_name || body.entity_name || rawExpense.entity || body.entity || null;
+        let entity: string | null = rawEntity;
+
+        // Si la entidad es un UUID o viene vacía, resolver nombre legible de la entidad
+        if (entity && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(entity).trim())) {
+            try {
+                const { data: entRow } = await clientSupabase
+                    .from('entities')
+                    .select('name')
+                    .eq('id', String(entity).trim())
+                    .maybeSingle();
+                if (entRow?.name) {
+                    entity = entRow.name;
+                }
+            } catch {
+                // mantener fallback
+            }
+        }
+
+        if ((!entity || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(entity).trim())) && templateId) {
+            try {
+                const { data: tplRow } = await clientSupabase
+                    .from('email_templates')
+                    .select('entity_id, entities(name)')
+                    .eq('id', templateId)
+                    .maybeSingle();
+                if (tplRow?.entities?.name) {
+                    entity = tplRow.entities.name;
+                }
+            } catch {
+                // mantener fallback
+            }
+        }
+
         const expenseType = rawExpense.expense_type || rawExpense.expenseType || body.expense_type || body.expenseType || null;
         const currency = rawExpense.currency || body.currency || 'COP';
         const receiptUrl = rawExpense.receipt_url || body.receipt_url || null;
@@ -184,8 +217,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Descripción / Concepto / Comercio
+        const rawMerchant = String(rawExpense.merchant || body.merchant || '').trim();
+        const rawConcept = String(rawExpense.concept || body.concept || '').trim();
+        const rawDesc = String(rawExpense.description || body.description || '').trim();
+
         const description = String(
-            rawExpense.description || body.description || rawExpense.merchant || body.merchant || rawExpense.concept || body.concept || entity || 'Gasto'
+            rawMerchant || rawConcept || rawDesc || entity || 'Gasto'
         ).trim();
 
         // Normalización de fecha para asegurar compatibilidad con Postgres date (YYYY-MM-DD)
@@ -255,7 +292,7 @@ export async function POST(req: NextRequest) {
         const paidBy = rawExpense.paid_by || body.paid_by || targetUserId;
         const createdBy = targetUserId;
         const receivedAt = body.received_at || body.receivedAt || new Date().toISOString();
-        const rawSnippet = body.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency} ${parsedAmount}`;
+        const rawSnippet = body.raw_snippet || rawExpense.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency} ${parsedAmount}`;
 
         // Si es una llamada desde el webhook (Google Apps Script), usar la función Postgres con SECURITY DEFINER.
         // Las peticiones de webhook no tienen sesión activa (auth.uid() = null), por lo que una inserción
@@ -267,12 +304,12 @@ export async function POST(req: NextRequest) {
                 p_template_id: templateId,
                 p_amount: parsedAmount,
                 p_currency: currency,
-                p_merchant: description,
+                p_merchant: rawMerchant || description,
                 p_entity: entity,
                 p_source_account: sourceAccount,
                 p_date: expenseDate,
                 p_time: expenseTime,
-                p_concept: description,
+                p_concept: rawConcept || description,
                 p_received_at: receivedAt,
                 p_expense_type: expenseType,
                 p_items: rawItems,
@@ -295,6 +332,24 @@ export async function POST(req: NextRequest) {
 
             if (rpcData) {
                 const expenseId = rpcData.expense_id || rpcData.id;
+
+                if (expenseId) {
+                    try {
+                        const patchFields: Record<string, any> = {};
+                        if (rawSnippet) patchFields.raw_snippet = rawSnippet;
+                        if (entity) patchFields.entity = entity;
+                        if (expenseType) patchFields.expense_type = expenseType;
+
+                        if (Object.keys(patchFields).length > 0) {
+                            await clientSupabase
+                                .from('expenses')
+                                .update(patchFields)
+                                .eq('id', expenseId);
+                        }
+                    } catch (patchErr) {
+                        console.warn('[API /api/expenses] Error actualizando campos enriquecidos de webhook:', patchErr);
+                    }
+                }
 
                 return NextResponse.json({
                     success: true,
@@ -320,6 +375,7 @@ export async function POST(req: NextRequest) {
                         gmail_message_id: gmailMessageId,
                         template_id: templateId,
                         expense_type: expenseType,
+                        raw_snippet: rawSnippet,
                         source: 'gmail',
                     },
                     ...rpcData,

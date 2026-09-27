@@ -14,6 +14,15 @@ interface ConfirmDraftModalProps {
     readonly draft: ExpenseDraft | null;
 }
 
+function formatEntity(entity?: string | null): string {
+    if (!entity) return 'CORREO BANCARIO';
+    const clean = entity.trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+        return 'BANCO';
+    }
+    return clean.toUpperCase();
+}
+
 export function ConfirmDraftModal({
     isOpen,
     onClose,
@@ -71,7 +80,7 @@ export function ConfirmDraftModal({
         setErrorMsg(null);
         setIsSubmitting(false);
         setIsDiscarding(false);
-        setDescription(draft.detected_merchant || 'Gasto detectado');
+        setDescription(draft.detected_merchant || draft.concept || 'Gasto detectado');
         setAmount(draft.detected_amount || 0);
         setExpenseDate(
             draft.detected_date || new Date().toISOString().split('T')[0],
@@ -243,8 +252,13 @@ export function ConfirmDraftModal({
                     <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100 space-y-2">
                         <div
                             className="flex justify-between items-center text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                            <div className="flex items-center space-x-2">
-                                <span>{draft.entity || 'Correo'}</span>
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                <span>{formatEntity(draft.entity)}</span>
+                                {draft.expense_type && (
+                                    <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md">
+                                        {draft.expense_type}
+                                    </span>
+                                )}
                                 {draft.source_account && (
                                     <span
                                         className="text-[10px] font-mono bg-white text-zinc-600 px-2 py-0.5 rounded-md border border-indigo-200">
@@ -265,6 +279,24 @@ export function ConfirmDraftModal({
                             <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed bg-white/70 p-2 rounded-xl border border-indigo-100/60 font-mono text-[11px]">
                                 &quot;{draft.raw_snippet}&quot;
                             </p>
+                        )}
+
+                        {draft.extracted_items && draft.extracted_items.length > 0 && (
+                            <div className="pt-1 border-t border-indigo-100/80">
+                                <span className="text-[10px] font-bold text-indigo-900 block mb-1">
+                                    Artículos detectados ({draft.extracted_items.length})
+                                </span>
+                                <div className="space-y-1 max-h-24 overflow-y-auto">
+                                    {draft.extracted_items.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center text-[11px] text-zinc-700">
+                                            <span className="truncate pr-2">{item.description}</span>
+                                            <span className="font-mono font-semibold shrink-0">
+                                                {formatCurrency(item.amount, draft.currency || 'COP')}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
 

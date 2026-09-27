@@ -976,9 +976,14 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 split_config: expense.split_config || updatedExpense.split_config,
             };
 
-            setExpenses((prev) =>
-                prev.map((e) => (e.id === updatedExpense.id ? expenseWithConfig : e))
-            );
+            setExpenses((prev) => {
+                const exists = prev.some((e) => e.id === updatedExpense.id);
+                if (exists) {
+                    return prev.map((e) => (e.id === updatedExpense.id ? expenseWithConfig : e));
+                }
+                return [expenseWithConfig, ...prev];
+            });
+            setDrafts((prev) => prev.filter((d) => d.id !== id));
             return expenseWithConfig;
         });
     };

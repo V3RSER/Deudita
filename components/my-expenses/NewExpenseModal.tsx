@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
-import { Expense, ExpenseSplitConfig } from '@/lib/types';
+import { Expense, ExpenseDraft, ExpenseSplitConfig } from '@/lib/types';
 import { getExpenseSplitConfig, saveLocalSplitConfig, serializeNotesWithConfig, } from '@/lib/split-config-utils';
 import { distributeAmountEqually, formatCurrency, normalizeSplitsToTotal } from '@/lib/balance-utils';
 import { FormattedCurrencyInput } from '@/components/my-expenses/FormattedCurrencyInput';
@@ -21,6 +21,7 @@ import {
     List,
     ListChecks,
     Loader2,
+    MailCheck,
     PieChart,
     Plus,
     ShoppingCart,
@@ -59,19 +60,40 @@ function parseNonNegativeNumber(raw: string): number | null {
     return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function formatEntity(entity?: string | null, fallback?: string | null): string {
+    if (entity) {
+        const clean = entity.trim();
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+            return clean.toUpperCase();
+        }
+    }
+    if (fallback) {
+        return fallback.toUpperCase();
+    }
+    return 'BANCO';
+}
+
 interface NewExpenseModalProps {
     isOpen: boolean;
     onClose: () => void;
     defaultGroupId?: string;
     expenseToEdit?: Expense | null;
+    draftToConfirm?: ExpenseDraft | null;
 }
 
-export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit }: Readonly<NewExpenseModalProps>) {
-    const { currentProfile, userGroups, members, profiles, addExpense, updateExpense, isMutating } = useExpense();
+export function NewExpenseModal({
+    isOpen,
+    onClose,
+    defaultGroupId,
+    expenseToEdit,
+    draftToConfirm,
+}: Readonly<NewExpenseModalProps>) {
+    const { currentProfile, userGroups, members, profiles, addExpense, updateExpense, discardDraft, isMutating } = useExpense();
 
     const [mode, setMode] = useState<'quick' | 'itemized'>('quick');
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isDiscardingDraft, setIsDiscardingDraft] = useState(false);
 
     // Form State
     const [amount, setAmount] = useState('');
@@ -127,8 +149,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
     const isSubmittingRef = useRef(false);
     const isUploadingRef = useRef(false);
 
-    isSubmittingRef.current = isSubmitting;
-    isUploadingRef.current = isUploading;
+    useEffect(() => {
+        isSubmittingRef.current = isSubmitting;
+    }, [isSubmitting]);
+
+    useEffect(() => {
+        isUploadingRef.current = isUploading;
+    }, [isUploading]);
 
     // Computed
     const activeGroup = userGroups.find(g => g.id === groupId);
@@ -142,6 +169,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 if (expenseToEdit.paid_by) ids.add(expenseToEdit.paid_by);
                 expenseToEdit.splits?.forEach(s => ids.add(s.user_id));
             }
+            if (draftToConfirm?.user_id) ids.add(draftToConfirm.user_id);
             if (paidById) ids.add(paidById);
             selectedMembers.forEach(id => ids.add(id));
             const matched = profiles.filter(p => ids.has(p.id));
@@ -166,7 +194,20 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             return [...matched, ...extraProfiles];
         }
         return matched;
-    }, [groupId, members, profiles, currentProfile, expenseToEdit, paidById, selectedMembers]);
+    }, [groupId, members, profiles, currentProfile, expenseToEdit, draftToConfirm, paidById, selectedMembers]);
+
+    const handleDiscardDraft = async () => {
+        if (!draftToConfirm || isDiscardingDraft || isSubmitting) return;
+        setIsDiscardingDraft(true);
+        try {
+            await discardDraft(draftToConfirm.id);
+            onClose();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Error al descartar el borrador.');
+        } finally {
+            setIsDiscardingDraft(false);
+        }
+    };
 
     const prevIsOpenRef = useRef(false);
     const prevExpenseIdRef = useRef<string | null>(null);
@@ -185,7 +226,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             return;
         }
 
-        const currentExpenseId = expenseToEdit ? expenseToEdit.id : null;
+        const currentExpenseId = expenseToEdit ? expenseToEdit.id : (draftToConfirm ? `draft_${draftToConfirm.id}` : null);
         const isOpening = !prevIsOpenRef.current;
         const isExpenseChanged = currentExpenseId !== prevExpenseIdRef.current;
 
@@ -200,7 +241,59 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
             setIsItemizedVerticalView(true);
             setExpandedItems([1]);
 
-            if (expenseToEdit) {
+            if (draftToConfirm) {
+                const hasItems = Boolean(draftToConfirm.extracted_items && draftToConfirm.extracted_items.length > 0);
+                setMode(hasItems ? 'itemized' : 'quick');
+                setAmount(draftToConfirm.detected_amount ? String(draftToConfirm.detected_amount) : '');
+                const initialDesc = (draftToConfirm.detected_merchant && draftToConfirm.concept && draftToConfirm.detected_merchant.toLowerCase() !== draftToConfirm.concept.toLowerCase())
+                    ? `${draftToConfirm.detected_merchant} · ${draftToConfirm.concept}`
+                    : (draftToConfirm.detected_merchant || draftToConfirm.concept || 'Gasto detectado');
+                setDescription(initialDesc);
+
+                setSubCategory(DEFAULT_EXPENSE_CATEGORY);
+
+                const expDate = draftToConfirm.detected_date ?? getTodayDateString();
+                setDate(expDate);
+                const expTime = draftToConfirm.detected_time
+                    ? (draftToConfirm.detected_time.includes('T') ? extractTimeFromISO(draftToConfirm.detected_time) : draftToConfirm.detected_time.slice(0, 5))
+                    : getCurrentTimeString();
+                setTime(expTime || '12:00');
+                setIsManualTime(Boolean(draftToConfirm.detected_time));
+                setShowTimeInput(Boolean(draftToConfirm.detected_time));
+
+                const initialGroupId = (draftToConfirm.group_id && userGroups.some(g => g.id === draftToConfirm.group_id))
+                    ? draftToConfirm.group_id
+                    : (defaultGroupId && userGroups.some(g => g.id === defaultGroupId)
+                        ? defaultGroupId
+                        : (userGroups[0]?.id ?? 'none'));
+                setGroupId(initialGroupId);
+
+                const groupMemberIds = (initialGroupId && initialGroupId !== 'none')
+                    ? members.filter(m => m.group_id === initialGroupId).map(m => m.user_id)
+                    : (currentProfile ? [currentProfile.id] : []);
+                setSelectedMembers(groupMemberIds.length > 0 ? groupMemberIds : (currentProfile ? [currentProfile.id] : []));
+                setPaidById(currentProfile?.id ?? (groupMemberIds[0] ?? ''));
+
+                setReceiptUrl('');
+                setNotes(draftToConfirm.raw_snippet || '');
+                setShowNoteInput(Boolean(draftToConfirm.raw_snippet));
+
+                if (hasItems && draftToConfirm.extracted_items) {
+                    setItems(draftToConfirm.extracted_items.map((it, idx) => ({
+                        id: idx + 1,
+                        desc: it.description,
+                        quantity: '1',
+                        amount: String(it.amount),
+                        amountType: 'total',
+                        assignedTo: groupMemberIds,
+                    })));
+                } else {
+                    setItems([{ id: 1, desc: '', quantity: '1', amount: '', amountType: 'each', assignedTo: [] }]);
+                }
+
+                setSplitType(hasItems ? 'itemized' : 'equal');
+                setSplits({});
+            } else if (expenseToEdit) {
                 const isItemized = Boolean(expenseToEdit.items && expenseToEdit.items.length > 0);
                 setMode(isItemized ? 'itemized' : 'quick');
                 setAmount(expenseToEdit.total_amount ? String(expenseToEdit.total_amount) : '');
@@ -362,7 +455,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 : (nextMembers[0] ?? '');
             setPaidById(nextPayer);
         }
-    }, [isOpen, expenseToEdit, defaultGroupId, userGroups, currentProfile, members, profiles]);
+    }, [isOpen, expenseToEdit, draftToConfirm, defaultGroupId, userGroups, currentProfile, members, profiles]);
 
     useEffect(() => () => {
         uploadControllerRef.current?.abort();
@@ -532,22 +625,30 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 category: subCategory,
                 expense_date: date,
                 expense_time: expenseTimeISO,
-                source: 'manual' as const,
+                source: draftToConfirm ? ('gmail' as const) : (expenseToEdit?.source ?? ('manual' as const)),
                 receipt_url: receiptUrl ? receiptUrl : undefined,
                 notes: combinedNotes,
                 split_config: splitConfig,
                 created_by: currentProfile?.id ?? paidById,
+                is_draft: false,
+                entity: draftToConfirm?.entity ?? expenseToEdit?.entity,
+                source_account: draftToConfirm?.source_account ?? expenseToEdit?.source_account,
+                gmail_message_id: draftToConfirm?.gmail_message_id ?? expenseToEdit?.gmail_message_id,
+                expense_type: draftToConfirm?.expense_type ?? expenseToEdit?.expense_type,
             };
 
             const finalItems = mode === 'itemized' ? items.map((i, idx) => ({
                 id: "tmp_" + idx,
-                expense_id: expenseToEdit?.id ?? '',
+                expense_id: (draftToConfirm?.id || expenseToEdit?.id) ?? '',
                 description: i.quantity && Number(i.quantity.replace(',', '.')) > 1 ? `${i.quantity} · ${i.desc.trim()}` : i.desc.trim(),
                 amount: getItemTotal(i),
                 created_at: new Date().toISOString()
             })) : [];
 
-            if (expenseToEdit) {
+            if (draftToConfirm) {
+                await updateExpense(draftToConfirm.id, payload, finalItems, normalizedSplits);
+                saveLocalSplitConfig(draftToConfirm.id, splitConfig);
+            } else if (expenseToEdit) {
                 await updateExpense(expenseToEdit.id, payload, finalItems, normalizedSplits);
                 saveLocalSplitConfig(expenseToEdit.id, splitConfig);
             } else {
@@ -788,8 +889,13 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                 <div
                     className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-100 shrink-0">
                     <div className="flex items-center space-x-2 sm:space-x-3">
+                        {draftToConfirm && (
+                            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+                                <MailCheck className="w-4 h-4 text-indigo-600" />
+                            </div>
+                        )}
                         <h2 id="new-expense-modal-title" className="text-base sm:text-lg font-bold text-zinc-900 tracking-tight">
-                            {expenseToEdit ? 'Editar gasto' : 'Nuevo gasto'}
+                            {draftToConfirm ? 'Confirmar gasto detectado' : expenseToEdit ? 'Editar gasto' : 'Nuevo gasto'}
                         </h2>
                         {!expenseToEdit && (
                             <div className="flex p-0.5 bg-zinc-100/90 rounded-xl shadow-inner ml-1 sm:ml-2">
@@ -800,7 +906,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                         setSplitType('equal');
                                         setStep(1);
                                     }}
-                                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${mode === 'quick'
+                                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${mode === 'quick'
                                         ? 'bg-white shadow-2xs text-zinc-900'
                                         : 'text-zinc-500 hover:text-zinc-900'
                                         }`}
@@ -814,7 +920,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                                         setSplitType('itemized');
                                         setStep(1);
                                     }}
-                                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${mode === 'itemized'
+                                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${mode === 'itemized'
                                         ? 'bg-white shadow-2xs text-zinc-900'
                                         : 'text-zinc-500 hover:text-zinc-900'
                                         }`}
@@ -828,7 +934,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                         type="button"
                         onClick={handleClose}
                         aria-label="Cerrar modal"
-                        className="p-2 -mr-1 rounded-full hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-colors"
+                        className="p-2 -mr-1 rounded-full hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -844,6 +950,64 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-3.5 sm:px-6 py-4 space-y-5 sm:space-y-6">
+
+                    {/* Banner de Comprobante Detectado por Correo */}
+                    {draftToConfirm && (
+                        <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5 shadow-2xs">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-white text-zinc-800 border border-indigo-200 shadow-2xs">
+                                        {formatEntity(draftToConfirm.entity, draftToConfirm.expense_type)}
+                                    </span>
+                                    {draftToConfirm.expense_type && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                                            {draftToConfirm.expense_type}
+                                        </span>
+                                    )}
+                                    {draftToConfirm.source_account && (
+                                        <span className="text-[11px] font-mono text-zinc-500">
+                                            *{draftToConfirm.source_account}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleDiscardDraft}
+                                    disabled={isDiscardingDraft || isSubmitting}
+                                    className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                                    title="Descartar este comprobante"
+                                >
+                                    {isDiscardingDraft ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>Descartar borrador</span>
+                                </button>
+                            </div>
+
+                            {Boolean(draftToConfirm.extracted_items && draftToConfirm.extracted_items.length > 0) && (
+                                <div className="text-xs text-indigo-800 font-medium flex items-center gap-1.5 bg-indigo-100/70 px-2.5 py-1.5 rounded-xl border border-indigo-200/60">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span>
+                                        Se cargaron automáticamente <strong>{draftToConfirm.extracted_items?.length} artículos</strong> en modo detallado.
+                                    </span>
+                                </div>
+                            )}
+
+                            {draftToConfirm.raw_snippet && (
+                                <div className="text-[11px] font-mono text-zinc-600 bg-white/90 p-2.5 rounded-xl border border-indigo-100/90 leading-relaxed">
+                                    <span className="block text-[10px] text-zinc-400 font-sans font-medium mb-0.5">
+                                        Texto original detectado:
+                                    </span>
+                                    <p className="line-clamp-2">
+                                        &quot;{draftToConfirm.raw_snippet}&quot;
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {step === 1 && (
                         <>
@@ -2032,7 +2196,7 @@ export function NewExpenseModal({ isOpen, onClose, defaultGroupId, expenseToEdit
                             >
                                 {(isSubmitting || isMutating) ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> :
                                     <CheckCircle2 className="w-5 h-5 mr-2" />}
-                                <span>{expenseToEdit ? 'Guardar Cambios' : 'Confirmar Gasto'}</span>
+                                <span>{draftToConfirm ? 'Confirmar y Guardar Gasto' : expenseToEdit ? 'Guardar Cambios' : 'Confirmar Gasto'}</span>
                             </button>
                         )}
                     </div>
