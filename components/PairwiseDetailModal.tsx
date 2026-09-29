@@ -82,16 +82,15 @@ export function PairwiseDetailModal({
     // Find creditor and debtor profiles
     const debtorProfile: Profile = useMemo(() => {
         if (!pairwise) {
-            return (
-                currentProfile || {
-                    id: '',
-                    full_name: 'Deudor',
-                    email: '',
-                    avatar_url: '',
-                    currency: currentProfile?.currency || '',
-                    created_at: new Date().toISOString(),
-                }
-            );
+            if (currentProfile) return currentProfile;
+            return {
+                id: '',
+                full_name: 'Deudor',
+                email: '',
+                avatar_url: '',
+                currency: '',
+                created_at: new Date().toISOString(),
+            };
         }
         return (
             profiles.find((p) => p.id === pairwise.debtor.id) || {
