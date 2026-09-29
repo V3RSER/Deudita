@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useExpense } from '@/lib/expense-context';
 import { Expense, ExpenseDraft, ExpenseSplitConfig } from '@/lib/types';
 import { getExpenseSplitConfig, saveLocalSplitConfig, serializeNotesWithConfig, } from '@/lib/split-config-utils';
-import { distributeAmountEqually, formatCurrency, normalizeSplitsToTotal } from '@/lib/balance-utils';
+import { distributeAmountEqually, formatCurrency, getCurrencySymbol, normalizeSplitsToTotal } from '@/lib/balance-utils';
 import { FormattedCurrencyInput } from '@/components/my-expenses/FormattedCurrencyInput';
 import {
     AlertCircle,
@@ -159,7 +159,7 @@ export function NewExpenseModal({
 
     // Computed
     const activeGroup = userGroups.find(g => g.id === groupId);
-    const currency = activeGroup?.currency ?? currentProfile?.currency ?? 'COP';
+    const currency = expenseToEdit?.currency ?? activeGroup?.currency ?? currentProfile?.currency ?? '';
 
     const activeProfiles = useMemo(() => {
         if (!groupId || groupId === 'none') {
@@ -1046,7 +1046,7 @@ export function NewExpenseModal({
                                             <div
                                                 className="flex items-center text-base sm:text-lg font-bold text-zinc-900 border-b border-dashed border-zinc-300 pb-1 focus-within:border-zinc-500 transition-colors">
                                                 <span
-                                                    className="mr-1">{currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}</span>
+                                                    className="mr-1">{getCurrencySymbol(currency)}</span>
                                                 <FormattedCurrencyInput
                                                     value={amount}
                                                     onChange={setAmount}
@@ -1412,7 +1412,7 @@ export function NewExpenseModal({
                                                             <div
                                                                 className="flex items-center bg-zinc-50 focus-within:bg-white border border-zinc-200 focus-within:border-emerald-500 rounded-xl p-1 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
                                                                 <span className="pl-1.5 text-zinc-400 font-bold text-xs shrink-0 select-none">
-                                                                    {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
+                                                                    {getCurrencySymbol(currency)}
                                                                 </span>
                                                                 <FormattedCurrencyInput
                                                                     value={item.amount}
@@ -1515,7 +1515,7 @@ export function NewExpenseModal({
                                                                 <div
                                                                     className="flex-1 flex items-center bg-zinc-50 focus-within:bg-white border border-zinc-200 focus-within:border-emerald-500 rounded-xl p-1 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
                                                                     <span className="pl-1.5 text-zinc-400 font-bold text-xs shrink-0 select-none">
-                                                                        {currency === 'COP' ? '$' : currency === 'EUR' ? '€' : '$'}
+                                                                        {getCurrencySymbol(currency)}
                                                                     </span>
                                                                     <FormattedCurrencyInput
                                                                         value={item.amount}

@@ -165,15 +165,17 @@ export async function GET(req: NextRequest) {
             const fullName = meta.full_name ?? meta.name ?? (user.email ? user.email.split('@')[0] : 'Usuario');
             const avatarUrl = meta.avatar_url ?? meta.picture ?? null;
 
-            const newProf = {
+            const newProf: Record<string, any> = {
                 id: user.id,
                 email: user.email ?? null,
                 full_name: fullName,
                 avatar_url: avatarUrl,
-                timezone: 'America/Bogota',
-                currency: 'COP',
-                currency_symbol: '$',
+                timezone: meta.timezone ?? null,
+                currency: meta.currency ?? null,
+                currency_symbol: meta.currency_symbol ?? null,
+                country: meta.country ?? null,
                 is_temp: false,
+                onboarding_completed: false,
             };
 
             await db.from('profiles').upsert(newProf);
@@ -429,7 +431,7 @@ export async function GET(req: NextRequest) {
                     detected_time: cleanTime,
                     confidence: 0.95,
                     status: 'pending',
-                    currency: exp.currency || 'COP',
+                    currency: exp.currency || profile?.currency || '',
                     entity: resolvedEntity,
                     entity_id: exp.entity && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(exp.entity) ? exp.entity : null,
                     source_account: exp.source_account,

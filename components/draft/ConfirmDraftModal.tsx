@@ -71,6 +71,15 @@ export function ConfirmDraftModal({
             .filter((profile): profile is NonNullable<typeof profile> => profile !== undefined);
     }, [membersByGroupId, profileById, selectedGroupId]);
 
+    const effectiveCurrency = useMemo(() => {
+        return (
+            draft?.currency ||
+            userGroups.find((g) => g.id === selectedGroupId)?.currency ||
+            currentProfile?.currency ||
+            ''
+        );
+    }, [draft?.currency, selectedGroupId, userGroups, currentProfile?.currency]);
+
     useEffect(() => {
         if (!isOpen || !draft) {
             return;
@@ -267,10 +276,10 @@ export function ConfirmDraftModal({
                                 )}
                             </div>
                             <span className="text-xs font-extrabold text-indigo-700">
-                                {draft.currency || 'COP'}{' '}
+                                {effectiveCurrency ? `${effectiveCurrency} ` : ''}
                                 {formatCurrency(
                                     draft.detected_amount,
-                                    draft.currency || 'COP',
+                                    effectiveCurrency,
                                 )}
                             </span>
                         </div>
@@ -291,7 +300,7 @@ export function ConfirmDraftModal({
                                         <div key={idx} className="flex justify-between items-center text-[11px] text-zinc-700">
                                             <span className="truncate pr-2">{item.description}</span>
                                             <span className="font-mono font-semibold shrink-0">
-                                                {formatCurrency(item.amount, draft.currency || 'COP')}
+                                                {formatCurrency(item.amount, effectiveCurrency)}
                                             </span>
                                         </div>
                                     ))}
@@ -323,7 +332,7 @@ export function ConfirmDraftModal({
                                 htmlFor="confirm-draft-amount"
                                 className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider"
                             >
-                                Monto ({draft.currency || 'COP'})
+                                Monto {effectiveCurrency ? `(${effectiveCurrency})` : ''}
                             </label>
                             <input
                                 id="confirm-draft-amount"
@@ -417,7 +426,7 @@ export function ConfirmDraftModal({
                                 selectedGroupMemberProfiles.length > 0
                                     ? amount / selectedGroupMemberProfiles.length
                                     : 0,
-                                draft.currency || 'COP',
+                                effectiveCurrency,
                             )}{' '}
                             c/u
                         </span>

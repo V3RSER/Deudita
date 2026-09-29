@@ -88,7 +88,7 @@ export function PairwiseDetailModal({
                     full_name: 'Deudor',
                     email: '',
                     avatar_url: '',
-                    currency: 'COP',
+                    currency: currentProfile?.currency || '',
                     created_at: new Date().toISOString(),
                 }
             );
@@ -99,7 +99,7 @@ export function PairwiseDetailModal({
                 full_name: pairwise.debtor.full_name || 'Deudor',
                 email: pairwise.debtor.email || '',
                 avatar_url: pairwise.debtor.avatar_url || '',
-                currency: 'COP',
+                currency: currentProfile?.currency || '',
                 created_at: new Date().toISOString(),
             }
         );
@@ -112,7 +112,7 @@ export function PairwiseDetailModal({
                 full_name: 'Acreedor',
                 email: '',
                 avatar_url: '',
-                currency: 'COP',
+                currency: currentProfile?.currency || '',
                 created_at: new Date().toISOString(),
             };
         }
@@ -122,11 +122,11 @@ export function PairwiseDetailModal({
                 full_name: pairwise.creditor.full_name || 'Acreedor',
                 email: pairwise.creditor.email || '',
                 avatar_url: pairwise.creditor.avatar_url || '',
-                currency: 'COP',
+                currency: currentProfile?.currency || '',
                 created_at: new Date().toISOString(),
             }
         );
-    }, [pairwise, profiles]);
+    }, [pairwise, profiles, currentProfile]);
 
     // Calculate pairwise debt detail specifically between debtor and creditor
     const detail = useMemo(() => {
@@ -146,10 +146,10 @@ export function PairwiseDetailModal({
     if (!isOpen || !pairwise || !detail) return null;
 
     const currency = groupId
-        ? groups.find((g) => g.id === groupId)?.currency || 'COP'
+        ? groups.find((g) => g.id === groupId)?.currency || pairwise.currency || currentProfile?.currency || ''
         : pairwise.group_id
-            ? groups.find((g) => g.id === pairwise.group_id)?.currency || 'COP'
-            : currentProfile?.currency || 'COP';
+            ? groups.find((g) => g.id === pairwise.group_id)?.currency || pairwise.currency || currentProfile?.currency || ''
+            : pairwise.currency || currentProfile?.currency || '';
 
     const isDebtor =
         pairwise.debtor.id === currentProfile?.id ||

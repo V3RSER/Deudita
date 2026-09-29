@@ -325,7 +325,7 @@ export function GenericExpenseList({
                                 const updatedBy = exp.updated_by ? profilesById.get(exp.updated_by) : null;
                                 const catConfig = getCategoryConfig(exp.category);
                                 const CategoryIcon = catConfig.icon;
-                                const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
+                                const currency = exp.currency || groupCurrency || groupObj?.currency || currentProfile?.currency || '';
 
                                 const managedIds = isSimplified
                                     ? (currentProfile?.managed_user_ids || []).filter((id) => id !== currentProfile?.id)
@@ -849,7 +849,7 @@ export function GenericExpenseList({
                             const payer = profilesById.get(payment.paid_by);
                             const receiver = profilesById.get(payment.paid_to);
                             const groupObj = groupsById.get(payment.group_id);
-                            const currency = groupCurrency || groupObj?.currency || currentProfile?.currency || 'COP';
+                            const currency = payment.currency || groupCurrency || groupObj?.currency || currentProfile?.currency || '';
 
                             const isIpaid = payment.paid_by === currentProfile?.id;
                             const isIreceived = payment.paid_to === currentProfile?.id;

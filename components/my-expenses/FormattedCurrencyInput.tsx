@@ -20,7 +20,7 @@ interface FormattedCurrencyInputProps {
 export function FormattedCurrencyInput({
     value,
     onChange,
-    currency = 'COP',
+    currency = '',
     placeholder = '0',
     className = '',
     required = false,
@@ -36,10 +36,9 @@ export function FormattedCurrencyInput({
 
     const formattedDisplay =
         value !== '' && value !== undefined && value !== null && !isNaN(numVal) && numVal >= 0
-            ? (hideSymbol ? new Intl.NumberFormat('es-CO', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2
-            }).format(numVal) : formatCurrency(numVal, currency))
+            ? (hideSymbol
+                ? formatCurrency(numVal, currency).replace(/^[^\d\s]+/, '').replace(/[^\d\s]+$/, '').trim()
+                : formatCurrency(numVal, currency))
             : '';
 
     const displayValue = isFocused

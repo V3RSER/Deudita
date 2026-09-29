@@ -11,7 +11,7 @@ import {
 
 function normalizeCurrencyCode(currency?: string | null): string {
     const normalized = currency?.trim().toUpperCase();
-    return normalized || 'COP';
+    return normalized || '';
 }
 
 function buildExpenseCurrencyByGroup(expenses: Expense[]): Map<string, string> {
@@ -19,6 +19,7 @@ function buildExpenseCurrencyByGroup(expenses: Expense[]): Map<string, string> {
     expenses.forEach((expense) => {
         if (!expense.group_id || !expense.currency) return;
         const currency = normalizeCurrencyCode(expense.currency);
+        if (!currency) return;
         const existing = byGroup.get(expense.group_id);
         if (!existing) {
             byGroup.set(expense.group_id, currency);
@@ -36,21 +37,22 @@ function getRecordCurrency(record: Expense | Payment, expenseCurrencyByGroup?: M
         const inferred = expenseCurrencyByGroup.get(record.group_id);
         if (inferred && inferred !== 'MIXED') return inferred;
     }
-    return 'COP';
+    return '';
 }
 
 function getDistinctCurrencies(expenses: Expense[], payments: Payment[]): string[] {
     const expenseCurrencyByGroup = buildExpenseCurrencyByGroup(expenses);
-    return Array.from(new Set([
+    const distinct = new Set([
         ...expenses.map((expense) => getRecordCurrency(expense, expenseCurrencyByGroup)),
         ...payments.map((payment) => getRecordCurrency(payment, expenseCurrencyByGroup)),
-    ]));
+    ]);
+    distinct.delete('');
+    return Array.from(distinct);
 }
 
-export function formatCurrency(amount: number, currencyCode?: string): string {
-    const num = Number.isFinite(amount) ? amount : 0;
-    const code = normalizeCurrencyCode(currencyCode);
-
+export function getCurrencySymbol(currencyCode?: string): string {
+    const code = currencyCode?.trim().toUpperCase();
+    if (!code) return '$';
     const currencySymbols: Record<string, string> = {
         COP: '$',
         MXN: '$',
@@ -59,22 +61,68 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
         USD: '$',
         EUR: '€',
         PEN: 'S/',
+        GBP: '£',
+        BRL: 'R$',
+        CAD: 'CA$',
+        AUD: 'AU$',
+        JPY: '¥',
+        CHF: 'CHF',
+        UYU: '$',
+        PYG: 'Gs',
+        BOB: 'Bs',
+        CRC: '₡',
+        DOP: 'RD$',
+        GTQ: 'Q',
     };
+    return currencySymbols[code] ?? '$';
+}
 
-    const symbol = currencySymbols[code] ?? '$';
+export function formatCurrency(amount: number, currencyCode?: string): string {
+    const num = Number.isFinite(amount) ? amount : 0;
+    const code = normalizeCurrencyCode(currencyCode);
+    const symbol = getCurrencySymbol(code);
 
     // Check if amount has non-zero fractional part
     const hasDecimals = Math.abs(num % 1) > 0.001;
 
     let formattedNumber = '';
-    if (code === 'USD' || code === 'EUR') {
+    if (code === 'USD') {
         formattedNumber = new Intl.NumberFormat('en-US', {
             minimumFractionDigits: hasDecimals ? 2 : 0,
             maximumFractionDigits: 2,
         }).format(num);
-    } else {
-        // COP, MXN, CLP, ARS, PEN: dots for thousands, comma for decimals
+    } else if (code === 'EUR') {
+        formattedNumber = new Intl.NumberFormat('de-DE', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else if (code === 'MXN') {
+        formattedNumber = new Intl.NumberFormat('es-MX', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else if (code === 'CLP') {
+        formattedNumber = new Intl.NumberFormat('es-CL', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else if (code === 'ARS') {
+        formattedNumber = new Intl.NumberFormat('es-AR', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else if (code === 'PEN') {
+        formattedNumber = new Intl.NumberFormat('es-PE', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else if (code === 'COP') {
         formattedNumber = new Intl.NumberFormat('es-CO', {
+            minimumFractionDigits: hasDecimals ? 2 : 0,
+            maximumFractionDigits: 2,
+        }).format(num);
+    } else {
+        formattedNumber = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: hasDecimals ? 2 : 0,
             maximumFractionDigits: 2,
         }).format(num);
@@ -174,7 +222,7 @@ export function calculateManagedSummary(
         );
     }
 
-    const currency = currencies[0] ?? 'COP';
+    const currency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
 
@@ -363,7 +411,8 @@ export function calculateDirectBalances(
         }
         const filteredExpenses = expenses;
         const filteredPayments = payments;
-        return calculateDirectBalancesForScope(filteredExpenses, filteredPayments, profiles, undefined, currencies[0] ?? 'COP');
+        const defaultCurrency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
+        return calculateDirectBalancesForScope(filteredExpenses, filteredPayments, profiles, undefined, defaultCurrency);
     }
     const groupExpenses = expenses.filter((e) => e.group_id === groupId);
     const groupPayments = payments.filter((p) => p.group_id === groupId);
@@ -380,7 +429,8 @@ export function calculateDirectBalances(
             )
         );
     }
-    return calculateDirectBalancesForScope(groupExpenses, groupPayments, profiles, groupId, currencies[0] ?? 'COP');
+    const defaultCurrency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
+    return calculateDirectBalancesForScope(groupExpenses, groupPayments, profiles, groupId, defaultCurrency);
 }
 
 function calculateDirectBalancesForScope(
@@ -388,7 +438,7 @@ function calculateDirectBalancesForScope(
     filteredPayments: Payment[],
     profiles: Profile[],
     groupId?: string,
-    currency = 'COP'
+    currency = ''
 ): PairwiseBalance[] {
 
     const profileMap = new Map<string, Profile>();
@@ -674,7 +724,7 @@ export function calculateSimplifiedBalances(
                 ).map((balance) => ({ ...balance, currency }))
             ).sort((a, b) => b.amount - a.amount);
         }
-        const currency = currencies[0] ?? 'COP';
+        const currency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
         return simplifySingleScopeBalances(filteredExpenses, filteredPayments, profiles, groupId)
             .map((balance) => ({ ...balance, currency }))
             .sort((a, b) => b.amount - a.amount);
@@ -705,7 +755,7 @@ export function calculateSimplifiedBalances(
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
 
-    const consolidatedCurrency = currencies[0] ?? 'COP';
+    const consolidatedCurrency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
     const combinedDebtMap = new Map<string, number>();
     const debtorBreakdownMap = new Map<string, ManagedContribution[]>();
     const creditorBreakdownMap = new Map<string, ManagedContribution[]>();
@@ -829,7 +879,7 @@ export function calculateUserSummaries(
             ).map((summary) => ({ ...summary, currency }))
         );
     }
-    const currency = currencies[0] ?? 'COP';
+    const currency = currencies[0] ?? (profiles.find(p => p.currency)?.currency || '');
 
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
@@ -1093,7 +1143,7 @@ export function calculatePairwiseDebtDetail(
     if (currencies.length > 1) {
         throw new Error('No se puede calcular un detalle de deuda con monedas mezcladas. Selecciona un alcance con una sola moneda.');
     }
-    const calculationCurrency = currencies[0] ?? 'COP';
+    const calculationCurrency = currencies[0] ?? groups.find(g => g.id === groupId)?.currency ?? (debtor.currency || creditor.currency || '');
 
     const profileMap = new Map<string, Profile>();
     profiles.forEach((p) => profileMap.set(p.id, p));
@@ -2271,7 +2321,7 @@ export function calculateMemberAccountStatement(
                     participantProfile: profileMap.get(memberId),
                     payerProfile: profileMap.get(peerId),
                     groupName: g?.name,
-                    currency: g?.currency || 'COP',
+                    currency: item.expense.currency || g?.currency || profileMap.get(memberId)?.currency || '',
                 };
 
                 if (isFullyPaid) {
@@ -2344,7 +2394,7 @@ export function calculateMemberAccountStatement(
                     participantProfile: profileMap.get(memberId),
                     payerProfile: profileMap.get(peerId),
                     groupName: g?.name,
-                    currency: g?.currency || 'COP',
+                    currency: item.expense.currency || g?.currency || profileMap.get(memberId)?.currency || '',
                 });
                 settledExpensesMap.set(item.expense.id, item.expense);
                 settledDebtWithPeer += item.amount;
@@ -2364,7 +2414,7 @@ export function calculateMemberAccountStatement(
                     participantProfile: profileMap.get(memberId),
                     payerProfile: profileMap.get(peerId),
                     groupName: g?.name,
-                    currency: g?.currency || 'COP',
+                    currency: item.expense.currency || g?.currency || profileMap.get(memberId)?.currency || '',
                 });
                 settledExpensesMap.set(item.expense.id, item.expense);
                 settledDebtWithPeer += item.amount;

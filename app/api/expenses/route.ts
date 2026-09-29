@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
         }
 
         const expenseType = rawExpense.expense_type || rawExpense.expenseType || body.expense_type || body.expenseType || null;
-        const currency = rawExpense.currency || body.currency || 'COP';
+        let currency = rawExpense.currency || body.currency || null;
         const receiptUrl = rawExpense.receipt_url || body.receipt_url || null;
         const category = rawExpense.category || body.category || null;
         const notes = rawExpense.notes || body.notes || null;
@@ -280,6 +280,25 @@ export async function POST(req: NextRequest) {
         let rawGroupId = rawExpense.group_id !== undefined ? rawExpense.group_id : (body.group_id !== undefined ? body.group_id : null);
         if (rawGroupId === 'none' || rawGroupId === '') rawGroupId = null;
 
+        if (!currency) {
+            if (rawGroupId) {
+                const { data: grp } = await clientSupabase
+                    .from('groups')
+                    .select('currency')
+                    .eq('id', rawGroupId)
+                    .maybeSingle();
+                if (grp?.currency) currency = grp.currency;
+            }
+            if (!currency) {
+                const { data: prof } = await clientSupabase
+                    .from('profiles')
+                    .select('currency')
+                    .eq('id', targetUserId)
+                    .maybeSingle();
+                if (prof?.currency) currency = prof.currency;
+            }
+        }
+
         // Modo borrador:
         // Si viene de script o no tiene grupo o se solicita explícitamente is_draft
         const isDraft = typeof rawExpense.is_draft === 'boolean'
@@ -292,7 +311,7 @@ export async function POST(req: NextRequest) {
         const paidBy = rawExpense.paid_by || body.paid_by || targetUserId;
         const createdBy = targetUserId;
         const receivedAt = body.received_at || body.receivedAt || new Date().toISOString();
-        const rawSnippet = body.raw_snippet || rawExpense.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency} ${parsedAmount}`;
+        const rawSnippet = body.raw_snippet || rawExpense.raw_snippet || `${entity || 'Notificación'}: ${description} por ${currency ? `${currency} ` : ''}${parsedAmount}`;
 
         // Si es una llamada desde el webhook (Google Apps Script), usar la función Postgres con SECURITY DEFINER.
         // Las peticiones de webhook no tienen sesión activa (auth.uid() = null), por lo que una inserción
@@ -431,7 +450,7 @@ export async function POST(req: NextRequest) {
             if (!personalGroup) {
                 const { data: createdGroup } = await clientSupabase
                     .from('groups')
-                    .insert({ name: 'Gastos Personales', owner_id: targetUserId, currency: currency || 'COP' })
+                    .insert({ name: 'Gastos Personales', owner_id: targetUserId, currency: currency })
                     .select('id')
                     .single();
 

@@ -116,7 +116,7 @@ export async function notifyExpenseCreated(
         description,
         totalAmount,
         groupId,
-        currency = 'COP',
+        currency = '',
         splits = [],
     }: {
         creatorId: string;
@@ -264,7 +264,7 @@ export interface ExpenseChangeSummary {
 export function calculateExpenseChangeDetails({
     previousExpense,
     newExpense,
-    currency = 'COP',
+    currency = '',
     nameMap = new Map(),
 }: {
     previousExpense: {
@@ -463,7 +463,7 @@ export async function notifyExpenseUpdated(
         description,
         totalAmount,
         groupId,
-        currency = 'COP',
+        currency = '',
         newSplits = [],
         previousSplits = [],
         removedUserIds = [],
@@ -938,7 +938,7 @@ export async function notifyPaymentCreated(
         receiverId,
         amount,
         groupId,
-        currency = 'COP',
+        currency = '',
         note,
     }: {
         paymentId: string;
@@ -1058,7 +1058,7 @@ export async function notifyPaymentDeleted(
         receiverId,
         amount,
         groupId,
-        currency = 'COP',
+        currency = '',
     }: {
         deleterId: string;
         payerId: string;

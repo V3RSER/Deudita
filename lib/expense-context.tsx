@@ -1206,7 +1206,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                     expense: {
                         description: draft.concept || draft.detected_merchant || 'Borrador',
                         total_amount: draft.detected_amount,
-                        currency: draft.currency || 'COP',
+                        currency: draft.currency || currentProfile?.currency || '',
                         group_id: null,
                         is_draft: true,
                         source: 'manual',
@@ -1243,7 +1243,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
                 detected_time: createdExp.expense_time,
                 confidence: 0.95,
                 status: 'pending',
-                currency: createdExp.currency || 'COP',
+                currency: createdExp.currency || draft.currency || currentProfile?.currency || '',
                 entity: createdExp.entity,
                 source_account: createdExp.source_account,
                 concept: createdExp.description,

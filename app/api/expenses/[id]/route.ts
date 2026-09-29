@@ -284,7 +284,21 @@ export async function PUT(
                 });
             }
 
-            const effectiveCurrency = expense.currency ?? previousExpense.currency ?? 'COP';
+            let effectiveCurrency = expense.currency ?? previousExpense.currency;
+            if (!effectiveCurrency) {
+                const grpId = expense.group_id ?? previousExpense.group_id;
+                if (grpId) {
+                    const { data: grp } = await supabase.from('groups').select('currency').eq('id', grpId).maybeSingle();
+                    if (grp?.currency) effectiveCurrency = grp.currency;
+                }
+            }
+            if (!effectiveCurrency) {
+                const payerId = expense.paid_by ?? previousExpense.paid_by;
+                if (payerId) {
+                    const { data: prof } = await supabase.from('profiles').select('currency').eq('id', payerId).maybeSingle();
+                    if (prof?.currency) effectiveCurrency = prof.currency;
+                }
+            }
 
             const changeDetails = calculateExpenseChangeDetails({
                 previousExpense: {

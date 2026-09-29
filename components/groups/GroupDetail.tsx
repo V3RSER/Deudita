@@ -192,7 +192,7 @@ export function GroupDetail({
 
     const mySummary = groupUserSummaries.find((s) => s.user.id === currentProfile?.id);
     const myNetBalance = mySummary ? mySummary.netBalance : 0;
-    const effectiveCurrency = group.currency ?? currentProfile?.currency ?? 'COP';
+    const effectiveCurrency = group.currency ?? currentProfile?.currency ?? '';
 
     // Filtered transactions
     const normalizedSearchTerm = filters.searchTerm.trim().toLowerCase();

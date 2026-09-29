@@ -151,7 +151,7 @@ export function SettleDebtModal({
     const isEditing = Boolean(paymentToEdit);
     const isLockedToGroup = Boolean(defaultGroupId && defaultGroupId.trim().length > 0) || isEditing;
     const targetGroup = userGroups.find((g) => g.id === groupId);
-    const currency = targetGroup?.currency || currentProfile?.currency || 'COP';
+    const currency = paymentToEdit?.currency || targetGroup?.currency || currentProfile?.currency || '';
 
     // Compute breakdown of group debts between payer and receiver
     const getGroupDebtBreakdown = () => {
@@ -230,7 +230,7 @@ export function SettleDebtModal({
             const alloc = Math.min(remaining, item.debt > 0 ? item.debt : remaining);
             distribution.push({
                 groupName: item.group.name,
-                currency: item.group.currency || 'COP',
+                currency: item.group.currency || currentProfile?.currency || '',
                 allocated: alloc,
                 totalDebt: item.debt,
             });
@@ -243,7 +243,7 @@ export function SettleDebtModal({
             const fallbackGroup = targetGroup || userGroups[0];
             distribution.push({
                 groupName: fallbackGroup.name,
-                currency: fallbackGroup.currency || 'COP',
+                currency: fallbackGroup.currency || currentProfile?.currency || '',
                 allocated: remaining,
                 totalDebt: 0,
             });

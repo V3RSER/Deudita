@@ -80,7 +80,7 @@ function formatDraftDateTime(dateStr?: string | null, timeStr?: string | null): 
 export function UnifiedDraftsAndTemplatesView({
     onOpenConfirmDraft,
 }: UnifiedDraftsAndTemplatesViewProps) {
-    const { drafts, expenses, userGroups, discardDraft } = useExpense();
+    const { drafts, expenses, userGroups, discardDraft, currentProfile } = useExpense();
 
     // Drafts filtering & search
     const [statusFilter, setStatusFilter] = useState<'pending' | 'confirmed' | 'all'>('pending');
@@ -429,7 +429,7 @@ export function UnifiedDraftsAndTemplatesView({
 
                                             <div className="text-right shrink-0">
                                                 <span className="text-base font-extrabold text-zinc-900 block">
-                                                    {formatCurrency(draft.detected_amount, draft.currency || 'COP')}
+                                                    {formatCurrency(draft.detected_amount, draft.currency || currentProfile?.currency || '')}
                                                 </span>
                                                 <span className="text-[10px] text-zinc-400 font-mono">
                                                     {formatDraftDateTime(draft.detected_date, draft.detected_time)}
@@ -539,7 +539,7 @@ export function UnifiedDraftsAndTemplatesView({
 
                                             <div className="text-right shrink-0">
                                                 <span className="text-base font-extrabold text-zinc-900 block">
-                                                    {formatCurrency(exp.total_amount, exp.currency || 'COP')}
+                                                    {formatCurrency(exp.total_amount, exp.currency || currentProfile?.currency || '')}
                                                 </span>
                                                 <span className="text-[10px] text-zinc-400 font-mono">
                                                     {formatDraftDateTime(exp.expense_date, exp.expense_time)}

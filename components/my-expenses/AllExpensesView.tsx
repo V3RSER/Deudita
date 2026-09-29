@@ -204,7 +204,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
     );
 
     const currencyForExpense = useCallback((expense: Expense): string => {
-        return groupsById.get(expense.group_id ?? '')?.currency ?? currentProfile?.currency ?? 'COP';
+        return expense.currency || groupsById.get(expense.group_id ?? '')?.currency || currentProfile?.currency || '';
     }, [groupsById, currentProfile?.currency]);
 
     const filteredCurrencyTotals = useMemo(() => {
@@ -315,7 +315,7 @@ export function AllExpensesView(props: AllExpensesViewProps) {
                                     <YAxis tick={{ fontSize: 10, fill: '#71717a' }} />
                                     <Tooltip
                                         formatter={(val) =>
-                                            formatCurrency(Number(val) || 0, summaryCurrency || currentProfile?.currency || 'COP')
+                                            formatCurrency(Number(val) || 0, summaryCurrency || currentProfile?.currency || '')
                                         }
                                         contentStyle={{
                                             backgroundColor: '#18181b',

@@ -20,12 +20,12 @@ interface EditGroupModalProps {
 }
 
 export function EditGroupModal({ isOpen, group, onClose }: EditGroupModalProps) {
-    const { updateGroup, isMutating } = useExpense();
+    const { updateGroup, isMutating, currentProfile } = useExpense();
 
     const [name, setName] = useState(group.name);
     const [category, setCategory] = useState<GroupCategory>(group.category ?? 'home');
     const [description, setDescription] = useState(getCleanGroupDescription(group.description));
-    const [selectedCurrency, setSelectedCurrency] = useState<string>(group.currency ?? 'COP');
+    const [selectedCurrency, setSelectedCurrency] = useState<string>(group.currency || currentProfile?.currency || '');
     const [groupImageUrl, setGroupImageUrl] = useState<string>(getGroupImage(group) ?? '');
     const [isUploading, setIsUploading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,7 +41,7 @@ export function EditGroupModal({ isOpen, group, onClose }: EditGroupModalProps) 
             setName(group.name);
             setCategory(group.category ?? 'home');
             setDescription(getCleanGroupDescription(group.description));
-            setSelectedCurrency(group.currency ?? 'COP');
+            setSelectedCurrency(group.currency || currentProfile?.currency || '');
             setGroupImageUrl(getGroupImage(group) ?? '');
             setErrorMessage(null);
             setIsSubmitting(false);

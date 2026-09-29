@@ -20,7 +20,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
 
     const [name, setName] = useState('');
     const [category, setCategory] = useState<GroupCategory>('friends');
-    const [selectedCurrency, setSelectedCurrency] = useState<string>(currentProfile?.currency || 'COP');
+    const [selectedCurrency, setSelectedCurrency] = useState<string>(currentProfile?.currency || '');
     const [groupImageUrl, setGroupImageUrl] = useState<string>('');
     const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
     const [newFriendName, setNewFriendName] = useState('');
@@ -44,7 +44,7 @@ export function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
             prevIsOpenRef.current = true;
             setName('');
             setCategory('friends');
-            setSelectedCurrency(currentProfile?.currency || 'COP');
+            setSelectedCurrency(currentProfile?.currency || '');
             setGroupImageUrl('');
             setSelectedMemberIds([]);
             setNewFriendName('');

@@ -112,10 +112,16 @@ export function ProfileSettingsModal({
     const router = useRouter();
     const { currentProfile, updateProfile } = useExpense();
 
+    const detectedTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : '';
+    const detectedCountryFromTz = COUNTRIES.find((c) => c.defaultTimezone === (currentProfile?.timezone || detectedTz))?.code || '';
+    const initialCountry = currentProfile?.country || detectedCountryFromTz;
+    const initialTz = currentProfile?.timezone || detectedTz;
+    const initialCurr = currentProfile?.currency || (COUNTRIES.find((c) => c.code === initialCountry)?.defaultCurrency || '');
+
     const [fullName, setFullName] = useState(currentProfile?.full_name ?? '');
-    const [country, setCountry] = useState(currentProfile?.country ?? 'CO');
-    const [timezone, setTimezone] = useState(currentProfile?.timezone ?? 'America/Bogota');
-    const [selectedCurrency, setSelectedCurrency] = useState(currentProfile?.currency ?? 'COP');
+    const [country, setCountry] = useState(initialCountry);
+    const [timezone, setTimezone] = useState(initialTz);
+    const [selectedCurrency, setSelectedCurrency] = useState(initialCurr);
     const [paymentInstructions, setPaymentInstructions] = useState(currentProfile?.payment_instructions ?? '');
     const [avatarUrl, setAvatarUrl] = useState(currentProfile?.avatar_url ?? '');
 
@@ -163,10 +169,12 @@ export function ProfileSettingsModal({
         if (!prevIsOpenRef.current) {
             prevIsOpenRef.current = true;
             setFullName(currentProfile.full_name ?? '');
-            const userCountry = currentProfile.country ?? 'CO';
+            const detectedTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : '';
+            const detectedCountryFromTz = COUNTRIES.find((c) => c.defaultTimezone === (currentProfile.timezone || detectedTz))?.code || '';
+            const userCountry = currentProfile.country || detectedCountryFromTz;
             setCountry(userCountry);
-            setTimezone(currentProfile.timezone ?? 'America/Bogota');
-            setSelectedCurrency(currentProfile.currency ?? 'COP');
+            setTimezone(currentProfile.timezone || detectedTz);
+            setSelectedCurrency(currentProfile.currency || (COUNTRIES.find((c) => c.code === userCountry)?.defaultCurrency || ''));
             setPaymentInstructions(currentProfile.payment_instructions ?? '');
             setAvatarUrl(currentProfile.avatar_url ?? '');
             setErrorMessage(null);
