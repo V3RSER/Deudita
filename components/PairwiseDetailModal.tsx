@@ -1536,9 +1536,9 @@ export function PairwiseDetailModal({
                                                 Saldo neto a liquidar
                                             </div>
                                             <div className="text-[11px] text-zinc-500 font-medium">
-                                                {isUserDebtor
+                                                {isDebtor
                                                     ? `Monto que debes pagar a ${creditorName}`
-                                                    : isUserCreditor
+                                                    : isCreditor
                                                     ? `Monto que ${debtorName} te debe pagar`
                                                     : `Monto que ${debtorName} paga a ${creditorName}`}
                                             </div>
@@ -1547,9 +1547,9 @@ export function PairwiseDetailModal({
                                     <span
                                         className={`text-xl sm:text-2xl font-display font-black tracking-tight tabular-nums shrink-0 ${finalSettlementAmount <= 0
                                             ? 'text-zinc-900'
-                                            : isUserCreditor
+                                            : isCreditor
                                             ? 'text-emerald-600'
-                                            : isUserDebtor
+                                            : isDebtor
                                             ? 'text-rose-600'
                                             : 'text-zinc-950'
                                         }`}>
