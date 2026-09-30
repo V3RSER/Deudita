@@ -360,7 +360,7 @@ export function PairwiseDetailModal({
                                                                 {item.expense.description || 'Gasto registrado'}
                                                             </span>
                                                             <span className="text-[11px] text-zinc-400 block mt-0.5">
-                                                                {formatExpenseDate(item.expense.date || item.expense.created_at)}
+                                                                {formatExpenseDate(item.expense.expense_date || item.expense.created_at)}
                                                             </span>
                                                         </div>
                                                         <span className="font-bold text-zinc-900 shrink-0">
@@ -432,7 +432,7 @@ export function PairwiseDetailModal({
                                                                 {r.expense.description || 'Gasto compensado'}
                                                             </span>
                                                             <span className="text-[11px] text-zinc-400 block mt-0.5">
-                                                                {formatExpenseDate(r.expense.date || r.expense.created_at)}
+                                                                {formatExpenseDate(r.expense.expense_date || r.expense.created_at)}
                                                             </span>
                                                         </div>
                                                         <span className="font-bold text-zinc-900 shrink-0">
@@ -448,7 +448,7 @@ export function PairwiseDetailModal({
                                                     >
                                                         <div className="min-w-0 flex-1">
                                                             <span className="font-semibold text-zinc-900 block truncate">
-                                                                {p.payment.notes || 'Pago directo registrado'}
+                                                                {p.payment.note || 'Pago directo registrado'}
                                                             </span>
                                                             <span className="text-[11px] text-zinc-400 block mt-0.5">
                                                                 {formatExpenseDate(p.payment.payment_date || p.payment.created_at)}
@@ -572,11 +572,11 @@ export function PairwiseDetailModal({
                                                                                         {exp.description}
                                                                                     </span>
                                                                                     <span className="text-zinc-400 block mt-0.5">
-                                                                                        {formatExpenseDate(exp.date || exp.created_at)}
+                                                                                        {formatExpenseDate(exp.expense_date || exp.created_at)}
                                                                                     </span>
                                                                                 </div>
                                                                                 <span className="font-semibold text-zinc-800 shrink-0">
-                                                                                    {formatCurrency(exp.amount, currency)}
+                                                                                    {formatCurrency(exp.total_amount, currency)}
                                                                                 </span>
                                                                             </div>
                                                                         ))}
