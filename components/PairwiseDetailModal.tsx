@@ -350,48 +350,223 @@ export function PairwiseDetailModal({
 
                 {/* 2. SCROLLABLE BODY */}
                 <div className="p-3 sm:p-4 space-y-3 overflow-y-auto">
-                    {/* SECCIÓN 1: CONSUMOS QUE DEBE */}
+                    {/* Empty state when everything is 0 */}
+                    {pendingConsumedExpenses.length === 0 &&
+                        activeReverseExpenses.length === 0 &&
+                        activeDirectPayments.length === 0 &&
+                        !hasCompensations && (
+                            <div className="p-6 text-center bg-white rounded-xl border border-zinc-200 shadow-2xs space-y-2">
+                                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                                    <Check className="w-5 h-5" />
+                                </div>
+                                <p className="text-sm font-bold text-zinc-900">Cuentas al día</p>
+                                <p className="text-xs text-zinc-500">No hay movimientos ni saldos pendientes entre ambos integrantes.</p>
+                            </div>
+                        )}
+
+                    {/* SECCIÓN 1 (AL INICIO): RESUMEN Y CÁLCULO MATEMÁTICO */}
                     <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
                         <button
                             type="button"
                             onClick={() =>
-                                setExpandedSections((prev) => ({ ...prev, debts: !prev.debts }))
+                                setExpandedSections((prev) => ({ ...prev, calculation: !prev.calculation }))
                             }
                             className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50 transition-colors cursor-pointer text-left"
                         >
                             <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
-                                    <Receipt className="w-3.5 h-3.5" />
+                                <div className="w-7 h-7 rounded-lg bg-zinc-100 text-zinc-700 border border-zinc-200 flex items-center justify-center shrink-0">
+                                    <Calculator className="w-3.5 h-3.5" />
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                        Gastos que debe ({pendingConsumedExpenses.length})
+                                        Resumen de liquidación
                                     </h3>
                                     <p className="text-[11px] text-zinc-500 truncate">
-                                        Pagados por {creditorName}
+                                        Desglose paso a paso
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs sm:text-sm font-bold text-rose-600">
-                                    +{formatCurrency(totalDirectConsumption, currency)}
-                                </span>
-                                {expandedSections.debts ? (
-                                    <ChevronUp className="w-4 h-4 text-zinc-400" />
-                                ) : (
-                                    <ChevronDown className="w-4 h-4 text-zinc-400" />
-                                )}
-                            </div>
+                            {expandedSections.calculation ? (
+                                <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
+                            ) : (
+                                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                            )}
                         </button>
 
-                        {expandedSections.debts && (
-                            <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/30">
-                                {pendingConsumedExpenses.length === 0 ? (
-                                    <div className="py-4 text-center text-xs text-zinc-500">
-                                        No hay consumos directos pendientes.
+                        {expandedSections.calculation && (
+                            <div className="border-t border-zinc-100 p-3 sm:p-4 bg-zinc-50/40 space-y-2.5 text-xs sm:text-sm">
+                                {/* Consumos directos (Solo si > 0) */}
+                                {totalDirectConsumption > 0 && (
+                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span
+                                                className={`w-5 text-center font-bold shrink-0 ${
+                                                    isCreditor ? 'text-emerald-500' : 'text-rose-500'
+                                                }`}
+                                            >
+                                                +
+                                            </span>
+                                            <span className="truncate">
+                                                {isCreditor
+                                                    ? `Consumos de ${debtorName} pagados por ti`
+                                                    : isDebtor
+                                                    ? `Tus consumos pagados por ${creditorName}`
+                                                    : `Consumos de ${debtorName} pagados por ${creditorName}`}
+                                            </span>
+                                        </div>
+                                        <span
+                                            className={`font-bold shrink-0 ${
+                                                isCreditor ? 'text-emerald-600' : 'text-rose-600'
+                                            }`}
+                                        >
+                                            {formatCurrency(totalDirectConsumption, currency)}
+                                        </span>
                                     </div>
-                                ) : (
+                                )}
+
+                                {/* Aportes y pagos previos (Solo si > 0) */}
+                                {totalActiveRecoverable > 0 && (
+                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span
+                                                className={`w-5 text-center font-bold shrink-0 ${
+                                                    isCreditor ? 'text-zinc-400' : 'text-emerald-500'
+                                                }`}
+                                            >
+                                                -
+                                            </span>
+                                            <span className="truncate">
+                                                {isCreditor
+                                                    ? `Aportes o pagos que te realizó ${debtorName}`
+                                                    : isDebtor
+                                                    ? 'Aportes o pagos que le realizaste'
+                                                    : `Aportes o pagos que realizó ${debtorName}`}
+                                            </span>
+                                        </div>
+                                        <span
+                                            className={`font-bold shrink-0 ${
+                                                isCreditor ? 'text-zinc-600' : 'text-emerald-600'
+                                            }`}
+                                        >
+                                            {formatCurrency(totalActiveRecoverable, currency)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Compensación grupal (Solo si > 0) */}
+                                {hasCompensations && (
+                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span
+                                                className={`w-5 text-center font-bold shrink-0 ${
+                                                    detail.optimizationDetail?.isDiscount
+                                                        ? isCreditor
+                                                            ? 'text-zinc-400'
+                                                            : 'text-emerald-500'
+                                                        : isCreditor
+                                                        ? 'text-emerald-500'
+                                                        : 'text-rose-500'
+                                                }`}
+                                            >
+                                                {detail.optimizationDetail?.isDiscount ? '-' : '+'}
+                                            </span>
+                                            <span className="truncate">
+                                                {detail.optimizationDetail?.isDiscount
+                                                    ? 'Compensación grupal (descuento)'
+                                                    : 'Consolidación de grupo'}
+                                            </span>
+                                        </div>
+                                        <span
+                                            className={`font-bold shrink-0 ${
+                                                detail.optimizationDetail?.isDiscount
+                                                    ? isCreditor
+                                                        ? 'text-zinc-600'
+                                                        : 'text-emerald-600'
+                                                    : isCreditor
+                                                    ? 'text-emerald-600'
+                                                    : 'text-rose-600'
+                                            }`}
+                                        >
+                                            {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Total Final */}
+                                <div className="pt-2.5 mt-1 border-t border-zinc-200 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="w-5 text-center font-bold text-zinc-400 shrink-0">=</span>
+                                        <span className="font-bold text-zinc-900 truncate">Total neto a liquidar</span>
+                                    </div>
+                                    <span
+                                        className={`text-base sm:text-lg font-black tracking-tight shrink-0 ${
+                                            finalSettlementAmount <= 0
+                                                ? 'text-zinc-900'
+                                                : isCreditor
+                                                ? 'text-emerald-600'
+                                                : 'text-rose-600'
+                                        }`}
+                                    >
+                                        {formatCurrency(finalSettlementAmount, currency)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECCIÓN 2: CONSUMOS QUE DEBE (Solo si > 0) */}
+                    {pendingConsumedExpenses.length > 0 && totalDirectConsumption > 0 && (
+                        <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setExpandedSections((prev) => ({ ...prev, debts: !prev.debts }))
+                                }
+                                className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50 transition-colors cursor-pointer text-left"
+                            >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div
+                                        className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${
+                                            isCreditor
+                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                : 'bg-rose-50 text-rose-600 border-rose-100'
+                                        }`}
+                                    >
+                                        <Receipt className="w-3.5 h-3.5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
+                                            {isCreditor
+                                                ? `Gastos que te debe ${debtorName} (${pendingConsumedExpenses.length})`
+                                                : isDebtor
+                                                ? `Gastos que debes (${pendingConsumedExpenses.length})`
+                                                : `Gastos que debe ${debtorName} (${pendingConsumedExpenses.length})`}
+                                        </h3>
+                                        <p className="text-[11px] text-zinc-500 truncate">
+                                            {isCreditor ? 'Pagados por ti' : `Pagados por ${creditorName}`}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span
+                                        className={`text-xs sm:text-sm font-bold ${
+                                            isCreditor ? 'text-emerald-600' : 'text-rose-600'
+                                        }`}
+                                    >
+                                        {formatCurrency(totalDirectConsumption, currency)}
+                                    </span>
+                                    {expandedSections.debts ? (
+                                        <ChevronUp className="w-4 h-4 text-zinc-400" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-zinc-400" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {expandedSections.debts && (
+                                <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/30">
                                     <GenericExpenseList
                                         expenses={pendingConsumedExpenses}
                                         payments={[]}
@@ -403,53 +578,63 @@ export function PairwiseDetailModal({
                                         onDeleteExpense={onDeleteExpense}
                                         showGroupBadge={!groupId}
                                     />
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* SECCIÓN 2: APORTES Y PAGOS DIRECTOS */}
-                    <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setExpandedSections((prev) => ({ ...prev, recovers: !prev.recovers }))
-                            }
-                            className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50 transition-colors cursor-pointer text-left"
-                        >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
-                                    <Wallet className="w-3.5 h-3.5" />
                                 </div>
-                                <div className="min-w-0">
-                                    <h3 className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                        Aportes y pagos previos ({activeReverseExpenses.length + activeDirectPayments.length})
-                                    </h3>
-                                    <p className="text-[11px] text-zinc-500 truncate">
-                                        Deducidos de la cuenta
-                                    </p>
-                                </div>
-                            </div>
+                            )}
+                        </div>
+                    )}
 
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs sm:text-sm font-bold text-emerald-600">
-                                    -{formatCurrency(totalActiveRecoverable, currency)}
-                                </span>
-                                {expandedSections.recovers ? (
-                                    <ChevronUp className="w-4 h-4 text-zinc-400" />
-                                ) : (
-                                    <ChevronDown className="w-4 h-4 text-zinc-400" />
-                                )}
-                            </div>
-                        </button>
-
-                        {expandedSections.recovers && (
-                            <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/30">
-                                {activeReverseExpenses.length === 0 && activeDirectPayments.length === 0 ? (
-                                    <div className="py-4 text-center text-xs text-zinc-500">
-                                        No hay aportes ni pagos previos registrados.
+                    {/* SECCIÓN 3: APORTES Y PAGOS DIRECTOS (Solo si > 0) */}
+                    {(activeReverseExpenses.length > 0 || activeDirectPayments.length > 0) && totalActiveRecoverable > 0 && (
+                        <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setExpandedSections((prev) => ({ ...prev, recovers: !prev.recovers }))
+                                }
+                                className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50 transition-colors cursor-pointer text-left"
+                            >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div
+                                        className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${
+                                            isCreditor
+                                                ? 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                                                : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                        }`}
+                                    >
+                                        <Wallet className="w-3.5 h-3.5" />
                                     </div>
-                                ) : (
+                                    <div className="min-w-0">
+                                        <h3 className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
+                                            {isCreditor
+                                                ? `Aportes y pagos recibidos (${activeReverseExpenses.length + activeDirectPayments.length})`
+                                                : isDebtor
+                                                ? `Aportes y pagos que realizaste (${activeReverseExpenses.length + activeDirectPayments.length})`
+                                                : `Aportes y pagos que realizó ${debtorName} (${activeReverseExpenses.length + activeDirectPayments.length})`}
+                                        </h3>
+                                        <p className="text-[11px] text-zinc-500 truncate">
+                                            {isCreditor ? 'Deducidos de lo que te debe' : isDebtor ? 'Deducidos de tu deuda' : 'Deducidos de la cuenta'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span
+                                        className={`text-xs sm:text-sm font-bold ${
+                                            isCreditor ? 'text-zinc-600' : 'text-emerald-600'
+                                        }`}
+                                    >
+                                        {formatCurrency(totalActiveRecoverable, currency)}
+                                    </span>
+                                    {expandedSections.recovers ? (
+                                        <ChevronUp className="w-4 h-4 text-zinc-400" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-zinc-400" />
+                                    )}
+                                </div>
+                            </button>
+
+                            {expandedSections.recovers && (
+                                <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/30">
                                     <GenericExpenseList
                                         expenses={activeReverseExpenses}
                                         payments={activeDirectPayments}
@@ -463,12 +648,12 @@ export function PairwiseDetailModal({
                                         onDeletePayment={onDeletePayment}
                                         showGroupBadge={!groupId}
                                     />
-                                )}
-                            </div>
-                        )}
-                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
-                    {/* SECCIÓN 3: COMPENSACIÓN GRUPAL (Solo si simplificado y hay compensación) */}
+                    {/* SECCIÓN 4: COMPENSACIÓN GRUPAL (Solo si simplificado y hay compensación > 0) */}
                     {isSimplified && hasCompensations && (
                         <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
                             <button
@@ -496,11 +681,14 @@ export function PairwiseDetailModal({
                                     <span
                                         className={`text-xs sm:text-sm font-bold ${
                                             detail.optimizationDetail?.isDiscount
+                                                ? isCreditor
+                                                    ? 'text-zinc-600'
+                                                    : 'text-emerald-600'
+                                                : isCreditor
                                                 ? 'text-emerald-600'
                                                 : 'text-rose-600'
                                         }`}
                                     >
-                                        {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
                                         {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
                                     </span>
                                     {expandedSections.distribution ? (
@@ -616,110 +804,6 @@ export function PairwiseDetailModal({
                             )}
                         </div>
                     )}
-
-                    {/* SECCIÓN 4: RESUMEN Y CÁLCULO MATEMÁTICO */}
-                    <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setExpandedSections((prev) => ({ ...prev, calculation: !prev.calculation }))
-                            }
-                            className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50 transition-colors cursor-pointer text-left"
-                        >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-7 h-7 rounded-lg bg-zinc-100 text-zinc-700 border border-zinc-200 flex items-center justify-center shrink-0">
-                                    <Calculator className="w-3.5 h-3.5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <h3 className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                        Resumen de liquidación
-                                    </h3>
-                                    <p className="text-[11px] text-zinc-500 truncate">
-                                        Desglose paso a paso
-                                    </p>
-                                </div>
-                            </div>
-
-                            {expandedSections.calculation ? (
-                                <ChevronUp className="w-4 h-4 text-zinc-400 shrink-0" />
-                            ) : (
-                                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
-                            )}
-                        </button>
-
-                        {expandedSections.calculation && (
-                            <div className="border-t border-zinc-100 p-3 sm:p-4 bg-zinc-50/40 space-y-2.5 text-xs sm:text-sm">
-                                {/* Consumos directos */}
-                                <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className="w-5 text-center font-bold text-rose-500 shrink-0">+</span>
-                                        <span className="truncate">Consumos directos con {creditorName}</span>
-                                    </div>
-                                    <span className="font-bold text-rose-600 shrink-0">
-                                        +{formatCurrency(totalDirectConsumption, currency)}
-                                    </span>
-                                </div>
-
-                                {/* Aportes y pagos previos */}
-                                <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className="w-5 text-center font-bold text-emerald-500 shrink-0">-</span>
-                                        <span className="truncate">Aportes y pagos directos registrados</span>
-                                    </div>
-                                    <span className="font-bold text-emerald-600 shrink-0">
-                                        -{formatCurrency(totalActiveRecoverable, currency)}
-                                    </span>
-                                </div>
-
-                                {/* Compensación grupal */}
-                                {hasCompensations && (
-                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="w-5 text-center font-bold text-sky-500 shrink-0">
-                                                {detail.optimizationDetail?.isDiscount ? '-' : '+'}
-                                            </span>
-                                            <span className="truncate">
-                                                {detail.optimizationDetail?.isDiscount
-                                                    ? 'Compensación grupal (descuento)'
-                                                    : 'Consolidación de grupo'}
-                                            </span>
-                                        </div>
-                                        <span
-                                            className={`font-bold shrink-0 ${
-                                                detail.optimizationDetail?.isDiscount
-                                                    ? 'text-emerald-600'
-                                                    : 'text-rose-600'
-                                            }`}
-                                        >
-                                            {detail.optimizationDetail?.isDiscount ? '-' : '+'}
-                                            {formatCurrency(detail.optimizationDetail?.totalCompensated || 0, currency)}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {/* Total Final */}
-                                <div className="pt-2.5 mt-1 border-t border-zinc-200 flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className="w-5 text-center font-bold text-zinc-400 shrink-0">=</span>
-                                        <span className="font-bold text-zinc-900 truncate">Total neto a liquidar</span>
-                                    </div>
-                                    <span
-                                        className={`text-base sm:text-lg font-black tracking-tight shrink-0 ${
-                                            finalSettlementAmount <= 0
-                                                ? 'text-zinc-900'
-                                                : isCreditor
-                                                ? 'text-emerald-600'
-                                                : isDebtor
-                                                ? 'text-rose-600'
-                                                : 'text-zinc-900'
-                                        }`}
-                                    >
-                                        {formatCurrency(finalSettlementAmount, currency)}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
         </div>
