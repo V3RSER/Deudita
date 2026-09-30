@@ -212,7 +212,7 @@ function UnifiedBalanceCard({
                                 {isCreditor ? 'A tu favor' : isDebtor ? 'Total a pagar' : 'Saldo total'}
                             </span>
                             <span
-                                className={`text-xl sm:text-2xl font-black tracking-tight ${cardTheme.amountClass} block`}>
+                                className={`text-xl sm:text-2xl font-display font-black tabular-nums tracking-tight ${cardTheme.amountClass} block`}>
                                 {cardTheme.sign}
                                 {formatCurrency(pairwise.amount)}
                             </span>
@@ -439,7 +439,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                         </div>
                     </div>
                     <div className="mt-3">
-                        <span className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight block">
+                        <span className="text-2xl sm:text-3xl font-display font-black tabular-nums text-emerald-700 tracking-tight block">
                             +{formatCurrency(totalOwedToMe)}
                         </span>
                         <p className="text-xs text-emerald-800/80 font-medium mt-1">
@@ -468,7 +468,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                         </div>
                     </div>
                     <div className="mt-3">
-                        <span className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight block">
+                        <span className="text-2xl sm:text-3xl font-display font-black tabular-nums text-rose-600 tracking-tight block">
                             -{formatCurrency(totalIOwe)}
                         </span>
                         <p className="text-xs text-rose-800/80 font-medium mt-1">
@@ -496,7 +496,7 @@ export function ConsolidatedBalances({ onOpenSettleModal }: ConsolidatedBalances
                     </div>
                     <div className="mt-3">
                         <span
-                            className={`text-2xl sm:text-3xl font-black tracking-tight block ${netConsolidated > 0
+                            className={`text-2xl sm:text-3xl font-display font-black tabular-nums tracking-tight block ${netConsolidated > 0
                                     ? 'text-emerald-700'
                                     : netConsolidated < 0
                                         ? 'text-rose-600'

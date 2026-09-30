@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Expense, Group, PairwiseBalance, Payment, Profile } from '@/lib/types';
 import { calculatePairwiseDebtDetail, formatCurrency, } from '@/lib/balance-utils';
@@ -8,14 +8,19 @@ import { GenericExpenseList } from '@/components/my-expenses/GenericExpenseList'
 import {
     ArrowLeft,
     ArrowRight,
+    ArrowRightLeft,
     Calculator,
+    Check,
     CheckCircle2,
     ChevronDown,
     ChevronUp,
+    Copy,
     GitMerge,
     Info,
     Layers,
     Network,
+    Receipt,
+    Scale,
     Sparkles,
     User,
     Users,
@@ -68,16 +73,44 @@ export function PairwiseDetailModal({
     onDeleteExpense,
     onDeletePayment,
 }: PairwiseDetailModalProps) {
-    // Collapsed by default
+    // Primary sections expanded by default so user immediately sees expenses
     const [expandedSections, setExpandedSections] = useState({
-        debts: false,
-        recovers: false,
+        debts: true,
+        recovers: true,
         distribution: false,
         calculation: false,
     });
 
+    const [copiedAmount, setCopiedAmount] = useState(false);
     const [expandedTriangulationIndexes, setExpandedTriangulationIndexes] = useState<Set<number>>(new Set());
     const [graphMode, setGraphMode] = useState<'simplified' | 'unsimplified'>('simplified');
+
+    // Accessibility: Close with Escape key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                onClose();
+            }
+        };
+        if (isOpen) {
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [isOpen, onClose]);
+
+    // When pairwise changes, reset expanded sections and copied state during render
+    const currentPairwiseKey = isOpen && pairwise ? `${pairwise.debtor.id}-${pairwise.creditor.id}` : '';
+    const [prevPairwiseKey, setPrevPairwiseKey] = useState(currentPairwiseKey);
+    if (currentPairwiseKey !== prevPairwiseKey) {
+        setPrevPairwiseKey(currentPairwiseKey);
+        setExpandedSections({
+            debts: true,
+            recovers: true,
+            distribution: false,
+            calculation: false,
+        });
+        setCopiedAmount(false);
+    }
 
     // Find creditor and debtor profiles
     const debtorProfile: Profile = useMemo(() => {
@@ -215,8 +248,8 @@ export function PairwiseDetailModal({
                     {/* Mobile Handle Indicator */}
                     <div className="w-12 h-1 bg-zinc-200 rounded-full mx-auto mb-2.5 sm:hidden" />
 
-                    {/* Top Row: Navigation + Perspective + Close */}
-                    <div className="flex items-center justify-between gap-2.5">
+                    {/* Top Row: Navigation + Perspective + Badges */}
+                    <div className="flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <button
                                 type="button"
@@ -235,13 +268,13 @@ export function PairwiseDetailModal({
                                         alt={debtorName}
                                         width={36}
                                         height={36}
-                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
+                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-rose-200 shrink-0 shadow-2xs"
                                         unoptimized
                                         referrerPolicy="no-referrer"
                                     />
                                 ) : (
                                     <div
-                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-white shrink-0 shadow-2xs">
+                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-rose-200 shrink-0 shadow-2xs">
                                         {getInitials(debtorName)}
                                     </div>
                                 )}
@@ -252,13 +285,13 @@ export function PairwiseDetailModal({
                                         alt={creditorName}
                                         width={36}
                                         height={36}
-                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-white shrink-0 shadow-2xs"
+                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover ring-2 ring-emerald-200 shrink-0 shadow-2xs"
                                         unoptimized
                                         referrerPolicy="no-referrer"
                                     />
                                 ) : (
                                     <div
-                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-white shrink-0 shadow-2xs">
+                                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[11px] font-bold ring-2 ring-emerald-200 shrink-0 shadow-2xs">
                                         {getInitials(creditorName)}
                                     </div>
                                 )}
@@ -267,48 +300,114 @@ export function PairwiseDetailModal({
                             {/* Title & Perspective */}
                             <div className="min-w-0 flex-1">
                                 <h2 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight truncate leading-snug">
-                                    <span className="text-zinc-950 font-black">{debtorName}</span>{' '}
-                                    <span className="text-zinc-500 font-normal">le debe a</span>{' '}
-                                    <span className="text-zinc-950 font-black">{creditorName}</span>
+                                    {isCreditor ? (
+                                        <>
+                                            <span className="text-zinc-950 font-black">{debtorName}</span>{' '}
+                                            <span className="text-zinc-500 font-normal">te debe dinero a ti</span>
+                                        </>
+                                    ) : isDebtor ? (
+                                        <>
+                                            <span className="text-zinc-500 font-normal">Le debes dinero a</span>{' '}
+                                            <span className="text-zinc-950 font-black">{creditorName}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-zinc-950 font-black">{debtorName}</span>{' '}
+                                            <span className="text-zinc-500 font-normal">le debe a</span>{' '}
+                                            <span className="text-zinc-950 font-black">{creditorName}</span>
+                                        </>
+                                    )}
                                 </h2>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                    <span className="text-[11px] text-zinc-500 font-medium">
+                                        {pendingConsumedExpenses.length} {pendingConsumedExpenses.length === 1 ? 'consumo' : 'consumos'}
+                                    </span>
+                                    <span className="text-zinc-300">•</span>
+                                    <span className="text-[11px] text-zinc-500 font-medium">
+                                        {activeReverseExpenses.length + activeDirectPayments.length} {activeReverseExpenses.length + activeDirectPayments.length === 1 ? 'aporte o pago' : 'aportes o pagos'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Status Chip (Por pagar / A tu favor) */}
-                        <span
-                            className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold shrink-0 border ${isCreditor
-                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                    : isDebtor
-                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                        : 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                                }`}
-                        >
-                            {isCreditor ? 'A tu favor' : isDebtor ? 'Por pagar' : 'Detalle'}
-                        </span>
-                    </div>
+                        {/* Top Badges (Mode + Status) */}
+                        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center">
+                            {isSimplified ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                                    <Sparkles className="w-3 h-3 text-indigo-600" />
+                                    <span>Simplificado</span>
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-zinc-100 text-zinc-700 border border-zinc-200/80">
+                                    <Layers className="w-3 h-3 text-zinc-600" />
+                                    <span>Directo</span>
+                                </span>
+                            )}
 
-                    {/* Counts pill (Consumos directos & Aportes) */}
-                    <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px] text-zinc-500">
-                        <span
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-zinc-100 border border-zinc-200/80 font-medium text-zinc-700">
-                            <span className="font-bold text-zinc-900">{pendingConsumedExpenses.length}</span> consumos directos
-                            <span className="text-zinc-300">•</span>
                             <span
-                                className="font-bold text-zinc-900">{activeReverseExpenses.length + activeDirectPayments.length}</span> aportes directos
-                        </span>
+                                className={`px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold border ${isCreditor
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                        : isDebtor
+                                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                            : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                                    }`}
+                            >
+                                {isCreditor ? '+ A tu favor' : isDebtor ? '- Por pagar' : 'Entre integrantes'}
+                            </span>
+                        </div>
                     </div>
 
-                    {/* Liquidation Bar: Saldo a liquidar + Saldar button */}
+                    {/* Liquidation Card Banner */}
                     <div
-                        className="mt-3 pt-2.5 sm:pt-3 border-t border-zinc-100 flex items-center justify-between gap-3">
-                        <div>
-                            <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider block leading-tight">
-                                SALDO A LIQUIDAR
+                        className={`mt-3.5 p-3.5 sm:p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all ${isCreditor
+                                ? 'bg-gradient-to-r from-emerald-500/10 via-emerald-50/50 to-white border-emerald-200/90'
+                                : isDebtor
+                                    ? 'bg-gradient-to-r from-rose-500/10 via-rose-50/50 to-white border-rose-200/90'
+                                    : 'bg-zinc-100/80 border-zinc-200/90'
+                            }`}
+                    >
+                        <div className="space-y-0.5 min-w-0">
+                            <span className="text-[10px] sm:text-[11px] font-black uppercase text-zinc-400 tracking-wider block leading-tight">
+                                {isCreditor ? 'TOTAL A COBRAR' : isDebtor ? 'TOTAL QUE DEBES PAGAR' : 'SALDO A LIQUIDAR'}
                             </span>
-                            <span
-                                className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight block mt-0.5">
-                                {formatCurrency(finalSettlementAmount, currency)}
-                            </span>
+                            <div className="flex items-baseline gap-2.5 flex-wrap">
+                                <span
+                                    className={`text-2xl sm:text-3xl font-black font-display tracking-tight tabular-nums leading-tight ${isCreditor ? 'text-emerald-700' : isDebtor ? 'text-rose-600' : 'text-zinc-950'
+                                        }`}
+                                >
+                                    {isCreditor ? '+' : isDebtor ? '-' : ''}
+                                    {formatCurrency(finalSettlementAmount, currency)}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(String(finalSettlementAmount));
+                                        setCopiedAmount(true);
+                                        setTimeout(() => setCopiedAmount(false), 2000);
+                                    }}
+                                    title="Copiar monto numérico"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-zinc-700 transition-colors py-0.5 px-1.5 rounded-md hover:bg-black/5 cursor-pointer"
+                                >
+                                    {copiedAmount ? (
+                                        <>
+                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span className="text-emerald-700 font-bold">Copiado</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="w-3.5 h-3.5" />
+                                            <span>Copiar monto</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            <p className="text-[11px] text-zinc-500 font-medium leading-tight">
+                                {isCreditor
+                                    ? `Monto neto que ${debtorName} debe transferirte para quedar en paz y salvo.`
+                                    : isDebtor
+                                        ? `Monto neto que debes pagarle a ${creditorName} para saldar la deuda.`
+                                        : `Monto para saldar las cuentas entre ${debtorName} y ${creditorName}.`}
+                            </p>
                         </div>
 
                         <button
@@ -322,9 +421,15 @@ export function PairwiseDetailModal({
                                     finalSettlementAmount
                                 );
                             }}
-                            className="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold px-5 sm:px-6 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer shrink-0"
+                            className={`px-5 sm:px-6 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm transition-all shadow-xs active:scale-95 cursor-pointer shrink-0 flex items-center justify-center gap-2 ${isCreditor
+                                    ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white'
+                                    : isDebtor
+                                        ? 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 text-white'
+                                        : 'bg-zinc-900 hover:bg-zinc-800 text-white'
+                                }`}
                         >
-                            Saldar
+                            <Wallet className="w-4 h-4" />
+                            <span>{isCreditor ? 'Registrar cobro' : isDebtor ? 'Saldar deuda' : 'Saldar cuenta'}</span>
                         </button>
                     </div>
                 </div>
@@ -367,12 +472,17 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <User className="w-4 h-4" />
+                                        <Receipt className="w-4.5 h-4.5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
-                                            Gastos que debe {debtorName} a {creditorName}
-                                        </h3>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                                                Gastos que debe {debtorName} a {creditorName}
+                                            </h3>
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/80">
+                                                {pendingConsumedExpenses.length} {pendingConsumedExpenses.length === 1 ? 'gasto' : 'gastos'}
+                                            </span>
+                                        </div>
                                         <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
                                             Gastos pagados por {creditorName} donde participó {debtorName}
                                         </p>
@@ -395,7 +505,7 @@ export function PairwiseDetailModal({
                                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                                     Total consumos directos
                                 </span>
-                                <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
+                                <span className="text-sm sm:text-base font-extrabold text-rose-600 font-display tabular-nums tracking-tight">
                                     + {formatCurrency(totalDirectConsumption, currency)}
                                 </span>
                             </div>
@@ -443,12 +553,17 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <Wallet className="w-4 h-4" />
+                                        <Wallet className="w-4.5 h-4.5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
-                                            Gastos y pagos a favor de {debtorName}
-                                        </h3>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
+                                                Gastos y pagos a favor de {debtorName}
+                                            </h3>
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                                                {activeReverseExpenses.length + activeDirectPayments.length} {activeReverseExpenses.length + activeDirectPayments.length === 1 ? 'registro' : 'registros'}
+                                            </span>
+                                        </div>
                                         <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
                                             Gastos pagados por {debtorName} con {creditorName} y pagos directos
                                             registrados
@@ -472,7 +587,7 @@ export function PairwiseDetailModal({
                                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                                     Total aportes directos
                                 </span>
-                                <span className="text-sm sm:text-base font-black text-emerald-600 font-mono">
+                                <span className="text-sm sm:text-base font-extrabold text-emerald-600 font-display tabular-nums tracking-tight">
                                     - {formatCurrency(totalActiveRecoverable, currency)}
                                 </span>
                             </div>
@@ -552,7 +667,7 @@ export function PairwiseDetailModal({
                                             : 'Consolidación aplicada'}
                                     </span>
                                     <span
-                                        className={`text-sm sm:text-base font-black font-mono ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                                        className={`text-sm sm:text-base font-extrabold font-display tabular-nums tracking-tight ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
                                             }`}
                                     >
                                         {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
@@ -733,7 +848,7 @@ export function PairwiseDetailModal({
                                                                             textAnchor="middle"
                                                                             fontWeight="800"
                                                                             fontSize="12px"
-                                                                            className="font-mono"
+                                                                            className="font-sans tabular-nums"
                                                                         >
                                                                             {formatCurrency(detail.netDirectBalance, currency)}
                                                                         </text>
@@ -784,7 +899,7 @@ export function PairwiseDetailModal({
                                                                                                 textAnchor="middle"
                                                                                                 fontWeight="800"
                                                                                                 fontSize="11px"
-                                                                                                className="font-mono"
+                                                                                                className="font-sans tabular-nums"
                                                                                             >
                                                                                                 {formatCurrency(debtorOwesAmount, currency)}
                                                                                             </text>
@@ -820,7 +935,7 @@ export function PairwiseDetailModal({
                                                                                                 textAnchor="middle"
                                                                                                 fontWeight="800"
                                                                                                 fontSize="11px"
-                                                                                                className="font-mono"
+                                                                                                className="font-sans tabular-nums"
                                                                                             >
                                                                                                 {formatCurrency(tpOwesCreditorAmount, currency)}
                                                                                             </text>
@@ -887,7 +1002,7 @@ export function PairwiseDetailModal({
                                                                             textAnchor="middle"
                                                                             fontWeight="900"
                                                                             fontSize="14px"
-                                                                            className="font-mono"
+                                                                            className="font-sans tabular-nums"
                                                                         >
                                                                             {formatCurrency(finalSettlementAmount, currency)}
                                                                         </text>
@@ -944,7 +1059,7 @@ export function PairwiseDetailModal({
                                                                                     textAnchor="middle"
                                                                                     fontWeight="800"
                                                                                     fontSize="10px"
-                                                                                    className="font-mono"
+                                                                                    className="font-sans tabular-nums"
                                                                                 >
                                                                                     {detail.optimizationDetail?.isDiscount ? '− ' : '+ '}
                                                                                     {formatCurrency(tp.amount, currency)}
@@ -1161,15 +1276,18 @@ export function PairwiseDetailModal({
                                         {/* Calculation Justifying ONLY the Compensation Amount */}
                                         {detail.optimizationDetail?.compensationFormula && (
                                             <div
-                                                className="bg-zinc-50/90 rounded-2xl p-4 sm:p-5 border border-zinc-200/90 space-y-1.5 text-center sm:text-left">
+                                                className="bg-zinc-50/90 rounded-2xl p-4 sm:p-5 border border-zinc-200/90 space-y-2 text-center sm:text-left shadow-2xs">
                                                 <div
-                                                    className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-                                                    {detail.optimizationDetail.isDiscount
-                                                        ? 'Cálculo del descuento compensado'
-                                                        : 'Cálculo de la consolidación de deudas'}
+                                                    className="flex items-center space-x-1.5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                                                    <Calculator className="w-3.5 h-3.5 text-zinc-400" />
+                                                    <span>
+                                                        {detail.optimizationDetail.isDiscount
+                                                            ? 'Cálculo del descuento compensado'
+                                                            : 'Cálculo de la consolidación de deudas'}
+                                                    </span>
                                                 </div>
                                                 <div
-                                                    className="text-base sm:text-lg font-black text-zinc-900 tracking-tight font-mono">
+                                                    className="text-base sm:text-xl font-display font-extrabold text-zinc-900 tracking-tight tabular-nums">
                                                     {detail.optimizationDetail.compensationFormula}
                                                 </div>
                                                 <div className="text-xs text-zinc-600 font-medium">
@@ -1215,7 +1333,7 @@ export function PairwiseDetailModal({
                                                                 </div>
                                                                 <div
                                                                     className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
-                                                                    <span className="text-base sm:text-lg font-black text-emerald-700 font-mono">
+                                                                    <span className="text-base sm:text-lg font-display font-extrabold text-emerald-700 tabular-nums tracking-tight">
                                                                         {formatCurrency(sug.amount, currency)}
                                                                     </span>
                                                                     {onOpenSettleModal && (
@@ -1284,7 +1402,7 @@ export function PairwiseDetailModal({
                                                                             <span>
                                                                                 Gastos entre {rel.from.full_name} y {rel.to.full_name}
                                                                             </span>
-                                                                            <span className="font-mono">
+                                                                            <span className="font-display font-bold text-zinc-900 tabular-nums">
                                                                                 {formatCurrency(rel.amount, currency)}
                                                                             </span>
                                                                         </div>
@@ -1323,14 +1441,14 @@ export function PairwiseDetailModal({
                                 <div className="flex items-start space-x-3 min-w-0 flex-1">
                                     <div
                                         className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                                        <Calculator className="w-4 h-4" />
+                                        <Calculator className="w-4 h-4 text-zinc-700" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">
                                             Resumen y cálculo matemático
                                         </h3>
                                         <p className="text-xs text-zinc-500 font-normal leading-tight mt-0.5">
-                                            Desglose paso a paso para llegar al saldo a liquidar
+                                            Desglose aritmético detallado para llegar al saldo a liquidar
                                         </p>
                                     </div>
                                 </div>
@@ -1354,36 +1472,42 @@ export function PairwiseDetailModal({
 
                         {/* Calculations Box */}
                         {expandedSections.calculation && (
-                            <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-3">
-                                <div className="space-y-2.5 text-xs sm:text-sm">
+                            <div className="p-4 sm:p-5 border-t border-zinc-200/80 bg-zinc-50/40 space-y-3.5">
+                                <div className="space-y-2 text-xs sm:text-sm">
                                     {/* Consumos directos */}
-                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                        <div className="flex items-center space-x-2 min-w-0">
-                                            <User className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                    <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-zinc-200/70 text-zinc-700 shadow-2xs">
+                                        <div className="flex items-center space-x-2.5 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100">
+                                                <Receipt className="w-3.5 h-3.5 text-rose-600" />
+                                            </div>
                                             <span
                                                 className="font-semibold text-zinc-800 truncate">Consumos directos con {creditorName}</span>
                                         </div>
-                                        <span className="font-black text-rose-600 shrink-0 font-mono">
+                                        <span className="font-display font-extrabold text-rose-600 shrink-0 tabular-nums tracking-tight">
                                             + {formatCurrency(totalDirectConsumption, currency)}
                                         </span>
                                     </div>
 
                                     {/* Aportes directos */}
-                                    <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                        <div className="flex items-center space-x-2 min-w-0">
-                                            <Wallet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                            <span className="font-semibold text-zinc-800 truncate">Aportes y pagos directos</span>
+                                    <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-zinc-200/70 text-zinc-700 shadow-2xs">
+                                        <div className="flex items-center space-x-2.5 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
+                                                <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                                            </div>
+                                            <span className="font-semibold text-zinc-800 truncate">Aportes y pagos directos registrados</span>
                                         </div>
-                                        <span className="font-black text-emerald-600 shrink-0 font-mono">
+                                        <span className="font-display font-extrabold text-emerald-600 shrink-0 tabular-nums tracking-tight">
                                             - {formatCurrency(totalActiveRecoverable, currency)}
                                         </span>
                                     </div>
 
                                     {/* Descuento o aumento por compensación con integrantes */}
                                     {hasCompensations && (
-                                        <div className="flex items-center justify-between gap-2 text-zinc-700">
-                                            <div className="flex items-center space-x-2 min-w-0">
-                                                <Network className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                        <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white border border-zinc-200/70 text-zinc-700 shadow-2xs">
+                                            <div className="flex items-center space-x-2.5 min-w-0">
+                                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border ${detail.optimizationDetail?.isDiscount ? 'bg-emerald-50 border-emerald-100' : 'bg-sky-50 border-sky-100'}`}>
+                                                    <Network className={`w-3.5 h-3.5 ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-sky-600'}`} />
+                                                </div>
                                                 <span className="font-semibold text-zinc-800 truncate">
                                                     {detail.optimizationDetail?.isDiscount
                                                         ? 'Compensación grupal (descuento)'
@@ -1391,7 +1515,7 @@ export function PairwiseDetailModal({
                                                 </span>
                                             </div>
                                             <span
-                                                className={`font-black font-mono shrink-0 ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
+                                                className={`font-display font-extrabold shrink-0 tabular-nums tracking-tight ${detail.optimizationDetail?.isDiscount ? 'text-emerald-600' : 'text-rose-600'
                                                     }`}
                                             >
                                                 {detail.optimizationDetail?.isDiscount ? '- ' : '+ '}
@@ -1402,16 +1526,33 @@ export function PairwiseDetailModal({
                                 </div>
 
                                 {/* Total Final Line */}
-                                <div className="pt-3 border-t border-zinc-200 flex items-center justify-between gap-2">
-                                    <div className="flex items-center space-x-1.5 min-w-0">
-                                        <span
-                                            className="text-base font-black text-zinc-400 font-mono select-none">=</span>
-                                        <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate">
-                                            Saldo final a liquidar
-                                        </span>
+                                <div className="p-3.5 sm:p-4 rounded-xl bg-white border-2 border-zinc-200/90 shadow-2xs flex items-center justify-between gap-3">
+                                    <div className="flex items-center space-x-2 min-w-0">
+                                        <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-600 font-display font-black text-sm select-none shrink-0 border border-zinc-200">
+                                            =
+                                        </div>
+                                        <div>
+                                            <div className="text-xs sm:text-sm font-black text-zinc-900 truncate">
+                                                Saldo neto a liquidar
+                                            </div>
+                                            <div className="text-[11px] text-zinc-500 font-medium">
+                                                {isUserDebtor
+                                                    ? `Monto que debes pagar a ${creditorName}`
+                                                    : isUserCreditor
+                                                    ? `Monto que ${debtorName} te debe pagar`
+                                                    : `Monto que ${debtorName} paga a ${creditorName}`}
+                                            </div>
+                                        </div>
                                     </div>
                                     <span
-                                        className="text-lg sm:text-xl font-black text-emerald-700 tracking-tight font-mono shrink-0">
+                                        className={`text-xl sm:text-2xl font-display font-black tracking-tight tabular-nums shrink-0 ${finalSettlementAmount <= 0
+                                            ? 'text-zinc-900'
+                                            : isUserCreditor
+                                            ? 'text-emerald-600'
+                                            : isUserDebtor
+                                            ? 'text-rose-600'
+                                            : 'text-zinc-950'
+                                        }`}>
                                         {formatCurrency(finalSettlementAmount, currency)}
                                     </span>
                                 </div>
