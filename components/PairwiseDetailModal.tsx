@@ -4,9 +4,7 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Expense, Group, PairwiseBalance, Payment, Profile } from '@/lib/types';
 import { calculatePairwiseDebtDetail, formatCurrency } from '@/lib/balance-utils';
-import { GenericExpenseList } from '@/components/my-expenses/GenericExpenseList';
 import {
-    Calculator,
     Check,
     ChevronDown,
     Copy,
@@ -43,6 +41,21 @@ function getInitials(name?: string | null): string {
     return trimmed.slice(0, 2).toUpperCase();
 }
 
+function formatExpenseDate(dateStr?: string | null): string {
+    if (!dateStr) return '';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('es-ES', {
+            day: 'numeric',
+            month: 'short',
+            year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+        });
+    } catch {
+        return '';
+    }
+}
+
 export function PairwiseDetailModal({
     isOpen,
     onClose,
@@ -55,10 +68,6 @@ export function PairwiseDetailModal({
     isSimplified,
     groupId,
     onOpenSettleModal,
-    onEditPayment,
-    onEditExpense,
-    onDeleteExpense,
-    onDeletePayment,
 }: PairwiseDetailModalProps) {
     const [expandedTerms, setExpandedTerms] = useState<{ [key: string]: boolean }>({
         debts: false,
@@ -66,8 +75,8 @@ export function PairwiseDetailModal({
         compensations: false,
     });
 
+    const [expandedRelations, setExpandedRelations] = useState<{ [key: string]: boolean }>({});
     const [copiedAmount, setCopiedAmount] = useState(false);
-    const [showRelatedExpenses, setShowRelatedExpenses] = useState(false);
 
     // Reset when pairwise changes
     const currentPairwiseKey = isOpen && pairwise ? `${pairwise.debtor.id}-${pairwise.creditor.id}` : '';
@@ -79,12 +88,16 @@ export function PairwiseDetailModal({
             recovers: false,
             compensations: false,
         });
+        setExpandedRelations({});
         setCopiedAmount(false);
-        setShowRelatedExpenses(false);
     }
 
     const toggleTerm = (term: 'debts' | 'recovers' | 'compensations') => {
         setExpandedTerms((prev) => ({ ...prev, [term]: !prev[term] }));
+    };
+
+    const toggleRelation = (relKey: string) => {
+        setExpandedRelations((prev) => ({ ...prev, [relKey]: !prev[relKey] }));
     };
 
     // Find creditor and debtor profiles
@@ -169,23 +182,12 @@ export function PairwiseDetailModal({
     const debtorName = debtorProfile.full_name || 'Deudor';
     const creditorName = creditorProfile.full_name || 'Acreedor';
 
-    const pendingConsumedExpenses = Array.from(
-        new Map(detail.pendingExpenses.map((d) => [d.expense.id, d.expense])).values()
-    );
-    const activeReverseExpenses = Array.from(
-        new Map(detail.reverseOffsetExpenses.map((r) => [r.expense.id, r.expense])).values()
-    );
-    const activeDirectPayments = Array.from(
-        new Map(detail.appliedPayments.map((p) => [p.payment.id, p.payment])).values()
-    );
-
     const totalDirectConsumption = detail.pendingExpenses.reduce((sum, d) => sum + d.originalAmount, 0);
     const totalReverseOffsets = detail.reverseOffsetExpenses.reduce((sum, r) => sum + r.amount, 0);
     const totalPaymentsApplied = detail.appliedPayments.reduce((sum, p) => sum + p.amountApplied, 0);
     const totalActiveRecoverable = Math.round((totalReverseOffsets + totalPaymentsApplied) * 100) / 100;
 
     const hasCompensations = isSimplified && (detail.optimizationDetail?.totalCompensated || 0) > 0.009;
-    const isCompensationDiscount = detail.optimizationDetail?.isDiscount ?? true;
     const totalCompensated = detail.optimizationDetail?.totalCompensated || 0;
 
     const finalSettlementAmount =
@@ -196,10 +198,13 @@ export function PairwiseDetailModal({
                 : detail.netDirectBalance;
 
     const isCompletelyEmpty =
-        pendingConsumedExpenses.length === 0 &&
-        activeReverseExpenses.length === 0 &&
-        activeDirectPayments.length === 0 &&
+        detail.pendingExpenses.length === 0 &&
+        totalActiveRecoverable === 0 &&
         !hasCompensations;
+
+    // Cross-debt relations list for group consolidation
+    const relevantRelations = detail.optimizationDetail?.relevantRelations || [];
+    const suggestedPayments = detail.optimizationDetail?.newSuggestedPayments || [];
 
     return (
         <div
@@ -210,8 +215,8 @@ export function PairwiseDetailModal({
                 className="relative w-full sm:max-w-xl max-h-[92vh] sm:max-h-[88vh] bg-white rounded-t-3xl sm:rounded-2xl shadow-xl border border-zinc-200 flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* 1. HEADER (CLEAN & NON-REDUNDANT) */}
-                <div className="bg-white px-4 py-3 sm:px-5 sm:py-3.5 border-b border-zinc-200 shrink-0">
+                {/* 1. HEADER */}
+                <div className="bg-white px-4 py-3 sm:px-6 sm:py-3.5 border-b border-zinc-200 shrink-0">
                     {/* Mobile drag handle */}
                     <div className="w-10 h-1 bg-zinc-200 rounded-full mx-auto mb-2 sm:hidden" />
 
@@ -281,11 +286,10 @@ export function PairwiseDetailModal({
                     </div>
                 </div>
 
-                {/* 2. BODY: UNIFIED LIQUIDATION EQUATION */}
-                <div className="p-3 sm:p-4 space-y-3 overflow-y-auto">
-                    {/* Empty State when everything is 0 */}
+                {/* 2. CUERPO: FILAS A TODO EL ANCHO SEPARADAS POR LÍNEAS DIVISORIAS FINAS */}
+                <div className="flex-1 overflow-y-auto divide-y divide-zinc-100">
                     {isCompletelyEmpty ? (
-                        <div className="p-8 text-center bg-white rounded-2xl border border-zinc-200 shadow-2xs space-y-2">
+                        <div className="p-8 text-center bg-white space-y-2">
                             <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
                                 <Check className="w-5 h-5" />
                             </div>
@@ -293,415 +297,417 @@ export function PairwiseDetailModal({
                             <p className="text-xs text-zinc-500">No hay movimientos ni saldos pendientes entre ambos integrantes.</p>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-2xs">
-                            {/* SECTION TITLE BANNER */}
-                            <div className="px-3.5 py-2.5 bg-zinc-50/70 border-b border-zinc-100 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Calculator className="w-3.5 h-3.5 text-zinc-500" />
-                                    <span className="text-xs font-bold text-zinc-800">
-                                        Resumen de liquidación
-                                    </span>
-                                </div>
-                                <span className="text-[11px] text-zinc-400">
-                                    Toca una fila para ver el detalle
-                                </span>
-                            </div>
-
-                            <div className="divide-y divide-zinc-100">
-                                {/* TÉRMINO 1: CONSUMOS DIRECTOS (+) */}
-                                {totalDirectConsumption > 0 && (
-                                    <div>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleTerm('debts')}
-                                            className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50/80 transition-colors cursor-pointer text-left"
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                {/* Operator sign */}
-                                                <div
-                                                    className={`w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 ${
-                                                        isCreditor
-                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
-                                                            : 'bg-rose-50 text-rose-600 border-rose-200/90'
-                                                    }`}
-                                                >
-                                                    +
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <span className="text-xs sm:text-sm font-bold text-zinc-900 block truncate">
-                                                        {isCreditor
-                                                            ? `Consumos de ${debtorName} pagados por ti`
-                                                            : isDebtor
-                                                            ? `Tus consumos pagados por ${creditorName}`
-                                                            : `Consumos de ${debtorName} pagados por ${creditorName}`}
-                                                    </span>
-                                                    <span className="text-[11px] text-zinc-500 block truncate">
-                                                        {pendingConsumedExpenses.length}{' '}
-                                                        {pendingConsumedExpenses.length === 1 ? 'gasto registrado' : 'gastos registrados'}
-                                                    </span>
-                                                </div>
+                        <>
+                            {/* FILA 1: CONSUMOS DIRECTOS (+) */}
+                            {totalDirectConsumption > 0 && (
+                                <div>
+                                    <button
+                                        type="button"
+                                        aria-expanded={expandedTerms.debts}
+                                        onClick={() => toggleTerm('debts')}
+                                        className="w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-3 hover:bg-zinc-50/80 active:bg-zinc-100/70 transition-colors cursor-pointer text-left select-none"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {/* Cajita con "+" */}
+                                            <div
+                                                className={`w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 ${
+                                                    isCreditor
+                                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
+                                                        : 'bg-rose-50 text-rose-600 border-rose-200/90'
+                                                }`}
+                                            >
+                                                +
                                             </div>
+                                            {/* Nombre sin subtítulo */}
+                                            <span className="text-sm sm:text-base font-bold text-zinc-900 truncate">
+                                                {isCreditor
+                                                    ? `Consumos de ${debtorName} pagados por ti`
+                                                    : isDebtor
+                                                    ? `Tus consumos pagados por ${creditorName}`
+                                                    : `Consumos de ${debtorName} pagados por ${creditorName}`}
+                                            </span>
+                                        </div>
 
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <span
-                                                    className={`text-xs sm:text-sm font-bold ${
-                                                        isCreditor ? 'text-emerald-600' : 'text-rose-600'
-                                                    }`}
-                                                >
-                                                    {formatCurrency(totalDirectConsumption, currency)}
-                                                </span>
-                                                <ChevronDown
-                                                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
-                                                        expandedTerms.debts ? 'rotate-180 text-zinc-600' : ''
-                                                    }`}
-                                                />
-                                            </div>
-                                        </button>
+                                        <div className="flex items-center gap-2.5 shrink-0">
+                                            {/* Monto en verde */}
+                                            <span
+                                                className={`text-sm sm:text-base font-bold ${
+                                                    isCreditor ? 'text-emerald-600' : 'text-rose-600'
+                                                }`}
+                                            >
+                                                {formatCurrency(totalDirectConsumption, currency)}
+                                            </span>
+                                            {/* Chevrón que rota 180° */}
+                                            <ChevronDown
+                                                className={`w-4 h-4 text-zinc-400 transition-transform duration-200 shrink-0 ${
+                                                    expandedTerms.debts ? 'rotate-180 text-zinc-600' : ''
+                                                }`}
+                                            />
+                                        </div>
+                                    </button>
 
-                                        {expandedTerms.debts && (
-                                            <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/40">
-                                                <GenericExpenseList
-                                                    expenses={pendingConsumedExpenses}
-                                                    payments={[]}
-                                                    profiles={profiles}
-                                                    userGroups={groups}
-                                                    currentProfile={debtorProfile}
-                                                    groupCurrency={currency}
-                                                    onEditExpense={onEditExpense}
-                                                    onDeleteExpense={onDeleteExpense}
-                                                    showGroupBadge={!groupId}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* TÉRMINO 2: APORTES Y PAGOS PREVIOS (-) */}
-                                {totalActiveRecoverable > 0 && (
-                                    <div>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleTerm('recovers')}
-                                            className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50/80 transition-colors cursor-pointer text-left"
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                {/* Operator sign: Red for creditor because it decreases credit; Green for debtor because it discounts debt */}
-                                                <div
-                                                    className={`w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 ${
-                                                        isCreditor
-                                                            ? 'bg-rose-50 text-rose-600 border-rose-200/90'
-                                                            : 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
-                                                    }`}
-                                                >
-                                                    -
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <span className="text-xs sm:text-sm font-bold text-zinc-900 block truncate">
-                                                        {isCreditor
-                                                            ? `Aportes o pagos que te realizó ${debtorName}`
-                                                            : isDebtor
-                                                            ? 'Aportes o pagos que le realizaste'
-                                                            : `Aportes o pagos que realizó ${debtorName}`}
-                                                    </span>
-                                                    <span className="text-[11px] text-zinc-500 block truncate">
-                                                        {activeReverseExpenses.length + activeDirectPayments.length} movimientos aplicados
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <span
-                                                    className={`text-xs sm:text-sm font-bold ${
-                                                        isCreditor ? 'text-rose-600' : 'text-emerald-600'
-                                                    }`}
-                                                >
-                                                    {formatCurrency(totalActiveRecoverable, currency)}
-                                                </span>
-                                                <ChevronDown
-                                                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
-                                                        expandedTerms.recovers ? 'rotate-180 text-zinc-600' : ''
-                                                    }`}
-                                                />
-                                            </div>
-                                        </button>
-
-                                        {expandedTerms.recovers && (
-                                            <div className="border-t border-zinc-100 p-2 sm:p-3 bg-zinc-50/40">
-                                                <GenericExpenseList
-                                                    expenses={activeReverseExpenses}
-                                                    payments={activeDirectPayments}
-                                                    profiles={profiles}
-                                                    userGroups={groups}
-                                                    currentProfile={debtorProfile}
-                                                    groupCurrency={currency}
-                                                    onEditExpense={onEditExpense}
-                                                    onDeleteExpense={onDeleteExpense}
-                                                    onEditPayment={onEditPayment}
-                                                    onDeletePayment={onDeletePayment}
-                                                    showGroupBadge={!groupId}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* TÉRMINO 3: COMPENSACIÓN GRUPAL (±) */}
-                                {hasCompensations && (
-                                    <div>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleTerm('compensations')}
-                                            className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-zinc-50/80 transition-colors cursor-pointer text-left"
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                {/* Operator sign:
-                                                    If discount: for creditor it subtracts money (- -> RED). For debtor it discounts debt (- -> GREEN).
-                                                    If addition: for creditor (+ -> GREEN). For debtor (+ -> RED).
-                                                */}
-                                                <div
-                                                    className={`w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 ${
-                                                        isCompensationDiscount
-                                                            ? isCreditor
-                                                                ? 'bg-rose-50 text-rose-600 border-rose-200/90'
-                                                                : 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
-                                                            : isCreditor
-                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
-                                                            : 'bg-rose-50 text-rose-600 border-rose-200/90'
-                                                    }`}
-                                                >
-                                                    {isCompensationDiscount ? '-' : '+'}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <span className="text-xs sm:text-sm font-bold text-zinc-900 block truncate">
-                                                        {isCompensationDiscount
-                                                            ? 'Compensación grupal (descuento)'
-                                                            : 'Consolidación de grupo'}
-                                                    </span>
-                                                    <span className="text-[11px] text-zinc-500 block truncate">
-                                                        Ajuste por deudas cruzadas en el grupo
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <span
-                                                    className={`text-xs sm:text-sm font-bold ${
-                                                        isCompensationDiscount
-                                                            ? isCreditor
-                                                                ? 'text-rose-600'
-                                                                : 'text-emerald-600'
-                                                            : isCreditor
-                                                            ? 'text-emerald-600'
-                                                            : 'text-rose-600'
-                                                    }`}
-                                                >
-                                                    {formatCurrency(totalCompensated, currency)}
-                                                </span>
-                                                <ChevronDown
-                                                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
-                                                        expandedTerms.compensations ? 'rotate-180 text-zinc-600' : ''
-                                                    }`}
-                                                />
-                                            </div>
-                                        </button>
-
-                                        {expandedTerms.compensations && (
-                                            <div className="border-t border-zinc-100 p-3 sm:p-4 bg-zinc-50/40 space-y-3">
-                                                <p className="text-xs text-zinc-600 leading-relaxed">
-                                                    {detail.optimizationDetail?.compensationLabel ||
-                                                        `Se compensan ${formatCurrency(
-                                                            totalCompensated,
-                                                            currency
-                                                        )} cruzando saldos con otros integrantes para reducir transferencias.`}
-                                                </p>
-
-                                                {/* Sugerencias de pago directo a terceros si existen */}
-                                                {detail.optimizationDetail?.newSuggestedPayments &&
-                                                    detail.optimizationDetail.newSuggestedPayments.length > 0 && (
-                                                        <div className="space-y-2 pt-1">
-                                                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block">
-                                                                Transferencias sugeridas
+                                    {/* Detalle alineado con el nombre: lista de gastos (nombre, fecha, monto) */}
+                                    {expandedTerms.debts && (
+                                        <div className="pl-[52px] sm:pl-[64px] pr-4 sm:pr-6 pb-4 pt-1 bg-zinc-50/40 border-t border-zinc-100/80">
+                                            <div className="divide-y divide-zinc-100">
+                                                {detail.pendingExpenses.map((item, idx) => (
+                                                    <div
+                                                        key={item.expense.id ? `${item.expense.id}-${idx}` : `exp-${idx}`}
+                                                        className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <span className="font-semibold text-zinc-900 block truncate">
+                                                                {item.expense.description || 'Gasto registrado'}
                                                             </span>
-                                                            {detail.optimizationDetail.newSuggestedPayments.map((sug, sIdx) => (
+                                                            <span className="text-[11px] text-zinc-400 block mt-0.5">
+                                                                {formatExpenseDate(item.expense.date || item.expense.created_at)}
+                                                            </span>
+                                                        </div>
+                                                        <span className="font-bold text-zinc-900 shrink-0">
+                                                            {formatCurrency(item.originalAmount, currency)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* FILA 2 (SI APLICA): APORTES Y PAGOS PREVIOS (-) */}
+                            {totalActiveRecoverable > 0 && (
+                                <div>
+                                    <button
+                                        type="button"
+                                        aria-expanded={expandedTerms.recovers}
+                                        onClick={() => toggleTerm('recovers')}
+                                        className="w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-3 hover:bg-zinc-50/80 active:bg-zinc-100/70 transition-colors cursor-pointer text-left select-none"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div
+                                                className={`w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 ${
+                                                    isCreditor
+                                                        ? 'bg-rose-50 text-rose-600 border-rose-200/90'
+                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-200/90'
+                                                }`}
+                                            >
+                                                -
+                                            </div>
+                                            <span className="text-sm sm:text-base font-bold text-zinc-900 truncate">
+                                                {isCreditor
+                                                    ? `Aportes o pagos que te realizó ${debtorName}`
+                                                    : isDebtor
+                                                    ? 'Aportes o pagos que le realizaste'
+                                                    : `Aportes o pagos que realizó ${debtorName}`}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2.5 shrink-0">
+                                            <span
+                                                className={`text-sm sm:text-base font-bold ${
+                                                    isCreditor ? 'text-rose-600' : 'text-emerald-600'
+                                                }`}
+                                            >
+                                                {formatCurrency(totalActiveRecoverable, currency)}
+                                            </span>
+                                            <ChevronDown
+                                                className={`w-4 h-4 text-zinc-400 transition-transform duration-200 shrink-0 ${
+                                                    expandedTerms.recovers ? 'rotate-180 text-zinc-600' : ''
+                                                }`}
+                                            />
+                                        </div>
+                                    </button>
+
+                                    {/* Detalle alineado con el nombre: lista de pagos/aportes */}
+                                    {expandedTerms.recovers && (
+                                        <div className="pl-[52px] sm:pl-[64px] pr-4 sm:pr-6 pb-4 pt-1 bg-zinc-50/40 border-t border-zinc-100/80">
+                                            <div className="divide-y divide-zinc-100">
+                                                {detail.reverseOffsetExpenses.map((r, idx) => (
+                                                    <div
+                                                        key={`rev-${r.expense.id}-${idx}`}
+                                                        className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <span className="font-semibold text-zinc-900 block truncate">
+                                                                {r.expense.description || 'Gasto compensado'}
+                                                            </span>
+                                                            <span className="text-[11px] text-zinc-400 block mt-0.5">
+                                                                {formatExpenseDate(r.expense.date || r.expense.created_at)}
+                                                            </span>
+                                                        </div>
+                                                        <span className="font-bold text-zinc-900 shrink-0">
+                                                            {formatCurrency(r.amount, currency)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+
+                                                {detail.appliedPayments.map((p, idx) => (
+                                                    <div
+                                                        key={`pay-${p.payment.id}-${idx}`}
+                                                        className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <span className="font-semibold text-zinc-900 block truncate">
+                                                                {p.payment.notes || 'Pago directo registrado'}
+                                                            </span>
+                                                            <span className="text-[11px] text-zinc-400 block mt-0.5">
+                                                                {formatExpenseDate(p.payment.payment_date || p.payment.created_at)}
+                                                            </span>
+                                                        </div>
+                                                        <span className="font-bold text-zinc-900 shrink-0">
+                                                            {formatCurrency(p.amountApplied, currency)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* FILA 3: CONSOLIDACIÓN DE GRUPO (+) */}
+                            {hasCompensations && (
+                                <div>
+                                    <button
+                                        type="button"
+                                        aria-expanded={expandedTerms.compensations}
+                                        onClick={() => toggleTerm('compensations')}
+                                        className="w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-3 hover:bg-zinc-50/80 active:bg-zinc-100/70 transition-colors cursor-pointer text-left select-none"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {/* Cajita con "+" y montos en verde */}
+                                            <div className="w-7 h-7 rounded-lg border font-bold text-xs flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-600 border-emerald-200/90">
+                                                +
+                                            </div>
+                                            {/* Nombre sin subtítulo */}
+                                            <span className="text-sm sm:text-base font-bold text-zinc-900 truncate">
+                                                Consolidación de grupo
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-2.5 shrink-0">
+                                            {/* Monto en verde */}
+                                            <span className="text-sm sm:text-base font-bold text-emerald-600">
+                                                {formatCurrency(totalCompensated, currency)}
+                                            </span>
+                                            {/* Chevrón que rota 180° */}
+                                            <ChevronDown
+                                                className={`w-4 h-4 text-zinc-400 transition-transform duration-200 shrink-0 ${
+                                                    expandedTerms.compensations ? 'rotate-180 text-zinc-600' : ''
+                                                }`}
+                                            />
+                                        </div>
+                                    </button>
+
+                                    {/* Detalle alineado con el nombre: deudas cruzadas y gastos asociados al expandir */}
+                                    {expandedTerms.compensations && (
+                                        <div className="pl-[52px] sm:pl-[64px] pr-4 sm:pr-6 pb-4 pt-1 bg-zinc-50/40 border-t border-zinc-100/80">
+                                            <div className="divide-y divide-zinc-100">
+                                                {relevantRelations.length > 0 ? (
+                                                    relevantRelations.map((rel, rIdx) => {
+                                                        const isFromMe = rel.from.id === currentProfile?.id;
+                                                        const isToMe = rel.to.id === currentProfile?.id;
+                                                        const fromName = isFromMe ? 'Tú' : rel.from.full_name || 'Integrante';
+                                                        const toName = isToMe ? 'ti' : rel.to.full_name || 'Integrante';
+
+                                                        let relationText = '';
+                                                        if (isFromMe) {
+                                                            relationText = `Tú le debes a ${toName}`;
+                                                        } else if (isToMe) {
+                                                            relationText = `${fromName} te debe a ti`;
+                                                        } else {
+                                                            relationText = `${fromName} le debe a ${toName}`;
+                                                        }
+
+                                                        const isNegative = isFromMe;
+                                                        const amountText = isNegative
+                                                            ? `− ${formatCurrency(rel.amount, currency)}`
+                                                            : formatCurrency(rel.amount, currency);
+
+                                                        const hasExpenses = Boolean(rel.expenses && rel.expenses.length > 0);
+                                                        const relKey = rel.id || `rel-${rIdx}`;
+                                                        const isRelExpanded = Boolean(expandedRelations[relKey]);
+
+                                                        return (
+                                                            <div key={relKey} className="py-2.5">
                                                                 <div
-                                                                    key={`sug-${sIdx}`}
-                                                                    className="p-3 bg-white rounded-lg border border-zinc-200 flex items-center justify-between gap-2 shadow-2xs"
+                                                                    role={hasExpenses ? 'button' : undefined}
+                                                                    tabIndex={hasExpenses ? 0 : undefined}
+                                                                    onClick={hasExpenses ? () => toggleRelation(relKey) : undefined}
+                                                                    className={`flex items-center justify-between gap-3 text-xs ${
+                                                                        hasExpenses ? 'cursor-pointer hover:text-zinc-900 group' : ''
+                                                                    }`}
                                                                 >
-                                                                    <div className="min-w-0">
-                                                                        <div className="text-xs font-semibold text-zinc-900 truncate">
-                                                                            Pagar a <strong className="text-zinc-950 font-bold">{sug.to.full_name}</strong>
-                                                                        </div>
-                                                                        <p className="text-[11px] text-zinc-500 truncate">
-                                                                            {sug.description}
-                                                                        </p>
-                                                                    </div>
+                                                                    <span className="font-semibold text-zinc-800 truncate">
+                                                                        {relationText}
+                                                                    </span>
                                                                     <div className="flex items-center gap-2 shrink-0">
-                                                                        <span className="text-xs sm:text-sm font-bold text-zinc-900">
-                                                                            {formatCurrency(sug.amount, currency)}
+                                                                        <span
+                                                                            className={`font-bold ${
+                                                                                isNegative ? 'text-rose-600' : 'text-zinc-900'
+                                                                            }`}
+                                                                        >
+                                                                            {amountText}
                                                                         </span>
-                                                                        {onOpenSettleModal && (
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    onClose();
-                                                                                    onOpenSettleModal(
-                                                                                        groupId || pairwise.group_id,
-                                                                                        sug.from.id,
-                                                                                        sug.to.id,
-                                                                                        sug.amount
-                                                                                    );
-                                                                                }}
-                                                                                className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-bold rounded-md transition-colors"
-                                                                            >
-                                                                                Saldar
-                                                                            </button>
+                                                                        {hasExpenses && (
+                                                                            <ChevronDown
+                                                                                className={`w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-transform ${
+                                                                                    isRelExpanded ? 'rotate-180' : ''
+                                                                                }`}
+                                                                            />
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
 
-                                                {/* Toggle opcional para gastos relacionados */}
-                                                {detail.optimizationDetail?.relevantRelations &&
-                                                    detail.optimizationDetail.relevantRelations.some(
-                                                        (rel) => rel.expenses && rel.expenses.length > 0
-                                                    ) && (
-                                                        <div className="pt-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setShowRelatedExpenses(!showRelatedExpenses)}
-                                                                className="text-xs font-semibold text-zinc-600 hover:text-zinc-900 flex items-center gap-1 cursor-pointer"
-                                                            >
-                                                                <span>{showRelatedExpenses ? 'Ocultar' : 'Ver'} gastos vinculados a la compensación</span>
-                                                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showRelatedExpenses ? 'rotate-180' : ''}`} />
-                                                            </button>
-
-                                                            {showRelatedExpenses && (
-                                                                <div className="mt-2.5 space-y-3">
-                                                                    {detail.optimizationDetail.relevantRelations.map((rel, rIdx) => {
-                                                                        if (!rel.expenses || rel.expenses.length === 0) return null;
-                                                                        return (
+                                                                {/* Gastos asociados a esta deuda cruzada */}
+                                                                {hasExpenses && isRelExpanded && (
+                                                                    <div className="mt-2 pl-3 border-l-2 border-zinc-200 space-y-2 py-1">
+                                                                        {rel.expenses.map((exp, eIdx) => (
                                                                             <div
-                                                                                key={`rel-${rIdx}`}
-                                                                                className="p-2.5 bg-white rounded-lg border border-zinc-200 space-y-2"
+                                                                                key={exp.id ? `${exp.id}-${eIdx}` : `exp-${eIdx}`}
+                                                                                className="flex items-center justify-between gap-2 text-[11px]"
                                                                             >
-                                                                                <div className="flex items-center justify-between text-xs font-semibold text-zinc-700">
-                                                                                    <span>{rel.from.full_name} y {rel.to.full_name}</span>
-                                                                                    <span className="font-bold text-zinc-900">{formatCurrency(rel.amount, currency)}</span>
+                                                                                <div className="min-w-0">
+                                                                                    <span className="font-medium text-zinc-700 block truncate">
+                                                                                        {exp.description}
+                                                                                    </span>
+                                                                                    <span className="text-zinc-400 block mt-0.5">
+                                                                                        {formatExpenseDate(exp.date || exp.created_at)}
+                                                                                    </span>
                                                                                 </div>
-                                                                                <GenericExpenseList
-                                                                                    expenses={rel.expenses}
-                                                                                    payments={[]}
-                                                                                    profiles={profiles}
-                                                                                    userGroups={groups}
-                                                                                    currentProfile={debtorProfile}
-                                                                                    groupCurrency={currency}
-                                                                                    showGroupBadge={!groupId}
-                                                                                />
+                                                                                <span className="font-semibold text-zinc-800 shrink-0">
+                                                                                    {formatCurrency(exp.amount, currency)}
+                                                                                </span>
                                                                             </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : suggestedPayments.length > 0 ? (
+                                                    suggestedPayments.map((sug, sIdx) => {
+                                                        const isFromMe = sug.from.id === currentProfile?.id;
+                                                        const isToMe = sug.to.id === currentProfile?.id;
+                                                        const fromName = isFromMe ? 'Tú' : sug.from.full_name;
+                                                        const toName = isToMe ? 'ti' : sug.to.full_name;
+                                                        const text = isFromMe
+                                                            ? `Tú le debes a ${toName}`
+                                                            : `${fromName} le debe a ${toName}`;
+                                                        const amountText = isFromMe
+                                                            ? `− ${formatCurrency(sug.amount, currency)}`
+                                                            : formatCurrency(sug.amount, currency);
 
-                            {/* TOTAL NETO DE LA ECUACIÓN Y BOTÓN ACCIÓN */}
-                            <div className="p-3.5 sm:p-4 bg-zinc-50/90 border-t-2 border-zinc-200">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    {/* Left: = icon and Title */}
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <div
-                                            className={`w-8 h-8 rounded-lg font-black text-sm flex items-center justify-center shrink-0 border ${
-                                                finalSettlementAmount <= 0
-                                                    ? 'bg-zinc-100 text-zinc-500 border-zinc-200'
-                                                    : isCreditor
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                    : 'bg-rose-50 text-rose-700 border-rose-200'
-                                            }`}
-                                        >
-                                            =
-                                        </div>
-                                        <div className="min-w-0">
-                                            <span className="text-xs sm:text-sm font-black text-zinc-900 block truncate">
-                                                Total neto a liquidar
-                                            </span>
-                                            <span className="text-[11px] text-zinc-500 block truncate">
-                                                {finalSettlementAmount <= 0
-                                                    ? 'Sin saldo pendiente'
-                                                    : isCreditor
-                                                    ? `A tu favor (recibes de ${debtorName})`
-                                                    : isDebtor
-                                                    ? `Por pagar a ${creditorName}`
-                                                    : `${debtorName} paga a ${creditorName}`}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Right: Amount, Copy, and Action Button */}
-                                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-200/60">
-                                        <div className="flex items-center gap-1.5">
-                                            <span
-                                                className={`text-xl sm:text-2xl font-black tracking-tight ${
-                                                    finalSettlementAmount <= 0
-                                                        ? 'text-zinc-700'
-                                                        : isCreditor
-                                                        ? 'text-emerald-700'
-                                                        : 'text-rose-600'
-                                                }`}
-                                            >
-                                                {formatCurrency(finalSettlementAmount, currency)}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(String(finalSettlementAmount));
-                                                    setCopiedAmount(true);
-                                                    setTimeout(() => setCopiedAmount(false), 2000);
-                                                }}
-                                                title="Copiar monto"
-                                                className="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-black/5 transition-colors cursor-pointer"
-                                            >
-                                                {copiedAmount ? (
-                                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                                        return (
+                                                            <div
+                                                                key={`sug-${sIdx}`}
+                                                                className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                                                            >
+                                                                <span className="font-semibold text-zinc-800 truncate">{text}</span>
+                                                                <span
+                                                                    className={`font-bold shrink-0 ${
+                                                                        isFromMe ? 'text-rose-600' : 'text-zinc-900'
+                                                                    }`}
+                                                                >
+                                                                    {amountText}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })
                                                 ) : (
-                                                    <Copy className="w-3.5 h-3.5" />
+                                                    <div className="py-2.5 text-xs text-zinc-600">
+                                                        {detail.optimizationDetail?.compensationLabel ||
+                                                            `Se compensan ${formatCurrency(
+                                                                totalCompensated,
+                                                                currency
+                                                            )} mediante optimización del grupo.`}
+                                                    </div>
                                                 )}
-                                            </button>
+                                            </div>
                                         </div>
-
-                                        {finalSettlementAmount > 0 && onOpenSettleModal && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    onClose();
-                                                    onOpenSettleModal(
-                                                        pairwise.group_id || groupId,
-                                                        debtorProfile.id,
-                                                        creditorProfile.id,
-                                                        finalSettlementAmount
-                                                    );
-                                                }}
-                                                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                                                    isCreditor
-                                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                                        : 'bg-zinc-900 hover:bg-zinc-800 text-white'
-                                                }`}
-                                            >
-                                                <Wallet className="w-3.5 h-3.5" />
-                                                <span>{isCreditor ? 'Registrar cobro' : 'Saldar'}</span>
-                                            </button>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {/* 3. PIE */}
+                <div className="p-4 sm:p-5 bg-zinc-50/80 border-t border-zinc-200 shrink-0">
+                    {/* Fila del total: caja "=", etiqueta "Total neto a liquidar" y monto con ícono de copiar */}
+                    <div className="flex items-center justify-between gap-3">
+                        {/* Caja "=" y etiqueta sin subtítulo */}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                                className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 border ${
+                                    finalSettlementAmount <= 0
+                                        ? 'bg-zinc-100 text-zinc-500 border-zinc-200'
+                                        : isCreditor
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                            >
+                                =
                             </div>
+                            <span className="text-sm sm:text-base font-bold text-zinc-900 truncate">
+                                Total neto a liquidar
+                            </span>
                         </div>
+
+                        {/* Monto un poco más grande con ícono de copiar al lado */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span
+                                className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                                    finalSettlementAmount <= 0
+                                        ? 'text-zinc-700'
+                                        : isCreditor
+                                        ? 'text-emerald-700'
+                                        : 'text-rose-600'
+                                }`}
+                            >
+                                {formatCurrency(finalSettlementAmount, currency)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(String(finalSettlementAmount));
+                                    setCopiedAmount(true);
+                                    setTimeout(() => setCopiedAmount(false), 2000);
+                                }}
+                                title="Copiar monto"
+                                className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-black/5 transition-colors cursor-pointer"
+                            >
+                                {copiedAmount ? (
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                    <Copy className="w-4 h-4" />
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Botón "Registrar cobro" o "Saldar" a todo el ancho debajo de la fila del total */}
+                    {finalSettlementAmount > 0 && onOpenSettleModal && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onClose();
+                                onOpenSettleModal(
+                                    pairwise.group_id || groupId,
+                                    debtorProfile.id,
+                                    creditorProfile.id,
+                                    finalSettlementAmount
+                                );
+                            }}
+                            className={`w-full mt-3.5 py-3 rounded-xl font-bold text-sm sm:text-base transition-all shadow-xs active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 ${
+                                isCreditor
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    : 'bg-zinc-900 hover:bg-zinc-800 text-white'
+                            }`}
+                        >
+                            <Wallet className="w-4 h-4" />
+                            <span>{isCreditor ? 'Registrar cobro' : 'Saldar'}</span>
+                        </button>
                     )}
                 </div>
             </div>
